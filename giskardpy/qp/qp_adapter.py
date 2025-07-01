@@ -996,7 +996,7 @@ class EqualityModel(ProblemDataPart):
 
                 # slack variable for total error
                 slack_model = cas.diag(
-                    cas.Expression([self.dt for c in self.equality_constraints]))
+                    cas.Expression([self.dt * self.control_horizon for c in self.equality_constraints]))
                 return model, slack_model
         else:
             if self.qp_formulation.is_implicit:
@@ -1046,18 +1046,19 @@ class EqualityModel(ProblemDataPart):
         slack_model_parts = []
         if len(derivative_link_model) > 0:
             model_parts.append(derivative_link_model)
-        if len(equality_constraint_model) > 0:
-            model_parts.append(equality_constraint_model)
-            slack_model_parts.append(equality_constraint_slack_model)
         if len(vel_constr_model) > 0:
             model_parts.append(vel_constr_model)
             slack_model_parts.append(vel_constr_slack_model)
+        if len(equality_constraint_model) > 0:
+            model_parts.append(equality_constraint_model)
+            slack_model_parts.append(equality_constraint_slack_model)
+
         if len(model_parts) == 0:
             # if there are no eq constraints, make an empty matrix with the right columns to prevent stacking issues
             model = cas.Expression(np.empty((0, self.number_of_non_slack_columns)))
         else:
             model = cas.vstack(model_parts)
-        slack_model = cas.vstack(slack_model_parts)
+        slack_model = cas.diag_stack(slack_model_parts)
 
         slack_model = cas.vstack([cas.zeros(derivative_link_model.shape[0],
                                             slack_model.shape[1]),
@@ -1276,7 +1277,7 @@ class InequalityModel(ProblemDataPart):
 
                 # slack variable for total error
                 slack_model = cas.diag(
-                    cas.Expression([self.dt for c in self.inequality_constraints]))
+                    cas.Expression([self.dt * self.control_horizon for c in self.inequality_constraints]))
                 return model, slack_model
         else:
             if self.qp_formulation.is_implicit:
@@ -1475,6 +1476,9 @@ class QPData:
                  zero_quadratic_weight_filter: np.ndarray,
                  bE_filter: np.ndarray,
                  bA_filter: np.ndarray) -> QPData:
+        self.zero_quadratic_weight_filter = zero_quadratic_weight_filter
+        self.bE_filter = bE_filter
+        self.bA_filter = bA_filter
         qp_data_filtered = QPData()
         qp_data_filtered.quadratic_weights = self.quadratic_weights[zero_quadratic_weight_filter]
         qp_data_filtered.linear_weights = self.linear_weights[zero_quadratic_weight_filter]
