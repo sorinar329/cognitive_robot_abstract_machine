@@ -68,7 +68,7 @@ class MotionStatechartNode:
             return '"' + result + '"'
         return result
 
-    def update_expression_on_starting(self, expression: cas.PreservedCasType) -> cas.PreservedCasType:
+    def update_expression_on_starting(self, expression: cas.AnyCasType) -> cas.AnyCasType:
         if len(expression.free_symbols()) == 0:
             return expression
         return god_map.motion_statechart_manager.register_expression_updater(expression, self)

@@ -96,8 +96,8 @@ class MotionGraphNodeStateManager(Generic[T]):
         return {key: self.life_cycle_state[idx] for key, idx in self.key_to_idx.items()}
 
     @profile
-    def register_expression_updater(self, node: MotionStatechartNode, expression: cas.PreservedCasType) \
-            -> cas.PreservedCasType:
+    def register_expression_updater(self, node: MotionStatechartNode, expression: cas.AnyCasType) \
+            -> cas.AnyCasType:
         """
         Expression is updated when all monitors are 1 at the same time, but only once.
         """

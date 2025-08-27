@@ -345,8 +345,8 @@ class MotionStatechartManager:
         return [x for x in self.monitor_state.nodes if isinstance(x, PayloadMonitor)]
 
     @profile
-    def register_expression_updater(self, expression: cas.PreservedCasType, node: MotionStatechartNode) \
-            -> cas.PreservedCasType:
+    def register_expression_updater(self, expression: cas.AnyCasType, node: MotionStatechartNode) \
+            -> cas.AnyCasType:
         """
         Expression is updated when all monitors are 1 at the same time, but only once.
         """

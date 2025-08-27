@@ -356,7 +356,7 @@ class Task(MotionStatechartNode):
         q_actual = frame_R_current.to_quaternion()
         q_goal = frame_R_goal.to_quaternion()
         q_goal = cas.if_less(q_goal.dot(q_actual), 0, -q_goal, q_goal)
-        q_error = cas.quaternion_multiply(q_goal, cas.quaternion_conjugate(q_actual))
+        q_error = q_actual.diff(q_goal)
 
         # w is redundant
         self.add_equality_constraint_vector(reference_velocities=[reference_velocity] * 3,
