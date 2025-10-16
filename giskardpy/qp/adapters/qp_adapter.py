@@ -222,14 +222,8 @@ class ProblemDataPart(ABC):
             upper_limits.position = v.upper_limits.position
 
         # %% vel limits
-        lower_limits.velocity = max(
-            v.lower_limits.velocity,
-            self.config.dof_lower_limits_overwrite[v.name].velocity,
-        )
-        upper_limits.velocity = min(
-            v.upper_limits.velocity,
-            self.config.dof_upper_limits_overwrite[v.name].velocity,
-        )
+        lower_limits.velocity = v.lower_limits.velocity
+        upper_limits.velocity = v.upper_limits.velocity
         if self.config.prediction_horizon == 1:
             return cas.Expression([lower_limits.velocity]), cas.Expression(
                 [upper_limits.velocity]
@@ -237,23 +231,13 @@ class ProblemDataPart(ABC):
 
         # %% acc limits
         if v.lower_limits.acceleration is None:
-            lower_limits.acceleration = self.config.dof_lower_limits_overwrite[
-                v.name
-            ].acceleration
+            lower_limits.acceleration = -np.inf
         else:
-            lower_limits.acceleration = max(
-                v.lower_limits.acceleration,
-                self.config.dof_lower_limits_overwrite[v.name].acceleration,
-            )
+            lower_limits.acceleration = v.lower_limits.acceleration
         if v.upper_limits.acceleration is None:
-            upper_limits.acceleration = self.config.dof_upper_limits_overwrite[
-                v.name
-            ].acceleration
+            upper_limits.acceleration = np.inf
         else:
-            upper_limits.acceleration = min(
-                v.upper_limits.acceleration,
-                self.config.dof_upper_limits_overwrite[v.name].acceleration,
-            )
+            upper_limits.acceleration = v.upper_limits.acceleration
 
         # %% jerk limits
         if upper_limits.jerk is None:

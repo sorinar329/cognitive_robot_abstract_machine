@@ -95,26 +95,20 @@ class LocalMinimumReached(Monitor):
     def __post_init__(self):
         ref = []
         symbols = []
-        for free_variable in god_map.world.active_degrees_of_freedom:
-            velocity_limit = god_map.qp_controller.config.dof_upper_limits_overwrite[
-                free_variable.name
-            ].velocity
-            if free_variable.upper_limits.velocity is not None:
-                velocity_limit = min(
-                    velocity_limit, free_variable.upper_limits.velocity
-                )
+        for dof in god_map.world.active_degrees_of_freedom:
+            velocity_limit = dof.upper_limits.velocity
             velocity_limit *= self.joint_convergence_threshold
             velocity_limit = min(
                 max(self.min_cut_off, velocity_limit), self.max_cut_off
             )
             ref.append(velocity_limit)
-            symbols.append(free_variable.symbols.velocity)
+            symbols.append(dof.symbols.velocity)
         ref = cas.Expression(ref)
         vel_symbols = cas.Expression(symbols)
 
         traj_longer_than_1_sec = god_map.time_symbol > 1
         self.observation_expression = cas.logic_and(
-            traj_longer_than_1_sec, cas.logic_all(vel_symbols < ref)
+            traj_longer_than_1_sec, cas.logic_all(cas.abs(vel_symbols) < ref)
         )
 
 

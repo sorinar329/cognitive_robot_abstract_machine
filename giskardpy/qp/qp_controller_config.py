@@ -52,16 +52,6 @@ class QPControllerConfig:
             lambda: DerivativeMap([None, 0.01, np.inf, None])
         )
     )
-    dof_lower_limits_overwrite: Dict[PrefixedName, DerivativeMap[float]] = field(
-        default_factory=lambda: defaultdict(
-            lambda: DerivativeMap([None, -1, -np.inf, None])
-        )
-    )
-    dof_upper_limits_overwrite: Dict[PrefixedName, DerivativeMap[float]] = field(
-        default_factory=lambda: defaultdict(
-            lambda: DerivativeMap([None, 1, np.inf, None])
-        )
-    )
     max_derivative: Derivatives = field(default=Derivatives.jerk)
     qp_solver_id: Optional[SupportedQPSolver] = field(default=None)
     qp_solver_class: Type[QPSolver] = field(init=False)
