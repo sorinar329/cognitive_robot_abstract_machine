@@ -1,19 +1,15 @@
-from dataclasses import dataclass
-from typing import Optional
-
-from semantic_world.datastructures.prefixed_name import PrefixedName
+import semantic_world.spatial_types.spatial_types as cas
 from giskardpy.god_map import god_map
 from giskardpy.motion_statechart.tasks.cartesian_tasks import (
     CartesianPosition,
     CartesianOrientation,
 )
 from giskardpy.motion_statechart.tasks.task import Task, WEIGHT_BELOW_CA
-import semantic_world.spatial_types.spatial_types as cas
-from semantic_world.spatial_types.symbol_manager import symbol_manager
+from giskardpy.utils.decorators import validated_dataclass
 from semantic_world.world_description.world_entity import Body
 
 
-@dataclass(kw_only=True)
+@validated_dataclass
 class SpiralMixing(Task):
 
     end_time: float

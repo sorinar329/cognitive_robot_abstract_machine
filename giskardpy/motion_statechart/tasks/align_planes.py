@@ -1,16 +1,12 @@
-from dataclasses import dataclass, field
-from typing import Optional
-
 import semantic_world.spatial_types.spatial_types as cas
-from giskardpy.motion_statechart.tasks.task import WEIGHT_ABOVE_CA, Task
-from giskardpy.middleware import get_middleware
 from giskardpy.god_map import god_map
+from giskardpy.motion_statechart.tasks.task import WEIGHT_ABOVE_CA, Task
+from giskardpy.utils.decorators import validated_dataclass
 from semantic_world.world_description.geometry import Color
-from semantic_world.datastructures.prefixed_name import PrefixedName
 from semantic_world.world_description.world_entity import Body
 
 
-@dataclass
+@validated_dataclass
 class AlignPlanes(Task):
     root_link: Body
     tip_link: Body

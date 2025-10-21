@@ -1,18 +1,16 @@
-from dataclasses import dataclass, field
+from dataclasses import field
 from functools import cached_property
 from typing import Optional, List, Union, Dict, DefaultDict, TypeVar
 
 import numpy as np
 
 import semantic_world.spatial_types.spatial_types as cas
-from giskardpy.motion_statechart.data_types import LifeCycleState
-from semantic_world.spatial_types.derivatives import Derivatives
-
 from giskardpy.data_types.exceptions import (
     GoalInitalizationException,
     DuplicateNameException,
 )
 from giskardpy.god_map import god_map
+from giskardpy.motion_statechart.data_types import LifeCycleState
 from giskardpy.motion_statechart.graph_node import MotionStatechartNode
 from giskardpy.qp.constraint import DerivativeEqualityConstraint
 from giskardpy.qp.constraint import (
@@ -22,13 +20,15 @@ from giskardpy.qp.constraint import (
 )
 from giskardpy.qp.free_variable import FreeVariable
 from giskardpy.qp.weight_gain import QuadraticWeightGain, LinearWeightGain
+from giskardpy.utils.decorators import validated_dataclass
+from semantic_world.spatial_types.derivatives import Derivatives
 from semantic_world.spatial_types.symbol_manager import symbol_manager
 
-WEIGHT_MAX = 10000
-WEIGHT_ABOVE_CA = 2500
-WEIGHT_COLLISION_AVOIDANCE = 50
-WEIGHT_BELOW_CA = 1
-WEIGHT_MIN = 0
+WEIGHT_MAX = 10000.0
+WEIGHT_ABOVE_CA = 2500.0
+WEIGHT_COLLISION_AVOIDANCE = 50.0
+WEIGHT_BELOW_CA = 1.0
+WEIGHT_MIN = 0.0
 
 T = TypeVar(
     "T",
@@ -39,7 +39,7 @@ T = TypeVar(
 )
 
 
-@dataclass
+@validated_dataclass
 class Task(MotionStatechartNode):
     """
     Tasks are a set of constraints with the same predicates.

@@ -1,7 +1,12 @@
 from collections import defaultdict
-from dataclasses import dataclass, field
+from dataclasses import field
 from typing import Dict, Optional, List, Tuple
+
+from line_profiler import profile
+
 import semantic_world.spatial_types.spatial_types as cas
+from giskardpy.god_map import god_map
+from giskardpy.middleware import get_middleware
 from giskardpy.model.collision_matrix_manager import CollisionViewRequest
 from giskardpy.motion_statechart.goals.goal import Goal
 from giskardpy.motion_statechart.monitors.monitors import Monitor
@@ -10,24 +15,20 @@ from giskardpy.motion_statechart.tasks.task import (
     WEIGHT_COLLISION_AVOIDANCE,
     Task,
 )
-from giskardpy.god_map import god_map
-from semantic_world.world_description.connections import ActiveConnection
+from giskardpy.utils.decorators import validated_dataclass
 from semantic_world.datastructures.prefixed_name import PrefixedName
 from semantic_world.robots.abstract_robot import AbstractRobot
-from semantic_world.spatial_types.symbol_manager import symbol_manager
-from giskardpy.middleware import get_middleware
-from line_profiler import profile
-
 from semantic_world.world import World
+from semantic_world.world_description.connections import ActiveConnection
 from semantic_world.world_description.world_entity import Body
 
 
-@dataclass
+@validated_dataclass
 class ExternalCA(Goal):
-    name: str = field(kw_only=True, default=None)
-    name_prefix: str = field(kw_only=True, default=None)
+    name: Optional[str] = field(kw_only=True, default=None)
+    name_prefix: Optional[str] = field(kw_only=True, default=None)
     connection: ActiveConnection = field(kw_only=True)
-    main_body: Body = field(init=False, default=None)
+    main_body: Body = field(init=False)
     max_velocity: float = field(default=0.2, kw_only=True)
     world: World = field(kw_only=True)
     idx: int = field(default=0, kw_only=True)
@@ -186,17 +187,17 @@ class ExternalCA(Goal):
         )
 
 
-@dataclass
+@validated_dataclass
 class SelfCA(Goal):
     body_a: Body = field(kw_only=True)
     body_b: Body = field(kw_only=True)
-    name: str = field(kw_only=True, default=None)
-    name_prefix: str = field(kw_only=True, default=None)
+    name: Optional[str] = field(kw_only=True, default=None)
+    name_prefix: Optional[str] = field(kw_only=True, default=None)
     max_velocity: float = field(default=0.2, kw_only=True)
     world: World = field(kw_only=True)
     idx: int = field(default=0, kw_only=True)
     max_avoided_bodies: int = field(default=1, kw_only=True)
-    buffer_zone_distance: float = field(default=None, kw_only=True)
+    buffer_zone_distance: float = field(kw_only=True)
 
     def __post_init__(self):
         self._plot = False
@@ -421,7 +422,7 @@ class CollisionAvoidanceHint(Goal):
 # avoid only something
 
 
-@dataclass
+@validated_dataclass
 class CollisionAvoidance(Goal):
     collision_entries: List[CollisionViewRequest] = field(default_factory=list)
 
@@ -517,8 +518,10 @@ class CollisionAvoidance(Goal):
                     counter[body_a, body_b] = max(
                         [
                             counter[body_a, body_b],
-                            body_a_original.get_collision_config().buffer_zone_distance,
-                            body_b_original.get_collision_config().buffer_zone_distance,
+                            body_a_original.get_collision_config().buffer_zone_distance
+                            or 0,
+                            body_b_original.get_collision_config().buffer_zone_distance
+                            or 0,
                         ]
                     )
 

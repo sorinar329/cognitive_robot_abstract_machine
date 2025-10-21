@@ -1,24 +1,24 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import field
 from functools import cached_property
-from typing import List, Union, Optional
+from typing import List, Union
 
 import semantic_world.spatial_types.spatial_types as cas
-from semantic_world.world_description.connections import (
-    ActiveConnection1DOF,
-)
-from semantic_world.datastructures.prefixed_name import PrefixedName
 from giskardpy.data_types.exceptions import GoalInitalizationException
 from giskardpy.god_map import god_map
 from giskardpy.motion_statechart.graph_node import MotionStatechartNode
 from giskardpy.motion_statechart.monitors.monitors import Monitor
 from giskardpy.motion_statechart.tasks.task import Task
-from semantic_world.spatial_types.derivatives import Derivatives
+from giskardpy.utils.decorators import validated_dataclass
+from semantic_world.datastructures.prefixed_name import PrefixedName
 from semantic_world.spatial_types.symbol_manager import symbol_manager
+from semantic_world.world_description.connections import (
+    ActiveConnection1DOF,
+)
 
 
-@dataclass
+@validated_dataclass
 class Goal(MotionStatechartNode):
     tasks: List[Task] = field(default_factory=list, init=False)
     monitors: List[Monitor] = field(default_factory=list, init=False)

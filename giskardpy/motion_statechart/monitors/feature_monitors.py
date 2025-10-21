@@ -1,14 +1,14 @@
-from dataclasses import dataclass, field
-from typing import Optional, Union
+from dataclasses import field
+from typing import Union
 
 import semantic_world.spatial_types.spatial_types as cas
-from semantic_world.datastructures.prefixed_name import PrefixedName
-from giskardpy.motion_statechart.monitors.monitors import Monitor
 from giskardpy.god_map import god_map
+from giskardpy.motion_statechart.monitors.monitors import Monitor
+from giskardpy.utils.decorators import validated_dataclass
 from semantic_world.world_description.world_entity import Body
 
 
-@dataclass
+@validated_dataclass
 class FeatureMonitor(Monitor):
     tip_link: Body
     root_link: Body
@@ -37,7 +37,7 @@ class FeatureMonitor(Monitor):
             self.root_V_reference_feature = root_reference_feature
 
 
-@dataclass
+@validated_dataclass
 class HeightMonitor(FeatureMonitor):
     reference_point: cas.Point3
     tip_point: cas.Point3
@@ -57,7 +57,7 @@ class HeightMonitor(FeatureMonitor):
         self.observation_expression = expr
 
 
-@dataclass
+@validated_dataclass
 class PerpendicularMonitor(FeatureMonitor):
     reference_normal: cas.Vector3
     tip_normal: cas.Vector3
@@ -72,7 +72,7 @@ class PerpendicularMonitor(FeatureMonitor):
         self.observation_expression = cas.abs(expr) <= self.threshold
 
 
-@dataclass
+@validated_dataclass
 class DistanceMonitor(FeatureMonitor):
     reference_point: cas.Point3
     tip_point: cas.Point3
@@ -93,7 +93,7 @@ class DistanceMonitor(FeatureMonitor):
         )
 
 
-@dataclass
+@validated_dataclass
 class AngleMonitor(FeatureMonitor):
     reference_vector: cas.Vector3
     tip_vector: cas.Vector3

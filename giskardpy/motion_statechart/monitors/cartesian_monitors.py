@@ -1,15 +1,14 @@
-from dataclasses import dataclass
-from typing import Optional, List
+from typing import List
 
 import semantic_world.spatial_types.spatial_types as cas
-from semantic_world.world_description.connections import OmniDrive
-from semantic_world.datastructures.prefixed_name import PrefixedName
 from giskardpy.god_map import god_map
 from giskardpy.motion_statechart.monitors.monitors import Monitor
+from giskardpy.utils.decorators import validated_dataclass
+from semantic_world.world_description.connections import OmniDrive
 from semantic_world.world_description.world_entity import Body
 
 
-@dataclass
+@validated_dataclass
 class InWorldSpace(Monitor):
     tip_link: Body
     xyz: List[float]
@@ -41,7 +40,7 @@ class InWorldSpace(Monitor):
         )
 
 
-@dataclass
+@validated_dataclass
 class PoseReached(Monitor):
     root_link: Body
     tip_link: Body
@@ -83,7 +82,7 @@ class PoseReached(Monitor):
         )
 
 
-@dataclass
+@validated_dataclass
 class PositionReached(Monitor):
     root_link: Body
     tip_link: Body
@@ -110,7 +109,7 @@ class PositionReached(Monitor):
         self.observation_expression = distance_to_goal < self.threshold
 
 
-@dataclass
+@validated_dataclass
 class OrientationReached(Monitor):
     root_link: Body
     tip_link: Body
@@ -137,7 +136,7 @@ class OrientationReached(Monitor):
         self.observation_expression = cas.abs(rotation_error) < self.threshold
 
 
-@dataclass
+@validated_dataclass
 class PointingAt(Monitor):
     tip_link: Body
     goal_point: cas.Point3
@@ -169,7 +168,7 @@ class PointingAt(Monitor):
         self.observation_expression = expr
 
 
-@dataclass
+@validated_dataclass
 class VectorsAligned(Monitor):
     root_link: Body
     tip_link: Body
@@ -197,7 +196,7 @@ class VectorsAligned(Monitor):
         self.observation_expression = expr
 
 
-@dataclass
+@validated_dataclass
 class DistanceToLine(Monitor):
     root_link: Body
     tip_link: Body

@@ -1,10 +1,9 @@
-from dataclasses import dataclass
 from typing import Dict
 
 import semantic_world.spatial_types.spatial_types as cas
 from giskardpy.data_types.exceptions import GoalInitalizationException
-from giskardpy.god_map import god_map
 from giskardpy.motion_statechart.monitors.monitors import Monitor
+from giskardpy.utils.decorators import validated_dataclass
 from semantic_world.world_description.connections import (
     RevoluteConnection,
     ActiveConnection,
@@ -12,7 +11,7 @@ from semantic_world.world_description.connections import (
 )
 
 
-@dataclass
+@validated_dataclass
 class JointGoalReached(Monitor):
     goal_state: Dict[ActiveConnection1DOF, float]
     threshold: float = 0.01
@@ -33,7 +32,7 @@ class JointGoalReached(Monitor):
         self.observation_expression = expression
 
 
-@dataclass
+@validated_dataclass
 class JointPositionAbove(Monitor):
     connection: ActiveConnection
     threshold: float

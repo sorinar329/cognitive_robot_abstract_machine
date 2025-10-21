@@ -1,7 +1,5 @@
 from __future__ import division
 
-from dataclasses import dataclass
-
 import semantic_world.spatial_types.spatial_types as cas
 from giskardpy.god_map import god_map
 from giskardpy.motion_statechart.goals.goal import Goal
@@ -9,11 +7,12 @@ from giskardpy.motion_statechart.monitors.monitors import TrueMonitor, CancelMot
 from giskardpy.motion_statechart.tasks.cartesian_tasks import CartesianPose
 from giskardpy.motion_statechart.tasks.joint_tasks import JointPositionList
 from giskardpy.motion_statechart.tasks.task import WEIGHT_ABOVE_CA
+from giskardpy.utils.decorators import validated_dataclass
 from semantic_world.datastructures.prefixed_name import PrefixedName
 from semantic_world.world_description.world_entity import Body
 
 
-@dataclass
+@validated_dataclass
 class GraspSequence(Goal):
     tip_link: Body
     root_link: Body
@@ -70,7 +69,7 @@ class GraspSequence(Goal):
         self.observation_expression = lift.observation_state_symbol
 
 
-@dataclass
+@validated_dataclass
 class Cutting(Goal):
     tip_link: Body
     root_link: Body

@@ -1,18 +1,15 @@
 from __future__ import division
 
-from dataclasses import dataclass
-from typing import Optional
-
 import semantic_world.spatial_types.spatial_types as cas
 from giskardpy.god_map import god_map
 from giskardpy.motion_statechart.tasks.task import WEIGHT_BELOW_CA, Task
-from semantic_world.world_description.geometry import Color
-from semantic_world.datastructures.prefixed_name import PrefixedName
+from giskardpy.utils.decorators import validated_dataclass
 from semantic_world.spatial_types.symbol_manager import symbol_manager
+from semantic_world.world_description.geometry import Color
 from semantic_world.world_description.world_entity import Body
 
 
-@dataclass
+@validated_dataclass
 class Pointing(Task):
     tip_link: Body
     goal_point: cas.Point3
@@ -76,7 +73,7 @@ class Pointing(Task):
         )
 
 
-@dataclass
+@validated_dataclass
 class PointingCone(Task):
     tip_link: Body
     goal_point: cas.Point3

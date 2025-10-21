@@ -1,15 +1,13 @@
-from dataclasses import dataclass
-from typing import Union, Optional
+from typing import Union
 
-from giskardpy.middleware import get_middleware
-from giskardpy.qp.solvers.qp_solver_ids import SupportedQPSolver
-import semantic_world.spatial_types.spatial_types as cas
-from giskardpy.data_types.exceptions import MonitorInitalizationException
 from giskardpy.god_map import god_map
+from giskardpy.middleware import get_middleware
 from giskardpy.motion_statechart.monitors.monitors import PayloadMonitor
+from giskardpy.qp.solvers.qp_solver_ids import SupportedQPSolver
+from giskardpy.utils.decorators import validated_dataclass
 
 
-@dataclass
+@validated_dataclass
 class SetPredictionHorizon(PayloadMonitor):
     prediction_horizon: int
 
@@ -27,7 +25,7 @@ class SetPredictionHorizon(PayloadMonitor):
         self.state = True
 
 
-@dataclass
+@validated_dataclass
 class SetQPSolver(PayloadMonitor):
     qp_solver_id: Union[SupportedQPSolver, int]
 

@@ -2,19 +2,19 @@ from __future__ import annotations
 
 import abc
 from abc import ABC
-from dataclasses import dataclass, field
+from dataclasses import field
 from functools import cached_property
-from typing import Optional
 
 import semantic_world.spatial_types.spatial_types as cas
-from giskardpy.motion_statechart.data_types import ObservationState
 from giskardpy.data_types.exceptions import GiskardException
 from giskardpy.god_map import god_map
+from giskardpy.motion_statechart.data_types import ObservationState
 from giskardpy.motion_statechart.graph_node import MotionStatechartNode
+from giskardpy.utils.decorators import validated_dataclass
 from semantic_world.spatial_types.symbol_manager import symbol_manager
 
 
-@dataclass
+@validated_dataclass
 class Monitor(MotionStatechartNode):
 
     @cached_property
@@ -38,7 +38,7 @@ class Monitor(MotionStatechartNode):
         )
 
 
-@dataclass
+@validated_dataclass
 class PayloadMonitor(Monitor, ABC):
     """
     A monitor which executes its __call__ function when start_condition becomes True.
@@ -53,7 +53,7 @@ class PayloadMonitor(Monitor, ABC):
         pass
 
 
-@dataclass
+@validated_dataclass
 class ThreadedPayloadMonitor(Monitor, ABC):
     """
     A monitor which executes its __call__ function when start_condition becomes True.
@@ -69,14 +69,14 @@ class ThreadedPayloadMonitor(Monitor, ABC):
         pass
 
 
-@dataclass
+@validated_dataclass
 class EndMotion(PayloadMonitor):
 
     def __call__(self):
         self.state = ObservationState.true
 
 
-@dataclass
+@validated_dataclass
 class CancelMotion(PayloadMonitor):
     exception: Exception = field(default_factory=GiskardException)
 
@@ -85,7 +85,7 @@ class CancelMotion(PayloadMonitor):
         raise self.exception
 
 
-@dataclass
+@validated_dataclass
 class LocalMinimumReached(Monitor):
     min_cut_off: float = 0.01
     max_cut_off: float = 0.06
@@ -112,7 +112,7 @@ class LocalMinimumReached(Monitor):
         )
 
 
-@dataclass
+@validated_dataclass
 class TimeAbove(Monitor):
     threshold: float
 
@@ -122,7 +122,7 @@ class TimeAbove(Monitor):
         self.observation_expression = condition
 
 
-@dataclass
+@validated_dataclass
 class Alternator(Monitor):
     mod: int = 2
 
@@ -132,13 +132,13 @@ class Alternator(Monitor):
         self.observation_expression = expr
 
 
-@dataclass
+@validated_dataclass
 class TrueMonitor(Monitor):
     def __post_init__(self):
         self.observation_expression = cas.BinaryTrue
 
 
-@dataclass
+@validated_dataclass
 class FalseMonitor(Monitor):
     def __post_init__(self):
         self.observation_expression = cas.BinaryFalse

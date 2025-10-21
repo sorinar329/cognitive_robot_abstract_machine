@@ -1,20 +1,20 @@
 from __future__ import division
 
-from dataclasses import dataclass, field
+from dataclasses import field
 from typing import Dict, Optional, Union, Type, Tuple
 
 import semantic_world.spatial_types.spatial_types as cas
-from giskardpy.motion_statechart.data_types import ObservationState
 from giskardpy.data_types.exceptions import GoalInitalizationException
 from giskardpy.god_map import god_map
+from giskardpy.motion_statechart.data_types import ObservationState
 from giskardpy.motion_statechart.monitors.monitors import PayloadMonitor
+from giskardpy.utils.decorators import validated_dataclass
 from giskardpy.utils.math import axis_angle_from_quaternion
-from semantic_world.world_description.connections import OmniDrive
-from semantic_world.datastructures.prefixed_name import PrefixedName
+from semantic_world.world_description.connections import OmniDrive, ActiveConnection1DOF
 from semantic_world.world_description.world_entity import Connection
 
 
-@dataclass
+@validated_dataclass
 class SetSeedConfiguration(PayloadMonitor):
     """
     Overwrite the configuration of the world to allow starting the planning from a different state.
@@ -23,7 +23,7 @@ class SetSeedConfiguration(PayloadMonitor):
     :param group_name: if joint names are not unique, it will search in this group for matches.
     """
 
-    seed_configuration: Dict[Connection, float]
+    seed_configuration: Dict[ActiveConnection1DOF, Union[int, float]]
 
     def __post_init__(self):
         self.seed_configuration = {
@@ -41,7 +41,7 @@ class SetSeedConfiguration(PayloadMonitor):
         self.state = ObservationState.true
 
 
-@dataclass
+@validated_dataclass
 class SetOdometry(PayloadMonitor):
     base_pose: cas.TransformationMatrix
     _odom_joints: Tuple[Type[Connection], ...] = field(default=(OmniDrive,), init=False)

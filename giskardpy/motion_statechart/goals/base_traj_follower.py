@@ -1,25 +1,24 @@
 from __future__ import division
 
-from dataclasses import dataclass
+from line_profiler import profile
 
 import semantic_world.spatial_types.spatial_types as cas
-from semantic_world.world_description.connections import OmniDrive
-from semantic_world.datastructures.prefixed_name import PrefixedName
-from semantic_world.spatial_types.derivatives import Derivatives
-from giskardpy.motion_statechart.goals.goal import Goal
 from giskardpy.god_map import god_map
-from semantic_world.spatial_types.symbol_manager import symbol_manager
+from giskardpy.motion_statechart.goals.goal import Goal
 from giskardpy.motion_statechart.tasks.task import (
     WEIGHT_ABOVE_CA,
     WEIGHT_BELOW_CA,
     Task,
 )
-from line_profiler import profile
-
+from giskardpy.utils.decorators import validated_dataclass
+from semantic_world.datastructures.prefixed_name import PrefixedName
+from semantic_world.spatial_types.derivatives import Derivatives
+from semantic_world.spatial_types.symbol_manager import symbol_manager
+from semantic_world.world_description.connections import OmniDrive
 from semantic_world.world_description.world_entity import Connection
 
 
-@dataclass
+@validated_dataclass
 class BaseTrajFollower(Goal):
     connection: Connection
     track_only_velocity: bool = False

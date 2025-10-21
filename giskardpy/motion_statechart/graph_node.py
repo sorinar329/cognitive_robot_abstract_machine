@@ -1,15 +1,16 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import field
 from functools import cached_property
 from typing import Optional, Union
 
 import semantic_world.spatial_types.spatial_types as cas
 from giskardpy.god_map import god_map
+from giskardpy.utils.decorators import validated_dataclass
 from giskardpy.utils.utils import string_shortener, quote_node_names
 
 
-@dataclass
+@validated_dataclass
 class MotionStatechartNode:
     name: str
 
@@ -23,10 +24,13 @@ class MotionStatechartNode:
     _unparsed_end_condition: Optional[str] = field(default=None, init=False)
     _unparsed_reset_condition: Optional[str] = field(default=None, init=False)
 
-    logic3_start_condition: cas.Expression = field(default=None, init=False)
-    logic3_pause_condition: cas.Expression = field(default=None, init=False)
-    logic3_end_condition: cas.Expression = field(default=None, init=False)
-    logic3_reset_condition: cas.Expression = field(default=None, init=False)
+    logic3_start_condition: Optional[cas.Expression] = field(default=None, init=False)
+    logic3_pause_condition: Optional[cas.Expression] = field(default=None, init=False)
+    logic3_end_condition: Optional[cas.Expression] = field(default=None, init=False)
+    logic3_reset_condition: Optional[cas.Expression] = field(default=None, init=False)
+
+    def __str__(self):
+        return self.name
 
     def set_unparsed_conditions(
         self,

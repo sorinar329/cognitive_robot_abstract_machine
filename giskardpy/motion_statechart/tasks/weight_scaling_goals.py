@@ -1,17 +1,15 @@
-from dataclasses import dataclass
-from typing import Optional, List, Dict
+from collections import defaultdict
+from typing import List
 
 import semantic_world.spatial_types.spatial_types as cas
 from giskardpy.god_map import god_map
-from semantic_world.spatial_types.derivatives import Derivatives
-from collections import defaultdict
-
 from giskardpy.motion_statechart.tasks.task import Task
-from semantic_world.spatial_types.symbol_manager import symbol_manager
+from giskardpy.utils.decorators import validated_dataclass
+from semantic_world.spatial_types.derivatives import Derivatives
 from semantic_world.world_description.world_entity import Body
 
 
-@dataclass
+@validated_dataclass
 class BaseArmWeightScaling(Task):
     """
     This goals adds weight scaling constraints with the distance between a tip_link and its goal Position as a
@@ -91,7 +89,7 @@ class BaseArmWeightScaling(Task):
         self.add_quadratic_weight_gain("baseToArmScaling", gains=list_gains)
 
 
-@dataclass
+@validated_dataclass
 class MaxManipulability(Task):
     """
     This goal maximizes the manipulability of the kinematic chain between root_link and tip_link.

@@ -109,8 +109,13 @@ class Trajectory:
         :param normalize_position: centers the joint positions around 0 on the y axis
         :param tick_stride: the distance between ticks in the plot. if tick_stride <= 0 pyplot determines the ticks automatically
         """
+        # Set matplotlib backend before importing to avoid GUI backend issues
+        import matplotlib
+
+        matplotlib.use("Agg")  # Use non-interactive backend that doesn't require GUI
+
         import matplotlib.colors as mcolors
-        import pylab as plt
+        import matplotlib.pyplot as plt
 
         cm_per_second = cm_to_inch(cm_per_second)
         height_per_derivative = cm_to_inch(height_per_derivative)
@@ -242,4 +247,5 @@ class Trajectory:
                     except FileNotFoundError:
                         pass
             plt.savefig(file_name, bbox_inches="tight")
+            plt.close(f)  # Close the figure to free memory
             get_middleware().loginfo(f"saved {file_name}")

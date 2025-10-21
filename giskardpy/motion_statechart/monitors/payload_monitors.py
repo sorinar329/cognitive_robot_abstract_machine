@@ -1,17 +1,17 @@
-from dataclasses import dataclass, field
-from typing import Optional, Dict, Tuple
+from dataclasses import field
+from typing import Dict, Tuple
 
 import numpy as np
 from line_profiler import profile
 
-import semantic_world.spatial_types.spatial_types as cas
-from giskardpy.motion_statechart.data_types import ObservationState
 from giskardpy.god_map import god_map
 from giskardpy.middleware import get_middleware
+from giskardpy.motion_statechart.data_types import ObservationState
 from giskardpy.motion_statechart.monitors.monitors import PayloadMonitor, Monitor
+from giskardpy.utils.decorators import validated_dataclass
 
 
-@dataclass
+@validated_dataclass
 class CheckMaxTrajectoryLength(Monitor):
     length: float
 
@@ -19,7 +19,7 @@ class CheckMaxTrajectoryLength(Monitor):
         self.observation_expression = god_map.time_symbol > self.length
 
 
-@dataclass
+@validated_dataclass
 class Print(PayloadMonitor):
     message: str = ""
 
@@ -28,7 +28,7 @@ class Print(PayloadMonitor):
         self.state = ObservationState.true
 
 
-@dataclass
+@validated_dataclass
 class Sleep(PayloadMonitor):
     seconds: float
     start_time: float = field(default=None, init=False)
@@ -42,7 +42,7 @@ class Sleep(PayloadMonitor):
         self.state = god_map.time - self.start_time >= self.seconds
 
 
-@dataclass
+@validated_dataclass
 class CollisionMatrixUpdater(PayloadMonitor):
     new_collision_matrix: Dict[Tuple[str, str], float]
 
@@ -53,7 +53,7 @@ class CollisionMatrixUpdater(PayloadMonitor):
         self.state = ObservationState.true
 
 
-@dataclass
+@validated_dataclass
 class PayloadAlternator(PayloadMonitor):
     mod: int = 2
 
@@ -61,7 +61,7 @@ class PayloadAlternator(PayloadMonitor):
         self.state = np.floor(god_map.time) % self.mod == 0
 
 
-@dataclass
+@validated_dataclass
 class Counter(PayloadMonitor):
     number: int
     counter: int = field(default=0, init=False)
@@ -76,7 +76,7 @@ class Counter(PayloadMonitor):
         self.counter += 1
 
 
-@dataclass
+@validated_dataclass
 class Pulse(PayloadMonitor):
     after_ticks: int
     true_for_ticks: int = 1

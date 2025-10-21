@@ -1,29 +1,24 @@
 from __future__ import division
 
-from dataclasses import dataclass
-from typing import Optional, List
-
 import numpy as np
 
 import semantic_world.spatial_types.spatial_types as cas
-from semantic_world.world_description.connections import OmniDrive
-from semantic_world.datastructures.prefixed_name import PrefixedName
-from semantic_world.spatial_types.derivatives import Derivatives
-from giskardpy.motion_statechart.goals.goal import Goal
 from giskardpy.god_map import god_map
-from giskardpy.motion_statechart.monitors.cartesian_monitors import InWorldSpace
+from giskardpy.motion_statechart.goals.goal import Goal
 from giskardpy.motion_statechart.tasks.cartesian_tasks import (
     CartesianPosition,
     CartesianOrientation,
     CartesianPositionStraight,
     CartesianPose,
 )
-from semantic_world.spatial_types.symbol_manager import symbol_manager
 from giskardpy.motion_statechart.tasks.task import WEIGHT_ABOVE_CA, Task
+from giskardpy.utils.decorators import validated_dataclass
+from semantic_world.spatial_types.derivatives import Derivatives
+from semantic_world.spatial_types.symbol_manager import symbol_manager
 from semantic_world.world_description.world_entity import Body
 
 
-@dataclass
+@validated_dataclass
 class DiffDriveBaseGoal(Goal):
     root_link: Body
     tip_link: Body
@@ -199,7 +194,7 @@ class DiffDriveBaseGoal(Goal):
         )
 
 
-@dataclass
+@validated_dataclass
 class CartesianPoseStraight(Goal):
     root_link: Body
     tip_link: Body
@@ -242,7 +237,7 @@ class CartesianPoseStraight(Goal):
         self.observation_expression = cas.logic_and(*obs_expressions)
 
 
-@dataclass
+@validated_dataclass
 class RelativePositionSequence(Goal):
     goal1: cas.TransformationMatrix
     goal2: cas.TransformationMatrix

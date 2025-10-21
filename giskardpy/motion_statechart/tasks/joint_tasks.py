@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field
+from dataclasses import field
 from typing import Optional, Dict, List, Tuple, Union
 
 import semantic_world.spatial_types.spatial_types as cas
@@ -6,6 +6,7 @@ from giskardpy.data_types.exceptions import GoalInitalizationException
 from giskardpy.god_map import god_map
 from giskardpy.motion_statechart.monitors.joint_monitors import JointGoalReached
 from giskardpy.motion_statechart.tasks.task import Task, WEIGHT_BELOW_CA
+from giskardpy.utils.decorators import validated_dataclass
 from semantic_world.datastructures.prefixed_name import PrefixedName
 from semantic_world.spatial_types.derivatives import Derivatives
 from semantic_world.world_description.connections import (
@@ -16,9 +17,9 @@ from semantic_world.world_description.connections import (
 )
 
 
-@dataclass
+@validated_dataclass
 class JointPositionList(Task):
-    goal_state: Dict[ActiveConnection1DOF, float]
+    goal_state: Dict[ActiveConnection1DOF, Union[int, float]]
     threshold: float = 0.01
     weight: float = WEIGHT_BELOW_CA
     max_velocity: float = 1.0
@@ -80,7 +81,7 @@ class JointPositionList(Task):
         self.observation_expression = joint_monitor.observation_expression
 
 
-@dataclass(kw_only=True)
+@validated_dataclass
 class MirrorJointPosition(Task):
     mapping: Dict[Union[PrefixedName, str], str] = field(default_factory=lambda: dict)
     threshold: float = 0.01
@@ -137,7 +138,7 @@ class MirrorJointPosition(Task):
         self.observation_expression = joint_monitor.observation_expression
 
 
-@dataclass
+@validated_dataclass
 class JointPositionLimitList(Task):
     lower_upper_limits: Dict[Union[PrefixedName, str], Tuple[float, float]]
     weight: float = WEIGHT_BELOW_CA
@@ -211,7 +212,7 @@ class JointPositionLimitList(Task):
             )
 
 
-@dataclass
+@validated_dataclass
 class JustinTorsoLimit(Task):
     connection: ActiveConnection
     lower_limit: Optional[float] = None
@@ -257,7 +258,7 @@ class JustinTorsoLimit(Task):
         )
 
 
-@dataclass
+@validated_dataclass
 class JointVelocityLimit(Task):
     joints: List[ActiveConnection1DOF]
     weight: float = WEIGHT_BELOW_CA
@@ -301,9 +302,9 @@ class JointVelocityLimit(Task):
                 )
 
 
-@dataclass
+@validated_dataclass
 class JointVelocity(Task):
-    connections: List[ActiveConnection]
+    connections: List[ActiveConnection1DOF]
     vel_goal: float
     weight: float = WEIGHT_BELOW_CA
     max_velocity: float = 1
@@ -319,7 +320,7 @@ class JointVelocity(Task):
         :param hard: turn this into a hard constraint.
         """
         for connection in self.connections:
-            current_joint = connection.position
+            current_joint = connection.dof.symbols.position
             try:
                 limit_expr = connection.dof.upper_limits.velocity
                 max_velocity = cas.min(self.max_velocity, limit_expr)
@@ -330,17 +331,17 @@ class JointVelocity(Task):
                 weight=self.weight,
                 task_expression=current_joint,
                 velocity_limit=max_velocity,
-                name=connection.name,
+                name=str(connection.name),
             )
 
 
-@dataclass
+@validated_dataclass
 class UnlimitedJointGoal(Task):
     connection: ActiveConnection1DOF
     goal_position: float
 
     def __post_init__(self):
-        connection_symbol = self.connection.joint_position_expression
+        connection_symbol = self.connection.dof.symbols.position
         self.add_position_constraint(
             expr_current=connection_symbol,
             expr_goal=self.goal_position,
@@ -349,7 +350,7 @@ class UnlimitedJointGoal(Task):
         )
 
 
-@dataclass
+@validated_dataclass
 class AvoidJointLimits(Task):
     """
     Calls AvoidSingleJointLimits for each joint in joint_list

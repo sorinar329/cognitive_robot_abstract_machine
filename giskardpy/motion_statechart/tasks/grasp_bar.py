@@ -1,16 +1,13 @@
 from __future__ import division
 
-from dataclasses import dataclass
-from typing import Optional
-
 import semantic_world.spatial_types.spatial_types as cas
-from semantic_world.datastructures.prefixed_name import PrefixedName
-from giskardpy.motion_statechart.tasks.task import WEIGHT_ABOVE_CA, Task
 from giskardpy.god_map import god_map
+from giskardpy.motion_statechart.tasks.task import WEIGHT_ABOVE_CA, Task
+from giskardpy.utils.decorators import validated_dataclass
 from semantic_world.world_description.world_entity import Body
 
 
-@dataclass
+@validated_dataclass
 class GraspBar(Task):
     root_link: Body
     tip_link: Body
@@ -38,7 +35,9 @@ class GraspBar(Task):
         :param reference_angular_velocity: rad/s
         :param weight:
         """
-        bar_center = god_map.world.transform(target_frame=self.root_link, spatial_object=self.bar_center)
+        bar_center = god_map.world.transform(
+            target_frame=self.root_link, spatial_object=self.bar_center
+        )
 
         tip_grasp_axis = god_map.world.transform(
             target_frame=self.tip_link, spatial_object=self.tip_grasp_axis

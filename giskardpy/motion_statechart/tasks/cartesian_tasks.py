@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field
+from dataclasses import field
 from typing import Optional
 
 import numpy as np
@@ -6,13 +6,13 @@ import numpy as np
 import semantic_world.spatial_types.spatial_types as cas
 from giskardpy.god_map import god_map
 from giskardpy.motion_statechart.tasks.task import Task, WEIGHT_ABOVE_CA
-from semantic_world.world_description.geometry import Color
-from semantic_world.datastructures.prefixed_name import PrefixedName
+from giskardpy.utils.decorators import validated_dataclass
 from semantic_world.spatial_types.derivatives import Derivatives
+from semantic_world.world_description.geometry import Color
 from semantic_world.world_description.world_entity import Body
 
 
-@dataclass
+@validated_dataclass
 class CartesianPosition(Task):
     default_reference_velocity = 0.2
     root_link: Body
@@ -90,7 +90,7 @@ class CartesianPosition(Task):
         self.observation_expression = distance_to_goal < self.threshold
 
 
-@dataclass
+@validated_dataclass
 class CartesianPositionStraight(Task):
     root_link: Body
     tip_link: Body
@@ -166,7 +166,7 @@ class CartesianPositionStraight(Task):
         self.observation_expression = dist < self.threshold
 
 
-@dataclass
+@validated_dataclass
 class CartesianOrientation(Task):
     default_reference_velocity = 0.2
     root_link: Body
@@ -234,7 +234,7 @@ class CartesianOrientation(Task):
         self.observation_expression = cas.abs(rotation_error) < self.threshold
 
 
-@dataclass
+@validated_dataclass
 class CartesianPose(Task):
     root_link: Body
     tip_link: Body
@@ -321,7 +321,7 @@ class CartesianPose(Task):
         )
 
 
-@dataclass
+@validated_dataclass
 class CartesianPositionVelocityLimit(Task):
     root_link: Body
     tip_link: Body
@@ -349,7 +349,7 @@ class CartesianPositionVelocityLimit(Task):
         )
 
 
-@dataclass
+@validated_dataclass
 class CartesianRotationVelocityLimit(Task):
     root_link: Body
     tip_link: Body
@@ -373,7 +373,7 @@ class CartesianRotationVelocityLimit(Task):
         )
 
 
-@dataclass
+@validated_dataclass
 class CartesianVelocityLimit(Task):
     root_link: Body
     tip_link: Body
@@ -408,7 +408,7 @@ class CartesianVelocityLimit(Task):
         )
 
 
-@dataclass
+@validated_dataclass
 class CartesianPositionVelocityTarget(Task):
     root_link: Body
     tip_link: Body
@@ -467,7 +467,7 @@ class CartesianPositionVelocityTarget(Task):
         )
 
 
-@dataclass()
+@validated_dataclass
 class JustinTorsoLimitCart(Task):
     root_link: Body
     tip_link: Body

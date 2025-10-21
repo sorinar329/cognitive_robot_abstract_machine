@@ -1,18 +1,15 @@
-from dataclasses import dataclass
-from typing import Optional, Union
-
-import semantic_world.spatial_types.spatial_types as cas
-from giskardpy.motion_statechart.goals.goal import Goal
-from giskardpy.god_map import god_map
-from giskardpy.motion_statechart.tasks.task import WEIGHT_BELOW_CA, Task
-
 import numpy as np
 
+import semantic_world.spatial_types.spatial_types as cas
+from giskardpy.god_map import god_map
+from giskardpy.motion_statechart.goals.goal import Goal
+from giskardpy.motion_statechart.tasks.task import WEIGHT_BELOW_CA, Task
+from giskardpy.utils.decorators import validated_dataclass
 from semantic_world.world_description.connections import ActiveConnection1DOF
 from semantic_world.world_description.world_entity import Body
 
 
-@dataclass
+@validated_dataclass
 class PrePushDoor(Goal):
     root_link: Body
     tip_link: Body

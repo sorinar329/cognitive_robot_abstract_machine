@@ -1,18 +1,17 @@
 import random
-from dataclasses import dataclass
 from typing import Optional
 
 import numpy as np
 
 import semantic_world.spatial_types.spatial_types as cas
-from semantic_world.datastructures.prefixed_name import PrefixedName
 from giskardpy.god_map import god_map
 from giskardpy.motion_statechart.tasks.task import Task, WEIGHT_ABOVE_CA
+from giskardpy.utils.decorators import validated_dataclass
 from semantic_world.spatial_types.symbol_manager import symbol_manager
 from semantic_world.world_description.world_entity import Body
 
 
-@dataclass
+@validated_dataclass
 class WiggleInsert(Task):
     root_link: Body
     tip_link: Body
