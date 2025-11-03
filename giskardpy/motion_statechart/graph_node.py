@@ -104,7 +104,7 @@ class TrinaryCondition:
 
 
 @dataclass(repr=False, eq=False)
-class ObservationVariable(cas.MathVariable):
+class ObservationVariable(cas.FloatVariable):
     """
     A symbol representing the observation state of a node.
     """
@@ -117,7 +117,7 @@ class ObservationVariable(cas.MathVariable):
 
 
 @dataclass(repr=False, eq=False)
-class LifeCycleVariable(cas.MathVariable):
+class LifeCycleVariable(cas.FloatVariable):
     """
     A symbol representing the life cycle state of a node.
     """

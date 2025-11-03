@@ -28,7 +28,7 @@ class GiskardToExplicitQPAdapter(GiskardToQPAdapter):
 
     bE_filter: np.ndarray
     bA_filter: np.ndarray
-    aux_symbols: List[cas.MathVariable]
+    aux_symbols: List[cas.FloatVariable]
 
     def general_qp_to_specific_qp(
         self,

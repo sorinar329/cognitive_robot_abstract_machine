@@ -144,7 +144,7 @@ def test_duplicate_name():
     msc = MotionStatechart(World())
 
     with pytest.raises(ValueError):
-        cas.MathVariable(name=PrefixedName("muh"))
+        cas.FloatVariable(name=PrefixedName("muh"))
         msc.add_node(TrueMonitor(name=PrefixedName("muh")))
         msc.add_node(TrueMonitor(name=PrefixedName("muh")))
 

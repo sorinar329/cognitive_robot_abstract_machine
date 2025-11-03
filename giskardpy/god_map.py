@@ -40,7 +40,7 @@ class GodMap:
 
     # %% controller datatypes
     time: float  # real/planning time in s
-    time_symbol: cas.MathVariable
+    time_symbol: cas.FloatVariable
     control_cycle_counter: int
     trajectory: Trajectory
     qp_solver_solution: np.ndarray

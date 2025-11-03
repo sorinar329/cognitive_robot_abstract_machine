@@ -40,7 +40,7 @@ class BaseTrajFollower(Goal):
         t: int,
         free_variable_name: PrefixedName,
         derivative: Derivatives = Derivatives.position,
-    ) -> cas.MathVariable:
+    ) -> cas.FloatVariable:
         expr = (
             f"god_map.trajectory.get_exact({t})['{free_variable_name}'][{derivative}]"
         )
