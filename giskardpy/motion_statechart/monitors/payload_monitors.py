@@ -5,7 +5,7 @@ import numpy as np
 from line_profiler import profile
 
 from giskardpy.god_map import god_map
-from giskardpy.motion_statechart.context import BuildContext
+from giskardpy.motion_statechart.context import BuildContext, ExecutionContext
 from giskardpy.motion_statechart.data_types import ObservationStateValues
 from giskardpy.motion_statechart.graph_node import MotionStatechartNode
 from giskardpy.motion_statechart.motion_statechart import ObservationState
@@ -23,7 +23,7 @@ class CheckMaxTrajectoryLength(MotionStatechartNode):
 class Print(MotionStatechartNode):
     message: str = ""
 
-    def on_tick(self) -> ObservationStateValues:
+    def on_tick(self, context: ExecutionContext) -> ObservationStateValues:
         print(self.message)
         return ObservationStateValues.TRUE
 
@@ -33,10 +33,10 @@ class Sleep(MotionStatechartNode):
     seconds: float
     start_time: Optional[float] = field(default=None, init=False)
 
-    def on_start(self, context: BuildContext):
+    def on_start(self, context: ExecutionContext):
         self.start_time = None
 
-    def on_tick(self) -> Optional[float]:
+    def on_tick(self, context: ExecutionContext) -> Optional[float]:
         if self.start_time is None:
             self.start_time = god_map.time
         return god_map.time - self.start_time >= self.seconds
@@ -78,15 +78,17 @@ class Counter(MotionStatechartNode):
 
 @dataclass
 class Pulse(MotionStatechartNode):
-    after_ticks: int
-    true_for_ticks: int = 1
-    ticks: int = field(default=0, init=False)
+    """
+    Will stay True for a single tick, then turn False.
+    """
 
-    def __call__(self):
-        if self.state == ObservationState.unknown:
-            self.counter = 0
-        if self.after_ticks <= self.counter <= self.after_ticks + self.true_for_ticks:
-            self.state = ObservationState.true
-        else:
-            self.state = ObservationState.false
-        self.counter += 1
+    _triggered: bool = field(default=False, init=False)
+
+    def on_tick(self, context: ExecutionContext) -> Optional[ObservationStateValues]:
+        if not self._triggered:
+            self._triggered = True
+            return ObservationStateValues.TRUE
+        return ObservationStateValues.FALSE
+
+    def on_reset(self, context: ExecutionContext):
+        self._triggered = False

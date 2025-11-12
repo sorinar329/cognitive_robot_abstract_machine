@@ -5,7 +5,7 @@ from typing import Optional, Type, Tuple
 
 import semantic_digital_twin.spatial_types.spatial_types as cas
 from giskardpy.data_types.exceptions import GoalInitalizationException
-from giskardpy.motion_statechart.context import BuildContext
+from giskardpy.motion_statechart.context import BuildContext, ExecutionContext
 from giskardpy.motion_statechart.graph_node import (
     MotionStatechartNode,
     NodeArtifacts,
@@ -32,7 +32,7 @@ class SetSeedConfiguration(MotionStatechartNode):
     def build(self, context: BuildContext) -> NodeArtifacts:
         return NodeArtifacts(observation=cas.TrinaryTrue)
 
-    def on_start(self, context: BuildContext):
+    def on_start(self, context: ExecutionContext):
         for connection, value in self.seed_configuration.items():
             connection.position = value
 
@@ -56,7 +56,7 @@ class SetOdometry(MotionStatechartNode):
                 )
         return NodeArtifacts(observation=cas.TrinaryTrue)
 
-    def on_start(self, context: BuildContext):
+    def on_start(self, context: ExecutionContext):
         # TODO can we get rid of world reference?
         parent_T_pose_ref = cas.TransformationMatrix(
             self.motion_statechart.context.world.compute_forward_kinematics_np(

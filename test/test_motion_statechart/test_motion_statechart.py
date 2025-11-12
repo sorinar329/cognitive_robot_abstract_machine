@@ -21,7 +21,7 @@ from giskardpy.motion_statechart.monitors.overwrite_state_monitors import (
     SetSeedConfiguration,
     SetOdometry,
 )
-from giskardpy.motion_statechart.monitors.payload_monitors import Print
+from giskardpy.motion_statechart.monitors.payload_monitors import Print, Pulse
 from giskardpy.motion_statechart.motion_statechart import (
     MotionStatechart,
 )
@@ -31,6 +31,7 @@ from giskardpy.motion_statechart.tasks.cartesian_tasks import (
 )
 from giskardpy.motion_statechart.tasks.joint_tasks import JointPositionList, JointState
 from giskardpy.motion_statechart.tasks.pointing import Pointing
+from giskardpy.motion_statechart.test_nodes.test_nodes import ChangeStateOnEvents
 from giskardpy.qp.qp_controller_config import QPControllerConfig
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.spatial_types import TransformationMatrix
@@ -1018,3 +1019,64 @@ def test_pointing(pr2_world: World):
     end.start_condition = pointing.observation_variable
     msc.compile(QPControllerConfig.create_default_with_50hz())
     msc.tick_until_end()
+
+
+def test_transition_triggers():
+    msc = MotionStatechart(World())
+
+    changer = ChangeStateOnEvents(name=PrefixedName("changer"))
+    msc.add_node(changer)
+
+    node1 = Pulse(name=PrefixedName("node1"))
+    msc.add_node(node1)
+
+    node2 = Pulse(name=PrefixedName("node2"))
+    msc.add_node(node2)
+    node2.start_condition = node1.observation_variable
+
+    node3 = Pulse(name=PrefixedName("node3"))
+    msc.add_node(node3)
+    node3.start_condition = cas.trinary_logic_and(
+        cas.trinary_logic_not(node1.observation_variable),
+        cas.trinary_logic_not(node2.observation_variable),
+    )
+
+    node4 = Pulse(name=PrefixedName("node4"))
+    msc.add_node(node4)
+    node4.start_condition = node3.observation_variable
+
+    changer.start_condition = node1.observation_variable
+    changer.pause_condition = node2.observation_variable
+    changer.end_condition = node3.observation_variable
+    changer.reset_condition = node4.observation_variable
+
+    msc.compile()
+
+    assert changer.state is None
+
+    msc.tick()
+    msc.draw("muh.pdf")
+    msc.tick()
+    msc.draw("muh.pdf")
+    assert changer.life_cycle_state == LifeCycleValues.RUNNING
+    assert changer.state == "on_start"
+
+    msc.tick()
+    msc.draw("muh.pdf")
+    assert changer.life_cycle_state == LifeCycleValues.PAUSED
+    assert changer.state == "on_pause"
+
+    msc.tick()
+    msc.draw("muh.pdf")
+    assert changer.life_cycle_state == LifeCycleValues.RUNNING
+    assert changer.state == "on_unpause"
+
+    msc.tick()
+    msc.draw("muh.pdf")
+    assert changer.life_cycle_state == LifeCycleValues.DONE
+    assert changer.state == "on_end"
+
+    msc.tick()
+    msc.draw("muh.pdf")
+    assert changer.life_cycle_state == LifeCycleValues.NOT_STARTED
+    assert changer.state == "on_reset"

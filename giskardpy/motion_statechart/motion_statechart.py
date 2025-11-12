@@ -480,7 +480,7 @@ class MotionStatechart(SubclassJSONSerializer):
         )
         for node in self.nodes:
             if self.life_cycle_state[node] == LifeCycleValues.RUNNING:
-                observation_overwrite = node.on_tick()
+                observation_overwrite = node.on_tick(context=self.context)
                 if observation_overwrite is not None:
                     self.observation_state[node] = observation_overwrite
 
@@ -503,18 +503,18 @@ class MotionStatechart(SubclassJSONSerializer):
 
             match (prev, curr):
                 case (_, LifeCycleValues.NOT_STARTED):
-                    node.on_reset()
+                    node.on_reset(context=self.context)
                 case (LifeCycleValues.NOT_STARTED, LifeCycleValues.RUNNING):
                     node.on_start(context=self.context)
                 case (LifeCycleValues.RUNNING, LifeCycleValues.PAUSED):
-                    node.on_pause()
+                    node.on_pause(context=self.context)
                 case (LifeCycleValues.PAUSED, LifeCycleValues.RUNNING):
-                    node.on_unpause()
+                    node.on_unpause(context=self.context)
                 case (
                     (LifeCycleValues.RUNNING | LifeCycleValues.PAUSED),
                     LifeCycleValues.DONE,
                 ):
-                    node.on_end()
+                    node.on_end(context=self.context)
                 case _:
                     pass
 

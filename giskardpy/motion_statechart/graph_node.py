@@ -19,7 +19,7 @@ from typing_extensions import (
 )
 
 import semantic_digital_twin.spatial_types.spatial_types as cas
-from giskardpy.motion_statechart.context import BuildContext
+from giskardpy.motion_statechart.context import BuildContext, ExecutionContext
 from giskardpy.motion_statechart.data_types import (
     LifeCycleValues,
     ObservationStateValues,
@@ -372,41 +372,37 @@ class MotionStatechartNode(SubclassJSONSerializer):
             observation=cas.Expression(self.observation_variable),
         )
 
-    def on_tick(self) -> Optional[ObservationStateValues]:
+    def on_tick(self, context: ExecutionContext) -> Optional[ObservationStateValues]:
         """
         Triggered when the node is ticked.
         .. warning:: Only happens while the node is in state RUNNING.
         :return: An optional observation state overwrite
         """
 
-    def on_start(self, context: BuildContext):
+    def on_start(self, context: ExecutionContext):
         """
         Triggered when the node transitions from NOT_STARTED to RUNNING.
         """
 
-    def on_pause(self):
+    def on_pause(self, context: ExecutionContext):
         """
         Triggered when the node transitions from RUNNING to PAUSED.
         """
 
-    def on_unpause(self):
+    def on_unpause(self, context: ExecutionContext):
         """
         Triggered when the node transitions from PAUSED to RUNNING.
         """
 
-    def on_end(self):
+    def on_end(self, context: ExecutionContext):
         """
         Triggered when the node transitions from RUNNING to DONE.
         """
 
-    def on_reset(self):
+    def on_reset(self, context: ExecutionContext):
         """
         Triggered when the node transitions from any state to NOT_STARTED.
         """
-
-    @property
-    def world(self) -> World:
-        return self.motion_statechart.world
 
     def __hash__(self):
         return hash(self.name)
@@ -686,5 +682,5 @@ class CancelMotion(MotionStatechartNode):
     def build(self, context: BuildContext) -> NodeArtifacts:
         return NodeArtifacts(observation=cas.TrinaryTrue)
 
-    def on_tick(self) -> Optional[float]:
+    def on_tick(self, context: ExecutionContext) -> Optional[float]:
         raise self.exception

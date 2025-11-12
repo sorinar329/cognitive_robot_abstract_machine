@@ -10,3 +10,8 @@ from semantic_digital_twin.world import World
 class BuildContext:
     world: World
     auxiliary_variable_manager: AuxiliaryVariableManager
+
+
+@dataclass
+class ExecutionContext:
+    world: World
