@@ -3,7 +3,6 @@ from dataclasses import dataclass
 from typing import List
 
 import semantic_digital_twin.spatial_types.spatial_types as cas
-from giskardpy.god_map import god_map
 from giskardpy.motion_statechart.graph_node import Task
 from semantic_digital_twin.spatial_types.derivatives import Derivatives
 from semantic_digital_twin.world_description.world_entity import Body
@@ -63,19 +62,19 @@ class BaseArmWeightScaling(Task):
                     gains[Derivatives.jerk][v] = v_gain
             list_gains.append(gains)
 
-        god_map.context.add_debug_expression(
+        context.add_debug_expression(
             "base_scaling",
             self.gain
             * cas.Expression(1).safe_division(
                 (scaling_exp / base_v.upper_limits.velocity).norm()
             ),
         )
-        god_map.context.add_debug_expression(
+        context.add_debug_expression(
             "arm_scaling",
             self.gain * (scaling_exp / arm_v.upper_limits.velocity).norm(),
         )
-        god_map.context.add_debug_expression("norm", scaling_exp.norm())
-        god_map.context.add_debug_expression("division", 1 / scaling_exp.norm())
+        context.add_debug_expression("norm", scaling_exp.norm())
+        context.add_debug_expression("division", 1 / scaling_exp.norm())
         self.add_quadratic_weight_gain("baseToArmScaling", gains=list_gains)
 
 
@@ -110,10 +109,10 @@ class MaxManipulability(Task):
             name=self.name,
         )
 
-        god_map.context.add_debug_expression(
+        context.add_debug_expression(
             f"mIndex {self.tip_link.name.name}", m, derivatives_to_plot=[0, 1]
         )
-        god_map.context.add_debug_expression(
+        context.add_debug_expression(
             f"mIndex {self.tip_link.name.name} threshold",
             self.m_threshold,
             derivatives_to_plot=[0, 1],

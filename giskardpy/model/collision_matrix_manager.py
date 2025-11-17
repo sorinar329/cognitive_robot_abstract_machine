@@ -6,7 +6,6 @@ from typing import List, Optional, Set, Dict, Any, Self
 
 from krrood.adapters.json_serializer import SubclassJSONSerializer
 
-from giskardpy.god_map import god_map
 from giskardpy.utils.utils import JsonSerializableEnum
 from semantic_digital_twin.adapters.world_entity_kwargs_tracker import (
     KinematicStructureEntityKwargsTracker,

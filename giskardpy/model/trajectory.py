@@ -13,7 +13,6 @@ from giskardpy_ros.tree.blackboard_utils import GiskardBlackboard
 from line_profiler import profile
 from sortedcontainers import SortedDict
 
-from giskardpy.god_map import god_map
 from giskardpy.middleware import get_middleware
 from giskardpy.utils.utils import cm_to_inch
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName

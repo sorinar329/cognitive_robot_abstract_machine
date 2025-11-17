@@ -1,11 +1,7 @@
 import time
 from dataclasses import field, dataclass
-from typing import Dict, Tuple, Optional
+from typing import Optional
 
-import numpy as np
-from line_profiler import profile
-
-from giskardpy.god_map import god_map
 from giskardpy.motion_statechart.context import ExecutionContext
 from giskardpy.motion_statechart.data_types import ObservationStateValues
 from giskardpy.motion_statechart.graph_node import MotionStatechartNode

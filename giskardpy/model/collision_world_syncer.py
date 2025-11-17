@@ -9,7 +9,6 @@ import numpy as np
 from line_profiler import profile
 
 import semantic_digital_twin.spatial_types.spatial_types as cas
-from giskardpy.god_map import god_map
 from giskardpy.model.collision_matrix_manager import CollisionMatrixManager
 from giskardpy.model.collisions import NullCollisionDetector, Collisions
 from giskardpy.motion_statechart.auxilary_variable_manager import (

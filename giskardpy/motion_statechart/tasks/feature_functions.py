@@ -4,7 +4,6 @@ from dataclasses import field, dataclass
 from typing import Union
 
 import semantic_digital_twin.spatial_types.spatial_types as cas
-from giskardpy.god_map import god_map
 from giskardpy.motion_statechart.data_types import DefaultWeights
 from giskardpy.motion_statechart.graph_node import Task
 from semantic_digital_twin.world_description.geometry import Color
@@ -36,7 +35,7 @@ class FeatureFunctionGoal(Task):
         )
         if isinstance(self.controlled_feature, cas.Point3):
             self.root_P_controlled_feature = root_T_tip @ tip_controlled_feature
-            god_map.context.add_debug_expression(
+            context.add_debug_expression(
                 "root_P_controlled_feature",
                 self.root_P_controlled_feature,
                 color=Color(1, 0, 0, 1),
@@ -44,7 +43,7 @@ class FeatureFunctionGoal(Task):
         elif isinstance(self.controlled_feature, cas.Vector3):
             self.root_V_controlled_feature = root_T_tip @ tip_controlled_feature
             self.root_V_controlled_feature.vis_frame = self.controlled_feature.vis_frame
-            god_map.context.add_debug_expression(
+            context.add_debug_expression(
                 "root_V_controlled_feature",
                 self.root_V_controlled_feature,
                 color=Color(1, 0, 0, 1),

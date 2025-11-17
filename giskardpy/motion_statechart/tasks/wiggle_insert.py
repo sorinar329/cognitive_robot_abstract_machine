@@ -5,7 +5,6 @@ from typing import Optional
 import numpy as np
 
 import semantic_digital_twin.spatial_types.spatial_types as cas
-from giskardpy.god_map import god_map
 from giskardpy.motion_statechart.data_types import DefaultWeights
 from giskardpy.motion_statechart.graph_node import Task
 from semantic_digital_twin.world_description.world_entity import Body

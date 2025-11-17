@@ -35,6 +35,7 @@ class Executor:
     collision_checker: InitVar[CollisionCheckerLib] = field(
         default=CollisionCheckerLib.none
     )
+    tmp_folder: str = field(default="/tmp/")
 
     # %% init False
     motion_statechart: MotionStatechart = field(init=False)
@@ -54,7 +55,9 @@ class Executor:
 
     def __post_init__(self, collision_checker: CollisionCheckerLib):
         if collision_checker == CollisionCheckerLib.bpb:
-            collision_detector = BulletCollisionDetector(_world=self.world)
+            collision_detector = BulletCollisionDetector(
+                _world=self.world, tmp_folder=self.tmp_folder
+            )
         else:
             collision_detector = NullCollisionDetector(_world=self.world)
 

@@ -17,6 +17,7 @@ from semantic_digital_twin.world_description.world_entity import Body
 
 @dataclass
 class BulletCollisionDetector(CollisionDetector):
+    tmp_folder: str
 
     def __post_init__(self):
         self.kw = bpb.KineverseWorld()
@@ -29,7 +30,7 @@ class BulletCollisionDetector(CollisionDetector):
     def add_object(self, body: Body):
         if not body.has_collision() or body.get_collision_config().disabled:
             return
-        o = create_shape_from_link(body)
+        o = create_shape_from_link(link=body, tmp_folder=self.tmp_folder)
         self.kw.add_collision_object(o)
         self.body_to_bpb_obj[body] = o
 

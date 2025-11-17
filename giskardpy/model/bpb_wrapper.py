@@ -1,17 +1,15 @@
 import os
-from dataclasses import dataclass, field
 from typing import List, Tuple, Optional
 
 import giskardpy_bullet_bindings as pb
 import trimesh
-from line_profiler.explicit_profiler import profile
 from pkg_resources import resource_filename
 
-from giskardpy.god_map import god_map
-from giskardpy.model.collisions import GiskardCollision
-from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from giskardpy.middleware import get_middleware
-from giskardpy.utils.utils import suppress_stdout, get_file_hash
+from giskardpy.model.collisions import GiskardCollision
+from giskardpy.utils.utils import suppress_stdout, create_path
+from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
+from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.geometry import (
     Shape,
     Box,
@@ -20,8 +18,6 @@ from semantic_digital_twin.world_description.geometry import (
     Mesh,
     Scale,
 )
-from semantic_digital_twin.robots.abstract_robot import AbstractRobot
-from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.world_entity import Body
 
 CollisionObject = pb.CollisionObject
@@ -54,13 +50,18 @@ def create_cube_shape(extents: Tuple[float, float, float]) -> pb.BoxShape:
     return out
 
 
-def create_cylinder_shape(diameter: float, height: float) -> pb.CylinderShape:
+def create_cylinder_shape(
+    diameter: float, height: float, tmp_folder: str
+) -> pb.CylinderShape:
     # out = pb.CylinderShapeZ(pb.Vector3(0.5 * diameter, 0.5 * diameter, height * 0.5))
     # out.margin = 0.001
     # Weird thing: The default URDF loader in bullet instantiates convex meshes. Idk why.
     file_name = resource_filename("giskardpy", "../resources/meshes/cylinder.obj")
     return load_convex_mesh_shape(
-        file_name, single_shape=True, scale=Scale(diameter, diameter, height)
+        pkg_filename=file_name,
+        tmp_folder=tmp_folder,
+        single_shape=True,
+        scale=Scale(diameter, diameter, height),
     )
 
 
@@ -70,7 +71,7 @@ def create_sphere_shape(diameter: float) -> pb.SphereShape:
     return out
 
 
-def create_shape_from_geometry(geometry: Shape) -> pb.CollisionShape:
+def create_shape_from_geometry(geometry: Shape, tmp_folder: str) -> pb.CollisionShape:
     if isinstance(geometry, Box):
         shape = create_cube_shape(
             (geometry.scale.x, geometry.scale.y, geometry.scale.z)
@@ -78,10 +79,15 @@ def create_shape_from_geometry(geometry: Shape) -> pb.CollisionShape:
     elif isinstance(geometry, Sphere):
         shape = create_sphere_shape(geometry.radius * 2)
     elif isinstance(geometry, Cylinder):
-        shape = create_cylinder_shape(geometry.width, geometry.height)
+        shape = create_cylinder_shape(
+            diameter=geometry.width, height=geometry.height, tmp_folder=tmp_folder
+        )
     elif isinstance(geometry, Mesh):
         shape = load_convex_mesh_shape(
-            geometry.filename, single_shape=False, scale=geometry.scale
+            pkg_filename=geometry.filename,
+            tmp_folder=tmp_folder,
+            single_shape=False,
+            scale=geometry.scale,
         )
         # todo geometry.set_collision_file_name(shape.file_path)
     else:
@@ -89,15 +95,17 @@ def create_shape_from_geometry(geometry: Shape) -> pb.CollisionShape:
     return shape
 
 
-def create_shape_from_link(link: Body, collision_id: int = 0) -> pb.CollisionObject:
+def create_shape_from_link(
+    link: Body, tmp_folder: str, collision_id: int = 0
+) -> pb.CollisionObject:
     # if len(link.collisions) > 1:
     shapes = []
     map_T_o = None
     for collision_id, geometry in enumerate(link.collision):
         if map_T_o is None:
-            shape = create_shape_from_geometry(geometry)
+            shape = create_shape_from_geometry(geometry=geometry, tmp_folder=tmp_folder)
         else:
-            shape = create_shape_from_geometry(geometry)
+            shape = create_shape_from_geometry(geometry=geometry, tmp_folder=tmp_folder)
         link_T_geometry = pb.Transform.from_np(geometry.origin.to_np())
         shapes.append((link_T_geometry, shape))
     shape = create_compound_shape(shapes_poses=shapes)
@@ -118,10 +126,12 @@ def create_compound_shape(
 # Technically the tracker is not required here,
 # since the loader keeps references to the loaded shapes.
 def load_convex_mesh_shape(
-    pkg_filename: str, single_shape: bool, scale: Scale
+    pkg_filename: str, tmp_folder: str, single_shape: bool, scale: Scale
 ) -> pb.ConvexShape:
     if not pkg_filename.endswith(".obj"):
-        obj_pkg_filename = convert_to_decomposed_obj_and_save_in_tmp(pkg_filename)
+        obj_pkg_filename = convert_to_decomposed_obj_and_save_in_tmp(
+            file_name=pkg_filename, tmp_folder=tmp_folder
+        )
     else:
         obj_pkg_filename = pkg_filename
     return pb.load_convex_shape(
@@ -132,17 +142,21 @@ def load_convex_mesh_shape(
 
 
 def convert_to_decomposed_obj_and_save_in_tmp(
-    file_name: str, log_path="/tmp/giskardpy/vhacd.log"
+    file_name: str, tmp_folder: str, log_path="/tmp/giskardpy/vhacd.log"
 ) -> str:
     hopefully_unique_name = "_".join(file_name.split("/")[-4:])
     resolved_old_path = get_middleware().resolve_iri(file_name)
     short_file_name = file_name.split("/")[-1].split(".")[0]
-    obj_file_name = f"{hopefully_unique_name}/{short_file_name}.obj"
-    new_path_original = god_map.to_tmp_path(obj_file_name)
+    obj_file_name = os.path.join(hopefully_unique_name, f"{short_file_name}.obj")
+    new_path_original = os.path.join(tmp_folder, obj_file_name)
     if not os.path.exists(new_path_original):
         mesh = trimesh.load(resolved_old_path, force="mesh")
         obj_str = trimesh.exchange.obj.export_obj(mesh)
-        god_map.write_to_tmp(obj_file_name, obj_str)
+
+        create_path(new_path_original)
+        with open(new_path_original, "w") as f:
+            f.write(obj_str)
+
         get_middleware().loginfo(
             f"Converted {file_name} to obj and saved in {new_path_original}."
         )
@@ -192,10 +206,15 @@ def create_compund_object(shapes_transforms, transform=pb.Transform.identity()):
     return create_object(create_compound_shape(shapes_transforms), transform)
 
 
-def create_convex_mesh(pkg_filename, transform=pb.Transform.identity()):
+def create_convex_mesh(
+    pkg_filename: str, tmp_folder: str, transform=pb.Transform.identity()
+):
     return create_object(
         load_convex_mesh_shape(
-            pkg_filename, single_shape=False, scale=Scale(1.0, 1.0, 1.0)
+            pkg_filename=pkg_filename,
+            tmp_folder=tmp_folder,
+            single_shape=False,
+            scale=Scale(1.0, 1.0, 1.0),
         ),
         transform,
     )

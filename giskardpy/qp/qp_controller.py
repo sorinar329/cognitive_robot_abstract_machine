@@ -15,7 +15,6 @@ from giskardpy.data_types.exceptions import (
     HardConstraintsViolatedException,
     InfeasibleException,
 )
-from giskardpy.god_map import god_map
 from giskardpy.middleware import get_middleware
 from giskardpy.qp.adapters.qp_adapter import GiskardToQPAdapter
 from giskardpy.qp.constraint_collection import ConstraintCollection

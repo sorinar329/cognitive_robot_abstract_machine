@@ -5,7 +5,6 @@ from abc import ABC
 from dataclasses import field
 
 import semantic_digital_twin.spatial_types.spatial_types as cas
-from giskardpy.god_map import god_map
 from giskardpy.motion_statechart.context import BuildContext
 from giskardpy.motion_statechart.data_types import ObservationStateValues
 from giskardpy.motion_statechart.graph_node import (

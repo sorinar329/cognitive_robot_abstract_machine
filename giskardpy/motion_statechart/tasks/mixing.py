@@ -1,7 +1,6 @@
 from dataclasses import dataclass
 
 import semantic_digital_twin.spatial_types.spatial_types as cas
-from giskardpy.god_map import god_map
 from giskardpy.motion_statechart.data_types import DefaultWeights
 from giskardpy.motion_statechart.tasks.cartesian_tasks import (
     CartesianPosition,
@@ -56,7 +55,7 @@ class SpiralMixing(Task):
             reference_velocity=CartesianPosition.default_reference_velocity,
             weight=self.weight,
         )
-        god_map.context.add_debug_expression("root_T_goal", root_T_goal)
+        context.add_debug_expression("root_T_goal", root_T_goal)
         self.add_rotation_goal_constraints(
             frame_R_current=root_T_tip.to_rotation_matrix(),
             frame_R_goal=root_T_goal.to_rotation_matrix(),
