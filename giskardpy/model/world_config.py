@@ -23,7 +23,6 @@ from semantic_digital_twin.world_description.world_entity import Body
 @dataclass
 class WorldConfig(ABC):
     world: World = field(default_factory=World)
-    default_color: Color = field(default_factory=lambda: Color(0.5, 0.5, 0.5, 1))
 
     @abc.abstractmethod
     def setup_world(self, *args, **kwargs):
