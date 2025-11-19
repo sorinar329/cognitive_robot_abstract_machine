@@ -23,10 +23,12 @@ from giskardpy.motion_statechart.context import BuildContext, ExecutionContext
 from giskardpy.motion_statechart.data_types import (
     LifeCycleValues,
     ObservationStateValues,
+    TransitionKind,
 )
 from giskardpy.motion_statechart.exceptions import (
     NotInMotionStatechartError,
 )
+from giskardpy.motion_statechart.plotters.plot_specs import NodePlotSpec
 from giskardpy.qp.constraint_collection import ConstraintCollection
 from giskardpy.utils.utils import string_shortener
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
@@ -36,25 +38,6 @@ if TYPE_CHECKING:
     from giskardpy.motion_statechart.motion_statechart import (
         MotionStatechart,
     )
-
-
-class TransitionKind(Enum):
-    START = 1
-    """
-    Transitions nodes from NOT_STARTED to RUNNING.
-    """
-    PAUSE = 2
-    """
-    Transitions nodes from RUNNING to PAUSED if True, or back if False.
-    """
-    END = 3
-    """
-    Transitions nodes from RUNNING or PAUSED to DONE.
-    """
-    RESET = 4
-    """
-    Transitions nodes from any state to NOT_STARTED.
-    """
 
 
 @dataclass(eq=False, repr=False)
@@ -368,10 +351,9 @@ class MotionStatechartNode(SubclassJSONSerializer):
     Decides when this transitions to NOT_STARTED.
     """
 
-    _plot: bool = field(default=True, kw_only=True)
-    _plot_style: str = field(default="filled, rounded", init=False)
-    _plot_shape: str = field(default="rectangle", init=False)
-    _plot_extra_boarder_styles: List[str] = field(default_factory=list, kw_only=True)
+    plot_specs: NodePlotSpec = field(
+        default_factory=NodePlotSpec.create_monitor_style, kw_only=True, init=False
+    )
 
     def __post_init__(self):
         if self.name is None:
@@ -652,15 +634,17 @@ class Task(MotionStatechartNode):
     Tasks are MotionStatechartNodes that add motion constraints.
     """
 
-    _plot_style: str = field(default="filled, diagonals", init=False)
-    _plot_shape: str = field(default="rectangle", init=False)
+    plot_specs: NodePlotSpec = field(
+        default_factory=NodePlotSpec.create_task_style, kw_only=True, init=False
+    )
 
 
 @dataclass(eq=False, repr=False)
 class Goal(MotionStatechartNode):
     nodes: List[MotionStatechartNode] = field(default_factory=list, init=False)
-    _plot_style: str = field(default="filled", init=False)
-    _plot_shape: str = field(default="none", init=False)
+    plot_specs: NodePlotSpec = field(
+        default_factory=NodePlotSpec.create_goal_style, kw_only=True, init=False
+    )
 
     def expand(self, context: BuildContext) -> None:
         """
@@ -801,10 +785,9 @@ class ThreadPayloadMonitor(MotionStatechartNode, ABC):
 
 @dataclass(eq=False, repr=False)
 class EndMotion(MotionStatechartNode):
-    _plot_style: str = field(default="filled, rounded", init=False)
-    _plot_shape: str = field(default="rectangle", init=False)
-    _plot_boarder_styles: List[str] = field(
-        default_factory=lambda: ["rounded"], kw_only=True
+
+    plot_specs: NodePlotSpec = field(
+        default_factory=NodePlotSpec.create_end_style, kw_only=True, init=False
     )
 
     def build(self, context: BuildContext) -> NodeArtifacts:
@@ -817,11 +800,10 @@ class CancelMotion(MotionStatechartNode):
     observation_expression: cas.Expression = field(
         default_factory=lambda: cas.TrinaryTrue, init=False
     )
-    _plot_extra_boarder_styles: List[str] = field(
-        default_factory=lambda: ["dashed, rounded"], kw_only=True
+
+    plot_specs: NodePlotSpec = field(
+        default_factory=NodePlotSpec.create_cancel_style, kw_only=True, init=False
     )
-    _plot_style: str = field(default="filled, rounded", init=False)
-    _plot_shape: str = field(default="rectangle", init=False)
 
     def build(self, context: BuildContext) -> NodeArtifacts:
         return NodeArtifacts(observation=cas.TrinaryTrue)

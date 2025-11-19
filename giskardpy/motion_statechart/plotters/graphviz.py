@@ -4,16 +4,13 @@ import re
 from dataclasses import dataclass, field
 
 import pydot
-from typing_extensions import List, Dict, Optional, Union, Set, TYPE_CHECKING, Literal, Mapping
-
-from giskardpy.motion_statechart.data_types import (
-    LifeCycleValues,
-    ObservationStateValues,
-)
-from giskardpy.motion_statechart.graph_node import (
-    Goal,
-    TransitionKind,
-    TrinaryCondition,
+from typing_extensions import (
+    List,
+    Dict,
+    Optional,
+    Union,
+    Set,
+    TYPE_CHECKING,
 )
 
 from giskardpy.motion_statechart.graph_node import (
@@ -21,8 +18,33 @@ from giskardpy.motion_statechart.graph_node import (
     CancelMotion,
     MotionStatechartNode,
 )
+from giskardpy.motion_statechart.graph_node import (
+    Goal,
+    TrinaryCondition,
+)
+from giskardpy.motion_statechart.plotters.plot_specs import (
+    TRANSITION_SPECS,
+    EdgeSpec,
+    StateSelector,
+)
+from giskardpy.motion_statechart.plotters.styles import (
+    RankSep,
+    NodeSep,
+    ObservationStateToColor,
+    ObservationStateToSymbol,
+    LiftCycleStateToColor,
+    LiftCycleStateToSymbol,
+    LineWidth,
+    ConditionFont,
+    FONT,
+    Fontsize,
+    GoalClusterStyle,
+    ObservationStateToEdgeStyle,
+    ArrowSize,
+)
 
 if TYPE_CHECKING:
+
     from giskardpy.motion_statechart.motion_statechart import MotionStatechart
 
 
@@ -38,140 +60,6 @@ def format_condition(condition: str) -> str:
     condition = condition.replace("0.0", "False")
     return condition
 
-
-NotStartedColor = "#9F9F9F"
-MyBLUE = "#0000DD"
-MyGREEN = "#006600"
-MyORANGE = "#996900"
-MyRED = "#993000"
-MyGRAY = "#E0E0E0"
-
-ChatGPTGreen = "#28A745"
-ChatGPTOrange = "#E6AC00"
-ChatGPTRed = "#DC3545"
-ChatGPTBlue = "#007BFF"
-ChatGPTGray = "#8F959E"
-
-StartCondColor = ChatGPTGreen
-PauseCondColor = ChatGPTOrange
-EndCondColor = ChatGPTRed
-ResetCondColor = ChatGPTGray
-
-MonitorTrueGreen = "#B6E5A0"
-MonitorFalseRed = "#FF5024"
-FONT = "sans-serif"
-LineWidth = 4
-NodeSep = 1
-RankSep = 1
-ArrowSize = 1
-Fontsize = 15
-GoalNodeStyle = "filled"
-GoalNodeShape = "none"
-GoalClusterStyle = "filled"
-MonitorStyle = "filled, rounded"
-MonitorShape = "rectangle"
-TaskStyle = "filled, diagonals"
-TaskShape = "rectangle"
-ConditionFont = "monospace"
-
-ResetSymbol = "⟲"
-
-ObservationStateToColor: Dict[ObservationStateValues, str] = {
-    ObservationStateValues.UNKNOWN: ResetCondColor,
-    ObservationStateValues.TRUE: MonitorTrueGreen,
-    ObservationStateValues.FALSE: MonitorFalseRed,
-}
-
-ObservationStateToSymbol: Dict[ObservationStateValues, str] = {
-    ObservationStateValues.UNKNOWN: "?",
-    ObservationStateValues.TRUE: "True",
-    ObservationStateValues.FALSE: "False",
-}
-
-ObservationStateToEdgeStyle: Dict[ObservationStateValues, Dict[str, str]] = {
-    ObservationStateValues.UNKNOWN: {
-        "penwidth": (LineWidth * 1.5) / 2,
-        # 'label': '<<FONT FACE="monospace"><B>?</B></FONT>>',
-        "fontsize": Fontsize * 1.333,
-    },
-    ObservationStateValues.TRUE: {"penwidth": LineWidth * 1.5},
-    ObservationStateValues.FALSE: {"style": "dashed", "penwidth": LineWidth * 1.5},
-}
-
-LiftCycleStateToColor: Dict[LifeCycleValues, str] = {
-    LifeCycleValues.NOT_STARTED: ResetCondColor,
-    LifeCycleValues.RUNNING: StartCondColor,
-    LifeCycleValues.PAUSED: PauseCondColor,
-    LifeCycleValues.DONE: EndCondColor,
-    LifeCycleValues.FAILED: "red",
-}
-
-LiftCycleStateToSymbol: Dict[LifeCycleValues, str] = {
-    # LifeCycleState.not_started: '○',
-    LifeCycleValues.NOT_STARTED: "—",
-    LifeCycleValues.RUNNING: "▶",
-    # LifeCycleState.paused: '⏸',
-    LifeCycleValues.PAUSED: "<B>||</B>",
-    LifeCycleValues.DONE: "■",
-    LifeCycleValues.FAILED: "red",
-}
-
-
-SrcSelector = Literal["parent", "child"]
-DstSelector = Literal["parent", "child"]
-StateSelector = Literal["parent", "child"]
-
-
-@dataclass(frozen=True)
-class EdgeSpec:
-    color: str
-    src_selector: SrcSelector
-    dst_selector: DstSelector
-    state_selector: StateSelector
-    extra_edge_kwargs: Optional[Dict[str, object]] = None
-
-    def extras(self) -> Dict[str, object]:
-        return {} if self.extra_edge_kwargs is None else dict(self.extra_edge_kwargs)
-
-
-TRANSITION_SPECS: Dict[TransitionKind, EdgeSpec] = {
-    TransitionKind.START: EdgeSpec(
-        color=StartCondColor,
-        src_selector="child",
-        dst_selector="parent",
-        state_selector="parent",
-    ),
-    TransitionKind.PAUSE: EdgeSpec(
-        color=PauseCondColor,
-        src_selector="child",
-        dst_selector="parent",
-        state_selector="child",
-        extra_edge_kwargs={"minlen": 0},
-    ),
-    TransitionKind.END: EdgeSpec(
-        color=EndCondColor,
-        src_selector="child",
-        dst_selector="parent",
-        state_selector="child",
-        extra_edge_kwargs={
-            "arrowhead": "none",
-            "arrowtail": "normal",
-            "dir": "both",
-        },
-    ),
-    TransitionKind.RESET: EdgeSpec(
-        color=ResetCondColor,
-        src_selector="parent",
-        dst_selector="child",
-        state_selector="parent",
-        extra_edge_kwargs={
-            "arrowhead": "none",
-            "arrowtail": "normal",
-            "dir": "both",
-            "minlen": 0,
-        },
-    ),
-}
 
 @dataclass
 class MotionStatechartGraphviz:
@@ -279,15 +167,15 @@ class MotionStatechartGraphviz:
         node: MotionStatechartNode,
     ) -> pydot.Node:
         pydot_node = self._create_pydot_node(node)
-        if len(node._plot_extra_boarder_styles) == 0:
+        if len(node.plot_specs.extra_border_styles) == 0:
             graph.add_node(pydot_node)
             return pydot_node
         child = pydot_node
-        for index, style in enumerate(node._plot_extra_boarder_styles):
+        for index, style in enumerate(node.plot_specs.extra_border_styles):
             c = pydot.Cluster(
                 graph_name=f"{node.unique_name}",
                 penwidth=LineWidth,
-                style=node._plot_extra_boarder_styles[index],
+                style=node.plot_specs.extra_border_styles[index],
                 color="black",
             )
             if index == 0:
@@ -295,7 +183,7 @@ class MotionStatechartGraphviz:
             else:
                 c.add_subgraph(child)
             child = c
-        if len(node._plot_extra_boarder_styles) > 0:
+        if len(node.plot_specs.extra_border_styles) > 0:
             graph.add_subgraph(c)
         return pydot_node
 
@@ -304,9 +192,9 @@ class MotionStatechartGraphviz:
         pydot_node = pydot.Node(
             str(node.unique_name),
             label=label,
-            shape=node._plot_shape,
+            shape=node.plot_specs.shape,
             color="black",
-            style=node._plot_style,
+            style=node.plot_specs.style,
             margin=0,
             fillcolor="white",
             fontname=FONT,
@@ -421,7 +309,9 @@ class MotionStatechartGraphviz:
         graph = self._cluster_map[parent_node.parent_node]
 
         def _select_node(
-            parent: MotionStatechartNode, child: MotionStatechartNode, selector: StateSelector
+            parent: MotionStatechartNode,
+            child: MotionStatechartNode,
+            selector: StateSelector,
         ) -> MotionStatechartNode:
             return parent if selector == "parent" else child
 
@@ -448,5 +338,3 @@ class MotionStatechartGraphviz:
                 **kwargs,
             )
         )
-
-

@@ -32,3 +32,22 @@ class DefaultWeights(FloatEnum):
     WEIGHT_COLLISION_AVOIDANCE = 50.0
     WEIGHT_BELOW_CA = 1.0
     WEIGHT_MIN = 0.0
+
+
+class TransitionKind(Enum):
+    START = 1
+    """
+    Transitions nodes from NOT_STARTED to RUNNING.
+    """
+    PAUSE = 2
+    """
+    Transitions nodes from RUNNING to PAUSED if True, or back if False.
+    """
+    END = 3
+    """
+    Transitions nodes from RUNNING or PAUSED to DONE.
+    """
+    RESET = 4
+    """
+    Transitions nodes from any state to NOT_STARTED.
+    """
