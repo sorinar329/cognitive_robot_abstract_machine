@@ -18,7 +18,6 @@ jobs:
 
       - name: Install dependencies
         run: |
-          sudo apt-get update
           cd /opt/ros/cognitive_robot_abstract_machine
           source /opt/ros/cram-venv/bin/activate
           git submodule init
@@ -30,4 +29,4 @@ jobs:
           source /opt/ros/overlay_ws/install/setup.bash
           source /opt/ros/cram-venv/bin/activate
           cd /opt/ros/cognitive_robot_abstract_machine
-          python -m pytest -v test/
+          python -m pytest -sv test/
