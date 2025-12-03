@@ -401,11 +401,6 @@ class CanBehaveLikeAVariable(Selectable[T], ABC):
     and comparison operations.
     """
 
-    _var_: CanBehaveLikeAVariable[T] = field(init=False, default=None)
-    """
-    Same as _var_ in Selectable, but of type CanBehaveLikeAVariable.
-    """
-
     _path_: List[ClassRelation] = field(init=False, default_factory=list)
     """
     The path of the variable in the symbol graph as a sequence of relation instances.
@@ -461,7 +456,7 @@ class ResultProcessor(CanBehaveLikeAVariable[T], ABC):
         super().__post_init__()
         self._var_ = (
             self._child_._var_
-            if isinstance(self._child_, CanBehaveLikeAVariable)
+            if isinstance(self._child_, Selectable)
             else None
         )
         self._node_.wrap_subtree = True
@@ -501,7 +496,7 @@ class ResultProcessor(CanBehaveLikeAVariable[T], ABC):
         :param result: The result to be mapped.
         :return: The mapped result.
         """
-        if isinstance(self._child_, CanBehaveLikeAVariable):
+        if isinstance(self._child_, Selectable):
             return result[self._id_].value
         elif isinstance(self._child_, SetOf):
             selected_variables_ids = [v._id_ for v in self._child_._selected_variables]
@@ -1129,7 +1124,7 @@ class SetOf(QueryObjectDescriptor[T]):
 
 
 @dataclass(eq=False, repr=False)
-class Entity(QueryObjectDescriptor[T], CanBehaveLikeAVariable[T]):
+class Entity(QueryObjectDescriptor[T], Selectable[T]):
     """
     A query over a single variable.
     """
@@ -2114,5 +2109,5 @@ def _any_of_the_kwargs_is_a_variable(bindings: Dict[str, Any]) -> bool:
     :return: Rather any of the objects is a variable or not.
     """
     return any(
-        isinstance(binding, CanBehaveLikeAVariable) for binding in bindings.values()
+        isinstance(binding, Selectable) for binding in bindings.values()
     )
