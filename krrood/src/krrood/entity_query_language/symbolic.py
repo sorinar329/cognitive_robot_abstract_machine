@@ -364,17 +364,13 @@ A function that maps the results of a query object descriptor to a new set of re
 @dataclass(eq=False, repr=False)
 class Selectable(SymbolicExpression[T], ABC):
 
-    _var_: CanBehaveLikeAVariable = field(init=False, default=None)
+    _var_: Selectable[T] = field(init=False, default=None)
     """
     A variable that is used if the child class to this class want to provide a variable to be tracked other than 
     itself, this is specially useful for child classes that holds a variable instead of being a variable and want
      to delegate the variable behaviour to the variable it has instead.
     For example, this is the case for the ResultQuantifiers & QueryDescriptors that operate on a single selected
     variable.
-    """
-    _results_mapping: List[ResultMapping] = field(init=False, default_factory=list)
-    """
-    Mapping functions that map the results of the query object descriptor to a new set of results.
     """
 
     @property
@@ -389,67 +385,26 @@ class Selectable(SymbolicExpression[T], ABC):
         return False
 
 
-    def max(self) -> Self:
-        """
-        Add a result mapping that maps the results to the result that has the maximum
-        value for the given variable.
+class Max(Selectable[T]):
+    _child_: Selectable[T]
 
-        :param variable: The variable for which the maximum value is to be found, if None, the first selected variable
-         is used.
-        :return: This query object descriptor.
-        """
-        variable = self._var_
-        key = lambda res: res[variable._id_].value
+    def __post_init__(self):
+        self._var_ = self
 
-        def get_max(results_gen):
-            try:
-                yield max(results_gen, key=key)
-            except ValueError:
-                yield {variable._id_: HashedValue(None)}
+    def _evaluate__(
+        self,
+        sources: Optional[Dict[int, HashedValue]] = None,
+        parent: Optional[SymbolicExpression] = None,
+    ) -> Iterable[OperationResult]:
+        key = lambda res: res[self._child_._id_].value
 
-        self._results_mapping.append(get_max)
-        return self
+        try:
+            bindings = max(sources, key=key)
+        except ValueError:
+            bindings = sources
 
-    def min(self, variable: Optional[CanBehaveLikeAVariable[T]] = None) -> Self:
-        """
-        Add a result mapping that maps the results to the result that has the minimum
-        value for the given variable.
+        yield OperationResult(bindings, False, self)
 
-        :param variable: The variable for which the minimum value is to be found, if None, the first selected variable
-         is used.
-        :return: This query object descriptor.
-        """
-        variable = self._var_
-        key = lambda res: res[variable._id_].value
-
-        def get_min(results_gen):
-            try:
-                yield min(results_gen, key=key)
-            except ValueError:
-                yield {variable._id_: HashedValue(None)}
-
-        self._results_mapping.append(get_min)
-        return self
-
-    def sum(self, variable: Optional[CanBehaveLikeAVariable[T]] = None) -> Self:
-        """
-        Computes the sum of values produced by the given variable.
-        If variable is None, tries to sum the rows directly (rare case).
-        """
-        variable = self._var_
-        map_to_var_val = lambda res: res[variable._id_].value
-
-        def apply_sum(results_gen):
-            entered = False
-            sum_val = 0
-            for val in map(map_to_var_val, results_gen):
-                entered = True
-                sum_val += val
-            sum_val = HashedValue(sum_val if entered else None)
-            yield {variable._id_: sum_val}
-
-        self._results_mapping.append(apply_sum)
-        return self
 
 
 @dataclass(eq=False, repr=False)
@@ -457,6 +412,11 @@ class CanBehaveLikeAVariable(Selectable[T], ABC):
     """
     This class adds the monitoring/tracking behaviour on variables that tracks attribute access, calling,
     and comparison operations.
+    """
+
+    _var_: CanBehaveLikeAVariable[T] = field(init=False, default=None)
+    """
+    Same as _var_ in Selectable, but of type CanBehaveLikeAVariable.
     """
 
     _path_: List[ClassRelation] = field(init=False, default_factory=list)

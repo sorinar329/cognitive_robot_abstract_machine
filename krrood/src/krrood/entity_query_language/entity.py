@@ -282,3 +282,66 @@ def inference(
     return lambda **kwargs: Variable(
         _type_=type_, _name__=type_.__name__, _kwargs_=kwargs, _is_inferred_=True
     )
+
+
+def max(variable: Union[T, Selectable[T]]) -> Union[T, Selectable[T]]:
+    """
+    Maps the variable values to their maximum value.
+
+    :param variable: The variable for which the maximum value is to be found.
+    :return: The variable mapped to its maximum value.
+    """
+    variable = self._var_
+    key = lambda res: res[variable._id_].value
+
+    def get_max(results_gen):
+        try:
+            yield max(results_gen, key=key)
+        except ValueError:
+            yield {variable._id_: HashedValue(None)}
+
+    self._results_mapping.append(get_max)
+    return self
+
+
+def min(self, variable: Optional[CanBehaveLikeAVariable[T]] = None) -> Self:
+    """
+    Add a result mapping that maps the results to the result that has the minimum
+    value for the given variable.
+
+    :param variable: The variable for which the minimum value is to be found, if None, the first selected variable
+     is used.
+    :return: This query object descriptor.
+    """
+    variable = self._var_
+    key = lambda res: res[variable._id_].value
+
+    def get_min(results_gen):
+        try:
+            yield min(results_gen, key=key)
+        except ValueError:
+            yield {variable._id_: HashedValue(None)}
+
+    self._results_mapping.append(get_min)
+    return self
+
+
+def sum(self, variable: Optional[CanBehaveLikeAVariable[T]] = None) -> Self:
+    """
+    Computes the sum of values produced by the given variable.
+    If variable is None, tries to sum the rows directly (rare case).
+    """
+    variable = self._var_
+    map_to_var_val = lambda res: res[variable._id_].value
+
+    def apply_sum(results_gen):
+        entered = False
+        sum_val = 0
+        for val in map(map_to_var_val, results_gen):
+            entered = True
+            sum_val += val
+        sum_val = HashedValue(sum_val if entered else None)
+        yield {variable._id_: sum_val}
+
+    self._results_mapping.append(apply_sum)
+    return self
