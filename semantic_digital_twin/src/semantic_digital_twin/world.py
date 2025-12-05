@@ -1147,17 +1147,17 @@ class World:
                 ]
 
     def get_degree_of_freedom_by_id(self, id: UUID) -> DegreeOfFreedom:
-        return self._get_world_entity_by_hash_from_iterable(hash(id))
+        return self._get_world_entity_by_hash(hash(id))
 
     def get_kinematic_structure_entity_by_id(
         self, id: UUID
     ) -> KinematicStructureEntity:
-        return self._get_world_entity_by_hash_from_iterable(hash(id))
+        return self._get_world_entity_by_hash(hash(id))
 
     def get_actuator_by_id(self, id: UUID) -> Actuator:
-        return self._get_world_entity_by_hash_from_iterable(hash(id))
+        return self._get_world_entity_by_hash(hash(id))
 
-    def _get_world_entity_by_hash_from_iterable(
+    def _get_world_entity_by_hash(
         self, entity_hash: int
     ) -> GenericWorldEntity:
         """
