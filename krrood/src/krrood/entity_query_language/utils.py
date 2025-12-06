@@ -157,24 +157,6 @@ def make_set(value: Any) -> Set:
     return set(value) if is_iterable(value) else {value}
 
 
-@dataclass(eq=False)
-class ALL:
-    """
-    Sentinel that compares equal to any other value.
-
-    This is used to signal wildcard matches in hashing/containment logic.
-    """
-
-    def __eq__(self, other):
-        """Always return True."""
-        return True
-
-    def __hash__(self):
-        """Hash based on object identity to remain unique as a sentinel."""
-        return hash(id(self))
-
-
-All = ALL()
 T = TypeVar("T")
 
 
@@ -193,9 +175,9 @@ class ReEnterableLazyIterable(Generic[T]):
 
     def __iter__(self):
         """
-        Iterate over the hashed values.
+        Iterate over the values, materializing them as they are iterated over.
 
-        :return: An iterator over the hashed values.
+        :return: An iterator over the values.
         """
         yield from self.materialized_values
         for v in self.iterable:
