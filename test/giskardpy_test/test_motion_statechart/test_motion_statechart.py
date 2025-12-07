@@ -91,8 +91,6 @@ from semantic_digital_twin.world_description.shape_collection import ShapeCollec
 from semantic_digital_twin.world_description.world_entity import Body
 
 
-
-
 def test_condition_to_str():
     msc = MotionStatechart()
     node1 = ConstTrueNode()
