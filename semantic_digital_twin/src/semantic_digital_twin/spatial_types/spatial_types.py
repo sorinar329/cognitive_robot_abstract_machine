@@ -423,7 +423,7 @@ class SymbolicType(Symbol):
                 left = self.casadi_sx.dep(0)
                 right = self.casadi_sx.dep(1)
                 return ca.is_equal(ca.simplify(left), ca.simplify(right), 5)
-        # its not evaluatable as a bool so we revert to the normal behavior and a not None python thing is true
+        # it's not evaluatable as a bool, so we revert to the normal behavior, and a not None python thing is true
         return True
 
     def __repr__(self):
