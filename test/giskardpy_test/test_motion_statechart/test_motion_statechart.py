@@ -2,7 +2,7 @@ import json
 import time
 from dataclasses import dataclass
 from math import radians
-from typing import Optional, Iterable
+from typing import Optional, Iterable, Type
 
 import numpy as np
 import pytest
@@ -59,6 +59,8 @@ from giskardpy.motion_statechart.tasks.cartesian_tasks import (
     CartesianOrientation,
     CartesianPosition,
     CartesianVelocityLimit,
+    CartesianPositionVelocityLimit,
+    CartesianRotationVelocityLimit,
 )
 from giskardpy.motion_statechart.tasks.feature_functions import AngleGoal
 from giskardpy.motion_statechart.tasks.joint_tasks import JointPositionList, JointState
@@ -1529,7 +1531,9 @@ class TestVelocityTasks:
         with pytest.raises(Exception):
             kin_sim.tick_until_end()
 
-    def test_cartesian_position_velocity_limit(self, pr2_world: "World"):
+    def _test_cartesian_position_velocity_limit(
+        self, pr2_world: "World", limit_cls: Type
+    ):
         """
         Test for the linear velocity limits.
         """
@@ -1542,8 +1546,8 @@ class TestVelocityTasks:
         )
 
         # Halving the velocity should at least double the execution time
-        usual_limit = CartesianVelocityLimit(root_link=root, tip_link=tip)
-        half_velocity_limit = CartesianVelocityLimit(
+        usual_limit = limit_cls(root_link=root, tip_link=tip, max_linear_velocity=0.1)
+        half_velocity_limit = limit_cls(
             root_link=root,
             tip_link=tip,
             max_linear_velocity=(usual_limit.max_linear_velocity / 2.1),
@@ -1567,7 +1571,9 @@ class TestVelocityTasks:
             goal_node=position_goal, limit_node=low_weight_limit, world=pr2_world
         )
 
-    def test_cartesian_rotation_velocity_limit(self, pr2_world: "World"):
+    def _test_cartesian_rotation_velocity_limit(
+        self, pr2_world: "World", limit_cls: Type
+    ):
         """
         Test for the angular velocity limits.
         """
@@ -1580,10 +1586,8 @@ class TestVelocityTasks:
         )
 
         # Halving the velocity should at least double the execution time
-        usual_limit = CartesianVelocityLimit(
-            root_link=root, tip_link=tip, max_angular_velocity=0.3
-        )
-        half_velocity_limit = CartesianVelocityLimit(
+        usual_limit = limit_cls(root_link=root, tip_link=tip, max_angular_velocity=0.3)
+        half_velocity_limit = limit_cls(
             root_link=root,
             tip_link=tip,
             max_angular_velocity=(usual_limit.max_angular_velocity / 2.1),
@@ -1606,6 +1610,13 @@ class TestVelocityTasks:
         self._test_observation_variable(
             goal_node=orientation, limit_node=low_weight_limit, world=pr2_world
         )
+
+    def test_velocity_task(self, pr2_world: World):
+        self._test_cartesian_position_velocity_limit(pr2_world, CartesianVelocityLimit)
+        self._test_cartesian_position_velocity_limit(
+            pr2_world, CartesianPositionVelocityLimit
+        )
+        self._test_cartesian_rotation_velocity_limit(pr2_world, CartesianVelocityLimit)
 
 
 def test_transition_triggers():

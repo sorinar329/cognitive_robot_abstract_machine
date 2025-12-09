@@ -306,32 +306,41 @@ class CartesianPose(Task):
             self._fk_binding.bind(context.world)
 
 
-@dataclass
+@dataclass(eq=False, repr=False)
 class CartesianPositionVelocityLimit(Task):
-    root_link: Body = field(kw_only=True)
-    tip_link: Body = field(kw_only=True)
-    max_linear_velocity: float = 0.2
-    weight: float = DefaultWeights.WEIGHT_ABOVE_CA
+    """
+    This goal will use put a strict limit on the Cartesian velocity. This will require a lot of constraints, thus
+    slowing down the system noticeably.
+    """
 
-    def __post_init__(self):
-        """
-        This goal will use put a strict limit on the Cartesian velocity. This will require a lot of constraints, thus
-        slowing down the system noticeably.
-        :param root_link: root link of the kinematic chain
-        :param tip_link: tip link of the kinematic chain
-        :param max_linear_velocity: m/s
-        :param max_angular_velocity: rad/s
-        :param weight: default DefaultWeights.WEIGHT_ABOVE_CA
-        :param hard: Turn this into a hard constraint. This make create unsolvable optimization problems
-        """
-        r_P_c = context.world.compose_forward_kinematics_expression(
+    root_link: KinematicStructureEntity = field(kw_only=True)
+    """root link of the kinematic chain"""
+    tip_link: KinematicStructureEntity = field(kw_only=True)
+    """tip link of the kinematic chain"""
+    max_linear_velocity: float = field(default=0.1, kw_only=True)
+    """in m/s"""
+    weight: float = field(default=DefaultWeights.WEIGHT_ABOVE_CA, kw_only=True)
+
+    def build(self, context: BuildContext) -> NodeArtifacts:
+        artifacts = NodeArtifacts()
+        root_P_tip = context.world.compose_forward_kinematics_expression(
             self.root_link, self.tip_link
         ).to_position()
-        self.add_translational_velocity_limit(
-            frame_P_current=r_P_c,
+        artifacts.constraints.add_translational_velocity_limit(
+            frame_P_current=root_P_tip,
             max_velocity=self.max_linear_velocity,
             weight=self.weight,
         )
+
+        position_variables: list[PositionVariable] = root_P_tip.free_variables()
+        velocity_variables = [p.dof.variables.velocity for p in position_variables]
+        root_P_tip_dot = cas.Expression(root_P_tip).total_derivative(
+            position_variables, velocity_variables
+        )
+
+        artifacts.observation = root_P_tip_dot.norm() <= self.max_linear_velocity
+
+        return artifacts
 
 
 @dataclass
