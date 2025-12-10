@@ -4,7 +4,6 @@ import inspect
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from functools import wraps, lru_cache
-from typing import Iterable
 
 from typing_extensions import (
     Callable,
@@ -15,6 +14,7 @@ from typing_extensions import (
     ClassVar,
     Dict,
     List,
+    Iterable
 )
 
 from .enums import PredicateType
