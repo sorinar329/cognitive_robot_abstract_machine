@@ -1,5 +1,6 @@
+import logging
 import os
-from typing import Optional, Dict
+from typing_extensions import Optional, Dict
 import numpy
 from dataclasses import dataclass, field
 
@@ -42,6 +43,8 @@ from .multi_sim import (
     MujocoCamera,
     MujocoEquality,
 )
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -550,16 +553,17 @@ class MJCFParser:
                 case mujoco.mjtEq.mjEQ_JOINT:
                     self.mimic_joints[equality.name2] = equality.name1
                 case mujoco.mjtEq.mjEQ_WELD:
+                    data = [0.0] * 6 + [1.0] + [0.0] * 3 + [1.0]  # TODO: MuJoCo Bug!!!
                     self.world.add_semantic_annotation(
                         MujocoEquality(
                             type=mujoco.mjtEq.mjEQ_WELD,
                             objtype=mujoco.mjtObj.mjOBJ_BODY,
                             name1=equality.name1,
                             name2=equality.name2,
-                            data=equality.data,
+                            data=data,
                         )
                     )
                 case _:
-                    print(
-                        f"Warning: Equality of type {equality.type} not supported yet. Skipping."
+                    logger.warning(
+                        f"Equality of type {equality.type} not supported yet. Skipping."
                     )

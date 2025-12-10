@@ -1,3 +1,4 @@
+import logging
 import inspect
 import os
 import shutil
@@ -56,6 +57,8 @@ from ..world_description.world_modification import (
     AddActuatorModification,
 )
 
+logger = logging.getLogger(__name__)
+
 
 def cas_pose_to_list(pose: TransformationMatrix) -> List[float]:
     """
@@ -67,8 +70,10 @@ def cas_pose_to_list(pose: TransformationMatrix) -> List[float]:
     pose = pose.evaluate()
     pos = pose[:3, 3]
     rotation_matrix = pose[:3, :3]
-    if numpy.linalg.det(rotation_matrix) < 0:
-        rotation_matrix[:, 2] *= -1
+    if (
+        numpy.linalg.det(rotation_matrix) < 0
+    ):  # Check if the rotation matrix is left-handed
+        rotation_matrix[:, 2] *= -1  # Convert to right-handed
     quat = Rotation.from_matrix(rotation_matrix).as_quat(scalar_first=True)
     return [pos[0], pos[1], pos[2], quat[0], quat[1], quat[2], quat[3]]
 
@@ -802,10 +807,29 @@ class MujocoEquality(SemanticAnnotation):
     """
 
     type: mujoco.mjtEq
+    """
+    The type of the equality constraint.
+    """
+
     objtype: mujoco.mjtObj
+    """
+    The type of the objects being constrained.
+    """
+
     name1: str
+    """
+    The name of the first entity being constrained.
+    """
+
     name2: str
+    """
+    The name of the second entity being constrained.
+    """
+
     data: List[float]
+    """
+    The data associated with the equality constraint.
+    """
 
 
 class MujocoConverter(EntityConverter, ABC): ...
@@ -1303,7 +1327,9 @@ class MujocoBuilder(MultiSimBuilder):
             )
         mesh_ext = os.path.splitext(mesh_file_path)[1].lower()
         if mesh_ext == ".dae":
-            print(f"Cannot use .dae files in Mujoco. Skipping mesh {mesh_file_path}.")
+            logger.warning(
+                f"Cannot use .dae files in Mujoco. Skipping mesh {mesh_file_path}."
+            )
             return False
         mesh_name = mesh_entity.name
         if mesh_name not in [mesh.name for mesh in self.spec.meshes]:
@@ -1473,7 +1499,7 @@ class MujocoBuilder(MultiSimBuilder):
             equality.objtype = equality_semantic_annotation.objtype
             equality.name1 = equality_semantic_annotation.name1
             equality.name2 = equality_semantic_annotation.name2
-            equality.data = [0.0] * 6 + [1.0] + [0.0] * 3 + [1.0]  # TODO: MuJoCo Bug!!!
+            equality.data = equality_semantic_annotation.data
 
     def _find_entity(
         self,
