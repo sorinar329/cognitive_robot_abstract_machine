@@ -16,7 +16,7 @@ from semantic_digital_twin.adapters.procthor.procthor_parser import (
     ProcthorWall,
     ProcthorObject,
 )
-from semantic_digital_twin.adapters.procthor.procthor_semantic_annotations import (
+from semantic_digital_twin.adapters.procthor.procthor_resolver import (
     ProcthorResolver,
 )
 from semantic_digital_twin.semantic_annotations.semantic_annotations import Bread
@@ -31,7 +31,7 @@ class ProcTHORTestCase(unittest.TestCase):
     def setUpClass(cls):
         super().setUpClass()
         json_dir = os.path.join(
-            resource_filename('semantic_digital_twin', '../../'),
+            resource_filename("semantic_digital_twin", "../../"),
             "resources",
             "procthor_json",
         )
@@ -320,7 +320,7 @@ class ProcTHORTestCase(unittest.TestCase):
     def test_parse_full_world(self):
         world = ProcTHORParser.from_file(
             os.path.join(
-                resource_filename('semantic_digital_twin', '../../'),
+                resource_filename("semantic_digital_twin", "../../"),
                 "resources",
                 "procthor_json",
                 "house_987654321.json",

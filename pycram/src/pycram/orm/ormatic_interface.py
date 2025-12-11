@@ -45,7 +45,7 @@ import pycram.robot_plans.motions.gripper
 import pycram.robot_plans.motions.misc
 import pycram.robot_plans.motions.navigation
 import pycram.robot_plans.motions.robot_body
-import semantic_digital_twin.adapters.procthor.procthor_semantic_annotations
+import semantic_digital_twin.adapters.procthor.procthor_resolver
 import semantic_digital_twin.callbacks.callback
 import semantic_digital_twin.datastructures.prefixed_name
 import semantic_digital_twin.orm.model

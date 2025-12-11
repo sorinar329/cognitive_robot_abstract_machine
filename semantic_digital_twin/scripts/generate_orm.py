@@ -12,13 +12,8 @@ import uuid
 from dataclasses import is_dataclass
 
 import sqlalchemy
-import trimesh
-from krrood.class_diagrams import ClassDiagram
-from krrood.ormatic.ormatic import ORMatic
-from krrood.ormatic.utils import classes_of_module
-from krrood.utils import recursive_subclasses
 
-import semantic_digital_twin.adapters.procthor.procthor_semantic_annotations
+import semantic_digital_twin.adapters.procthor.procthor_resolver
 import semantic_digital_twin.orm.model
 import semantic_digital_twin.reasoning.predicates
 import semantic_digital_twin.robots.abstract_robot
@@ -28,6 +23,10 @@ import semantic_digital_twin.world_description.degree_of_freedom
 import semantic_digital_twin.world_description.geometry
 import semantic_digital_twin.world_description.shape_collection
 import semantic_digital_twin.world_description.world_entity
+from krrood.class_diagrams import ClassDiagram
+from krrood.ormatic.ormatic import ORMatic
+from krrood.ormatic.utils import classes_of_module
+from krrood.utils import recursive_subclasses
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.orm.model import *  # type: ignore
 from semantic_digital_twin.reasoning.predicates import ContainsType
@@ -80,7 +79,6 @@ all_classes |= set(
     classes_of_module(semantic_digital_twin.world_description.world_modification)
 )
 all_classes |= set(classes_of_module(semantic_digital_twin.callbacks.callback))
-
 
 # remove classes that should not be mapped
 all_classes -= {
