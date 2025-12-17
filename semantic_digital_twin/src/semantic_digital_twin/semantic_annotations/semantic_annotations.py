@@ -106,6 +106,7 @@ class Handle(HasRootBody):
 class Fridge(
     HasCaseAsMainBody,
     HasDoors,
+    HasDrawers,
 ):
     """
     A fridge that has a door and a body.

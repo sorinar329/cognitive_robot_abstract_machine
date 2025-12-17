@@ -284,6 +284,42 @@ class TestFactories(unittest.TestCase):
         assert isinstance(slider.body.parent_connection, PrismaticConnection)
         assert drawer.slider == slider
 
+    def test_has_drawer_factory(self):
+        world = World()
+        root = Body(name=PrefixedName("root"))
+        fridge = Fridge.create_with_new_body_in_world(
+            name=PrefixedName("case"),
+            world=world,
+            parent=root,
+            scale=Scale(1, 1, 2.0),
+        )
+        drawer = Drawer.create_with_new_body_in_world(
+            name=PrefixedName("drawer"), world=world, parent=fridge.body
+        )
+        fridge.add_drawer(drawer)
+
+        semantic_drawer_annotations = world.get_semantic_annotations_by_type(Drawer)
+        self.assertEqual(len(semantic_drawer_annotations), 1)
+        assert fridge.drawers[0] == drawer
+
+    def test_has_doors_factory(self):
+        world = World()
+        root = Body(name=PrefixedName("root"))
+        fridge = Fridge.create_with_new_body_in_world(
+            name=PrefixedName("case"),
+            world=world,
+            parent=root,
+            scale=Scale(1, 1, 2.0),
+        )
+        door = Door.create_with_new_body_in_world(
+            name=PrefixedName("left_door"), world=world, parent=fridge.body
+        )
+        fridge.add_door(door)
+
+        semantic_door_annotations = world.get_semantic_annotations_by_type(Door)
+        self.assertEqual(len(semantic_door_annotations), 1)
+        assert fridge.doors[0] == door
+
     def test_floor_factory(self):
         world = World()
         root = Body(name=PrefixedName("root"))

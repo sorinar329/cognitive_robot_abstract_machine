@@ -141,6 +141,12 @@ dresserdao_drawers_association = Table(
     Column("dresserdao_id", ForeignKey("DresserDAO.database_id")),
     Column("drawerdao_id", ForeignKey("DrawerDAO.database_id")),
 )
+fridgedao_drawers_association = Table(
+    "fridgedao_drawers_association",
+    Base.metadata,
+    Column("fridgedao_id", ForeignKey("FridgeDAO.database_id")),
+    Column("drawerdao_id", ForeignKey("DrawerDAO.database_id")),
+)
 fridgedao_doors_association = Table(
     "fridgedao_doors_association",
     Base.metadata,
@@ -402,31 +408,6 @@ class HasActiveConnectionDAO(
     }
 
 
-class HasDrawersDAO(
-    HasActiveConnectionDAO,
-    DataAccessObject[semantic_digital_twin.semantic_annotations.mixins.HasDrawers],
-):
-
-    __tablename__ = "HasDrawersDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        ForeignKey(HasActiveConnectionDAO.database_id),
-        primary_key=True,
-        use_existing_column=True,
-    )
-
-    drawers: Mapped[typing.List[DrawerDAO]] = relationship(
-        "DrawerDAO",
-        secondary="hasdrawersdao_drawers_association",
-        cascade="save-update, merge",
-    )
-
-    __mapper_args__ = {
-        "polymorphic_identity": "HasDrawersDAO",
-        "inherit_condition": database_id == HasActiveConnectionDAO.database_id,
-    }
-
-
 class HasPrismaticConnectionDAO(
     HasActiveConnectionDAO,
     DataAccessObject[
@@ -445,6 +426,31 @@ class HasPrismaticConnectionDAO(
     __mapper_args__ = {
         "polymorphic_identity": "HasPrismaticConnectionDAO",
         "inherit_condition": database_id == HasActiveConnectionDAO.database_id,
+    }
+
+
+class HasDrawersDAO(
+    HasPrismaticConnectionDAO,
+    DataAccessObject[semantic_digital_twin.semantic_annotations.mixins.HasDrawers],
+):
+
+    __tablename__ = "HasDrawersDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(HasPrismaticConnectionDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    drawers: Mapped[typing.List[DrawerDAO]] = relationship(
+        "DrawerDAO",
+        secondary="hasdrawersdao_drawers_association",
+        cascade="save-update, merge",
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "HasDrawersDAO",
+        "inherit_condition": database_id == HasPrismaticConnectionDAO.database_id,
     }
 
 
@@ -3253,6 +3259,11 @@ class FridgeDAO(
         use_existing_column=True,
     )
 
+    drawers: Mapped[typing.List[DrawerDAO]] = relationship(
+        "DrawerDAO",
+        secondary="fridgedao_drawers_association",
+        cascade="save-update, merge",
+    )
     doors: Mapped[typing.List[DoorDAO]] = relationship(
         "DoorDAO", secondary="fridgedao_doors_association", cascade="save-update, merge"
     )

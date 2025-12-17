@@ -607,49 +607,56 @@ class HasSlider(HasPrismaticConnection, SemanticAssociation, ABC):
 
 
 @dataclass(eq=False)
-class HasDrawers(HasActiveConnection):
+class HasDrawers(HasPrismaticConnection, ABC):
     """
     A mixin class for semantic annotations that have drawers.
     """
 
     drawers: List[Drawer] = field(default_factory=list, hash=False, kw_only=True)
 
-    def _add_drawer_to_world(
+    def add_drawer(
         self,
-        drawer_factory: DrawerFactory,
-        parent_T_drawer: TransformationMatrix,
-        parent_world: World,
+        drawer: Drawer,
     ):
+        """
+        Adds a door to the parent world using a new door hinge body with a revolute connection.
 
-        lower_limits, upper_limits = self._create_drawer_upper_lower_limits(
-            drawer_factory
-        )
-        drawer_world = drawer_factory.create()
-        parent_root = parent_world.root
-        child_root = drawer_world.root
+        :param door_factory: The factory used to create the door.
+        :param parent_T_door: The transformation matrix defining the door's position and orientation relative
+        to the parent world.
+        :param parent_world: The world to which the door will be added.
+        """
 
-        parent_T_drawer.reference_frame = parent_root
+        self._add_drawer(drawer)
+        self.drawers.append(drawer)
 
-        dof = DegreeOfFreedom(
-            name=PrefixedName(
-                f"{child_root.name.name}_connection", child_root.name.prefix
-            ),
-            lower_limits=lower_limits,
-            upper_limits=upper_limits,
-        )
-        with parent_world.modify_world():
-            parent_world.add_degree_of_freedom(dof)
-            connection = PrismaticConnection(
-                parent=parent_root,
-                child=child_root,
-                parent_T_connection_expression=parent_T_drawer,
-                multiplier=1.0,
-                offset=0.0,
-                axis=Vector3.X(),
-                dof_id=dof.id,
+    def _add_drawer(
+        self: SemanticAnnotation | Self,
+        drawer: Drawer,
+    ):
+        """
+        Adds a hinge to the door. The hinge's pivot point is on the opposite side of the handle.
+        :param door_factory: The factory used to create the door.
+        :param parent_T_door: The transformation matrix defining the door's position and orientation relative
+        :param opening_axis: The axis around which the door opens.
+        """
+        if drawer._world != self._world:
+            raise ValueError("Hinge must be part of the same world as the door.")
+
+        world = self._world
+        door_body = drawer.body
+        self_T_door = self.get_self_T_new_child(drawer)
+
+        with world.modify_world():
+            parent_C_handle = drawer.body.parent_connection
+            world.remove_connection(parent_C_handle)
+
+            self_C_door = FixedConnection(
+                parent=self.body,
+                child=door_body,
+                parent_T_connection_expression=self_T_door,
             )
-
-            parent_world.merge_world(drawer_world, connection)
+            world.add_connection(self_C_door)
 
 
 @dataclass(eq=False)
@@ -663,7 +670,6 @@ class HasDoors(SemanticAssociation, ABC):
     def add_door(
         self,
         door: Door,
-        parent: KinematicStructureEntity,
     ):
         """
         Adds a door to the parent world using a new door hinge body with a revolute connection.
@@ -674,13 +680,12 @@ class HasDoors(SemanticAssociation, ABC):
         :param parent_world: The world to which the door will be added.
         """
 
-        self._add_door(door, parent)
+        self._add_door(door)
         self.doors.append(door)
 
     def _add_door(
         self: SemanticAnnotation | Self,
         door: Door,
-        parent: KinematicStructureEntity,
     ):
         """
         Adds a hinge to the door. The hinge's pivot point is on the opposite side of the handle.
@@ -700,52 +705,11 @@ class HasDoors(SemanticAssociation, ABC):
             world.remove_connection(parent_C_handle)
 
             self_C_door = FixedConnection(
-                parent=parent,
+                parent=self.body,
                 child=door_body,
                 parent_T_connection_expression=self_T_door,
             )
             world.add_connection(self_C_door)
-
-    def _calculate_door_pivot_point(
-        self,
-        semantic_door_annotation: Door,
-        parent_T_door: TransformationMatrix,
-        scale: Scale,
-        opening_axis: Vector3,
-    ) -> TransformationMatrix:
-        """
-        Calculate the door pivot point based on the handle position and the door scale. The pivot point is on the opposite
-        side of the handle.
-
-        :param semantic_door_annotation: The door semantic annotation containing the handle.
-        :param parent_T_door: The transformation matrix defining the door's position and orientation.
-        :param scale: The scale of the door.
-        :param opening_axis: The axis along which the door is open.
-
-        :return: The transformation matrix defining the door's pivot point.
-        """
-        connection = semantic_door_annotation.handle.body.parent_connection
-        door_P_handle: NDArray[float] = (
-            connection.origin_expression.to_position().to_np()
-        )
-
-        match opening_axis.to_np().tolist():
-            case [0, 1, 0, 0]:
-                sign = np.sign(-1 * door_P_handle[2]) if door_P_handle[2] != 0 else 1
-                offset = sign * (scale.z / 2)
-                parent_P_hinge = parent_T_door.to_np()[:3, 3] + np.array([0, 0, offset])
-            case [0, 0, 1, 0]:
-                sign = np.sign(-1 * door_P_handle[1]) if door_P_handle[1] != 0 else 1
-                offset = sign * (scale.y / 2)
-                parent_P_hinge = parent_T_door.to_np()[:3, 3] + np.array([0, offset, 0])
-            case _:
-                raise InvalidAxisError(axis=opening_axis)
-
-        parent_T_hinge = TransformationMatrix.from_point_rotation_matrix(
-            Point3(*parent_P_hinge)
-        )
-
-        return parent_T_hinge
 
 
 @dataclass(eq=False)
