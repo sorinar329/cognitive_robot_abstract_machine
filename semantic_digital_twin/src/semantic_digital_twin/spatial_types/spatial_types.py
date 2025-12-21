@@ -148,16 +148,15 @@ class HomogeneousTransformationMatrix(
         data: Optional[sm.MatrixData] = None,
         reference_frame: Optional[KinematicStructureEntity] = None,
         child_frame: Optional[KinematicStructureEntity] = None,
-        sanity_check: bool = True,
     ):
         """
         :param data: A 4x4 matrix of some form that represents the rotation matrix.
-        :param sanity_check: Whether to perform a sanity check on the matrix data. Can be skipped for performance reasons.
         """
-        if data is None:
-            data = np.eye(4)
         self.reference_frame = reference_frame
         self.child_frame = child_frame
+        if data is None:
+            self._casadi_sx = ca.SX.eye(4)
+            return
         self.casadi_sx = sm.to_sx(data)
 
     def _verify_type(self):
@@ -230,7 +229,6 @@ class HomogeneousTransformationMatrix(
                 data=rotation_matrix,
                 reference_frame=reference_frame,
                 child_frame=child_frame,
-                sanity_check=False,
             )
         if point is not None:
             a_T_b[0, 3] = point.x
@@ -457,20 +455,18 @@ class RotationMatrix(sm.SymbolicMathType, SpatialType, SubclassJSONSerializer):
         self,
         data: Optional[sm.MatrixData] = None,
         reference_frame: Optional[KinematicStructureEntity] = None,
-        sanity_check: bool = True,
     ):
         """
-
         :param data: A 4x4 matrix of some form that represents the rotation matrix.
         :param reference_frame:
-        :param sanity_check: Whether to perform a sanity check on the matrix data. Can be skipped for performance reasons.
         """
+        self.reference_frame = reference_frame
         if data is None:
-            data = np.eye(4)
+            self._casadi_sx = ca.SX.eye(4)
+            return
         empty_data = to_sx(Matrix.eye(4))
         empty_data[:3, :3] = sm.to_sx(data)[:3, :3]
         self._casadi_sx = empty_data
-        self.reference_frame = reference_frame
 
     def _verify_type(self):
         if self.shape != (4, 4):
@@ -536,7 +532,7 @@ class RotationMatrix(sm.SymbolicMathType, SpatialType, SubclassJSONSerializer):
         s[2, 0] = -m_st[1] + m_vt_0_ax[1]
         s[2, 1] = m_st[0] + m_vt_1_2
         s[2, 2] = ct__m_vt__axis[2]
-        return cls(s, reference_frame=reference_frame, sanity_check=False)
+        return cls(s, reference_frame=reference_frame)
 
     @classmethod
     def from_quaternion(cls, q: Quaternion) -> RotationMatrix:
@@ -717,7 +713,7 @@ class RotationMatrix(sm.SymbolicMathType, SpatialType, SubclassJSONSerializer):
         s[2, 0] = -ca.sin(pitch)
         s[2, 1] = ca.cos(pitch) * ca.sin(roll)
         s[2, 2] = ca.cos(pitch) * ca.cos(roll)
-        result = cls(reference_frame=reference_frame, sanity_check=False)
+        result = cls(reference_frame=reference_frame)
         result.casadi_sx = s
         return result
 
@@ -1535,64 +1531,7 @@ class Quaternion(sm.SymbolicMathType, SpatialType, SubclassJSONSerializer):
 
         :return: A new instance of `Quaternion` corresponding to the given rotation matrix `r`.
         """
-        q = sm.Vector(data=(0, 0, 0, 0))
-        t = r.to_generic_matrix().trace()
-
-        if0 = t - r[3, 3]
-
-        if1 = r[1, 1] - r[0, 0]
-
-        m_i_i = sm.if_greater_zero(if1, r[1, 1], r[0, 0])
-        m_i_j = sm.if_greater_zero(if1, r[1, 2], r[0, 1])
-        m_i_k = sm.if_greater_zero(if1, r[1, 0], r[0, 2])
-
-        m_j_i = sm.if_greater_zero(if1, r[2, 1], r[1, 0])
-        m_j_j = sm.if_greater_zero(if1, r[2, 2], r[1, 1])
-        m_j_k = sm.if_greater_zero(if1, r[2, 0], r[1, 2])
-
-        m_k_i = sm.if_greater_zero(if1, r[0, 1], r[2, 0])
-        m_k_j = sm.if_greater_zero(if1, r[0, 2], r[2, 1])
-        m_k_k = sm.if_greater_zero(if1, r[0, 0], r[2, 2])
-
-        if2 = r[2, 2] - m_i_i
-
-        m_i_i = sm.if_greater_zero(if2, r[2, 2], m_i_i)
-        m_i_j = sm.if_greater_zero(if2, r[2, 0], m_i_j)
-        m_i_k = sm.if_greater_zero(if2, r[2, 1], m_i_k)
-
-        m_j_i = sm.if_greater_zero(if2, r[0, 2], m_j_i)
-        m_j_j = sm.if_greater_zero(if2, r[0, 0], m_j_j)
-        m_j_k = sm.if_greater_zero(if2, r[0, 1], m_j_k)
-
-        m_k_i = sm.if_greater_zero(if2, r[1, 2], m_k_i)
-        m_k_j = sm.if_greater_zero(if2, r[1, 0], m_k_j)
-        m_k_k = sm.if_greater_zero(if2, r[1, 1], m_k_k)
-
-        t = sm.if_greater_zero(if0, t, m_i_i - (m_j_j + m_k_k) + r[3, 3])
-        q[0] = sm.if_greater_zero(
-            if0,
-            r[2, 1] - r[1, 2],
-            sm.if_greater_zero(
-                if2, m_i_j + m_j_i, sm.if_greater_zero(if1, m_k_i + m_i_k, t)
-            ),
-        )
-        q[1] = sm.if_greater_zero(
-            if0,
-            r[0, 2] - r[2, 0],
-            sm.if_greater_zero(
-                if2, m_k_i + m_i_k, sm.if_greater_zero(if1, t, m_i_j + m_j_i)
-            ),
-        )
-        q[2] = sm.if_greater_zero(
-            if0,
-            r[1, 0] - r[0, 1],
-            sm.if_greater_zero(
-                if2, t, sm.if_greater_zero(if1, m_i_j + m_j_i, m_k_i + m_i_k)
-            ),
-        )
-        q[3] = sm.if_greater_zero(if0, t, m_k_j - m_j_k)
-
-        q *= 0.5 / sm.sqrt(t * r[3, 3])
+        q = rotation_matrix_to_quaternion(r.to_generic_matrix())
         return cls.from_iterable(q, reference_frame=r.reference_frame)
 
     def conjugate(self) -> Quaternion:
@@ -1895,6 +1834,79 @@ class Pose(sm.SymbolicMathType, SpatialType, SubclassJSONSerializer):
         return HomogeneousTransformationMatrix(
             data=self, reference_frame=self.reference_frame
         )
+
+
+@sm.substitution_cache
+def rotation_matrix_to_quaternion(r: Matrix):
+    """
+    This method constructs a quaternion representation of the provided rotation matrix. It is designed to handle
+    different cases of rotation matrix configurations to ensure numerical stability during computation. The resultant
+    quaternion adheres to the expected mathematical relationship with the given rotation matrix.
+
+    .. note:: this method uses basic symbolic types and substitution caching, because it is building a large computational graph.
+
+    :param r: The input 3x3 matrix representing a rotation.
+    :return: A new instance of `Vector` corresponding to the quaternion for the given rotation matrix `r`.
+    """
+    q = sm.Vector(data=(0, 0, 0, 0))
+    t = r.trace()
+
+    if0 = t - r[3, 3]
+
+    if1 = r[1, 1] - r[0, 0]
+
+    m_i_i = sm.if_greater_zero(if1, r[1, 1], r[0, 0])
+    m_i_j = sm.if_greater_zero(if1, r[1, 2], r[0, 1])
+    m_i_k = sm.if_greater_zero(if1, r[1, 0], r[0, 2])
+
+    m_j_i = sm.if_greater_zero(if1, r[2, 1], r[1, 0])
+    m_j_j = sm.if_greater_zero(if1, r[2, 2], r[1, 1])
+    m_j_k = sm.if_greater_zero(if1, r[2, 0], r[1, 2])
+
+    m_k_i = sm.if_greater_zero(if1, r[0, 1], r[2, 0])
+    m_k_j = sm.if_greater_zero(if1, r[0, 2], r[2, 1])
+    m_k_k = sm.if_greater_zero(if1, r[0, 0], r[2, 2])
+
+    if2 = r[2, 2] - m_i_i
+
+    m_i_i = sm.if_greater_zero(if2, r[2, 2], m_i_i)
+    m_i_j = sm.if_greater_zero(if2, r[2, 0], m_i_j)
+    m_i_k = sm.if_greater_zero(if2, r[2, 1], m_i_k)
+
+    m_j_i = sm.if_greater_zero(if2, r[0, 2], m_j_i)
+    m_j_j = sm.if_greater_zero(if2, r[0, 0], m_j_j)
+    m_j_k = sm.if_greater_zero(if2, r[0, 1], m_j_k)
+
+    m_k_i = sm.if_greater_zero(if2, r[1, 2], m_k_i)
+    m_k_j = sm.if_greater_zero(if2, r[1, 0], m_k_j)
+    m_k_k = sm.if_greater_zero(if2, r[1, 1], m_k_k)
+
+    t = sm.if_greater_zero(if0, t, m_i_i - (m_j_j + m_k_k) + r[3, 3])
+    q[0] = sm.if_greater_zero(
+        if0,
+        r[2, 1] - r[1, 2],
+        sm.if_greater_zero(
+            if2, m_i_j + m_j_i, sm.if_greater_zero(if1, m_k_i + m_i_k, t)
+        ),
+    )
+    q[1] = sm.if_greater_zero(
+        if0,
+        r[0, 2] - r[2, 0],
+        sm.if_greater_zero(
+            if2, m_k_i + m_i_k, sm.if_greater_zero(if1, t, m_i_j + m_j_i)
+        ),
+    )
+    q[2] = sm.if_greater_zero(
+        if0,
+        r[1, 0] - r[0, 1],
+        sm.if_greater_zero(
+            if2, t, sm.if_greater_zero(if1, m_i_j + m_j_i, m_k_i + m_i_k)
+        ),
+    )
+    q[3] = sm.if_greater_zero(if0, t, m_k_j - m_j_k)
+
+    q *= 0.5 / sm.sqrt(t * r[3, 3])
+    return q
 
 
 # %% type hints

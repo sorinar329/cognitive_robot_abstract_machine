@@ -1090,6 +1090,14 @@ class TestVector:
 
 class TestMatrix:
     @pytest.mark.parametrize("shape", [(1, 1), (1, 5), (3, 1), (2, 3), (4, 4)])
+    def test_create_filled_with_variables(self, shape):
+        m = sm.Matrix.create_filled_with_variables(shape, name="muh")
+        for row in range(shape[0]):
+            for col in range(shape[1]):
+                v = m[row, col].free_variables()[0]
+                assert v.name == f"muh_{row}_{col}"
+
+    @pytest.mark.parametrize("shape", [(1, 1), (1, 5), (3, 1), (2, 3), (4, 4)])
     def test_matrix_flatten_matches_numpy(self, shape):
         data = np.arange(shape[0] * shape[1]).reshape(shape)
         m = sm.Matrix(data)

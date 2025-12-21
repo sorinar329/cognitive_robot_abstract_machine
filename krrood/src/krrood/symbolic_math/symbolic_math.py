@@ -589,7 +589,7 @@ class SymbolicMathType(ABC):
     def substitute(
         self,
         old_variables: List[FloatVariable],
-        new_variables: List[ScalarData],
+        new_variables: List[ScalarData] | Vector,
     ) -> Self:
         """
         Replace variables in an expression with new variables or expressions.
@@ -603,10 +603,10 @@ class SymbolicMathType(ABC):
             The length of this list must correspond to the `old_variables` list.
         :return: A new expression with the specified variables replaced.
         """
-        old_variables = to_sx([to_sx(s) for s in old_variables])
-        new_variables = to_sx([to_sx(s) for s in new_variables])
+        old_variables = to_sx(old_variables)
+        new_variables = ca.densify(to_sx(new_variables))
         result = copy.copy(self)
-        result.casadi_sx = ca.substitute(self.casadi_sx, old_variables, new_variables)
+        result.casadi_sx = ca.substitute(result.casadi_sx, old_variables, new_variables)
         return result
 
     def equivalent(self, other: ScalarData) -> bool:
@@ -1127,6 +1127,16 @@ class Matrix(SymbolicMathType):
         if data is None:
             data = []
         self.casadi_sx = to_sx(data)
+
+    @classmethod
+    def create_filled_with_variables(cls, shape: Tuple[int, int], name: str) -> Self:
+        data = []
+        for row in range(shape[0]):
+            row_data = []
+            for col in range(shape[1]):
+                row_data.append(FloatVariable(f"{name}_{row}_{col}"))
+            data.append(row_data)
+        return cls(data)
 
     def _verify_type(self):
         """
@@ -2234,6 +2244,44 @@ def if_less_eq_cases(
         b_result_sx = to_sx(b_result_cases[i][1])
         result_sx = ca.if_else(ca.le(a_sx, b_sx), b_result_sx, result_sx)
     return _create_return_type(else_result).from_casadi_sx(result_sx)
+
+
+_substitution_cache: Dict[str, Tuple[SymbolicMathType, List[FloatVariable]]] = {}
+
+
+def substitution_cache(method):
+    """
+    This decorator allows you to speed up complex symbolic math operations.
+    The operator computes the expression once with variables and stores it in a cache.
+    On subsequent calls, the cached expression is used and the args are substituted into the variables,
+    avoiding rebuilding of the computation graph.
+    """
+
+    def wrapper(*args, **kwargs):
+        if len(kwargs) > 0:
+            raise SymbolicMathError(
+                message="substitution_cache does not support kwargs"
+            )
+        global _substitution_cache
+        cache_key = method.__name__
+        if not cache_key in _substitution_cache:
+            variable_args = []
+            for i, arg in enumerate(args):
+                variable_args.append(
+                    Matrix.create_filled_with_variables(arg.shape, name=f"arg{i}")
+                )
+            variables = [
+                item.free_variables()[0]
+                for arg in variable_args
+                for item in arg.flatten()
+            ]
+            result = method(*variable_args)
+            _substitution_cache[cache_key] = (result, variables)
+        expr, variables = _substitution_cache[cache_key]
+        substitutions = [item for arg in args for item in arg.flatten()]
+        return expr.substitute(variables, substitutions)
+
+    return wrapper
 
 
 # %% type hints

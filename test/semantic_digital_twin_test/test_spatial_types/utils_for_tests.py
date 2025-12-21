@@ -39,6 +39,6 @@ def compare_orientations(
     desired_orientation: all_expressions_float_np,
 ) -> None:
     try:
-        np.allclose(actual_orientation, desired_orientation)
+        assert np.allclose(actual_orientation, desired_orientation)
     except:
-        np.allclose(actual_orientation, -desired_orientation)
+        assert np.allclose(actual_orientation, -desired_orientation)
