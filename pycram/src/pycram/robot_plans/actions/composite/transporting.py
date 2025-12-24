@@ -87,11 +87,6 @@ class TransportAction(ActionDescription):
                         OpenActionDescription(sem_anno[0].handle.body, self.arm),
                     ).perform()
         SequentialPlan(self.context, ParkArmsActionDescription(Arms.BOTH)).perform()
-        # pickup_loc = CostmapLocation(
-        #    target=self.object_designator,
-        #    reachable_for=self.robot_view,
-        #    reachable_arm=self.arm,
-        # )
         pickup_loc = GiskardLocation(
             target_pose=PoseStamped.from_spatial_type(
                 self.object_designator.global_pose
@@ -121,13 +116,6 @@ class TransportAction(ActionDescription):
                     arm=self.arm,
                     grasp_description=pickup_loc.grasp_description,
                 ),
-                # CostmapLocation(
-                #    target=self.target_location,
-                #    reachable_for=self.robot_view,
-                #    reachable_arm=pickup_pose.arm,
-                #    grasp_descriptions=[pickup_pose.grasp_description],
-                #   rotation_agnostic=self.place_rotation_agnostic,
-                # ),
                 True,
             ),
         ).perform()

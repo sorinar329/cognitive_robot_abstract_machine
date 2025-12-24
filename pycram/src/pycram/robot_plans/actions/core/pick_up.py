@@ -191,7 +191,7 @@ class PickUpAction(ActionDescription):
         lift_to_pose = PoseStamped().from_spatial_type(
             end_effector.tool_frame.global_pose
         )
-        lift_to_pose.pose.position.z += 0.00
+        lift_to_pose.pose.position.z += 0.10
         SequentialPlan(
             self.context,
             MoveTCPMotion(

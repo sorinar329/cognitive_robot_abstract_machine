@@ -23,7 +23,8 @@ from typing_extensions import (
     Union,
     Callable,
     Any,
-    Iterable, TYPE_CHECKING,
+    Iterable,
+    TYPE_CHECKING,
 )
 from typing_extensions import List
 from typing_extensions import Type, Set
@@ -1892,8 +1893,6 @@ class World:
         with new_world.modify_world():
             for body in self.bodies:
                 new_body = Body(
-                    # visual=body.visual,
-                    # collision=body.collision.copy_for_world(new_world),
                     name=body.name,
                     id=body.id,
                 )
