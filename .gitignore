@@ -68,3 +68,9 @@ poetry.lock
 
 # Created during tests
 file::memory:
+
+dist
+random_events/src/random_events.egg-info
+*/__pycache__/
+random_events/docs/_build
+random_events/docs/_autosummary
