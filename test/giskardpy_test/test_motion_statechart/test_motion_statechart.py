@@ -802,6 +802,7 @@ def test_nested_goals():
     assert outer.life_cycle_state == LifeCycleValues.RUNNING
     assert end.life_cycle_state == LifeCycleValues.RUNNING
     assert msc_copy.is_end_motion()
+    msc_copy.plot_gantt_chart()
 
 
 @dataclass(eq=False, repr=False)
@@ -2032,6 +2033,7 @@ class TestParallel:
         kin_sim.tick_until_end()
         # 5 (longest ticker) + 1 (for parallel to turn True) + 2 (for end to trigger)
         assert kin_sim.control_cycles == 8
+        msc.plot_gantt_chart()
 
     def test_parallel_with_tasks(self, pr2_world: World):
         map = pr2_world.root
