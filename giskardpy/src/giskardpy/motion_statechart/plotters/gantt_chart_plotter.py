@@ -59,7 +59,7 @@ class HistoryGanttChartPlotter:
             return
 
         ordered = self._iter_hierarchy()
-        depths, names, y_index = self._build_labels_and_indices(ordered)
+        depths, names, _ = self._build_labels_and_indices(ordered)
 
         last_cycle = max(item.control_cycle for item in history)
         num_bars = len(names)
@@ -90,7 +90,7 @@ class HistoryGanttChartPlotter:
             sub_list = list(walk(root, 0))
             sub_list[-1] = sub_list[-1][0], sub_list[-1][1], True
             ordered_.extend(sub_list)
-        return ordered_
+        return list(reversed(ordered_))
 
     def _build_labels_and_indices(
         self, ordered: List[Tuple[MotionStatechartNode, int]]
@@ -269,7 +269,16 @@ class HistoryGanttChartPlotter:
         plt.ylabel("Nodes")
         num_bars = len(self.motion_statechart.history.history[0].life_cycle_state)
         plt.ylim(-0.8, num_bars - 1 + 0.8)
-        node_names = [n.unique_name for n, _, _ in ordered_nodes]
+
+        def make_label(node: MotionStatechartNode, depth: int, final: bool) -> str:
+            if depth == 0:
+                return node.unique_name
+            if final:
+                return "└─" * (depth - 1) + "└─ " + node.unique_name
+            else:
+                return "│  " * (depth - 1) + "├─ " + node.unique_name
+
+        node_names = [make_label(n, depth, final) for n, depth, final in ordered_nodes]
         node_idx = list(range(len(node_names)))
         plt.yticks(node_idx, node_names)
         plt.gca().yaxis.tick_right()
