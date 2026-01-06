@@ -53,8 +53,6 @@ class Tracy(AbstractRobot, SpecifiesLeftRightArm, HasNeck):
                 _world=world,
             )
 
-            #TODO: check Vektor3 + Quaternion values
-
             # Create left arm
             left_gripper_thumb = Finger(
                 name=PrefixedName("left_gripper_thumb", prefix=robot.name.name),
@@ -224,7 +222,7 @@ class Tracy(AbstractRobot, SpecifiesLeftRightArm, HasNeck):
             robot.add_joint_states([left_arm_park, right_arm_park, left_gripper_close, left_gripper_open,
                                     right_gripper_close, right_gripper_open])
 
-            world.add_semantic_annotation(robot)
+            world.add_semantic_annotation(robot, skip_duplicates=True)
 
             vel_limits = defaultdict(lambda: 0.2)
             robot.tighten_dof_velocity_limits_of_1dof_connections(new_limits=vel_limits)
