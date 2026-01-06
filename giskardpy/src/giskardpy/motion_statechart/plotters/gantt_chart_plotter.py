@@ -146,8 +146,8 @@ class HistoryGanttChartPlotter:
 
         # Measure required width for right-side y tick labels and set right margin adaptively
         labels_w_inches = self._measure_labels_width_in(node_names)
-        label_pad_inches = -1
-        right_margin_inches = labels_w_inches + label_pad_inches
+        label_pad_inches = 0.2
+        right_margin_inches = max(0.8, labels_w_inches + label_pad_inches)
 
         fig_w_inches = (
             left_margin_inches
@@ -174,7 +174,11 @@ class HistoryGanttChartPlotter:
         inner_bottom = bottom_margin_inches / fig_h_inches
         inner_top = 1 - top_margin_inches / fig_h_inches
         inner_h_norm = inner_top - inner_bottom
-        main_w_norm_of_fig = main_w_inches / fig_w_inches
+        # Pre-allocate extra width equal to (final width + pad). axes_grid1 will
+        # carve that space out from ax_main when appending the right axis, leaving
+        # the main axis with exactly main_w_inches of drawable width.
+        preallocated_main_w_inches = main_w_inches + final_w_inches + pad_inches
+        main_w_norm_of_fig = preallocated_main_w_inches / fig_w_inches
         ax_main.set_position(
             [
                 inner_left,
