@@ -1,65 +1,138 @@
+
+from __future__ import annotations
+
+import pytest
 from dataclasses import dataclass
 from enum import Enum
-from typing_extensions import Optional
+from typing_extensions import List, Optional
 
 from krrood.class_diagrams.parameterizer import Parameterizer
-from random_events.variable import Continuous, Integer, Symbolic, Variable
+from random_events.variable import Continuous, Integer, Symbolic
+from probabilistic_model.probabilistic_circuit.rx.probabilistic_circuit import (
+    ProbabilisticCircuit,
+)
+
+from ..dataset.example_classes import (
+    Position,
+    Orientation,
+    Pose,
+    Element,
+)
+
+
+@pytest.fixture
+def parameterizer() -> Parameterizer:
+    return Parameterizer()
+
+
+def test_parameterizer_position(parameterizer: Parameterizer):
+    """
+    Test parameterizing a simple dataclass with float fields.
+    """
+    variables = parameterizer(Position)
+    assert len(variables) == 3
+    assert all(isinstance(v, Continuous) for v in variables)
+    assert variables[0].name == "Position.x"
+    assert variables[1].name == "Position.y"
+    assert variables[2].name == "Position.z"
+
+
+def test_parameterizer_orientation(parameterizer: Parameterizer):
+    """
+    Test parameterizing a dataclass with an Optional float field.
+    """
+    variables = parameterizer(Orientation)
+    assert len(variables) == 4
+    assert all(isinstance(v, Continuous) for v in variables)
+    assert variables[3].name == "Orientation.w"
+
+
+def test_parameterizer_pose(parameterizer: Parameterizer):
+    """
+    Test parameterizing a nested dataclass.
+    """
+    variables = parameterizer(Pose)
+    # Pose has position (3) and orientation (4)
+    assert len(variables) == 7
+    assert variables[0].name == "Pose.position.x"
+    assert variables[4].name == "Pose.orientation.y"
 
 
 @dataclass
-class Position:
-    x: float
-    y: float
-    z: float
+class IntegerClass:
+    count: int
+
+
+def test_parameterizer_integer(parameterizer: Parameterizer):
+    """
+    Test parameterizing a dataclass with an integer field.
+    """
+    variables = parameterizer(IntegerClass)
+    assert len(variables) == 1
+    assert isinstance(variables[0], Integer)
+    assert variables[0].name == "IntegerClass.count"
+
 
 @dataclass
-class Orientation:
-    x: float
-    y: float
-    z: float
-    w: Optional[float]
-
-@dataclass
-class Pose:
-    position: Position
-    orientation: Orientation
-
-class Element(Enum):
-    C = "c"
-    H = "h"
-
-@dataclass
-class Atom:
+class BooleanEnumClass:
+    active: bool
     element: Element
-    type: int
-    charge: float
 
-def test_parameterizer_example_classes():
-    param = Parameterizer()
 
-    # Extract variables for each example class
-    pos_vars = param(Position)
-    ori_vars = param(Orientation)
-    pose_vars = param(Pose)
-    atom_vars = param(Atom)
+def test_parameterizer_symbolic(parameterizer: Parameterizer):
+    """
+    Test parameterizing a dataclass with boolean and Enum fields.
+    """
+    variables = parameterizer(BooleanEnumClass)
+    assert len(variables) == 2
+    assert all(isinstance(v, Symbolic) for v in variables)
+    assert variables[0].name == "BooleanEnumClass.active"
+    assert variables[1].name == "BooleanEnumClass.element"
 
-    print("\nPosition Variables:", [v.name for v in pos_vars])
-    print("Orientation Variables:", [v.name for v in ori_vars])
-    print("Pose Variables:", [v.name for v in pose_vars])
-    print("Atom Variables:", [v.name for v in atom_vars])
 
-    # Assertions
-    assert all(isinstance(v, Continuous) for v in pos_vars), "Position should have only Continuous"
-    assert all(isinstance(v, Continuous) for v in ori_vars), "Orientation should have only Continuous"
-    assert any(isinstance(v, Symbolic) for v in atom_vars), "Atom should have Symbolic variables"
-    assert any(isinstance(v, Integer) for v in atom_vars), "Atom should have Integer variables"
-    assert any(isinstance(v, Continuous) for v in atom_vars), "Atom should have Continuous variables"
+@dataclass
+class ListClass:
+    values: List[float]
 
-    # # Create PCS for Atom variables
-    variables_for_pcs = [
-        Continuous(v.name) if isinstance(v, Integer) else v for v in atom_vars
-    ]
-    pcs = param.create_fully_factorized_distribution(variables_for_pcs)
-    print("PCS variables:", pcs.variables)
-    assert set(pcs.variables) == set(variables_for_pcs), "PCS should include all Atom variables"
+
+def test_parameterizer_list(parameterizer: Parameterizer):
+    """
+    Test parameterizing a dataclass with a List field.
+    """
+    variables = parameterizer(ListClass)
+    assert len(variables) == 1
+    assert isinstance(variables[0], Continuous)
+    assert variables[0].name == "ListClass.values"
+
+
+def test_create_fully_factorized_distribution(parameterizer: Parameterizer):
+    """
+    Test creating a fully factorized distribution.
+    """
+    variables = parameterizer(Position)
+    distribution = parameterizer.create_fully_factorized_distribution(variables)
+    assert isinstance(distribution, ProbabilisticCircuit)
+    assert set(distribution.variables) == set(variables)
+
+
+def test_parameterizer_non_dataclass_error(parameterizer: Parameterizer):
+    """
+    Test that a TypeError is raised when a non-dataclass is passed.
+    """
+    with pytest.raises(TypeError):
+        parameterizer(int)
+
+
+@dataclass
+class UnsupportedTypeClass:
+    data: dict
+
+
+def test_parameterizer_unsupported_type_error(parameterizer: Parameterizer):
+    """
+    Test that a NotImplementedError is raised for unsupported types.
+    """
+    with pytest.raises(NotImplementedError):
+        parameterizer(UnsupportedTypeClass)
+
 
