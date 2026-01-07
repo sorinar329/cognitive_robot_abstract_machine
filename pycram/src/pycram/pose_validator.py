@@ -153,6 +153,8 @@ def pose_sequence_reachability_validator(
     try:
         executor.tick_until_end()
     except TimeoutError:
+        failed_nodes = []
+
         logger.debug(f"Timeout while executing pose sequence: {target_sequence}")
         return False
     finally:
