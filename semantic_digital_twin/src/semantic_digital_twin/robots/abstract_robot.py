@@ -28,6 +28,8 @@ from ..world_description.connections import (
     OmniDrive,
     ActiveConnection1DOF,
 )
+from ..world_description.geometry import BoundingBox
+from ..world_description.shape_collection import BoundingBoxCollection
 from ..world_description.world_entity import (
     Body,
     RootedSemanticAnnotation,
@@ -434,6 +436,32 @@ class JointState(ABC):
         return hash((self.name, self.joints, self.joint_positions))
 
 @dataclass
+class Base(KinematicChain):
+    """
+    The base of a robot
+    """
+
+    @property
+    def bounding_box(self) -> BoundingBox:
+        bounding_boxes = [
+            kse.collision.as_bounding_box_collection_in_frame(
+                self._world.root
+            ).bounding_box()
+            for kse in self._world.compute_chain_of_kinematic_structure_entities(
+                self.root, self.tip
+            )
+            if kse.collision is not None
+        ]
+        bb_collection = BoundingBoxCollection(
+            bounding_boxes, reference_frame=self._world.root
+        )
+        return bb_collection.bounding_box()
+
+    def __hash__(self):
+        return hash((self.name, self.root, self.tip))
+
+
+@dataclass(eq=False)
 class AbstractRobot(Agent, ABC):
     """
     Specification of an abstract robot. A robot consists of:
@@ -448,6 +476,11 @@ class AbstractRobot(Agent, ABC):
     torso: Optional[Torso] = None
     """
     The torso of the robot, which is a kinematic chain connecting the base with a collection of other kinematic chains.
+    """
+
+    base: Optional[Base] = None
+    """
+    The base of the robot, the part closes to the floor
     """
 
     manipulators: Set[Manipulator] = field(default_factory=set)
@@ -489,7 +522,7 @@ class AbstractRobot(Agent, ABC):
         ...
 
     @abstractmethod
-    def load_srdf(self):
+    def setup_collision_config(self):
         """
         Loads the SRDF file for the robot, if it exists. This method is expected to be implemented in subclasses.
         """
@@ -581,6 +614,16 @@ class AbstractRobot(Agent, ABC):
         self.torso = torso
         self._semantic_annotations.add(torso)
         torso.assign_to_robot(self)
+
+    def add_base(self, base: Base):
+        """
+        Adds the given base to the robot
+        """
+        if self.base is not None:
+            raise ValueError(f"Robot {self.name} already has a base: {self.base.name}.")
+        self.base = base
+        self._semantic_annotations.add(base)
+        base.assign_to_robot(self)
 
     def add_kinematic_chain(self, kinematic_chain: KinematicChain):
         """
