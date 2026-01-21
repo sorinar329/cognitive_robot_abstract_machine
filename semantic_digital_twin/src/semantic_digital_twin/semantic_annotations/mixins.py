@@ -135,7 +135,6 @@ class HasRootKinematicStructureEntity(SemanticAnnotation, ABC):
     @classmethod
     def _create_with_connection_in_world(
         cls,
-        connection_type: Type[Connection],
         name: PrefixedName,
         world: World,
         kinematic_structure_entity: KinematicStructureEntity,
@@ -148,7 +147,6 @@ class HasRootKinematicStructureEntity(SemanticAnnotation, ABC):
         """
         Create a new instance and connect its root entity to the world's root.
 
-        :param connection_type: The type of connection to use.
         :param name: The name of the semantic annotation.
         :param world: The world to add the annotation and entity to.
         :param kinematic_structure_entity: The root entity of the semantic annotation.
@@ -159,13 +157,11 @@ class HasRootKinematicStructureEntity(SemanticAnnotation, ABC):
         :param connection_offset: The offset for the connection.
         :return: The created semantic annotation instance.
         """
-        if connection_type is None:
-            raise MissingConnectionType(cls)
 
         self_instance = cls(name=name, root=kinematic_structure_entity)
         world_root_T_self = world_root_T_self or HomogeneousTransformationMatrix()
 
-        if connection_type == FixedConnection:
+        if cls._parent_connection_type == FixedConnection:
             world_root_C_self = FixedConnection(
                 parent=world.root,
                 child=kinematic_structure_entity,
@@ -173,9 +169,9 @@ class HasRootKinematicStructureEntity(SemanticAnnotation, ABC):
             )
         else:
             connection_limits = connection_limits or cls._generate_default_dof_limits(
-                connection_type
+                cls._parent_connection_type
             )
-            world_root_C_self = connection_type.create_with_dofs(
+            world_root_C_self = cls._parent_connection_type.create_with_dofs(
                 world=world,
                 parent=world.root,
                 child=kinematic_structure_entity,
@@ -368,7 +364,6 @@ class HasRootBody(HasRootKinematicStructureEntity, ABC):
         body = Body(name=name)
 
         return cls._create_with_connection_in_world(
-            connection_type=cls._parent_connection_type,
             name=name,
             world=world,
             kinematic_structure_entity=body,
@@ -425,7 +420,6 @@ class HasRootRegion(HasRootKinematicStructureEntity, ABC):
         region = Region(name=name)
 
         return cls._create_with_connection_in_world(
-            connection_type=cls._parent_connection_type,
             name=name,
             world=world,
             kinematic_structure_entity=region,
@@ -779,7 +773,6 @@ class HasCaseAsRootBody(HasSupportingSurface, ABC):
         body.collision = collision_shapes
         body.visual = collision_shapes
         return cls._create_with_connection_in_world(
-            connection_type=cls._parent_connection_type,
             name=name,
             world=world,
             kinematic_structure_entity=body,

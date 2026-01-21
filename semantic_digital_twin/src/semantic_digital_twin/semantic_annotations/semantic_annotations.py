@@ -88,7 +88,7 @@ class Handle(HasRootBody):
         handle_body.collision = collision
         handle_body.visual = collision
         return cls._create_with_connection_in_world(
-            cls._parent_connection_type, name, world, handle_body, world_root_T_self
+            name, world, handle_body, world_root_T_self
         )
 
     @classmethod
@@ -151,7 +151,7 @@ class Aperture(HasRootRegion):
         aperture_region.area = aperture_geometry
 
         return cls._create_with_connection_in_world(
-            cls._parent_connection_type, name, world, aperture_region, world_root_T_self
+            name, world, aperture_region, world_root_T_self
         )
 
     @classmethod
@@ -251,7 +251,7 @@ class Door(HasHandle, HasHinge):
         world.add_semantic_annotation(entry_way)
 
         door = cls._create_with_connection_in_world(
-            FixedConnection, name, world, door_body, world_root_T_self
+            name, world, door_body, world_root_T_self
         )
         door.entry_way = entry_way
         return door
@@ -412,9 +412,7 @@ class Floor(HasSupportingSurface):
         """
         room_body = Body.from_3d_points(name=name, points_3d=floor_polytope)
         self = cls(root=room_body)
-        self._create_with_connection_in_world(
-            cls._parent_connection_type, name, world, self.root, world_root_T_self
-        )
+        self._create_with_connection_in_world(name, world, self.root, world_root_T_self)
         return self
 
 
@@ -459,7 +457,7 @@ class Wall(HasApertures):
         wall_body.visual = wall_collision
 
         return cls._create_with_connection_in_world(
-            cls._parent_connection_type, name, world, wall_body, world_root_T_self
+            name, world, wall_body, world_root_T_self
         )
 
     @property
