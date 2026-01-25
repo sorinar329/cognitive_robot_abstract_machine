@@ -328,6 +328,11 @@ class NumpyNDarrayJSONSerializer(ExternalClassJSONSerializer[np.ndarray]):
 
 @dataclass
 class DataclassJSONSerializer(ExternalClassJSONSerializer[None]):
+    """
+    Generic JSON serializer for dataclasses.
+    It creates a dict where all fields are serialized using the to_json function.
+    If this is not enough, you still need to implement a custom serializer.
+    """
 
     @classmethod
     def to_json(cls, obj) -> Dict[str, Any]:
@@ -358,13 +363,6 @@ class DataclassJSONSerializer(ExternalClassJSONSerializer[None]):
 
     @classmethod
     def from_json(cls, data: Dict[str, Any], clazz: Type, **kwargs) -> Self:
-        """
-        .. warn::
-
-            This will not work if any of the classes' fields have a type UUID or some container of UUID.
-            Whenever this happens, the UUIDs are resolved to WorldEntityWithID objects, which leads to undefined
-            behavior.
-        """
         fields_ = {f.name: f for f in fields(clazz)}
 
         init_args = {}
