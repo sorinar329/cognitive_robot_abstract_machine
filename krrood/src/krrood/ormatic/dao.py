@@ -1062,10 +1062,12 @@ class DataAccessObject(HasGeneric[T]):
 
         base_result = parent_dao.from_dao(state=state)
 
-        if not state.discovery_mode:
-            for key in _get_type_hints_cached(type(domain_object)):
-                if not hasattr(self, key) and hasattr(base_result, key):
-                    object.__setattr__(domain_object, key, getattr(base_result, key))
+        if state.discovery_mode:
+            return
+
+        for key in _get_type_hints_cached(type(domain_object)):
+            if not hasattr(self, key) and hasattr(base_result, key):
+                object.__setattr__(domain_object, key, getattr(base_result, key))
 
     def _create_filled_parent_dao(
         self, base_clazz: Type[DataAccessObject]
