@@ -131,6 +131,11 @@ class TFPublisher(StateChangeCallback):
     tf_model_cb: TfPublisherModelCallback = field(init=False)
     """Callback for updating the tf message cache on model update."""
 
+    throttle_state_updates: int = 1
+    """
+    Only published every n-th state update.
+    """
+
     def __post_init__(self):
         super().__post_init__()
         self.tf_pub = self.node.create_publisher(TFMessage, self.tf_topic, 10)
@@ -185,5 +190,7 @@ class TFPublisher(StateChangeCallback):
         )
 
     def _notify(self):
+        if self.world.state.version % self.throttle_state_updates != 0:
+            return
         self.tf_model_cb.update_tf_message()
         self.tf_pub.publish(self.tf_model_cb.tf_message)

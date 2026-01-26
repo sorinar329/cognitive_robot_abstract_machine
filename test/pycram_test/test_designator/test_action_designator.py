@@ -295,7 +295,7 @@ def test_close(immutable_model_world):
 def test_transport(mutable_model_world):
     world, robot_view, context = mutable_model_world
     node = rclpy.create_node("test_node")
-    TFPublisher(world, node)
+    TFPublisher(world, node, throttle_state_updates=10)
     VizMarkerPublisher(world, node)
     description = TransportActionDescription(
         world.get_body_by_name("milk.stl"),
