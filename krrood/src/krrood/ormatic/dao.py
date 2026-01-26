@@ -281,137 +281,26 @@ class FromDataAccessObjectState(DataAccessObjectState[FromDataAccessObjectWorkIt
             )
         )
 
-    def register_for_conversion(self, dao_instance: DataAccessObject[T]) -> T:
+    def allocate_and_memoize(
+        self, dao_instance: DataAccessObject, original_clazz: Type
+    ) -> Any:
         """
-        Register a DAO for conversion if not already present.
+        Allocate a new instance and store it in the memoization dictionary.
+        Initializes default values for dataclass fields.
 
         :param dao_instance: The DAO instance to register.
-        :return: The uninitialized domain object.
+        :param original_clazz: The domain class to instantiate.
+        :return: The uninitialized domain object instance.
         """
-        if not self.has(dao_instance):
-            domain_object = self.allocate_and_memoize(
-                dao_instance, dao_instance.original_class()
-            )
-            self.push_work_item(dao_instance, domain_object)
-        return self.get(dao_instance)
-
-    def perform_from_dao_conversion(self, dao_instance: DataAccessObject[T]) -> T:
-        """
-        Perform the four-phase conversion process.
-
-        :param dao_instance: The DAO instance to convert.
-        :return: The converted domain object.
-        """
-        self.is_processing = True
-        discovery_order = []
-        if not self.has(dao_instance):
-            self.allocate_and_memoize(dao_instance, dao_instance.original_class())
-        self.push_work_item(dao_instance, self.get(dao_instance))
-
-        self._discover_dependencies(discovery_order)
-        self._fill_domain_objects(discovery_order)
-        self._finalize_containers(discovery_order)
-        self._call_post_inits(discovery_order)
-
-        self.is_processing = False
-
-        return self.get(dao_instance)
-
-    def _discover_dependencies(
-        self,
-        discovery_order: List[FromDataAccessObjectWorkItem],
-    ) -> None:
-        """
-        Phase 1: Discovery (DFS) to identify all reachable DAOs.
-
-        :param discovery_order: List to record the discovery order.
-        """
-        self.discovery_mode = True
-
-        while self.work_items:
-            # Use pop() to treat the deque as a stack (LIFO) for DFS
-            work_item = self.work_items.pop()
-            discovery_order.append(work_item)
-            work_item.dao_instance._fill_from_dao(work_item.domain_object, self)
-
-        self.discovery_mode = False
-
-    def _fill_domain_objects(
-        self,
-        discovery_order: List[FromDataAccessObjectWorkItem],
-    ) -> None:
-        """
-        Phase 2: Population & Alternative Mapping Resolution (Bottom-Up).
-
-        :param discovery_order: The order in which DAOs were discovered.
-        """
-        for work_item in reversed(discovery_order):
-            if not self.is_initialized(work_item.dao_instance):
-                work_item.dao_instance._fill_from_dao(work_item.domain_object, self)
-                self.mark_initialized(work_item.dao_instance)
-
-    def _finalize_containers(
-        self,
-        discovery_order: List[FromDataAccessObjectWorkItem],
-    ) -> None:
-        """
-        Phase 3: Container Finalization.
-        Convert temporary lists to their final container types.
-
-        :param discovery_order: The order in which DAOs were discovered.
-        """
-        processed_ids = set()
-        for work_item in discovery_order:
-            domain_object = self.get(work_item.dao_instance)
-            if domain_object is not None and id(domain_object) not in processed_ids:
-                self._finalize_object_containers(domain_object)
-                processed_ids.add(id(domain_object))
-
-    @staticmethod
-    def _finalize_object_containers(domain_object: Any) -> None:
-        """
-        Convert lists to sets based on type hints.
-
-        :param domain_object: The domain object to finalize.
-        """
-        hints = _get_type_hints_cached(type(domain_object))
-
-        for attr_name, hint in hints.items():
-            origin = get_origin(hint)
-            # Handle both typing.Set[...] and built-in set
-            if origin is set or hint is set:
-                value = getattr(domain_object, attr_name, None)
-                if isinstance(value, list):
-                    setattr(domain_object, attr_name, set(value))
-
-    def _call_post_inits(
-        self,
-        discovery_order: List[FromDataAccessObjectWorkItem],
-    ) -> None:
-        """
-        Phase 4: Post-Initialization.
-        Call post_init or __post_init__ on all objects.
-
-        :param discovery_order: The order in which DAOs were discovered.
-        """
-        processed_ids = set()
-        for work_item in discovery_order:
-            # Skip post_init for objects that were created via AlternativeMapping
-            # because they are typically created via their constructor, which already
-            # calls __post_init__ (for dataclasses).
-            try:
-                if issubclass(
-                    work_item.dao_instance.original_class(), AlternativeMapping
-                ):
-                    continue
-            except (AttributeError, TypeError, NoGenericError):
-                pass
-
-            domain_object = self.get(work_item.dao_instance)
-            if domain_object is not None and id(domain_object) not in processed_ids:
-                if hasattr(domain_object, "__post_init__"):
-                    domain_object.__post_init__()
-                processed_ids.add(id(domain_object))
+        result = original_clazz.__new__(original_clazz)
+        if is_dataclass(original_clazz):
+            for f in fields(original_clazz):
+                if f.default is not MISSING:
+                    object.__setattr__(result, f.name, f.default)
+                elif f.default_factory is not MISSING:
+                    object.__setattr__(result, f.name, f.default_factory())
+        self.register(dao_instance, result)
+        return result
 
 
 class HasGeneric(Generic[T]):
@@ -827,9 +716,137 @@ class DataAccessObject(HasGeneric[T]):
             return state.get(self)
 
         if not state.is_processing:
-            return state.perform_from_dao_conversion(self)
+            return self._perform_from_dao_conversion(state)
 
-        return state.register_for_conversion(self)
+        return self._register_for_conversion(state)
+
+    def _perform_from_dao_conversion(self, state: FromDataAccessObjectState) -> T:
+        """
+        Perform the four-phase conversion process.
+
+        :param state: The conversion state.
+        :return: The converted domain object.
+        """
+        state.is_processing = True
+        discovery_order = []
+        if not state.has(self):
+            state.allocate_and_memoize(self, self.original_class())
+        state.push_work_item(self, state.get(self))
+
+        self._discover_dependencies(state, discovery_order)
+        self._fill_domain_objects(state, discovery_order)
+        self._finalize_containers(state, discovery_order)
+        self._call_post_inits(state, discovery_order)
+
+        state.is_processing = False
+
+        return state.get(self)
+
+    def _discover_dependencies(
+        self,
+        state: FromDataAccessObjectState,
+        discovery_order: List[FromDataAccessObjectWorkItem],
+    ) -> None:
+        """
+        Phase 1: Discovery (DFS) to identify all reachable DAOs.
+
+        :param state: The conversion state.
+        :param discovery_order: List to record the discovery order.
+        """
+        state.discovery_mode = True
+
+        while state.work_items:
+            # Use pop() to treat the deque as a stack (LIFO) for DFS
+            work_item = state.work_items.pop()
+            discovery_order.append(work_item)
+            work_item.dao_instance._fill_from_dao(work_item.domain_object, state)
+
+        state.discovery_mode = False
+
+    def _fill_domain_objects(
+        self,
+        state: FromDataAccessObjectState,
+        discovery_order: List[FromDataAccessObjectWorkItem],
+    ) -> None:
+        """
+        Phase 2: Filling (Bottom-Up) to initialize domain objects.
+
+        :param state: The conversion state.
+        :param discovery_order: The order in which DAOs were discovered.
+        """
+        for work_item in reversed(discovery_order):
+            if not state.is_initialized(work_item.dao_instance):
+                work_item.dao_instance._fill_from_dao(work_item.domain_object, state)
+                state.mark_initialized(work_item.dao_instance)
+
+    def _finalize_containers(
+        self,
+        state: FromDataAccessObjectState,
+        discovery_order: List[FromDataAccessObjectWorkItem],
+    ) -> None:
+        """
+        Convert temporary lists to their final container types.
+        """
+        processed_ids = set()
+        for work_item in discovery_order:
+            domain_object = state.get(work_item.dao_instance)
+            if domain_object is not None and id(domain_object) not in processed_ids:
+                self._finalize_object_containers(domain_object)
+                processed_ids.add(id(domain_object))
+
+    @staticmethod
+    def _finalize_object_containers(domain_object: Any) -> None:
+        """
+        Convert lists to sets based on type hints.
+        """
+        hints = _get_type_hints_cached(type(domain_object))
+
+        for attr_name, hint in hints.items():
+            origin = get_origin(hint)
+            # Handle both typing.Set[...] and built-in set
+            if origin is set or hint is set:
+                value = getattr(domain_object, attr_name, None)
+                if isinstance(value, list):
+                    setattr(domain_object, attr_name, set(value))
+
+    def _call_post_inits(
+        self,
+        state: FromDataAccessObjectState,
+        discovery_order: List[FromDataAccessObjectWorkItem],
+    ) -> None:
+        """
+        Phase 4: Call post_init or __post_init__ on all objects.
+        """
+        processed_ids = set()
+        for work_item in discovery_order:
+            # Skip post_init for objects that were created via AlternativeMapping
+            # because they are typically created via their constructor, which already
+            # calls __post_init__ (for dataclasses).
+            try:
+                if issubclass(
+                    work_item.dao_instance.original_class(), AlternativeMapping
+                ):
+                    continue
+            except (AttributeError, TypeError, NoGenericError):
+                pass
+
+            domain_object = state.get(work_item.dao_instance)
+            if domain_object is not None and id(domain_object) not in processed_ids:
+                if hasattr(domain_object, "__post_init__"):
+                    domain_object.__post_init__()
+                processed_ids.add(id(domain_object))
+
+    def _register_for_conversion(self, state: FromDataAccessObjectState) -> T:
+        """
+        Register this DAO for conversion if not already present.
+
+        :param state: The conversion state.
+        :return: The uninitialized domain object.
+        """
+        if not state.has(self):
+            domain_object = state.allocate_and_memoize(self, self.original_class())
+            state.push_work_item(self, domain_object)
+        return state.get(self)
 
     def _fill_from_dao(self, domain_object: T, state: FromDataAccessObjectState) -> T:
         """
