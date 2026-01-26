@@ -804,10 +804,11 @@ class DataAccessObject(HasGeneric[T]):
         for attr_name, hint in hints.items():
             origin = get_origin(hint)
             # Handle both typing.Set[...] and built-in set
-            if origin is set or hint is set:
-                value = getattr(domain_object, attr_name, None)
-                if isinstance(value, list):
-                    setattr(domain_object, attr_name, set(value))
+            if origin is not set and hint is not set:
+                continue
+            value = getattr(domain_object, attr_name, None)
+            if isinstance(value, list):
+                setattr(domain_object, attr_name, set(value))
 
     def _call_post_inits(
         self,

@@ -654,5 +654,5 @@ class UnderspecifiedTypesContainer:
 
 
 @dataclass
-class PositionSet:
+class TestPositionSet:
     positions: Set[Position] = field(default_factory=set)

@@ -59,12 +59,6 @@ persondao_knows_association = Table(
     Column("source_persondao_id", ForeignKey("PersonDAO.database_id")),
     Column("target_persondao_id", ForeignKey("PersonDAO.database_id")),
 )
-positionsetdao_positions_association = Table(
-    "positionsetdao_positions_association",
-    Base.metadata,
-    Column("source_positionsetdao_id", ForeignKey("PositionSetDAO.database_id")),
-    Column("target_positiondao_id", ForeignKey("PositionDAO.database_id")),
-)
 alternativemappingaggregatordao_entities1_association = Table(
     "alternativemappingaggregatordao_entities1_association",
     Base.metadata,
@@ -160,6 +154,14 @@ symbolgraphmappingdao_predicate_relations_association = Table(
         "target_predicateclassrelationdao_id",
         ForeignKey("PredicateClassRelationDAO.database_id"),
     ),
+)
+testpositionsetdao_positions_association = Table(
+    "testpositionsetdao_positions_association",
+    Base.metadata,
+    Column(
+        "source_testpositionsetdao_id", ForeignKey("TestPositionSetDAO.database_id")
+    ),
+    Column("target_positiondao_id", ForeignKey("PositionDAO.database_id")),
 )
 torsodao_kinematic_chains_association = Table(
     "torsodao_kinematic_chains_association",
@@ -447,25 +449,6 @@ class PersonDAO(
         secondary="persondao_knows_association",
         primaryjoin="PersonDAO.database_id == persondao_knows_association.c.source_persondao_id",
         secondaryjoin="PersonDAO.database_id == persondao_knows_association.c.target_persondao_id",
-        cascade="save-update, merge",
-    )
-
-
-class PositionSetDAO(
-    Base, DataAccessObject[test.krrood_test.dataset.example_classes.PositionSet]
-):
-
-    __tablename__ = "PositionSetDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        Integer, primary_key=True, use_existing_column=True
-    )
-
-    positions: Mapped[builtins.set[PositionDAO]] = relationship(
-        "PositionDAO",
-        secondary="positionsetdao_positions_association",
-        primaryjoin="PositionSetDAO.database_id == positionsetdao_positions_association.c.source_positionsetdao_id",
-        secondaryjoin="PositionDAO.database_id == positionsetdao_positions_association.c.target_positiondao_id",
         cascade="save-update, merge",
     )
 
@@ -1549,6 +1532,25 @@ class SymbolGraphMappingDAO(
             secondaryjoin="PredicateClassRelationDAO.database_id == symbolgraphmappingdao_predicate_relations_association.c.target_predicateclassrelationdao_id",
             cascade="save-update, merge",
         )
+    )
+
+
+class TestPositionSetDAO(
+    Base, DataAccessObject[test.krrood_test.dataset.example_classes.TestPositionSet]
+):
+
+    __tablename__ = "TestPositionSetDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    positions: Mapped[builtins.set[PositionDAO]] = relationship(
+        "PositionDAO",
+        secondary="testpositionsetdao_positions_association",
+        primaryjoin="TestPositionSetDAO.database_id == testpositionsetdao_positions_association.c.source_testpositionsetdao_id",
+        secondaryjoin="PositionDAO.database_id == testpositionsetdao_positions_association.c.target_positiondao_id",
+        cascade="save-update, merge",
     )
 
 
