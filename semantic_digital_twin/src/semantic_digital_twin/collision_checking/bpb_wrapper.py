@@ -100,19 +100,10 @@ def create_cube_shape(extents: Tuple[float, float, float]) -> pb.BoxShape:
     return out
 
 
-def create_cylinder_shape(
-    diameter: float, height: float, tmp_folder: str
-) -> pb.CylinderShape:
-    # out = pb.CylinderShapeZ(pb.Vector3(0.5 * diameter, 0.5 * diameter, height * 0.5))
-    # out.margin = 0.001
-    # Weird thing: The default URDF loader in bullet instantiates convex meshes. Idk why.
-    file_name = resource_filename("giskardpy", "../../resources/meshes/cylinder.obj")
-    return load_convex_mesh_shape(
-        file_name=file_name,
-        tmp_folder=tmp_folder,
-        single_shape=True,
-        scale=Scale(diameter, diameter, height),
-    )
+def create_cylinder_shape(diameter: float, height: float) -> pb.CylinderShape:
+    out = pb.CylinderShapeZ(pb.Vector3(diameter / 2, diameter / 2, height))
+    out.margin = 0.001
+    return out
 
 
 def create_sphere_shape(diameter: float) -> pb.SphereShape:
@@ -121,7 +112,7 @@ def create_sphere_shape(diameter: float) -> pb.SphereShape:
     return out
 
 
-def create_shape_from_geometry(geometry: Shape, tmp_folder: str) -> pb.CollisionShape:
+def create_shape_from_geometry(geometry: Shape) -> pb.CollisionShape:
     if isinstance(geometry, Box):
         shape = create_cube_shape(
             (geometry.scale.x, geometry.scale.y, geometry.scale.z)
@@ -129,23 +120,19 @@ def create_shape_from_geometry(geometry: Shape, tmp_folder: str) -> pb.Collision
     elif isinstance(geometry, Sphere):
         shape = create_sphere_shape(geometry.radius * 2)
     elif isinstance(geometry, Cylinder):
-        shape = create_cylinder_shape(
-            diameter=geometry.width, height=geometry.height, tmp_folder=tmp_folder
-        )
+        shape = create_cylinder_shape(diameter=geometry.width, height=geometry.height)
     elif isinstance(geometry, TriangleMesh):
         f = tempfile.NamedTemporaryFile(delete=False, suffix=".obj")
         with open(f.name, "w") as fd:
             fd.write(trimesh.exchange.obj.export_obj(geometry.mesh))
         shape = load_convex_mesh_shape(
-            file_name=f.name,
-            tmp_folder=tmp_folder,
+            mesh=geometry,
             single_shape=False,
             scale=geometry.scale,
         )
     elif isinstance(geometry, FileMesh):
         shape = load_convex_mesh_shape(
-            file_name=geometry.filename,
-            tmp_folder=tmp_folder,
+            mesh=geometry,
             single_shape=False,
             scale=geometry.scale,
         )
