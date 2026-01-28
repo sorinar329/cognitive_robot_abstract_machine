@@ -51,9 +51,10 @@ def test_collision_matrix(world_setup_simple):
     assert (body3, body4) in pairs
 
 
-def test_all_collisions(world_setup_simple):
+@pytest.mark.parametrize("collision_detector", collision_detectors)
+def test_all_collisions(world_setup_simple, collision_detector):
     world, body1, body2, body3, body4 = world_setup_simple
-    tcd = TrimeshCollisionDetector(world)
+    tcd = collision_detector(world)
     body4.parent_connection.origin = HomogeneousTransformationMatrix.from_xyz_rpy(
         10, 10, 10
     )

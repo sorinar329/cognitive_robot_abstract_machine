@@ -13,7 +13,7 @@ from krrood.symbolic_math.symbolic_math import (
     VariableParameters,
     CompiledFunction,
 )
-from ..callbacks.callback import ModelChangeCallback
+from ..callbacks.callback import ModelChangeCallback, StateChangeCallback
 from ..world_description.connections import ActiveConnection
 from ..world_description.world_entity import Body
 
@@ -169,6 +169,7 @@ class CollisionDetectorModelUpdater(ModelChangeCallback):
 
     def __post_init__(self):
         self.world = self.collision_detector.world
+        super().__post_init__()
 
     def _notify(self):
         self.collision_detector.sync_world_model()
@@ -199,14 +200,16 @@ class CollisionDetectorModelUpdater(ModelChangeCallback):
 
 
 @dataclass
-class CollisionDetectorStateUpdater(ModelChangeCallback):
+class CollisionDetectorStateUpdater(StateChangeCallback):
     collision_detector: CollisionDetector
     world: World = field(init=False)
 
     def __post_init__(self):
         self.world = self.collision_detector.world
+        super().__post_init__()
 
     def _notify(self):
+        self.collision_detector.world_model_updater.compiled_collision_fks.evaluate()
         self.collision_detector.sync_world_state()
 
 
@@ -231,7 +234,7 @@ class CollisionDetector(abc.ABC):
         self.world_state_updater.notify()
 
     def get_all_collision_fks(self) -> np.ndarray:
-        return self.world_model_updater.compiled_collision_fks.evaluate()
+        return self.world_model_updater.compiled_collision_fks._out
 
     def get_collision_fk(self, body_id: UUID):
         pass
