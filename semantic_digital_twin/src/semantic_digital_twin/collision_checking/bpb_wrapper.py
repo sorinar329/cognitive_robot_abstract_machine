@@ -141,10 +141,10 @@ def create_shape_from_geometry(geometry: Shape) -> pb.CollisionShape:
     return shape
 
 
-def create_shape_from_link(body: Body, tmp_folder: str) -> pb.CollisionObject:
+def create_shape_from_link(body: Body) -> pb.CollisionObject:
     shapes = []
     for collision_id, geometry in enumerate(body.collision):
-        shape = create_shape_from_geometry(geometry=geometry, tmp_folder=tmp_folder)
+        shape = create_shape_from_geometry(geometry=geometry)
         link_T_geometry = pb.Transform.from_np(geometry.origin.to_np())
         shapes.append((link_T_geometry, shape))
     compouned_shape = create_compound_shape(shapes_poses=shapes)

@@ -21,7 +21,7 @@ class BulletCollisionDetector(CollisionDetector):
     body_to_bullet_object: Dict[Body, bpb.CollisionObject] = field(
         default_factory=dict, init=False
     )
-    # ordered_bullet_objects: List[bpb.CollisionObject] = field(default_factory=list)
+    ordered_bullet_objects: List[bpb.CollisionObject] = field(default_factory=list)
 
     query: Optional[
         DefaultDict[PrefixedName, Set[Tuple[bpb.CollisionObject, float]]]
@@ -33,10 +33,7 @@ class BulletCollisionDetector(CollisionDetector):
         self.body_to_bullet_object = {}
         for body in self.world.bodies_with_enabled_collision:
             self.add_body(body)
-        # self.ordered_bullet_objects = list(self.body_to_bullet_object.values())
-
-    def tmp_folder(self):
-        return tempfile.NamedTemporaryFile(dir="/tmp", delete=False).name
+        self.ordered_bullet_objects = list(self.body_to_bullet_object.values())
 
     def clear(self):
         for o in self.kineverse_world.collision_objects:
@@ -44,7 +41,7 @@ class BulletCollisionDetector(CollisionDetector):
 
     def sync_world_state(self) -> None:
         bpb.batch_set_transforms(
-            self.kineverse_world.collision_objects,
+            self.ordered_bullet_objects,
             self.get_all_collision_fks(),
         )
 

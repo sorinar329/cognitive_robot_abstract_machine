@@ -177,9 +177,7 @@ class CollisionDetectorModelUpdater(ModelChangeCallback):
     def compile_collision_fks(self):
         collision_fks = []
         world_root = self.world.root
-        for body in sorted(
-            self.world.bodies_with_enabled_collision, key=lambda b: b.id
-        ):
+        for body in self.world.bodies_with_enabled_collision:
             if body == world_root:
                 continue
             collision_fks.append(
@@ -232,8 +230,8 @@ class CollisionDetector(abc.ABC):
         self.world_model_updater.notify()
         self.world_state_updater.notify()
 
-    def get_all_collision_fks(self):
-        return self.world_model_updater.compiled_collision_fks._out
+    def get_all_collision_fks(self) -> np.ndarray:
+        return self.world_model_updater.compiled_collision_fks.evaluate()
 
     def get_collision_fk(self, body_id: UUID):
         pass
@@ -260,6 +258,14 @@ class CollisionDetector(abc.ABC):
         :param collision_matrix:
         :return: A list of detected collisions.
         """
+
+    def check_collision_between_bodies(
+        self, body_a: Body, body_b: Body
+    ) -> Optional[Collision]:
+        collision = self.check_collisions(
+            {CollisionCheck(body_a, body_b, 0.0, self.world)}
+        )
+        return collision[0] if collision else None
 
     @abc.abstractmethod
     def reset_cache(self):

@@ -12,10 +12,10 @@ from semantic_digital_twin.collision_checking.trimesh_collision_detector import 
 from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
 from semantic_digital_twin.testing import world_setup_simple
 
+collision_detectors = [BulletCollisionDetector, TrimeshCollisionDetector]
 
-@pytest.mark.parametrize(
-    "collision_detector", [TrimeshCollisionDetector, BulletCollisionDetector]
-)
+
+@pytest.mark.parametrize("collision_detector", collision_detectors)
 def test_simple_collision(world_setup_simple, collision_detector):
     world, body1, body2, body3, body4 = world_setup_simple
     tcd = collision_detector(world)
@@ -24,12 +24,13 @@ def test_simple_collision(world_setup_simple, collision_detector):
     assert {collision.body_a, collision.body_b} == {body1, body2}
 
 
-def test_no_collision(world_setup_simple):
+@pytest.mark.parametrize("collision_detector", collision_detectors)
+def test_no_collision(world_setup_simple, collision_detector):
     world, body1, body2, body3, body4 = world_setup_simple
     body1.parent_connection.origin = HomogeneousTransformationMatrix.from_xyz_rpy(
         1, 1, 1
     )
-    tcd = TrimeshCollisionDetector(world)
+    tcd = collision_detector(world)
     collision = tcd.check_collision_between_bodies(body1, body2)
     assert not collision
 

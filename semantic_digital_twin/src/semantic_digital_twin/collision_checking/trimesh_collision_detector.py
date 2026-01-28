@@ -121,13 +121,5 @@ class TrimeshCollisionDetector(CollisionDetector):
 
         return result
 
-    def check_collision_between_bodies(
-        self, body_a: Body, body_b: Body
-    ) -> Optional[Collision]:
-        collision = self.check_collisions(
-            {CollisionCheck(body_a, body_b, 0.0, self.world)}
-        )
-        return collision[0] if collision else None
-
     def reset_cache(self):
         pass
