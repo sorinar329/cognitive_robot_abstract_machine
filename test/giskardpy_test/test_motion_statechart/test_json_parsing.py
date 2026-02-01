@@ -29,7 +29,7 @@ from giskardpy.motion_statechart.motion_statechart import (
     ObservationState,
 )
 from giskardpy.motion_statechart.tasks.cartesian_tasks import CartesianPose
-from giskardpy.motion_statechart.tasks.joint_tasks import JointPositionList, JointState
+from giskardpy.motion_statechart.tasks.joint_tasks import JointPositionList
 from giskardpy.motion_statechart.test_nodes.test_nodes import (
     ConstTrueNode,
     TestNestedGoal,
@@ -44,6 +44,7 @@ from krrood.symbolic_math.symbolic_math import (
 from semantic_digital_twin.adapters.world_entity_kwargs_tracker import (
     WorldEntityWithIDKwargsTracker,
 )
+from semantic_digital_twin.datastructures.joint_state import JointState
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.robots.abstract_robot import AbstractRobot
 from semantic_digital_twin.spatial_types import Vector3, HomogeneousTransformationMatrix
@@ -122,7 +123,8 @@ def test_to_json_joint_position_list(mini_world):
     json_data = node.to_json()
     json_str = json.dumps(json_data)
     new_json_data = json.loads(json_str)
-    node_copy = JointPositionList.from_json(new_json_data, world=mini_world)
+    tracker = WorldEntityWithIDKwargsTracker.from_world(mini_world)
+    node_copy = JointPositionList.from_json(new_json_data, **tracker.create_kwargs())
     assert node_copy.name == node.name
     assert node_copy.threshold == node.threshold
     assert node_copy.goal_state == node.goal_state
@@ -207,7 +209,10 @@ def test_executing_json_parsed_statechart():
     json_data = msc.to_json()
     json_str = json.dumps(json_data)
     new_json_data = json.loads(json_str)
-    msc_copy = MotionStatechart.from_json(new_json_data, world=world)
+    tracker = WorldEntityWithIDKwargsTracker.from_world(world)
+    msc_copy = MotionStatechart.from_json(
+        new_json_data, world=world, **tracker.create_kwargs()
+    )
 
     kin_sim = Executor(
         world=world,

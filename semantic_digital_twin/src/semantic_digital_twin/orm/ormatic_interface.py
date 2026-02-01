@@ -18,6 +18,8 @@ from sqlalchemy.orm import relationship, Mapped, mapped_column, DeclarativeBase
 import builtins
 import krrood.ormatic.custom_types
 import semantic_digital_twin.callbacks.callback
+import semantic_digital_twin.datastructures.definitions
+import semantic_digital_twin.datastructures.joint_state
 import semantic_digital_twin.datastructures.prefixed_name
 import semantic_digital_twin.orm.model
 import semantic_digital_twin.reasoning.predicates
@@ -208,6 +210,15 @@ hsrbdao_arms_association = Table(
     Base.metadata,
     Column("source_hsrbdao_id", ForeignKey("HSRBDAO.database_id")),
     Column("target_armdao_id", ForeignKey("ArmDAO.database_id")),
+)
+semanticrobotannotationdao_joint_states_association = Table(
+    "semanticrobotannotationdao_joint_states_association",
+    Base.metadata,
+    Column(
+        "source_semanticrobotannotationdao_id",
+        ForeignKey("SemanticRobotAnnotationDAO.database_id"),
+    ),
+    Column("target_jointstatedao_id", ForeignKey("JointStateDAO.database_id")),
 )
 kinematicchaindao_sensors_association = Table(
     "kinematicchaindao_sensors_association",
@@ -499,6 +510,31 @@ class JerkVariableDAO(
         uselist=False,
         foreign_keys=[dof_id],
         post_update=True,
+    )
+
+
+class JointStateDAO(
+    Base, DataAccessObject[semantic_digital_twin.datastructures.joint_state.JointState]
+):
+
+    __tablename__ = "JointStateDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    state_type: Mapped[
+        semantic_digital_twin.datastructures.definitions.JointStateType
+    ] = mapped_column(use_existing_column=True)
+
+    name_id: Mapped[int] = mapped_column(
+        ForeignKey("PrefixedNameDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+
+    name: Mapped[PrefixedNameDAO] = relationship(
+        "PrefixedNameDAO", uselist=False, foreign_keys=[name_id], post_update=True
     )
 
 
@@ -4283,6 +4319,14 @@ class SemanticRobotAnnotationDAO(
         ForeignKey(RootedSemanticAnnotationDAO.database_id),
         primary_key=True,
         use_existing_column=True,
+    )
+
+    joint_states: Mapped[builtins.list[JointStateDAO]] = relationship(
+        "JointStateDAO",
+        secondary="semanticrobotannotationdao_joint_states_association",
+        primaryjoin="SemanticRobotAnnotationDAO.database_id == semanticrobotannotationdao_joint_states_association.c.source_semanticrobotannotationdao_id",
+        secondaryjoin="JointStateDAO.database_id == semanticrobotannotationdao_joint_states_association.c.target_jointstatedao_id",
+        cascade="save-update, merge",
     )
 
     __mapper_args__ = {
