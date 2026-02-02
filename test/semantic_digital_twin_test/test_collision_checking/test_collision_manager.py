@@ -107,3 +107,26 @@ class TestCollisionRules:
                 assert check.body_b not in rule.allowed_collision_bodies
 
         assert len(collision_matrix.collision_checks) > 0
+
+    def test_AllowCollisionForAdjacentPairs(self, pr2_world_state_reset):
+        pr2 = pr2_world_state_reset.get_semantic_annotations_by_type(PR2)[0]
+        collision_manager = CollisionManager(pr2_world_state_reset)
+        collision_manager.low_priority_rules.extend(pr2.default_collision_rules)
+        collision_manager.high_priority_rules.extend(pr2.high_priority_collision_rules)
+        expected_collision_matrix = collision_manager.create_collision_matrix()
+
+        hard_ware_interface_cache = {}
+
+        with pr2_world_state_reset.modify_world():
+            for dof in pr2_world_state_reset.degrees_of_freedom:
+                hard_ware_interface_cache[dof.name] = dof.has_hardware_interface
+                dof.has_hardware_interface = False
+
+        empty_collision_matrix = collision_manager.create_collision_matrix()
+        assert len(empty_collision_matrix.collision_checks) == 0
+
+        with pr2_world_state_reset.modify_world():
+            for dof in pr2_world_state_reset.degrees_of_freedom:
+                dof.has_hardware_interface = hard_ware_interface_cache[dof.name]
+
+        assert collision_manager.create_collision_matrix() == expected_collision_matrix

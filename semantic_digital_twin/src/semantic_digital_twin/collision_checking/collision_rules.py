@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from abc import abstractmethod, ABC
 from dataclasses import dataclass, field
 from itertools import combinations
 
@@ -95,7 +96,7 @@ class Updatable(Protocol):
 
 
 @dataclass
-class HighPriorityAllowCollisionRule(CollisionRule):
+class HighPriorityAllowCollisionRule(CollisionRule, ABC):
     allowed_collision_pairs: set[CollisionCheck] = field(default_factory=set)
     allowed_collision_bodies: set[Body] = field(default_factory=set)
 
@@ -108,11 +109,19 @@ class HighPriorityAllowCollisionRule(CollisionRule):
             and collision_check.body_b not in self.allowed_collision_bodies
         }
 
+    def update(self, world: World):
+        self.allowed_collision_pairs = set()
+        self.allowed_collision_bodies = set()
+        self._update(world)
+
+    @abstractmethod
+    def _update(self, world: World): ...
+
 
 @dataclass
 class AllowNonRobotCollisions(HighPriorityAllowCollisionRule):
 
-    def update(self, world: World):
+    def _update(self, world: World):
         """
         Disable collision checks between bodies that do not belong to any robot.
         """
@@ -140,7 +149,7 @@ class AllowNonRobotCollisions(HighPriorityAllowCollisionRule):
 @dataclass
 class AllowCollisionForAdjacentPairs(HighPriorityAllowCollisionRule):
 
-    def update(self, world: World):
+    def _update(self, world: World):
         for body_a, body_b in combinations(world.bodies_with_collision, 2):
             if not world.is_controlled_connection_in_chain(body_a, body_b):
                 self.allowed_collision_pairs.add(
@@ -150,6 +159,10 @@ class AllowCollisionForAdjacentPairs(HighPriorityAllowCollisionRule):
 
 @dataclass
 class SelfCollisionMatrixRule(HighPriorityAllowCollisionRule):
+
+    def _update(self, world: World): ...
+
+    def update(self, world: World): ...
 
     def compute_collision_matrix(self, world: World) -> set[CollisionCheck]:
         """
