@@ -17,9 +17,10 @@ The tutorial demonstrates the creation of a body and its visual and collision in
 First, let's create a world.
 
 ```{code-cell} ipython3
+from krrood.utils import get_package_root
+import semantic_digital_twin
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
-from semantic_digital_twin.spatial_types.spatial_types import TransformationMatrix, RotationMatrix
-from semantic_digital_twin.utils import get_semantic_digital_twin_directory_root
+from semantic_digital_twin.spatial_types.spatial_types import HomogeneousTransformationMatrix, RotationMatrix
 from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.world_entity import Body
 
@@ -46,20 +47,20 @@ from semantic_digital_twin.spatial_types import Point3, Vector3
 from semantic_digital_twin.world_description.shape_collection import ShapeCollection
 from semantic_digital_twin.world_description.geometry import Box, Scale, Sphere, Cylinder, FileMesh, Color
 
-box_origin = TransformationMatrix.from_xyz_rpy(x=0, y=0, z=0, roll=0, pitch=0, yaw=0)
+box_origin = HomogeneousTransformationMatrix.from_xyz_rpy(x=0, y=0, z=0, roll=0, pitch=0, yaw=0)
 box = Box(origin=box_origin, scale=Scale(1., 1., 0.5), color=Color(1., 0., 0., 1., ))
 
-sphere_origin = TransformationMatrix.from_xyz_quaternion(pos_x=0, pos_y=1., pos_z=1., quat_x=0., quat_y=0., quat_z=0.,
+sphere_origin = HomogeneousTransformationMatrix.from_xyz_quaternion(pos_x=0, pos_y=1., pos_z=1., quat_x=0., quat_y=0., quat_z=0.,
                                                    quat_w=1.)
 sphere = Sphere(origin=sphere_origin, radius=0.4)
 
-cylinder_origin = TransformationMatrix.from_point_rotation_matrix(point=Point3.from_iterable([1, -1, 2]),
+cylinder_origin = HomogeneousTransformationMatrix.from_point_rotation_matrix(point=Point3.from_iterable([1, -1, 2]),
                                                                   rotation_matrix=RotationMatrix.from_axis_angle(
                                                                       Vector3.from_iterable([1., 0., 0.]), 0.8, ),)
 cylinder = Cylinder(origin=cylinder_origin, width=0.05, height=0.5)
 
-mesh = FileMesh(origin=TransformationMatrix(),
-            filename=os.path.join(get_semantic_digital_twin_directory_root(os.getcwd()), "resources", "stl", "milk.stl"))
+mesh = FileMesh(origin=HomogeneousTransformationMatrix(),
+            filename=os.path.join(get_package_root(semantic_digital_twin), "resources", "stl", "milk.stl"))
 
 collision = ShapeCollection([cylinder, sphere, box])
 visual = ShapeCollection([mesh])
@@ -75,7 +76,7 @@ with world.modify_world():
 from semantic_digital_twin.spatial_computations.raytracer import RayTracer
 rt = RayTracer(world)
 rt.update_scene()
-rt.scene.show("jupyter")
+rt.scene.show("notebook")
 ```
 
 If you think you have understood everything in this tutorial, you may try out 
