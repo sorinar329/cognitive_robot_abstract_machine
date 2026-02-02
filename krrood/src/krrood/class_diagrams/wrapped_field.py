@@ -21,7 +21,6 @@ from typing_extensions import (
     TYPE_CHECKING,
     Optional,
     Union,
-    Any,
 )
 
 from .failures import MissingContainedTypeOfContainer
@@ -108,14 +107,12 @@ class WrappedField:
 
         while True:
             try:
-                type_hints = get_type_hints(self.clazz.clazz, localns=local_namespace)
-                return type_hints.get(self.field.name, self.field.type)
+                return get_type_hints(self.clazz.clazz, localns=local_namespace)[
+                    self.field.name
+                ]
             except NameError as e:
                 found_class = self._find_class_by_name(e.name)
                 local_namespace[e.name] = found_class
-            except Exception as e:
-                # If everything else fails, return the raw field type
-                return self.field.type
 
     def _build_initial_namespace(self) -> dict:
         """
@@ -135,18 +132,7 @@ class WrappedField:
             for wrapped_class in class_diagram.wrapped_classes:
                 if wrapped_class.clazz.__name__ == class_name:
                     return wrapped_class.clazz
-
-        try:
-            return manually_search_for_class_name(class_name)
-        except TypeResolutionError:
-
-            from krrood.entity_query_language.predicate import Symbol
-            from krrood.utils import recursive_subclasses
-
-            for sub in recursive_subclasses(Symbol):
-                if sub.__name__ == class_name:
-                    return sub
-            raise
+        return manually_search_for_class_name(class_name)
 
     @cached_property
     def is_builtin_type(self) -> bool:

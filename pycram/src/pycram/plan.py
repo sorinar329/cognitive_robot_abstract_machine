@@ -34,7 +34,6 @@ from semantic_digital_twin.world_description.world_modification import (
     WorldModelModificationBlock,
 )
 from krrood.class_diagrams.class_diagram import ClassDiagram
-from krrood.entity_query_language.symbol_graph import SymbolGraph
 from krrood.probabilistic_knowledge.parameterizer import Parameterizer
 from .datastructures.dataclasses import ExecutionData, Context
 from .datastructures.enums import TaskStatus
@@ -624,34 +623,25 @@ class Plan:
         """
         Parameterize all parameters of a plan using the krrood parameterizer.
 
-        :param classes: Optional list of classes to include in the ClassDiagram
+        :param classes: List of classes to include in the ClassDiagram
                         (including classes found on the plan nodes).
-                        If None, SymbolGraph().class_diagram is used.
         :return: List of random event variables created by the parameterizer.
         """
 
         ordered_nodes = [self.root] + self.root.recursive_children
         designator_nodes = []
+        all_classes = set(classes)
 
-        if classes is not None:
-            all_classes = set(classes)
-            for node in ordered_nodes:
-                if not (isinstance(node, DesignatorNode) and node.designator_type):
-                    continue
+        for node in ordered_nodes:
+            if not (isinstance(node, DesignatorNode) and node.designator_type):
+                continue
 
-                designator_nodes.append(node)
-                all_classes.add(node.designator_type)
+            designator_nodes.append(node)
+            all_classes.add(node.designator_type)
 
-            class_diagram = ClassDiagram(list(all_classes))
-        else:
-            class_diagram = SymbolGraph().class_diagram
-            for node in ordered_nodes:
-                if not (isinstance(node, DesignatorNode) and node.designator_type):
-                    continue
-
-                designator_nodes.append(node)
-
+        class_diagram = ClassDiagram(list(all_classes))
         parameterizer = Parameterizer()
+
         all_variables = []
 
         for index, node in enumerate(designator_nodes):

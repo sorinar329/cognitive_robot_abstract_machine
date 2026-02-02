@@ -6,7 +6,6 @@ from dataclasses import dataclass
 
 from typing_extensions import Any, Optional, Callable, TypeVar
 
-from krrood.entity_query_language.predicate import Symbol
 from ...designator import DesignatorDescription
 from ...failures import PlanFailure
 from ...has_parameters import HasParameters
@@ -15,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
-class ActionDescription(DesignatorDescription, HasParameters, Symbol):
+class ActionDescription(DesignatorDescription, HasParameters):
     _pre_perform_callbacks = []
     _post_perform_callbacks = []
 

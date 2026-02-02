@@ -4,7 +4,6 @@ from random_events.set import Set
 from random_events.variable import Continuous, Integer, Symbolic
 from random_events.product_algebra import Event, SimpleEvent
 from krrood.class_diagrams.class_diagram import ClassDiagram
-from krrood.entity_query_language.symbol_graph import SymbolGraph
 from krrood.probabilistic_knowledge.parameterizer import Parameterizer
 from pycram.datastructures.enums import TorsoState, Arms
 from pycram.robot_plans import MoveTorsoAction
@@ -131,7 +130,11 @@ def test_parameterize_movetorse_navigate(parameterizer: Parameterizer):
     2. Sampling from the constrained distribution and validation of constraints.
     """
 
-    class_diagram = SymbolGraph().class_diagram
+    plan_classes = [
+        MoveTorsoAction, NavigateAction, PoseStamped, PyCramPose,
+        PyCramVector3, PyCramQuaternion, Header
+    ]
+    class_diagram = ClassDiagram(plan_classes)
     wrapped_move_torso = class_diagram.get_wrapped_class(MoveTorsoAction)
     wrapped_navigate = class_diagram.get_wrapped_class(NavigateAction)
 
@@ -140,7 +143,7 @@ def test_parameterize_movetorse_navigate(parameterizer: Parameterizer):
     movetorso_variables2 = parameterizer.parameterize(wrapped_move_torso, prefix="MoveTorsoAction_2")
 
     all_variables = movetorso_variables1 + navigate_variables + movetorso_variables2
-    variables = {v.name: v for v in all_variables if not any(sub in v.name for sub in ["frame_id", "object_designator", "manipulator"])}
+    variables = {v.name: v for v in all_variables}
 
     expected_names = {
         "MoveTorsoAction_1.torso_state", "MoveTorsoAction_2.torso_state",
@@ -197,7 +200,13 @@ def test_parameterize_pickup_navigate_place(parameterizer: Parameterizer):
     2. Creating and sampling from a constrained distribution over the plan variables.
     """
 
-    class_diagram = SymbolGraph().class_diagram
+    plan_classes = [
+        PickUpAction, NavigateAction, PlaceAction,
+        GraspDescription, PoseStamped, PyCramPose,
+        PyCramVector3, PyCramQuaternion, Header
+    ]
+    class_diagram = ClassDiagram(plan_classes)
+
     wrapped_pickup = class_diagram.get_wrapped_class(PickUpAction)
     wrapped_navigate = class_diagram.get_wrapped_class(NavigateAction)
     wrapped_place = class_diagram.get_wrapped_class(PlaceAction)
@@ -207,7 +216,7 @@ def test_parameterize_pickup_navigate_place(parameterizer: Parameterizer):
     place_variables = parameterizer.parameterize(wrapped_place, prefix="PlaceAction")
 
     all_variables = pickup_variables + navigate_variables + place_variables
-    variables = {v.name: v for v in all_variables if not any(sub in v.name for sub in ["frame_id", "object_designator", "manipulator"])}
+    variables = {v.name: v for v in all_variables}
 
     expected_variables = {
         "PickUpAction.arm",

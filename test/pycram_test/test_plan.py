@@ -682,7 +682,12 @@ def test_algebra_sequentialplan(immutable_model_world):
         MoveTorsoActionDescription(None),
     )
 
-    variables = sp.parameterize_plan()
+    plan_classes = [
+        MoveTorsoAction, NavigateAction, PyCramPose, PyCramVector3, PyCramQuaternion, Header,
+        PoseStamped
+    ]
+
+    variables = sp.parameterize_plan(classes=plan_classes)
     variables_map = {v.name: v for v in variables}
 
     probabilistic_circuit = Parameterizer().create_fully_factorized_distribution(variables)
@@ -751,7 +756,12 @@ def test_algebra_parallelplan(immutable_model_world):
         ParkArmsActionDescription(None),
     )
 
-    variables = sp.parameterize_plan()
+    plan_classes = [
+        MoveTorsoAction, ParkArmsAction, PoseStamped, PyCramPose,
+        PyCramVector3, PyCramQuaternion, Header
+    ]
+
+    variables = sp.parameterize_plan(classes=plan_classes)
     variables_map = {v.name: v for v in variables}
 
     # Ensure expected variable names exist
