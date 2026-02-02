@@ -67,6 +67,10 @@ class SpecifiesLeftRightArm(HasArms, ABC):
     """
 
     @cached_property
+    def arms(self) -> List[Arm]:
+        return [self.left_arm, self.right_arm]
+
+    @cached_property
     def left_arm(self):
         return self._assign_left_right_arms(LeftOf)
 

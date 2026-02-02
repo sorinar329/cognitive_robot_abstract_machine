@@ -18,13 +18,8 @@ class ViewManager:
     def get_end_effector_view(
         arm: Arms, robot_view: AbstractRobot
     ) -> Optional[Manipulator]:
-
-        for man in robot_view.manipulators:
-            if "left" in man.name.name and arm == Arms.LEFT:
-                return man
-            elif "right" in man.name.name and arm == Arms.RIGHT:
-                return man
-        return None
+        arm = ViewManager.get_arm_view(arm, robot_view)
+        return arm.manipulator
 
     @staticmethod
     def get_arm_view(
@@ -37,13 +32,14 @@ class ViewManager:
         :param robot_view: The robot view to search in.
         :return: The Manipulator object representing the arm.
         """
-        for arm_chain in robot_view.manipulator_chains:
-            if "left" in arm_chain.name.name and arm == Arms.LEFT:
-                return arm_chain
-            elif "right" in arm_chain.name.name and arm == Arms.RIGHT:
-                return arm_chain
-            elif arm == Arms.BOTH:
-                return robot_view.left_arm, robot_view.right_arm
+        if len(robot_view.arms) == 1:
+            return robot_view.arms[0]
+        elif arm == Arms.LEFT:
+            return robot_view.left_arm
+        elif arm == Arms.RIGHT:
+            return robot_view.right_arm
+        elif arm == Arms.BOTH:
+            return robot_view.arms
         return None
 
     @staticmethod

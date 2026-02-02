@@ -157,7 +157,9 @@ def cylinder_bot_world():
 
 
 def world_with_urdf_factory(
-    urdf_path: str, robot_semantic_annotation: Type[AbstractRobot] | None
+    urdf_path: str,
+    robot_semantic_annotation: Type[AbstractRobot] | None,
+    drive_connection_type: Type[OmniDrive],
 ):
     """
     Builds this tree:
@@ -177,9 +179,12 @@ def world_with_urdf_factory(
         )
         world_with_urdf.add_connection(map_C_localization)
 
-        c_root_bf = OmniDrive.create_with_dofs(
-            parent=localization_body, child=world_with_urdf.root, world=world_with_urdf
-        )
+        if drive_connection_type is OmniDrive:
+            c_root_bf = OmniDrive.create_with_dofs(
+                parent=localization_body,
+                child=world_with_urdf.root,
+                world=world_with_urdf,
+            )
         world_with_urdf.add_connection(c_root_bf)
 
     return world_with_urdf
@@ -195,7 +200,7 @@ def pr2_world_setup():
         "robots",
     )
     pr2 = os.path.join(urdf_dir, "pr2_calibrated_with_ft.urdf")
-    return world_with_urdf_factory(pr2, PR2)
+    return world_with_urdf_factory(pr2, PR2, OmniDrive)
 
 
 @pytest.fixture(scope="session")
@@ -208,7 +213,7 @@ def hsr_world_setup():
         "robots",
     )
     hsr = os.path.join(urdf_dir, "hsrb.urdf")
-    return world_with_urdf_factory(hsr, HSRB)
+    return world_with_urdf_factory(hsr, HSRB, OmniDrive)
 
 
 @pytest.fixture(scope="session")
@@ -239,10 +244,7 @@ def stretch_world():
         "robots",
     )
     stretch = os.path.join(urdf_dir, "stretch_description.urdf")
-    stretch_parser = URDFParser.from_file(file_path=stretch)
-    world_with_stretch = stretch_parser.parse()
-    Stretch.from_world(world_with_stretch)
-    return world_with_stretch
+    return world_with_urdf_factory(stretch, Stretch, OmniDrive)
 
 
 @pytest.fixture(scope="session")
@@ -255,10 +257,7 @@ def tiago_world():
         "robots",
     )
     tiago = os.path.join(urdf_dir, "tiago_dual.urdf")
-    tiago_parser = URDFParser.from_file(file_path=tiago)
-    world_with_tiago = tiago_parser.parse()
-    Tiago.from_world(world_with_tiago)
-    return world_with_tiago
+    return world_with_urdf_factory(tiago, Tiago, OmniDrive)
 
 
 @pytest.fixture(scope="session")

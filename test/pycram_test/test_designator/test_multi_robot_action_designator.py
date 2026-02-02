@@ -3,10 +3,18 @@ from copy import deepcopy
 import pytest
 
 from pycram.datastructures.dataclasses import Context
+from pycram.datastructures.enums import Arms
+from pycram.datastructures.pose import PoseStamped
 from pycram.language import SequentialPlan
 from pycram.process_module import simulated_robot
-from pycram.robot_plans import MoveTorsoAction, MoveTorsoActionDescription
-from semantic_digital_twin.datastructures.definitions import TorsoState
+from pycram.robot_plans import (
+    MoveTorsoAction,
+    MoveTorsoActionDescription,
+    NavigateActionDescription,
+    SetGripperActionDescription,
+    PickUpActionDescription,
+)
+from semantic_digital_twin.datastructures.definitions import TorsoState, GripperState
 from semantic_digital_twin.robots.hsrb import HSRB
 from semantic_digital_twin.robots.stretch import Stretch
 from semantic_digital_twin.robots.tiago import Tiago
@@ -51,7 +59,15 @@ def immutable_multiple_robot_apartment(setup_multi_robot_apartment):
     world.state.data = state
 
 
-def test_move_torso_multi_test(immutable_multiple_robot_apartment):
+@pytest.fixture
+def mutable_multiple_robot_apartment(setup_multi_robot_apartment):
+    world, view = setup_multi_robot_apartment
+    copy_world = deepcopy(world)
+    copy_view = view.from_world(copy_world)
+    return copy_world, copy_view, Context(world, view)
+
+
+def test_move_torso_multi(immutable_multiple_robot_apartment):
     world, view, context = immutable_multiple_robot_apartment
     plan = SequentialPlan(context, MoveTorsoActionDescription(TorsoState.HIGH))
 
@@ -62,3 +78,62 @@ def test_move_torso_multi_test(immutable_multiple_robot_apartment):
 
     for connection, target in joint_state.items():
         assert connection.position == pytest.approx(target, abs=0.01)
+
+
+def test_navigate_multi(immutable_multiple_robot_apartment):
+    world, view, context = immutable_multiple_robot_apartment
+    plan = SequentialPlan(
+        context,
+        NavigateActionDescription(PoseStamped.from_list([1, 2, 0], frame=world.root)),
+    )
+
+    with simulated_robot:
+        plan.perform()
+
+    robot_base_pose = view.root.global_pose
+    robot_base_position = robot_base_pose.to_position().to_np()
+    robot_base_orientation = robot_base_pose.to_quaternion().to_np()
+
+    assert robot_base_position[:3] == pytest.approx([1, 2, 0], abs=0.01)
+    assert robot_base_orientation == pytest.approx([0, 0, 0, 1], abs=0.01)
+
+
+def test_move_gripper_multi(immutable_multiple_robot_apartment):
+    world, view, context = immutable_multiple_robot_apartment
+
+    plan = SequentialPlan(
+        context, SetGripperActionDescription(Arms.LEFT, GripperState.OPEN)
+    )
+
+    with simulated_robot:
+        plan.perform()
+
+    arm = view.arms[0]
+    open_state = arm.manipulator.get_joint_state_by_type(GripperState.OPEN)
+    close_state = arm.manipulator.get_joint_state_by_type(GripperState.CLOSE)
+
+    for connection, target in open_state.items():
+        assert connection.position == pytest.approx(target, abs=0.01)
+
+    plan = SequentialPlan(
+        context, SetGripperActionDescription(Arms.LEFT, GripperState.CLOSE)
+    )
+
+    with simulated_robot:
+        plan.perform()
+
+    for connection, target in close_state.items():
+        assert connection.position == pytest.approx(target, abs=0.01)
+
+
+def test_pick_up_multi(mutable_multiple_robot_apartment):
+    world, view, context = mutable_multiple_robot_apartment
+
+    plan = SequentialPlan(
+        context,
+        NavigateActionDescription(PoseStamped.from_list([1, 2, 0], frame=world.root)),
+        PickUpActionDescription(world.get_body_by_name("milk.stl"), Arms.LEFT),
+    )
+
+    with simulated_robot:
+        plan.perform()
