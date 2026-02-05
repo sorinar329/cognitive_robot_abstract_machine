@@ -201,9 +201,6 @@ def test_grasping(immutable_tracy_block_world):
 def test_pick_up_multi(mutable_tracy_block_world):
     world, view, context = mutable_tracy_block_world
 
-    node = rclpy.create_node("test")
-    VizMarkerPublisher(world, node)
-
     left_arm = ViewManager.get_arm_view(Arms.LEFT, view)
     grasp_description = GraspDescription(
         ApproachDirection.FRONT,

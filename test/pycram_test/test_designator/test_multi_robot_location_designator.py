@@ -236,9 +236,6 @@ def test_reachability_pose_probabilistic_costmap_location(
     immutable_multiple_robot_simple_apartment,
 ):
     world, robot_view, context = immutable_multiple_robot_simple_apartment
-    node = rclpy.create_node("node")
-    VizMarkerPublisher(world, node)
-    TFPublisher(world, node)
 
     plan = SequentialPlan(
         context,
