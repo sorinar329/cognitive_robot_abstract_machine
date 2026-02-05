@@ -9,9 +9,7 @@ import pytest
 
 from giskardpy.data_types.exceptions import DuplicateNameException
 from giskardpy.executor import Executor, SimulationPacer
-from semantic_digital_twin.collision_checking.collision_matrix_manager import (
-    CollisionRule,
-)
+from semantic_digital_twin.collision_checking.collision_rules import AvoidAllCollisions
 from semantic_digital_twin.collision_checking.collision_world_syncer import (
     CollisionCheckerLib,
 )
@@ -31,6 +29,7 @@ from giskardpy.motion_statechart.exceptions import (
 )
 from giskardpy.motion_statechart.goals.collision_avoidance import (
     CollisionAvoidance,
+    ExternalCollisionAvoidance,
 )
 from giskardpy.motion_statechart.goals.open_close import Open, Close
 from giskardpy.motion_statechart.goals.templates import Sequence, Parallel
@@ -99,7 +98,7 @@ from semantic_digital_twin.adapters.world_entity_kwargs_tracker import (
     WorldEntityWithIDKwargsTracker,
 )
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
-from semantic_digital_twin.robots.abstract_robot import Manipulator
+from semantic_digital_twin.robots.abstract_robot import Manipulator, AbstractRobot
 from semantic_digital_twin.robots.hsrb import HSRB
 from semantic_digital_twin.semantic_annotations.semantic_annotations import (
     Handle,
@@ -2464,8 +2463,8 @@ class TestOpenClose:
 
 class TestCollisionAvoidance:
     def test_collision_avoidance(self, cylinder_bot_world: World):
+        robot = cylinder_bot_world.get_semantic_annotations_by_type(AbstractRobot)[0]
         tip = cylinder_bot_world.get_kinematic_structure_entity_by_name("bot")
-
         msc = MotionStatechart()
         msc.add_nodes(
             [
@@ -2476,9 +2475,7 @@ class TestCollisionAvoidance:
                         x=1, reference_frame=cylinder_bot_world.root
                     ),
                 ),
-                CollisionAvoidance(
-                    collision_entries=[CollisionRule.avoid_all_collision()],
-                ),
+                ExternalCollisionAvoidance(robot=robot),
                 local_min := LocalMinimumReached(),
             ]
         )
@@ -2582,7 +2579,7 @@ class TestCollisionAvoidance:
                                 ),
                             ),
                             CollisionAvoidance(
-                                collision_entries=[CollisionRule.avoid_all_collision()],
+                                collision_rules=[CollisionRule.avoid_all_collision()],
                             ),
                         ]
                     ),

@@ -871,13 +871,23 @@ class Point3(sm.SymbolicMathType, SpatialType, SubclassJSONSerializer):
         )
 
     @classmethod
-    def create_with_variables(cls, name: str) -> Self:
-        return cls(
-            x=sm.FloatVariable(name=f"{name}.x"),
-            y=sm.FloatVariable(name=f"{name}.y"),
-            z=sm.FloatVariable(name=f"{name}.z"),
+    def create_with_variables(
+        cls, name: str, resolver: Callable[[], List[float] | np.ndarray] | None = None
+    ) -> Self:
+        x = sm.FloatVariable(name=f"{name}.x")
+        y = sm.FloatVariable(name=f"{name}.y")
+        z = sm.FloatVariable(name=f"{name}.z")
+        result = cls(
+            x=x,
+            y=y,
+            z=z,
             reference_frame=None,
         )
+        if resolver is not None:
+            x.resolve = lambda: resolver()[0]
+            y.resolve = lambda: resolver()[1]
+            z.resolve = lambda: resolver()[2]
+        return result
 
     def to_json(self) -> Dict[str, Any]:
         if not self.is_constant():
@@ -1164,13 +1174,23 @@ class Vector3(sm.SymbolicMathType, SpatialType, SubclassJSONSerializer):
         return v
 
     @classmethod
-    def create_with_variables(cls, name: str) -> Self:
-        return cls(
-            x=sm.FloatVariable(name=f"{name}.x"),
-            y=sm.FloatVariable(name=f"{name}.y"),
-            z=sm.FloatVariable(name=f"{name}.z"),
+    def create_with_variables(
+        cls, name: str, resolver: Callable[[], List[float] | np.ndarray] | None = None
+    ) -> Self:
+        x = sm.FloatVariable(name=f"{name}.x")
+        y = sm.FloatVariable(name=f"{name}.y")
+        z = sm.FloatVariable(name=f"{name}.z")
+        result = cls(
+            x=x,
+            y=y,
+            z=z,
             reference_frame=None,
         )
+        if resolver is not None:
+            x.resolve = lambda: resolver()[0]
+            y.resolve = lambda: resolver()[1]
+            z.resolve = lambda: resolver()[2]
+        return result
 
     @property
     def x(self) -> sm.Scalar:

@@ -3,6 +3,7 @@ from itertools import combinations
 
 import pytest
 
+from krrood.symbolic_math.symbolic_math import Vector, VariableParameters
 from semantic_digital_twin.collision_checking.collision_detector import (
     CollisionCheckingResult,
 )
@@ -98,6 +99,34 @@ class TestCollisionRules:
             len(collision_matrix.collision_checks)
             == len(pr2.left_arm.bodies) * len(pr2.right_arm.bodies) - 1
         )
+
+    def test_AvoidCollisionBetweenGroups2(self, cylinder_bot_world):
+        env1 = cylinder_bot_world.get_kinematic_structure_entity_by_name("environment")
+        env2 = cylinder_bot_world.get_kinematic_structure_entity_by_name("environment2")
+        robot = cylinder_bot_world.get_semantic_annotations_by_type(MinimalRobot)[0]
+
+        collision_manager = cylinder_bot_world.collision_manager
+        collision_manager.normal_priority_rules.extend(
+            [
+                AvoidCollisionBetweenGroups(
+                    buffer_zone_distance=10,
+                    violated_distance=0.0,
+                    body_group1=[robot.root],
+                    body_group2=[env1],
+                ),
+                AvoidCollisionBetweenGroups(
+                    buffer_zone_distance=15,
+                    violated_distance=0.23,
+                    body_group1=[robot.root],
+                    body_group2=[env2],
+                ),
+            ]
+        )
+
+        collision_manager.update_collision_matrix()
+        # -1 because torso is in both chains
+        assert collision_manager.get_buffer_zone_distance(robot.root, env1) == 10
+        assert collision_manager.get_buffer_zone_distance(robot.root, env2) == 15
 
     def test_AllowCollisionBetweenGroups(self, pr2_world_state_reset):
         pr2 = pr2_world_state_reset.get_semantic_annotations_by_type(PR2)[0]
@@ -293,46 +322,102 @@ class TestCollisionGroups:
 
 class TestExternalCollisionExpressionManager:
     def test_simple(self, cylinder_bot_world):
+        env1 = cylinder_bot_world.get_kinematic_structure_entity_by_name("environment")
+        env2 = cylinder_bot_world.get_kinematic_structure_entity_by_name("environment2")
         robot = cylinder_bot_world.get_semantic_annotations_by_type(MinimalRobot)[0]
         collision_manager = cylinder_bot_world.collision_manager
-        collision_manager.normal_priority_rules.append(
-            AvoidAllCollisions(
-                buffer_zone_distance=10, bodies=cylinder_bot_world.bodies_with_collision
-            )
+        collision_manager.normal_priority_rules.extend(
+            [
+                AvoidCollisionBetweenGroups(
+                    buffer_zone_distance=10,
+                    violated_distance=0.0,
+                    body_group1=[robot.root],
+                    body_group2=[env1],
+                ),
+                AvoidCollisionBetweenGroups(
+                    buffer_zone_distance=15,
+                    violated_distance=0.23,
+                    body_group1=[robot.root],
+                    body_group2=[env2],
+                ),
+            ]
         )
         collision_manager.max_avoided_bodies_rules.append(
-            MaxAvoidedCollisionsOverride(5, {robot.root})
+            MaxAvoidedCollisionsOverride(2, {robot.root})
         )
         collision_manager.add_collision_consumer(
             external_collisions := ExternalCollisionExpressionManager(robot)
         )
-        external_collisions.register_body(robot.root, number_of_potential_collisions=2)
+        external_collisions.register_body(robot.root)
         collisions = collision_manager.compute_collisions()
+
+        # test point on a
+        point1 = external_collisions.get_group1_P_point_on_a_symbol(robot.root, 0)
+        assert np.allclose(point1.evaluate(), np.array([0.0, 0.05, 0.499, 1.0]))
+        point2 = external_collisions.get_group1_P_point_on_a_symbol(robot.root, 1)
         assert np.allclose(
-            external_collisions.collision_data,
-            np.array(
-                [
-                    0.0,  # point on y object
-                    0.05,
-                    0.499,
-                    0,  # contact normal in map, -y because its to the right
-                    -1,
-                    0,
-                    0.2,  # contact distance
-                    10,  # buffer zone distance
-                    0,  # violated distance
-                    0.05,  # point on x object
-                    0,
-                    0.499,
-                    -1,  # contact normal in map, -x because its to the front
-                    0,
-                    0,
-                    0.7,  # contact distance
-                    10,  # buffer zone distance
-                    0,  # violated distance
-                ]
-            ),
-            atol=1e-4,
+            point2.evaluate(), np.array([0.05, 0.0, 0.499, 1.0]), atol=1e-4
         )
-        point1 = external_collisions.external_new_a_P_pa_symbol(robot.root, 0)
-        point2 = external_collisions.external_new_a_P_pa_symbol(robot.root, 1)
+
+        # test contact normal
+        contact_normal1 = external_collisions.get_group1_V_contact_normal_symbol(
+            robot.root, 0
+        )
+        assert np.allclose(contact_normal1.evaluate(), np.array([0.0, -1.0, 0.0, 0.0]))
+        contact_normal2 = external_collisions.get_group1_V_contact_normal_symbol(
+            robot.root, 1
+        )
+        assert np.allclose(
+            contact_normal2.evaluate(), np.array([-1, 0.0, 0.0, 0.0]), atol=1e-4
+        )
+
+        # test buffer distance
+        buffer_distance1 = external_collisions.get_buffer_distance_symbol(robot.root, 0)
+        assert np.allclose(buffer_distance1.evaluate()[0], 15)
+        buffer_distance2 = external_collisions.get_buffer_distance_symbol(robot.root, 1)
+        assert np.allclose(buffer_distance2.evaluate()[0], 10)
+
+        # test contact distance
+        contact_distance1 = external_collisions.get_contact_distance_symbol(
+            robot.root, 0
+        )
+        assert np.allclose(contact_distance1.evaluate()[0], 0.2)
+        contact_distance2 = external_collisions.get_contact_distance_symbol(
+            robot.root, 1
+        )
+        assert np.allclose(contact_distance2.evaluate()[0], 0.7)
+
+        # test violated distance
+        violated_distance1 = external_collisions.get_violated_distance_symbol(
+            robot.root, 0
+        )
+        assert np.allclose(violated_distance1.evaluate()[0], 0.23)
+        violated_distance2 = external_collisions.get_violated_distance_symbol(
+            robot.root, 1
+        )
+        assert np.allclose(violated_distance2.evaluate()[0], 0.0)
+
+        # test full expr
+        variables = external_collisions.get_external_collision_variables()
+        assert len(variables) == external_collisions.block_size * 2
+        expression = Vector(variables)
+        compiled_expression = expression.compile(
+            VariableParameters.from_lists(variables)
+        )
+        result = compiled_expression(external_collisions.collision_data)
+        assert np.allclose(result, external_collisions.collision_data)
+
+        # test specific expression
+        group1_P_point_on_a = external_collisions.get_group1_P_point_on_a_symbol(
+            robot.root, 0
+        )
+        group_1_V_contact_normal = (
+            external_collisions.get_group1_V_contact_normal_symbol(robot.root, 0)
+        )
+        expr = group_1_V_contact_normal @ group1_P_point_on_a.to_vector3()
+        compiled_expression = expr.compile(VariableParameters.from_lists(variables))
+        result = compiled_expression(external_collisions.collision_data)
+        expected = external_collisions.get_group1_V_contact_normal_data(
+            robot.root, 0
+        ) @ external_collisions.get_group1_P_point_on_a_data(robot.root, 0)
+        assert np.allclose(result, expected)

@@ -44,6 +44,20 @@ class CollisionGroup:
     def __eq__(self, other) -> bool:
         return self.root == other.root
 
+    def __contains__(self, item):
+        return item == self.root or item in self.bodies
+
+    def get_max_avoided_bodies(self, collision_manager: CollisionManager):
+        max_avoided_bodies = []
+        if isinstance(self.root, Body):
+            max_avoided_bodies.append(
+                collision_manager.get_max_avoided_bodies(self.root)
+            )
+        max_avoided_bodies.extend(
+            collision_manager.get_max_avoided_bodies(b) for b in self.bodies
+        )
+        return max(max_avoided_bodies, default=1)
+
 
 @dataclass
 class CollisionConsumer(ABC):
@@ -100,7 +114,7 @@ class CollisionGroupConsumer(CollisionConsumer, ABC):
             if len(group.bodies) > 0 or group.root in world.bodies_with_collision
         ]
 
-    def get_collision_group(self, body: Body) -> CollisionGroup:
+    def get_collision_group(self, body: KinematicStructureEntity) -> CollisionGroup:
         for group in self.collision_groups:
             if body in group.bodies or body == group.root:
                 return group
@@ -182,27 +196,27 @@ class CollisionManager(ModelChangeCallback):
                 return max_avoided_bodies
         raise Exception(f"No rule found for {body}")
 
-    def get_buffer_zone_distance(self, body: Body) -> float:
+    def get_buffer_zone_distance(self, body_a: Body, body_b: Body) -> float:
         """
         Returns the buffer-zone distance for the body by scanning rules from highest to lowest priority.
         """
         for rule in reversed(self.rules):
             if isinstance(rule, AvoidCollisionRule):
-                value = rule.buffer_zone_distance_for(body)
+                value = rule.buffer_zone_distance_for(body_a, body_b)
                 if value is not None:
                     return value
-        raise ValueError(f"No buffer-zone rule found for {body}")
+        raise ValueError(f"No buffer-zone rule found for {body_a, body_b}")
 
-    def get_violated_distance(self, body: Body) -> float:
+    def get_violated_distance(self, body_a: Body, body_b: Body) -> float:
         """
         Returns the violated distance for the body by scanning rules from highest to lowest priority.
         """
         for rule in reversed(self.rules):
             if isinstance(rule, AvoidCollisionRule):
-                value = rule.violated_distance_for(body)
+                value = rule.violated_distance_for(body_a, body_b)
                 if value is not None:
                     return value
-        raise ValueError(f"No violated-distance rule found for {body}")
+        raise ValueError(f"No violated-distance rule found for {body_a, body_b}")
 
     @property
     def rules(self) -> List[CollisionRule]:

@@ -2334,7 +2334,7 @@ NumericalMatrix = np.ndarray | Iterable[Iterable[NumericalScalar]]
 SymbolicScalar = FloatVariable | Scalar
 
 ScalarData = NumericalScalar | SymbolicScalar
-VectorData = NumericalVector | Vector
+VectorData = NumericalVector | Vector | Iterable[ScalarData]
 MatrixData = NumericalMatrix | Matrix
 
 GenericSymbolicType = TypeVar(

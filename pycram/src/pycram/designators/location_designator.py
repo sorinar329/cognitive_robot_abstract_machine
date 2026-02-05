@@ -1638,9 +1638,7 @@ class GiskardLocation(LocationDesignatorDescription):
             ]
         )
 
-        collision_avoidance = CollisionAvoidance(
-            collision_entries=[giskard_coll_request]
-        )
+        collision_avoidance = CollisionAvoidance(collision_rules=[giskard_coll_request])
         msc = MotionStatechart()
         msc.add_nodes([pose_seq, collision_avoidance])
 
