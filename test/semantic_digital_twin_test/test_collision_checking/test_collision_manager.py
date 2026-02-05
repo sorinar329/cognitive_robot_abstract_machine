@@ -35,6 +35,7 @@ from semantic_digital_twin.world_description.connections import OmniDrive
 from semantic_digital_twin.world_description.geometry import Cylinder
 from semantic_digital_twin.world_description.shape_collection import ShapeCollection
 from semantic_digital_twin.world_description.world_entity import Body
+import numpy as np
 
 
 class TestCollisionRules:
@@ -307,5 +308,29 @@ class TestExternalCollisionExpressionManager:
         )
         external_collisions.register_body(robot.root, number_of_potential_collisions=2)
         collisions = collision_manager.compute_collisions()
-        # assert
-        pass
+        assert np.allclose(
+            external_collisions.collision_data,
+            np.array(
+                [
+                    0.0,  # point on y object
+                    0.05,
+                    0.499,
+                    0,  # contact normal in map, -y because its to the right
+                    -1,
+                    0,
+                    0.2,  # contact distance
+                    10,  # buffer zone distance
+                    0,  # violated distance
+                    0.05,  # point on x object
+                    0,
+                    0.499,
+                    -1,  # contact normal in map, -x because its to the front
+                    0,
+                    0,
+                    0.7,  # contact distance
+                    10,  # buffer zone distance
+                    0,  # violated distance
+                ]
+            ),
+            atol=1e-4,
+        )
