@@ -423,7 +423,7 @@ class LossOfContactDetector(AbstractContactDetector):
                                contact_points, interference_points, LossOfContactEvent)
 
     def get_bodies_that_lost_contact(self, contact_points: ContactPointsList, interference_points: ContactPointsList) \
-            -> Tuple[List[PhysicalBody], List[PhysicalBody]]:
+            -> Tuple[List[Body], List[Body]]:
         """
         Get the objects that lost contact with the object to track.
 
