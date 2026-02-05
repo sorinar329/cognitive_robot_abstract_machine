@@ -4,6 +4,7 @@ from dataclasses import dataclass, field, InitVar
 
 from typing_extensions import Optional
 
+from krrood.symbolic_math.symbolic_math import FloatVariable
 from semantic_digital_twin.collision_checking.collision_detector import (
     NullCollisionDetector,
 )
@@ -20,14 +21,7 @@ from semantic_digital_twin.world_description.world_state_trajectory_plotter impo
     WorldStateTrajectoryPlotter,
 )
 from .data_types.exceptions import NoQPControllerConfigException
-from semantic_digital_twin.collision_checking.collision_world_syncer import (
-    CollisionWorldSynchronizer,
-    CollisionCheckerLib,
-)
-from .motion_statechart.auxilary_variable_manager import (
-    AuxiliaryVariableManager,
-    AuxiliaryVariable,
-)
+from .motion_statechart.auxilary_variable_manager import FloatVariableManager
 from .motion_statechart.context import BuildContext, ExecutionContext
 from .motion_statechart.motion_statechart import MotionStatechart
 from .qp.exceptions import EmptyProblemException
@@ -108,10 +102,6 @@ class Executor:
         default_factory=QPControllerConfig.create_with_simulation_defaults
     )
     """Optional configuration for the QP Controller. Is only needed when constraints are present in the motion statechart."""
-    collision_checker: InitVar[CollisionCheckerLib] = field(
-        default=CollisionCheckerLib.none
-    )
-    """Library used for collision checking. Can be set to Bullet or None."""
     tmp_folder: str = field(default="/tmp/")
     """Path to safe temporary files."""
     record_trajectory: bool = False
@@ -128,12 +118,8 @@ class Executor:
     # %% init False
     motion_statechart: MotionStatechart = field(init=False)
     """The motion statechart describing the robot's motion logic."""
-    collision_scene: Optional[CollisionWorldSynchronizer] = field(
-        default=None, init=False
-    )
-    """The collision scene synchronizer for managing robot collision states."""
-    auxiliary_variable_manager: AuxiliaryVariableManager = field(
-        default_factory=AuxiliaryVariableManager, init=False
+    auxiliary_variable_manager: FloatVariableManager = field(
+        default_factory=FloatVariableManager, init=False
     )
     """Manages auxiliary symbolic variables for execution contexts."""
     qp_controller: Optional[QPController] = field(default=None, init=False)
@@ -141,27 +127,17 @@ class Executor:
 
     control_cycles: int = field(init=False)
     """Tracks the number of control cycles elapsed during execution."""
-    _control_cycles_variable: AuxiliaryVariable = field(init=False)
+    _control_cycles_variable: FloatVariable = field(init=False)
     """Auxiliary variable linked to the control_cycles attribute."""
 
-    _time_variable: AuxiliaryVariable = field(init=False)
+    _time_variable: FloatVariable = field(init=False)
     """Auxiliary variable representing the current time in seconds since the start of the simulation."""
 
     @property
     def time(self) -> float:
         return self.control_cycles * self.controller_config.control_dt
 
-    def __post_init__(self, collision_checker: CollisionCheckerLib):
-        if collision_checker == CollisionCheckerLib.bpb:
-            collision_detector = BulletCollisionDetector(world=self.world)
-        else:
-            collision_detector = NullCollisionDetector(world=self.world)
-
-        self.collision_scene = CollisionWorldSynchronizer(
-            world=self.world,
-            robots=self.world.get_semantic_annotations_by_type(AbstractRobot),
-            collision_detector=collision_detector,
-        )
+    def __post_init__(self):
         self.pacer.target_frequency = self.controller_config.target_frequency
 
     def _create_control_cycles_variable(self):
@@ -185,8 +161,7 @@ class Executor:
     def build_context(self) -> BuildContext:
         return BuildContext(
             world=self.world,
-            auxiliary_variable_manager=self.auxiliary_variable_manager,
-            collision_expression_manager=self.collision_scene,
+            float_variable_manager=self.auxiliary_variable_manager,
             qp_controller_config=self.controller_config,
             control_cycle_variable=self._control_cycles_variable,
         )

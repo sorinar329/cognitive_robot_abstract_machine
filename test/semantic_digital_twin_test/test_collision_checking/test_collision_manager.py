@@ -398,7 +398,7 @@ class TestExternalCollisionExpressionManager:
         assert np.allclose(violated_distance2.evaluate()[0], 0.0)
 
         # test full expr
-        variables = external_collisions.get_external_collision_variables()
+        variables = external_collisions.get_collision_variables()
         assert len(variables) == external_collisions.block_size * 2
         expression = Vector(variables)
         compiled_expression = expression.compile(

@@ -5,19 +5,14 @@ from dataclasses import dataclass, field
 import numpy as np
 from typing_extensions import Self, Dict, Type, TypeVar, TYPE_CHECKING
 
-from semantic_digital_twin.collision_checking.collision_expressions import (
-    CollisionExpressionManager,
-)
+from krrood.symbolic_math.symbolic_math import FloatVariable
 from semantic_digital_twin.collision_checking.collision_manager import CollisionManager
 from semantic_digital_twin.world import World
 
 if TYPE_CHECKING:
-    from .auxilary_variable_manager import AuxiliaryVariableManager, AuxiliaryVariable
+    from .auxilary_variable_manager import FloatVariableManager
     from .exceptions import MissingContextExtensionError
     from ..qp.qp_controller_config import QPControllerConfig
-    from semantic_digital_twin.collision_checking.collision_world_syncer import (
-        CollisionWorldSynchronizer,
-    )
 
 
 @dataclass
@@ -39,13 +34,11 @@ class BuildContext:
 
     world: World
     """There world in which to execute the Motion Statechart."""
-    auxiliary_variable_manager: AuxiliaryVariableManager
+    float_variable_manager: FloatVariableManager
     """Auxiliary variable manager used by nodes to create auxiliary variables."""
-    collision_expression_manager: CollisionExpressionManager
-    """Synchronization of the collision world with the world in which the Motion Statechart is executed."""
     qp_controller_config: QPControllerConfig
     """Configuration of the QP controller used to solve the QP problem."""
-    control_cycle_variable: AuxiliaryVariable
+    control_cycle_variable: FloatVariable
     """Auxiliary variable used to count control cycles, can be used my Motion StatechartNodes to implement time-dependent actions."""
     extensions: Dict[Type[ContextExtension], ContextExtension] = field(
         default_factory=dict, repr=False, init=False
@@ -74,14 +67,16 @@ class BuildContext:
         """
         Extend the build context with a custom extension.
         """
-        self.extensions[type(extension)] = extension
+        extension_type = type(extension)
+        if extension_type in self.extensions:
+            raise ValueError(f"Extension of type {extension_type} already exists.")
+        self.extensions[extension_type] = extension
 
     @classmethod
     def empty(cls) -> Self:
         return cls(
             world=World(),
-            auxiliary_variable_manager=None,
-            collision_expression_manager=None,
+            float_variable_manager=None,
             qp_controller_config=None,
             control_cycle_variable=None,
         )

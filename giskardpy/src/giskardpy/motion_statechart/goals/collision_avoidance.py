@@ -4,7 +4,7 @@ from typing import Dict, List, Tuple
 
 import krrood.symbolic_math.symbolic_math as sm
 from giskardpy.middleware import get_middleware
-from giskardpy.motion_statechart.context import BuildContext
+from giskardpy.motion_statechart.context import BuildContext, ContextExtension
 from giskardpy.motion_statechart.data_types import DefaultWeights
 from giskardpy.motion_statechart.graph_node import (
     Goal,
@@ -29,6 +29,13 @@ from semantic_digital_twin.world_description.world_entity import (
     KinematicStructureEntity,
 )
 from test_collision_checking.test_collision_detectors import collision_detectors
+
+
+@dataclass
+class ExternalCollisionContext(ContextExtension):
+    collision_expression_manager: ExternalCollisionExpressionManager = field(
+        default_factory=ExternalCollisionExpressionManager
+    )
 
 
 @dataclass(eq=False, repr=False)
@@ -138,29 +145,25 @@ class ExternalCollisionAvoidanceTask(Task):
         artifacts = NodeArtifacts()
 
         root_V_contact_normal = (
-            context.collision_expression_manager.external_map_V_n_symbol(
+            self.external_collision_manager.get_group1_V_contact_normal_symbol(
                 self.tip, self.index
             )
         )
-        tip_P_contact = (
-            context.collision_expression_manager.get_group1_P_point_on_a_symbol(
-                self.tip, self.index
-            )
+        tip_P_contact = self.external_collision_manager.get_group1_P_point_on_a_symbol(
+            self.tip, self.index
         )
         distance_expression = (
-            context.collision_expression_manager.external_contact_distance_symbol(
+            self.external_collision_manager.get_contact_distance_symbol(
                 self.tip, self.index
             )
         )
 
-        buffer_zone_expr = (
-            context.collision_expression_manager.get_variable_buffer_zone_distance(
-                self.tip
-            )
+        buffer_zone_expr = self.external_collision_manager.get_buffer_distance_symbol(
+            self.tip, self.index
         )
         violated_distance = (
-            context.collision_expression_manager.get_variable_violated_distance(
-                self.tip
+            self.external_collision_manager.get_violated_distance_symbol(
+                self.tip, self.index
             )
         )
 
@@ -213,7 +216,7 @@ class ExternalCollisionAvoidance(Goal):
 
         for group in external_collision_manager.active_groups:
             max_avoided_bodies = group.get_max_avoided_bodies(context.collision_manager)
-            for index in max_avoided_bodies:
+            for index in range(max_avoided_bodies):
                 distance_monitor = ExternalCollisionDistanceMonitor(
                     name=f"{self.name}/monitor{index}",
                     collision_group=group,
@@ -226,7 +229,6 @@ class ExternalCollisionAvoidance(Goal):
                     name=f"{self.name}/task{index}",
                     collision_group=group,
                     max_velocity=self.max_velocity,
-                    max_avoided_bodies=max_avoided_bodies,
                     index=index,
                     external_collision_manager=external_collision_manager,
                 )

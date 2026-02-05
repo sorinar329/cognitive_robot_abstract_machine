@@ -9,10 +9,6 @@ import pytest
 
 from giskardpy.data_types.exceptions import DuplicateNameException
 from giskardpy.executor import Executor, SimulationPacer
-from semantic_digital_twin.collision_checking.collision_rules import AvoidAllCollisions
-from semantic_digital_twin.collision_checking.collision_world_syncer import (
-    CollisionCheckerLib,
-)
 from giskardpy.motion_statechart.binding_policy import GoalBindingPolicy
 from giskardpy.motion_statechart.data_types import (
     LifeCycleValues,
@@ -96,6 +92,10 @@ from semantic_digital_twin.adapters.ros.visualization.viz_marker import (
 )
 from semantic_digital_twin.adapters.world_entity_kwargs_tracker import (
     WorldEntityWithIDKwargsTracker,
+)
+from semantic_digital_twin.collision_checking.collision_matrix import CollisionRule
+from semantic_digital_twin.collision_checking.collision_world_syncer import (
+    CollisionCheckerLib,
 )
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.robots.abstract_robot import Manipulator, AbstractRobot
@@ -2491,13 +2491,12 @@ class TestCollisionAvoidance:
 
         kin_sim = Executor(
             world=cylinder_bot_world,
-            collision_checker=CollisionCheckerLib.bpb,
         )
         kin_sim.compile(motion_statechart=msc_copy)
 
         msc_copy.draw("muh.pdf")
         kin_sim.tick_until_end(500)
-        kin_sim.collision_scene.check_collisions()
+        collisions = kin_sim.world.collision_manager.compute_collisions()
         contact_distance = (
             kin_sim.collision_scene.closest_points.external_collisions[tip]
             .data[0]

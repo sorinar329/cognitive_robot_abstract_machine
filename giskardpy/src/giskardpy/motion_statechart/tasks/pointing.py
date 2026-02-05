@@ -53,7 +53,7 @@ class Pointing(Task):
         root_T_tip = context.world.compose_forward_kinematics_expression(
             self.root_link, self.tip_link
         )
-        root_P_goal_point = context.auxiliary_variable_manager.create_point3(
+        root_P_goal_point = context.float_variable_manager.create_point3(
             name=PrefixedName("goal", str(self.name)),
             provider=lambda: self._root_P_goal_point,
         )
@@ -118,7 +118,7 @@ class PointingCone(Task):
         root_T_tip = context.world.compose_forward_kinematics_expression(
             self.root_link, self.tip_link
         )
-        root_P_goal_point = context.auxiliary_variable_manager.create_point3(
+        root_P_goal_point = context.float_variable_manager.create_point3(
             name=PrefixedName("goal", str(self.name)),
             provider=lambda: self._root_P_goal_point,
         )

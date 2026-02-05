@@ -47,6 +47,9 @@ class CollisionGroup:
     def __contains__(self, item):
         return item == self.root or item in self.bodies
 
+    def __hash__(self):
+        return hash((self.root, tuple(sorted(self.bodies))))
+
     def get_max_avoided_bodies(self, collision_manager: CollisionManager):
         max_avoided_bodies = []
         if isinstance(self.root, Body):

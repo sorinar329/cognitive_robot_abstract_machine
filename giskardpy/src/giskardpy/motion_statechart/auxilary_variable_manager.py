@@ -8,42 +8,7 @@ from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.spatial_types import (
     Point3,
     HomogeneousTransformationMatrix,
-    Vector3,
 )
-
-
-def create_point(name: PrefixedName, provider: Callable[[], List[float]]):
-    return Point3(
-        x=FloatVariable.create_with_resolver(
-            name=str(PrefixedName("x", str(name))),
-            resolver=lambda: provider()[0],
-        ),
-        y=FloatVariable.create_with_resolver(
-            name=str(PrefixedName("y", str(name))),
-            resolver=lambda: provider()[1],
-        ),
-        z=FloatVariable.create_with_resolver(
-            name=str(PrefixedName("z", str(name))),
-            resolver=lambda: provider()[2],
-        ),
-    )
-
-
-def create_vector3(name: PrefixedName, provider: Callable[[], List[float]]):
-    return Vector3(
-        x=FloatVariable.create_with_resolver(
-            name=str(PrefixedName("x", str(name))),
-            resolver=lambda: provider()[0],
-        ),
-        y=FloatVariable.create_with_resolver(
-            name=str(PrefixedName("y", str(name))),
-            resolver=lambda: provider()[1],
-        ),
-        z=FloatVariable.create_with_resolver(
-            name=str(PrefixedName("z", str(name))),
-            resolver=lambda: provider()[2],
-        ),
-    )
 
 
 @dataclass

@@ -4,10 +4,6 @@ import numpy as np
 import pytest
 
 from giskardpy.executor import Executor
-from semantic_digital_twin.collision_checking.collision_matrix_manager import (
-    CollisionRule,
-    CollisionAvoidanceTypes,
-)
 from giskardpy.motion_statechart.context import BuildContext
 from giskardpy.motion_statechart.data_types import (
     LifeCycleValues,
@@ -43,6 +39,7 @@ from krrood.symbolic_math.symbolic_math import (
 from semantic_digital_twin.adapters.world_entity_kwargs_tracker import (
     WorldEntityWithIDKwargsTracker,
 )
+from semantic_digital_twin.collision_checking.collision_matrix import CollisionRule
 from semantic_digital_twin.datastructures.joint_state import JointState
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.robots.abstract_robot import AbstractRobot

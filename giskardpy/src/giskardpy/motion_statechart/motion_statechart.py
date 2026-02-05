@@ -206,9 +206,9 @@ class ObservationState(State):
                 self.observation_symbols(),
                 self.life_cycle_symbols(),
                 context.world.state.get_variables(),
-                context.collision_expression_manager.get_external_collision_symbol(),
+                context.world.collision_manager.get_external_collision_symbol(),
                 context.collision_expression_manager.get_self_collision_symbol(),
-                context.auxiliary_variable_manager.variables,
+                context.float_variable_manager.variables,
             ),
             sparse=False,
         )
@@ -230,7 +230,7 @@ class ObservationState(State):
             numpy_array=context.collision_expression_manager.self_collision_data,
         )
         self._compiled_updater.bind_args_to_memory_view(
-            arg_idx=5, numpy_array=context.auxiliary_variable_manager.data
+            arg_idx=5, numpy_array=context.float_variable_manager.data
         )
 
     @profile

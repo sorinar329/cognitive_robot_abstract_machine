@@ -23,15 +23,6 @@ from semantic_digital_twin.world_description.world_entity import (
 
 
 @dataclass
-class ExternalCollisionResults:
-    """
-    Maps bodies to any
-    """
-
-    def add_collision(self, collision: Collision): ...
-
-
-@dataclass
 class ExternalCollisionExpressionManager(CollisionGroupConsumer):
     """
     Owns symbols and buffer
@@ -163,7 +154,7 @@ class ExternalCollisionExpressionManager(CollisionGroupConsumer):
             if body in group:
                 self.active_groups.add(group)
 
-    def get_external_collision_variables(self) -> list[FloatVariable]:
+    def get_collision_variables(self) -> list[FloatVariable]:
         """
 
         :return: A list of all external collision variables for registered bodies.
@@ -191,13 +182,6 @@ class ExternalCollisionExpressionManager(CollisionGroupConsumer):
                 violated_distance = self.get_violated_distance_symbol(body, index)
                 variables.append(violated_distance.free_variables()[0])
         return variables
-
-    def get_external_collision_data(self) -> np.ndarray:
-        """
-
-        :return: A numpy array containing the external collision data,
-                 corresponding to the symbols returned by get_external_collision_variables.
-        """
 
     def get_group1_P_point_on_a_data(
         self, body: KinematicStructureEntity, idx: int
@@ -297,16 +281,4 @@ class ExternalCollisionExpressionManager(CollisionGroupConsumer):
         return FloatVariable.create_with_resolver(
             f"violated_distance({body.name}, {idx})",
             resolver=lambda: self.get_violated_distance_data(body, idx),
-        )
-
-    @lru_cache
-    def external_number_of_collisions_symbol(
-        self, body: KinematicStructureEntity
-    ) -> FloatVariable:
-        provider = lambda n=body: self.closest_points.get_number_of_external_collisions(
-            n
-        )
-        return FloatVariable.create_with_resolver(
-            name=str(PrefixedName(f"len(closest_point({body.name}))")),
-            resolver=provider,
         )
