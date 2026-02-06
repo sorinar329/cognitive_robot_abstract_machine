@@ -54,6 +54,10 @@ class PosePublisher(StateChangeCallback):
     """
     End time for this PosePublisher, used for lifetime only if given lifetime is greater than 0
     """
+    fixed_frame: str = field(init=False)
+    """
+    The frame in which the marker are published, is set to the world root
+    """
 
     def _notify(self):
         if self.lifetime > 0 and time.time() >= self.end_time:
@@ -68,6 +72,7 @@ class PosePublisher(StateChangeCallback):
         time.sleep(0.2)
         self.end_time = time.time() + self.lifetime
         self._notify()
+        self.fixed_frame = str(self.world.root)
 
     def _create_marker_array(
         self, global_pose: HomogeneousTransformationMatrix
