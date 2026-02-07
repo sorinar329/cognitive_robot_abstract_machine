@@ -322,7 +322,9 @@ def test_average_with_condition(departments_and_employees):
     )
 
 
-def test_multiple_aggregations_per_group(departments_and_employees):
+def test_multiple_aggregations_per_group_on_different_variables(
+    departments_and_employees,
+):
     departments, employees = departments_and_employees
 
     emp = variable(Employee, domain=None)
@@ -339,6 +341,43 @@ def test_multiple_aggregations_per_group(departments_and_employees):
     assert results[0][department] == next(
         d for d in departments if d.name.startswith("I")
     )
+
+
+def test_multiple_aggregations_per_group_on_same_variable(departments_and_employees):
+    departments, employees = departments_and_employees
+
+    emp = variable(Employee, domain=None)
+    department = emp.department
+    avg_salary = eql.average(emp.salary)
+    max_salary = eql.max(emp.salary)
+    query = a(
+        set_of(avg_salary, max_salary, department)
+        .grouped_by(department)
+        .having(max_salary > 25000)
+    )
+    results = list(query.evaluate())
+    result_tuples = []
+    assert len(results) == 2
+    for result in results:
+        result_tuples.append(
+            (result[department], result[avg_salary], result[max_salary])
+        )
+    salary_per_department = defaultdict(list)
+    for emp in employees:
+        salary_per_department[emp.department].append(emp.salary)
+    expected_result_tuples = [
+        (
+            d,
+            sum(salary_per_department[d]) / len(salary_per_department[d]),
+            max(salary_per_department[d]),
+        )
+        for d in departments
+        if max(salary_per_department[d]) > 25000
+    ]
+    for result_tuple, expected_result_tuple in zip(
+        result_tuples, expected_result_tuples
+    ):
+        assert result_tuple == expected_result_tuple
 
 
 def test_having_node_hierarchy(departments_and_employees):
