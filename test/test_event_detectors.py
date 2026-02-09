@@ -4,6 +4,7 @@ from datetime import timedelta
 import numpy as np
 from pycram.testing import SemanticWorldTestCase, setup_world
 from semantic_digital_twin.collision_checking.trimesh_collision_detector import TrimeshCollisionDetector
+from semantic_digital_twin.reasoning.predicates import InsideOf
 from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
 from semantic_digital_twin.world_description.connections import FixedConnection
 from semantic_digital_twin.world_description.world_entity import Body
@@ -21,7 +22,8 @@ from segmind.event_logger import EventLogger
 
 
 
-class TestEventDetectors():
+class TestEventDetectors:
+
 
     def test_general_pick_up_start_condition_checker(self):
         self.world = setup_world()
@@ -33,21 +35,21 @@ class TestEventDetectors():
 
     def test_translation_detector(self):
         self.world = setup_world()
-        self.milk = self.world.get_body_by_name("milk.stl")
-        milk_tracker = ObjectTrackerFactory.get_tracker(self.milk)
-        translation_detector = self.run_and_get_translation_detector(self.milk)
+        milk = self.world.get_body_by_name("milk.stl")
+        milk_tracker = ObjectTrackerFactory.get_tracker(milk)
+        translation_detector = self.run_and_get_translation_detector(milk)
 
         try:
             translation_detector.update_with_latest_motion_data()
             time.sleep(2)
-            self.fridge = self.world.get_body_by_name("cabinet1")
+            fridge = self.world.get_body_by_name("cabinet1")
             root_T_milk_connection = HomogeneousTransformationMatrix.from_xyz_rpy(
-                x = self.fridge.global_pose.x, y=self.fridge.global_pose.y, z=self.fridge.global_pose.z
+                x = fridge.global_pose.x, y=fridge.global_pose.y, z=fridge.global_pose.z
             )
             with self.world.modify_world():
                 milk_conn = FixedConnection(
                     parent=self.world.root,
-                    child=self.milk,
+                    child=milk,
                     parent_T_connection_expression=root_T_milk_connection
                 )
                 self.world.add_connection(milk_conn)
@@ -74,23 +76,33 @@ class TestEventDetectors():
             translation_detector.join()
 
     def test_insertion_detector(self):
-        milk_tracker = ObjectTrackerFactory.get_tracker(self.milk)
+        self.world = setup_world()
+        milk = self.world.get_body_by_name("milk.stl")
+        fridge = self.world.get_body_by_name("cabinet1")
+        milk_tracker = ObjectTrackerFactory.get_tracker(milk)
         time_between_frames = timedelta(seconds=0.01)
-        translation_detector = self.run_and_get_translation_detector(self.milk, time_between_frames)
-
-        sr_detector = InsertionDetector(wait_time=time_between_frames)
+        translation_detector = self.run_and_get_translation_detector(milk, time_between_frames)
+        logger = EventLogger()
+        sr_detector = InsertionDetector(logger=logger, world=self.world)
         sr_detector.start()
 
         try:
-            self.assertFalse(self.kitchen.links["iai_fridge_main"].contains_body(self.milk))
-            fridge_position = self.kitchen.links["iai_fridge_main"].position.to_list()
-            
+            assert InsideOf(milk, fridge).compute_containment_ratio() == 0.0
+
             # Get initial translation data
             translation_detector.update_with_latest_motion_data()
-            
-            self.milk.set_position(fridge_position)
 
-            # update trhice, the first three updates will trigger the displacement threshold, while the last update will trigger the consistent zero gradient
+            root_T_milk_connection = HomogeneousTransformationMatrix.from_xyz_rpy(
+                x=fridge.global_pose.x, y=fridge.global_pose.y, z=fridge.global_pose.z
+            )
+            with self.world.modify_world():
+                milk_conn = FixedConnection(
+                    parent=self.world.root,
+                    child=milk,
+                    parent_T_connection_expression=root_T_milk_connection
+                )
+                self.world.add_connection(milk_conn)
+            # update trice, the first three updates will trigger the displacement threshold, while the last update will trigger the consistent zero gradient
             translation_detector.update_with_latest_motion_data()
             translation_detector.update_with_latest_motion_data()
             translation_detector.update_with_latest_motion_data()
@@ -98,8 +110,8 @@ class TestEventDetectors():
             # because milk goes to moving state then to stop state thus we need to wait for 2 changes
             time.sleep(translation_detector.get_n_changes_wait_time(2))
             
-            self.assertTrue(milk_tracker.get_latest_event_of_type(StopMotionEvent) is not None)
-            self.assertTrue(self.kitchen.links["iai_fridge_main"].contains_body(self.milk))
+            assert (milk_tracker.get_latest_event_of_type(StopMotionEvent) is not None)
+            assert InsideOf(milk, fridge).compute_containment_ratio() == 1.0
         except Exception as e:
             raise e
         finally:
@@ -124,24 +136,24 @@ class TestEventDetectors():
         for i in range(3):
             a = np.zeros((3, 3))
             a[:, i] = 1
-            self.assertTrue(has_consistent_direction(a.tolist()))
+            assert(has_consistent_direction(a.tolist()))
             a = np.zeros((3, 3))
             a[:, i] = -1
-            self.assertTrue(has_consistent_direction(a.tolist()))
+            assert(has_consistent_direction(a.tolist()))
             a = np.zeros((3, 3))
             a[:, i] = -1
             a[1, i] = 1
-            self.assertFalse(has_consistent_direction(a.tolist()))
+            assert(has_consistent_direction(a.tolist())) is False
 
     def test_displacement_motion_detection_method(self):
         for i in range(3):
             a = np.zeros((3, 3))
             a[:, i] = 1
-            self.assertTrue(is_displaced(a.tolist(), 1.5))
+            assert(is_displaced(a.tolist(), 1.5))
             a = np.zeros((3, 3))
             a[:, i] = -1
-            self.assertTrue(is_displaced(a.tolist(), 1.5))
+            assert(is_displaced(a.tolist(), 1.5))
             a = np.zeros((3, 3))
             a[:, i] = -1
             a[1, i] = 1
-            self.assertFalse(is_displaced(a.tolist(), 1.5))
+            assert(is_displaced(a.tolist(), 1.5)) == False
