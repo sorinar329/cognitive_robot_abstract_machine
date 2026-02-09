@@ -529,6 +529,15 @@ def stretch_apartment_world(stretch_world_setup, apartment_world_setup):
     return apartment_copy
 
 
+@pytest.fixture(scope="session")
+def tiago_apartment_world(tiago_world, apartment_world_setup):
+    apartment_copy = deepcopy(apartment_world_setup)
+    tiago_copy = deepcopy(tiago_world)
+    apartment_copy.merge_world(tiago_copy)
+
+    return apartment_copy, Tiago.from_world(apartment_copy)
+
+
 ###############################
 ######## World with reset #####
 ###############################

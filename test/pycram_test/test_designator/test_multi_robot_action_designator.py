@@ -448,9 +448,6 @@ def test_open(immutable_multiple_robot_apartment):
 def test_close(immutable_multiple_robot_apartment):
     world, robot_view, context = immutable_multiple_robot_apartment
 
-    node = rclpy.create_node("node")
-    VizMarkerPublisher(world, node)
-
     world.get_connection_by_name("cabinet10_drawer_middle_joint").position = 0.45
     world.notify_state_change()
 

@@ -1,16 +1,17 @@
 from copy import deepcopy
 
 from giskardpy.motion_statechart.goals.cartesian_goals import DiffDriveBaseGoal
-from giskardpy.motion_statechart.goals.templates import Sequence
+from giskardpy.motion_statechart.goals.open_close import Close
+from giskardpy.motion_statechart.goals.templates import Sequence, Parallel
 from giskardpy.motion_statechart.tasks.align_planes import AlignPlanes
 from giskardpy.motion_statechart.tasks.cartesian_tasks import CartesianPose
 from giskardpy.motion_statechart.tasks.pointing import Pointing
 from pycram.datastructures.enums import ExecutionType
 from pycram.robot_description import ViewManager
-from pycram.robot_plans import MoveTCPMotion, MoveMotion
+from pycram.robot_plans import MoveTCPMotion, MoveMotion, ClosingMotion
 from pycram.robot_plans.motions.base import AlternativeMotion
 from semantic_digital_twin.robots.stretch import Stretch
-from semantic_digital_twin.spatial_types import Vector3
+from semantic_digital_twin.spatial_types import Vector3, HomogeneousTransformationMatrix
 
 
 class StretchMoveTCP(MoveTCPMotion, AlternativeMotion[Stretch]):
@@ -66,3 +67,31 @@ class StretchMoveSim(MoveMotion, AlternativeMotion[Stretch]):
         return DiffDriveBaseGoal(
             goal_pose=self.target.to_spatial_type(),
         )
+
+
+class StretchClos(ClosingMotion, AlternativeMotion[Stretch]):
+
+    execution_type = ExecutionType.SIMULATED
+
+    def perform(self):
+        return
+
+    @property
+    def _motion_chart(self):
+        tip = ViewManager().get_end_effector_view(self.arm, self.robot_view).tool_frame
+        cart = CartesianPose(
+            name="Keep holding handle",
+            root_link=self.object_part,
+            tip_link=tip,
+            goal_pose=HomogeneousTransformationMatrix(
+                reference_frame=tip, child_frame=tip
+            ),
+        )
+        align = AlignPlanes(
+            root_link=self.world.root,
+            tip_link=self.robot_view.root,
+            goal_normal=Vector3(1, 0, 0, reference_frame=self.object_part),
+            tip_normal=Vector3(0, -1, 0, self.robot_view.root),
+        )
+        close = Close(tip_link=tip, environment_link=self.object_part)
+        return Parallel([cart, align, close])
