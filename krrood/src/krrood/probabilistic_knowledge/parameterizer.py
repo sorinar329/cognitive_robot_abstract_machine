@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import enum
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
@@ -124,11 +125,16 @@ class Parameterizer:
             return [var], [attribute]
 
     def _create_simple_event_singleton_from_set_attribute(self, variable, attribute):
-        if isinstance(attribute, bool):
+        if isinstance(attribute, bool) or isinstance(attribute, enum.Enum):
             return SimpleEvent({variable: Set.from_iterable([attribute])})
-        return SimpleEvent(
-            {variable: SimpleInterval(attribute, attribute, Bound.CLOSED, Bound.CLOSED)}
-        )
+        else:
+            return SimpleEvent(
+                {
+                    variable: SimpleInterval(
+                        attribute, attribute, Bound.CLOSED, Bound.CLOSED
+                    )
+                }
+            )
 
     def _process_relationship(
         self,

@@ -36,7 +36,6 @@ def test_parameterize_orientation():
         Continuous("Orientation.x"),
         Continuous("Orientation.y"),
         Continuous("Orientation.z"),
-        Continuous("Orientation.w"),
     ]
 
     assert variables == expected_variables
@@ -59,7 +58,6 @@ def test_parameterize_pose():
         Continuous("Pose.orientation.x"),
         Continuous("Pose.orientation.y"),
         Continuous("Pose.orientation.z"),
-        Continuous("Pose.orientation.w"),
     ]
 
     assert variables == expected_variables
