@@ -104,9 +104,10 @@ class CollisionDetectorModelUpdater(ModelChangeCallback):
                 self.world.state.position_float_variables
             )
         )
-        self.compiled_collision_fks.bind_args_to_memory_view(
-            0, self.world.state.positions
-        )
+        if not collision_fks.is_constant():
+            self.compiled_collision_fks.bind_args_to_memory_view(
+                0, self.world.state.positions
+            )
 
     def compute(self) -> np.ndarray:
         return self.compiled_collision_fks.evaluate()

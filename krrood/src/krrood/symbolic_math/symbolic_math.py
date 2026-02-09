@@ -310,13 +310,15 @@ class CompiledFunction:
         Binds the arg at index arg_idx to the memoryview of a numpy_array.
         If your args keep the same memory across calls, you only need to bind them once.
         """
-        self._function_buffer.set_arg(arg_idx, memoryview(numpy_array))
+        if not self._is_constant:
+            self._function_buffer.set_arg(arg_idx, memoryview(numpy_array))
 
     def evaluate(self) -> np.ndarray | sp.csc_matrix:
         """
         Evaluate the compiled function with the current args.
         """
-        self._function_evaluator()
+        if not self._is_constant:
+            self._function_evaluator()
         return self._out
 
     def __call__(self, *args: np.ndarray) -> np.ndarray | sp.csc_matrix:

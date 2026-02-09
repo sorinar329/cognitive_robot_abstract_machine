@@ -43,10 +43,11 @@ class BulletCollisionDetector(CollisionDetector):
             self.kineverse_world.remove_collision_object(o)
 
     def sync_world_state(self) -> None:
-        bpb.batch_set_transforms(
-            self.ordered_bullet_objects,
-            self.get_all_collision_fks(),
-        )
+        if len(self.ordered_bullet_objects) > 0:
+            bpb.batch_set_transforms(
+                self.ordered_bullet_objects,
+                self.get_all_collision_fks(),
+            )
 
     def add_body(self, body: Body):
         o = create_shape_from_link(body=body)
