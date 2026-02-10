@@ -9,16 +9,17 @@ from unittest import TestCase
 import rclpy
 
 import pycram.ros
-from cognitive_robot_abstract_machine.test.krrood_test.dataset.semantic_world_like_classes import FixedConnection
 from pycram.datastructures.enums import WorldMode
 from pycram.datastructures.pose import PoseStamped
 from pycram.testing import SemanticWorldTestCase, setup_world
 from semantic_digital_twin.adapters.ros.visualization.viz_marker import VizMarkerPublisher
 from semantic_digital_twin.adapters.urdf import URDFParser
+from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.orm.model import HomogeneousTransformationMatrixMapping
 from semantic_digital_twin.spatial_types import Vector3
 from semantic_digital_twin.spatial_types.spatial_types import Pose, HomogeneousTransformationMatrix
 from semantic_digital_twin.world import World
+from semantic_digital_twin.world_description.connections import FixedConnection
 from sqlalchemy import create_engine
 from sqlalchemy.orm.session import Session
 
@@ -49,8 +50,10 @@ class TestMultiverseEpisodeSegmenter(TestCase):
         episode_dir = os.path.join(multiverse_episodes_dir, selected_episode)
         csv_file = os.path.join(episode_dir, f"data.csv")
         models_dir = os.path.join(episode_dir, "models")
-        cls.world = setup_world()
-
+        cls.world = World()
+        root = Body(name=PrefixedName(name="root", prefix="world"))
+        with cls.world.modify_world():
+            cls.world.add_kinematic_structure_entity(root)
         cls.spawn_objects(models_dir)
         rclpy.init()
         cls.node = rclpy.create_node("test_node")
@@ -67,36 +70,33 @@ class TestMultiverseEpisodeSegmenter(TestCase):
 
     @classmethod
     def spawn_objects(cls, models_dir):
-        cls.copy_model_files_to_world_data_dir(models_dir)
+        #cls.copy_model_files_to_world_data_dir(models_dir)
         directory = Path(models_dir)
         urdf_files = [f.name for f in directory.glob('*.urdf')]
         for file in urdf_files:
-            file_path = "/home/sorin/dev/workspace/Segmind/resources/multiverse_episodes/icub_montessori_no_hands/models/" + file
+
+            file_path = "/home/sorin/dev/Segmind/resources/multiverse_episodes/icub_montessori_no_hands/models/" + file
             obj_name = Path(file).stem
-            pose = PoseStamped()
             if obj_name == "iCub":
                 file = "iCub.urdf"
                 obj_type = Agent
-                pose = [-0.8, 0, 0.55]
-                #PoseStamped(Pose(Vector3(-0.8, 0, 0.55)))
+                pose = [-0.8, 0, 0]
+
             elif obj_name == "scene":
                 obj_type = Region
+                pose = [0, 0, -0.55]
+
             else:
                 obj_type = Body
+                pose = [0, 0, 2]
             try:
                 obj_world = URDFParser.from_file(file_path).parse()
-                new_obj_connection = HomogeneousTransformationMatrix.from_xyz_rpy(
-                x=pose[0], y=pose[1], z=pose[2]
-                )
                 with cls.world.modify_world():
-                    cls.world.merge_world(obj_world,
-                                          root_connection=Connection(
-                                              parent=cls.world.root,
-                                              child=obj_world.root,
-                                              parent_T_connection_expression=new_obj_connection
-                                          ))
+                    cls.world.merge_world(obj_world, root_connection=FixedConnection(parent=cls.world.root, child=obj_world.root,
+                                                                                     parent_T_connection_expression=HomogeneousTransformationMatrix.from_xyz_rpy(x=pose[0], y=pose[1], z=pose[2])))
 
-                    #obj = Object(obj_name, obj_type, path=file, pose=pose)
+
+
             except Exception as e:
                 #import pdb
                 #pdb.set_trace()
@@ -110,11 +110,12 @@ class TestMultiverseEpisodeSegmenter(TestCase):
         Copy the model files to the world data directory.
         """
         # Copy the entire folder and its contents
-       # shutil.copytree(models_dir, cls.world.conf.cache_dir + "/objects", dirs_exist_ok=True)
+        #shutil.copytree(models_dir, cls.world.conf.cache_dir + "/objects", dirs_exist_ok=True)
 
     @classmethod
     def tearDownClass(cls):
-        cls.viz_marker_publisher._stop_publishing()
+        print("Stopping the file player...")
+        cls.viz_marker_publisher.stop()
         print("Viz marker publisher has been stopped, exiting the world...")
         # cls.world.exit()
         print("World has been exited.")

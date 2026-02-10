@@ -1,6 +1,8 @@
 from datetime import datetime
 
 import pandas as pd
+from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
+from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
 from semantic_digital_twin.spatial_types.spatial_types import Pose, Vector3, Quaternion
 from semantic_digital_twin.world_description.world_entity import Body
 from typing_extensions import Dict, Set
@@ -36,16 +38,20 @@ class CSVEpisodePlayer(FilePlayer):
             obj_position = [objects_data[f"{obj_name}:position_{i}"] for i in range(3)]
             obj_orientation = [objects_data[f"{obj_name}:quaternion_{i}"] for i in range(4)]
             obj_orientation[0], obj_orientation[3] = obj_orientation[3], obj_orientation[0]
-            obj_pose = PoseStamped(Pose(Vector3(*obj_position), Quaternion(*obj_orientation)),
-                                   Header(stamp=datetime.fromtimestamp(current_time)))
+            obj_pose = HomogeneousTransformationMatrix.from_xyz_rpy(x=obj_position[0], y=obj_position[1], z=obj_position[2],
+                                                                    roll=obj_orientation[1], pitch=obj_orientation[2], yaw=obj_orientation[3])
+
             if self.position_shift is not None:
-                obj_pose.position += self.position_shift
-            obj_type = Body
+                obj_pose.x += self.position_shift.x
+                obj_pose.y += self.position_shift.y
+                obj_pose.z += self.position_shift.z
+
+
 
             # Create the object if it does not exist in the world and set its pose
-            if obj_name not in self.world.get_object_names():
-                obj = Body(obj_name, obj_type, pose=obj_pose, path=f"{obj_name}.urdf")
+            if obj_name not in self.world.bodies:
+                obj = Body(name=PrefixedName(str(obj_name)))
             else:
-                obj = self.world.get_object_by_name(obj_name)
-                objects_poses[obj] = obj_pose
+                obj = self.world.get_body_by_name(obj_name)
+                objects_poses[obj] = obj.global_pose.to_pose()
         return objects_poses
