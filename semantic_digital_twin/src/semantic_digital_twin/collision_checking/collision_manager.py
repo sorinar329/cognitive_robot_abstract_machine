@@ -135,6 +135,12 @@ class CollisionManager(ModelChangeCallback):
         for consumer in self.collision_consumers:
             consumer.on_world_model_update(self.world)
 
+    def add_default_rule(self, rule: CollisionRule):
+        self.default_rules.append(rule)
+
+    def add_ignore_collision_rule(self, rule: CollisionRule):
+        self.ignore_collision_rules.append(rule)
+
     def add_temporary_rule(self, rule: CollisionRule):
         """
         Adds a rule to the temporary collision rules.

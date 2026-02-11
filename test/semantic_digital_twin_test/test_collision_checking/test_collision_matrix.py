@@ -9,6 +9,7 @@ from semantic_digital_twin.collision_checking.collision_detector import (
 from semantic_digital_twin.collision_checking.collision_groups import (
     CollisionGroupConsumer,
 )
+from semantic_digital_twin.collision_checking.collision_manager import CollisionManager
 from semantic_digital_twin.collision_checking.collision_matrix import (
     CollisionMatrix,
     CollisionCheck,
@@ -19,6 +20,10 @@ from semantic_digital_twin.collision_checking.collision_rules import (
     AllowNonRobotCollisions,
     AvoidAllCollisions,
     AllowCollisionRule,
+    AvoidExternalCollisions,
+)
+from semantic_digital_twin.collision_checking.pybullet_collision_detector import (
+    BulletCollisionDetector,
 )
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.robots.abstract_robot import AbstractRobot
@@ -40,12 +45,36 @@ class TestCollisionRules:
             root_C_env = FixedConnection(pr2_world_state_reset.root, env)
             pr2_world_state_reset.add_connection(root_C_env)
 
-        pr2 = pr2_world_state_reset.get_semantic_annotations_by_type(PR2)[0]
-        collision_manager = pr2_world_state_reset.collision_manager
-
         base_link = pr2_world_state_reset.get_body_by_name("base_link")
         torso_lift_link = pr2_world_state_reset.get_body_by_name("torso_lift_link")
         head_pan_link = pr2_world_state_reset.get_body_by_name("head_pan_link")
+
+        pr2 = pr2_world_state_reset.get_semantic_annotations_by_type(PR2)[0]
+        collision_manager = CollisionManager(
+            pr2_world_state_reset,
+            collision_detector=BulletCollisionDetector(pr2_world_state_reset),
+        )
+        collision_manager.add_default_rule(
+            AvoidAllCollisions(
+                buffer_zone_distance=0.2,
+                violated_distance=0.05,
+                world=pr2_world_state_reset,
+            )
+        )
+        collision_manager.add_default_rule(
+            AvoidExternalCollisions(
+                buffer_zone_distance=0.1,
+                bodies=[torso_lift_link],
+                world=pr2_world_state_reset,
+            )
+        )
+        collision_manager.add_default_rule(
+            AvoidExternalCollisions(
+                buffer_zone_distance=0.05,
+                bodies=[head_pan_link],
+                world=pr2_world_state_reset,
+            )
+        )
 
         # PR2 has a rule for base_link: buffer=0.2, violated=0.05
         # It's added to low_priority_rules
@@ -58,7 +87,7 @@ class TestCollisionRules:
 
         # Add a high priority rule to override
         override_rule = AvoidAllCollisions(
-            buffer_zone_distance=0.5, violated_distance=0.1, bodies=[base_link]
+            buffer_zone_distance=0.5, violated_distance=0.1, world=pr2_world_state_reset
         )
         collision_manager.ignore_collision_rules.append(override_rule)
 
@@ -156,7 +185,7 @@ class TestCollisionRules:
         avoid_all = AvoidAllCollisions(
             buffer_zone_distance=0.05,
             violated_distance=0,
-            bodies=pr2_apartment_world.bodies_with_collision,
+            world=pr2_apartment_world,
         )
         avoid_all.apply_to_collision_matrix(collision_matrix)
         # collisions between pr2 bodies and between apartment bodies should be avoided
