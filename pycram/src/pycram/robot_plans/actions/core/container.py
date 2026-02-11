@@ -76,7 +76,6 @@ class OpenAction(ActionDescription):
             ),
         ).perform()
 
-    @ActionDescription.rdr.decorator
     def pre_condition(self) -> bool:
         """
         Check if the container is opened, this assumes that the container state can be read accurately from the

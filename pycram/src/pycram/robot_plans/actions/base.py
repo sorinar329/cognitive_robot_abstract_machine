@@ -3,15 +3,19 @@ from __future__ import annotations
 import os.path
 from abc import abstractmethod
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 
-from typing_extensions import Any, Optional, Callable, TypeVar
+from typing_extensions import Any, Optional, Callable, TypeVar, Dict, Type
 
+from krrood.entity_query_language.entity import variable
+from krrood.entity_query_language.symbolic import Variable, SymbolicExpression
 from ...designator import DesignatorDescription
 from ...failures import PlanFailure
 from ...has_parameters import HasParameters
 
 logger = logging.getLogger(__name__)
+
+T = TypeVar("T")
 
 
 @dataclass
@@ -86,6 +90,31 @@ class ActionDescription(DesignatorDescription, HasParameters):
     def post_perform(cls, func) -> Callable:
         cls._post_perform_callbacks.append(func)
         return func
+
+    def get_bound_variables(self) -> Dict[str, Variable[Type[T]]]:
+        self_fields = list(fields(self))
+        [self_fields.remove(parent_field) for parent_field in fields(ActionDescription)]
+        return {
+            getattr(self, f.name): variable(
+                type(getattr(self, f.name)), [getattr(self, f.name)]
+            )
+            for f in self_fields
+        }
+
+    def get_unbound_variables(self) -> Dict[str, Variable[Type[T]]]:
+        self_fields = list(fields(self))
+        [self_fields.remove(parent_field) for parent_field in fields(ActionDescription)]
+        return {
+            getattr(self, f.name): variable(
+                type(getattr(self, f.name)),
+                find_domain_for_type(type(getattr(self, f.name))),
+            )
+            for f in self_fields
+        }
+
+    def get_variables(self, unbound=False) -> Dict[Any, Variable[Type[T]]]:
+        # Maybe use python-box for a better interface
+        return self.get_unbound_variables() if unbound else self.get_bound_variables()
 
 
 ActionType = TypeVar("ActionType", bound=ActionDescription)

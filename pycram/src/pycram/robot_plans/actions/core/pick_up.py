@@ -6,7 +6,9 @@ from datetime import timedelta
 
 from typing_extensions import Union, Optional, Type, Any, Iterable
 
+from krrood.entity_query_language.entity import and_
 from semantic_digital_twin.datastructures.definitions import GripperState
+from semantic_digital_twin.reasoning.predicates import reachable
 from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
 from semantic_digital_twin.world_description.connections import FixedConnection
 from semantic_digital_twin.world_description.world_entity import Body
@@ -24,6 +26,7 @@ from ....failures import ObjectNotGraspedError
 from ....failures import ObjectNotInGraspingArea
 from ....has_parameters import has_parameters
 from ....language import SequentialPlan
+from ....querying.predicates import GripperIsFree
 from ....robot_description import ViewManager
 from ....robot_plans.actions.base import ActionDescription
 from ....utils import translate_pose_along_local_axis
@@ -187,6 +190,18 @@ class PickUpAction(ActionDescription):
                 movement_type=MovementType.TRANSLATION,
             ),
         ).perform()
+
+    def pre_condition(self):
+        variables = self.get_variables()
+        condition = and_(
+            GripperIsFree(variables[self.arm]),
+            reachable(
+                self.object_designator.global_pose,
+                self.robot_view.root,
+                variables[self.arm],
+            ),
+        )
+        return condition
 
     def validate(
         self, result: Optional[Any] = None, max_wait_time: Optional[timedelta] = None

@@ -353,6 +353,9 @@ class GraspDescription:
 
         return primary_face, secondary_face
 
+    def __hash__(self):
+        return id(self)
+
 @dataclass
 class PreferredGraspAlignment:
     """
