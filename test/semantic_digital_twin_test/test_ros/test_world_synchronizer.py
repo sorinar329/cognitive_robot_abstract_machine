@@ -696,5 +696,37 @@ def test_attribute_update_modification_apply_direct():
     assert b1 not in anno.entities
 
 
+def test_skipping_incorrect_message(rclpy_node):
+    w1 = World(name="w1")
+    w2 = World(name="w2")
+
+    synchronizer_1 = ModelSynchronizer(
+        node=rclpy_node,
+        world=w1,
+    )
+    synchronizer_2 = ModelSynchronizer(
+        node=rclpy_node,
+        world=w2,
+    )
+
+    with w1.modify_world():
+        new_body = Body(name=PrefixedName("b3"))
+        w1.add_kinematic_structure_entity(new_body)
+
+    time.sleep(0.2)
+
+    assert len(w1.kinematic_structure_entities) == len(w2.kinematic_structure_entities)
+
+    with w1.modify_world():
+        synchronizer_1.apply_missed_messages()
+        handle = Handle.create_with_new_body_in_world(PrefixedName("handle"), w1)
+
+    time.sleep(1)
+    assert len(w1.kinematic_structure_entities) == len(w2.kinematic_structure_entities)
+
+    synchronizer_1.close()
+    synchronizer_2.close()
+
+
 if __name__ == "__main__":
     unittest.main()
