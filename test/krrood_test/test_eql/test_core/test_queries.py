@@ -42,6 +42,8 @@ from krrood.entity_query_language.result_quantification_constraint import (
     AtMost,
     Range,
 )
+from krrood.entity_query_language.symbolic import BindingProductGenerator
+from krrood.entity_query_language.utils import chain_evaluate_variables
 from ...dataset.example_classes import VectorsWithProperty
 from ...dataset.semantic_world_like_classes import (
     Handle,
@@ -1139,3 +1141,13 @@ def test_modifying_built_query_raises_error(handles_and_containers_world):
     query.evaluate()
     with pytest.raises(TryingToModifyAnAlreadyBuiltQuery):
         query.where(contains(body.name, "1"))
+
+
+def test_chain_evaluate_variables():
+    var1 = variable(int, [1, 2])
+    var2 = variable(int, [3, 4])
+    values = []
+    for val in chain_evaluate_variables((var1, var2), {}):
+        values.append(tuple(val.values()))
+    assert values == [(1, 3), (1, 4), (2, 3), (2, 4)]
+    assert values == [(v[var1], v[var2]) for v in BindingProductGenerator((var1, var2)).evaluate()]

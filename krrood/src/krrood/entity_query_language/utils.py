@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import inspect
+from copy import copy
 from functools import lru_cache
 
 """
@@ -31,11 +32,11 @@ from typing_extensions import (
     Type,
     Tuple,
     TYPE_CHECKING,
-    Hashable,
+    Hashable, Iterable, Optional,
 )
 
 if TYPE_CHECKING:
-    from krrood.entity_query_language.symbolic import Bindings
+    from .symbolic import Bindings, SymbolicExpression
 
 
 class IDGenerator:
@@ -106,6 +107,33 @@ def make_set(value: Any) -> Set:
     :param value: The value to make a set from.
     """
     return set(value) if is_iterable(value) else {value}
+
+
+def chain_evaluate_variables(
+    variables: Iterable[SymbolicExpression],
+    sources: Bindings,
+    parent: Optional[SymbolicExpression] = None,
+) -> Iterator[Bindings]:
+    """
+    Evaluate the symbolic expressions by generating combinations of values from their evaluation generators.
+
+    :param variables: The symbolic expressions to evaluate.
+    :param sources: The current bindings.
+    :param parent: The parent expression.
+    :return: An Iterable of Bindings for each combination of values.
+    """
+    var_val_gen = [
+        (
+            lambda bindings, var=var: (
+                v.bindings
+                for v in var._evaluate_(copy(bindings), parent=parent)
+                if v.is_true
+            )
+        )
+        for var in variables
+    ]
+
+    yield from chain_stages(var_val_gen, sources)
 
 
 T = TypeVar("T")

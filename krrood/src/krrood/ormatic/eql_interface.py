@@ -443,7 +443,7 @@ class EQLTranslator:
         if isinstance(query, Attribute):
             return self.translate_attribute(query)
         if isinstance(query, Where):
-            return self.translate_query(query.conditions)
+            return self.translate_query(query.condition)
 
         raise UnsupportedQueryTypeError(f"Unknown query type: {type(query)}")
 

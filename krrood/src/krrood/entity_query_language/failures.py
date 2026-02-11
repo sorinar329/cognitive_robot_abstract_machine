@@ -19,8 +19,8 @@ if TYPE_CHECKING:
         Selectable,
         QueryObjectDescriptor,
         Aggregator,
-        GroupBy,
-        GroupByBuilder,
+        GroupedBy,
+        GroupedByBuilder,
     )
     from .match import Match
 
@@ -235,16 +235,16 @@ class UnsupportedAggregationOfAGroupedByVariable(AggregationUsageError):
     For further details, see :doc:`/krrood/doc/eql/result_processors`.
     """
 
-    group_by: GroupBy
+    grouped_by: GroupedBy
     """
-    The group_by operation that contains the grouped_by variable that is being aggregated over.
+    The grouped_by operation that contains the grouped_by variable that is being aggregated over.
     """
 
     def __post_init__(self):
         self.message = (
             f"Aggregation over grouped_by variable that is not Count "
-            f"{self.group_by.aggregators_of_grouped_by_variables_that_are_not_count} in the group_by operation"
-            f" {self.group_by}"
+            f"{self.grouped_by.aggregators_of_grouped_by_variables_that_are_not_count} in the grouped_by operation"
+            f" {self.grouped_by}"
         )
         super().__post_init__()
 
@@ -270,9 +270,9 @@ class NonAggregatedSelectedVariablesError(AggregationUsageError):
     For further details, see :doc:`/krrood/doc/eql/result_processors`.
     """
 
-    group_by_builder: GroupByBuilder
+    grouped_by_builder: GroupedByBuilder
     """
-    The builder class for the GroupBy operation.
+    The builder class for the GroupedDataSource operation.
     """
     non_aggregated_variables: List[Selectable]
     """
@@ -287,7 +287,7 @@ class NonAggregatedSelectedVariablesError(AggregationUsageError):
         self.message = (
             f"The variabls {self.non_aggregated_variables} are neither aggregated nor grouped by, they cannot be selected"
             f" along with the aggregated variables {self.aggregated_variables}. You can only select variables that are"
-            f" either aggregated or are in the grouped by variables {self.group_by_builder.variables_to_group_by}."
+            f" either aggregated or are in the grouped by variables {self.grouped_by_builder.variables_to_group_by}."
         )
         super().__post_init__()
 
