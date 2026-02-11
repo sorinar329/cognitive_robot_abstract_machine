@@ -310,6 +310,14 @@ class URDFParser:
                     urdf = file.read()
         return URDFParser(urdf=urdf, prefix=prefix)
 
+    @classmethod
+    def from_xacro(cls, xacro_path: str, prefix: Optional[str] = None) -> URDFParser:
+        from xacro import process_file
+
+        xacro_path = CompositePathResolver().resolve(xacro_path)
+        urdf = process_file(xacro_path).toxml()
+        return URDFParser(urdf=urdf, prefix=prefix)
+
     def parse(self) -> World:
         prefix = self.parsed.name
         links = [
