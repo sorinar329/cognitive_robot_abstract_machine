@@ -462,28 +462,9 @@ def test_multiple_aggregations_per_group_on_same_variable(departments_and_employ
         .having(max_salary > 25000)
     )
     results = list(query.evaluate())
-    result_tuples = []
-    assert len(results) == 2
-    for result in results:
-        result_tuples.append(
-            (result[department], result[avg_salary], result[max_salary])
-        )
-    salary_per_department = defaultdict(list)
-    for emp in employees:
-        salary_per_department[emp.department].append(emp.salary)
-    expected_result_tuples = [
-        (
-            d,
-            sum(salary_per_department[d]) / len(salary_per_department[d]),
-            max(salary_per_department[d]),
-        )
-        for d in departments
-        if max(salary_per_department[d]) > 25000
-    ]
-    for result_tuple, expected_result_tuple in zip(
-        result_tuples, expected_result_tuples
-    ):
-        assert result_tuple == expected_result_tuple
+    assert_correct_results_for_complex_aggregation_query(
+        results, 2, 25000, max_salary, department, avg_salary, employees, departments
+    )
 
 
 def test_having_node_hierarchy(departments_and_employees):
@@ -532,8 +513,23 @@ def test_recalling_having(departments_and_employees):
     )
     query.having(max_salary > 30000)
     results = list(query.evaluate())
+    assert_correct_results_for_complex_aggregation_query(
+        results, 1, 30000, max_salary, department, avg_salary, employees, departments
+    )
+
+
+def assert_correct_results_for_complex_aggregation_query(
+    results,
+    num_results_expected,
+    max_salary_condition,
+    max_salary,
+    department,
+    avg_salary,
+    employees,
+    departments,
+):
     result_tuples = []
-    assert len(results) == 1
+    assert len(results) == num_results_expected
     for result in results:
         result_tuples.append(
             (result[department], result[avg_salary], result[max_salary])
@@ -548,7 +544,7 @@ def test_recalling_having(departments_and_employees):
             max(salary_per_department[d]),
         )
         for d in departments
-        if max(salary_per_department[d]) > 30000
+        if max(salary_per_department[d]) > max_salary_condition
     ]
     for result_tuple, expected_result_tuple in zip(
         result_tuples, expected_result_tuples
