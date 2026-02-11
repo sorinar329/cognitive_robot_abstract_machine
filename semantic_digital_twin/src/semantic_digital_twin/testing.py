@@ -171,6 +171,72 @@ def world_setup_simple():
     return world, body1, body2, body3, body4, body5
 
 
+@pytest.fixture()
+def ray_test_world():
+    world = World()
+    root = Body(name=PrefixedName(name="root", prefix="world"))
+    body1 = Body(
+        name=PrefixedName("name1", prefix="test"),
+        collision=ShapeCollection(
+            [
+                Box(
+                    origin=HomogeneousTransformationMatrix.from_xyz_rpy(),
+                    scale=Scale(0.25, 0.25, 0.25),
+                )
+            ]
+        ),
+    )
+    body2 = Body(
+        name=PrefixedName("name2", prefix="test"),
+        collision=ShapeCollection(
+            [
+                Box(
+                    origin=HomogeneousTransformationMatrix.from_xyz_rpy(),
+                    scale=Scale(0.25, 0.25, 0.25),
+                )
+            ]
+        ),
+    )
+    body3 = Body(
+        name=PrefixedName("name3", prefix="test"),
+        collision=ShapeCollection(
+            [Sphere(origin=HomogeneousTransformationMatrix.from_xyz_rpy(), radius=0.01)]
+        ),
+    )
+
+    body4 = Body(
+        name=PrefixedName("name4", prefix="test"),
+        collision=ShapeCollection(
+            [Sphere(origin=HomogeneousTransformationMatrix.from_xyz_rpy(), radius=0.01)]
+        ),
+    )
+
+    with world.modify_world():
+        world.add_kinematic_structure_entity(body1)
+        world.add_kinematic_structure_entity(body2)
+        world.add_kinematic_structure_entity(body3)
+        world.add_kinematic_structure_entity(body4)
+
+        c_root_body1 = Connection6DoF.create_with_dofs(
+            parent=root, child=body1, world=world
+        )
+        c_root_body2 = Connection6DoF.create_with_dofs(
+            parent=root, child=body2, world=world
+        )
+        c_root_body3 = Connection6DoF.create_with_dofs(
+            parent=root, child=body3, world=world
+        )
+        c_root_body4 = Connection6DoF.create_with_dofs(
+            parent=root, child=body4, world=world
+        )
+
+        world.add_connection(c_root_body1)
+        world.add_connection(c_root_body2)
+        world.add_connection(c_root_body3)
+        world.add_connection(c_root_body4)
+    return world, body1, body2, body3, body4
+
+
 @pytest.fixture
 def two_arm_robot_world():
     urdf_dir = os.path.join(

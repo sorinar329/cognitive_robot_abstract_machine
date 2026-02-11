@@ -38,10 +38,16 @@ from ..world_description.world_entity import Body
 logger = logging.getLogger(__name__)
 
 
-PKG_NAME = __package__.split(".", 1)[0]
+def create_cache_dir(folder_name: str) -> Path:
+    pkg_name = __package__.split(".", 1)[0]
 
-CACHE_DIR = Path(user_cache_dir(PKG_NAME)) / "convex_decompositions"
-CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    cache_dir = Path(user_cache_dir(pkg_name)) / folder_name
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    return cache_dir
+
+
+CACHE_DIR = create_cache_dir("convex_decompositions")
+LOG_DIR = create_cache_dir("log")
 
 
 def trimesh_quantized_hash(mesh, decimals: int = 6, digest_size: int = 16) -> str:
@@ -199,25 +205,29 @@ def load_convex_mesh_shape(
     )
 
 
-def clear_cache():
+def clear_cache(cache_dir: Path = CACHE_DIR):
     """
     Clears the convex decomposition cache.
+    :param cache_dir: the cache directory to clear.
     """
-    for file in CACHE_DIR.iterdir():
+    for file in cache_dir.iterdir():
         file.unlink()
 
 
 def convert_to_decomposed_obj_and_save_in_tmp(
-    mesh: Trimesh, log_path="/tmp/semantic_digital_twin/vhacd.log"
+    mesh: Trimesh,
+    cache_dir: Path = CACHE_DIR,
+    log_path: Path = LOG_DIR,
 ) -> str:
     """
     Converts a mesh to a convex decomposition and saves it in a cache file.
     :param mesh: the mesh to convert.
+    :param cache_dir: the cache directory to save the convex decomposition in.
     :param log_path: the path to the log file.
     :return: the path to the convex decomposition file.
     """
     file_hash = trimesh_quantized_hash(mesh)
-    obj_file_name = str(CACHE_DIR / f"{file_hash}.obj")
+    obj_file_name = str(cache_dir / f"{file_hash}.obj")
     if not os.path.exists(obj_file_name):
         obj_str = trimesh.exchange.obj.export_obj(mesh)
         create_path(obj_file_name)
@@ -225,7 +235,7 @@ def convert_to_decomposed_obj_and_save_in_tmp(
             f.write(obj_str)
         if not mesh.is_convex:
             with suppress_stdout_stderr():
-                bullet.vhacd(obj_file_name, obj_file_name, log_path)
+                bullet.vhacd(obj_file_name, obj_file_name, str(log_path / "vhacd.log"))
             logging.info(f'Saved convex decomposition to "{obj_file_name}".')
         else:
             logging.info(f'Saved obj to "{obj_file_name}".')

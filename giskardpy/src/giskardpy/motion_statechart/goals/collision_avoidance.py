@@ -17,7 +17,7 @@ from giskardpy.motion_statechart.graph_node import (
 )
 from giskardpy.qp.qp_controller_config import QPControllerConfig
 from krrood.symbolic_math.symbolic_math import Scalar, FloatVariable
-from semantic_digital_twin.collision_checking.collision_manager import CollisionGroup
+from semantic_digital_twin.collision_checking.collision_groups import CollisionGroup
 from semantic_digital_twin.collision_checking.collision_matrix import CollisionRule
 from semantic_digital_twin.collision_checking.collision_variable_managers import (
     SelfCollisionVariableManager,

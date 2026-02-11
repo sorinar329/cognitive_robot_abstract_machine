@@ -9,16 +9,21 @@ from semantic_digital_twin.adapters.mesh import STLParser
 from semantic_digital_twin.collision_checking.pybullet_collision_detector import (
     clear_cache,
     convert_to_decomposed_obj_and_save_in_tmp,
-    CACHE_DIR,
+    create_cache_dir,
 )
 from semantic_digital_twin.world_description.world_entity import Body
 
 
 @pytest.fixture
-def clean_cache():
-    clear_cache()
+def cache_dir():
+    return create_cache_dir("tmp")
+
+
+@pytest.fixture
+def clean_cache(cache_dir):
+    clear_cache(cache_dir)
     yield
-    clear_cache()
+    clear_cache(cache_dir)
 
 
 @pytest.fixture
@@ -42,29 +47,33 @@ def convex_mesh():
     return mesh
 
 
-def test_convert_non_convex_mesh_decomposes(clean_cache, non_convex_mesh):
+def test_convert_non_convex_mesh_decomposes(clean_cache, cache_dir, non_convex_mesh):
     """
     Test that for a non-convex mesh, the function produces a valid .obj file in the cache directory.
     """
-    output_path = convert_to_decomposed_obj_and_save_in_tmp(non_convex_mesh)
+    output_path = convert_to_decomposed_obj_and_save_in_tmp(
+        non_convex_mesh, cache_dir=cache_dir
+    )
 
     assert os.path.exists(output_path)
     assert output_path.endswith(".obj")
-    assert str(CACHE_DIR) in output_path
+    assert str(cache_dir) in output_path
     # For non-convex, it should have triggered VHACD (we can't easily check if VHACD ran
     # but we can check if it exists and is not empty)
     assert os.path.getsize(output_path) > 0
 
 
-def test_convert_convex_mesh_saves_directly(clean_cache, convex_mesh):
+def test_convert_convex_mesh_saves_directly(clean_cache, cache_dir, convex_mesh):
     """
     Test that for a convex mesh, the function saves it as an .obj file.
     """
-    output_path = convert_to_decomposed_obj_and_save_in_tmp(convex_mesh)
+    output_path = convert_to_decomposed_obj_and_save_in_tmp(
+        convex_mesh, cache_dir=cache_dir
+    )
 
     assert os.path.exists(output_path)
     assert output_path.endswith(".obj")
-    assert str(CACHE_DIR) in output_path
+    assert str(cache_dir) in output_path
 
 
 def test_convert_caching_behavior(clean_cache, non_convex_mesh):
