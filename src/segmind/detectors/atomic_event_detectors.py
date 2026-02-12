@@ -7,7 +7,7 @@ from queue import Queue, Empty, Full
 
 import numpy as np
 
-from semantic_digital_twin.collision_checking.collision_detector import Collision
+from pycram.datastructures.pose import PoseStamped
 from semantic_digital_twin.reasoning.predicates import contact
 from semantic_digital_twin.spatial_types.spatial_types import Pose
 from semantic_digital_twin.world import World
@@ -605,11 +605,15 @@ class MotionDetector(DetectorWithTrackedObject, ABC):
         """
         try:
             # latest_pose, latest_time = self.update_with_latest_motion_data()
-            _, _ = self.data_queue.get_nowait()
-            self.data_queue.task_done()
-            latest_pose, latest_time = self.get_current_pose_and_time()
-            self.poses.append(latest_pose)
-            self.times.append(latest_time)
+            try:
+                _, _ = self.data_queue.get_nowait()
+                self.data_queue.task_done()
+            except Empty:
+                pass
+
+            self.latest_pose, self.latest_time = self.get_current_pose_and_time()
+            self.poses.append(self.latest_pose)
+            self.times.append(self.latest_time)
             if len(self.poses) > 1:
                 self.calculate_and_update_latest_distance()
                 self._crop_distances_and_times_to_window_size()
@@ -730,7 +734,9 @@ class MotionDetector(DetectorWithTrackedObject, ABC):
         """
         current_pose, current_time = self.get_current_pose_and_time()
         event_type = self.get_event_type()
-        event = event_type(self.tracked_object, self.start_pose, current_pose, timestamp=self.event_time)
+        start_pose_stamped = PoseStamped.from_spatial_type(self.start_pose)
+        current_pose_stamped = PoseStamped.from_spatial_type(current_pose)
+        event = event_type(self.tracked_object, start_pose_stamped, current_pose_stamped, timestamp=self.event_time)
         return event
 
     @abstractmethod

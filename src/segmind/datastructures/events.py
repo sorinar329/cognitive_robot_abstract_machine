@@ -2,7 +2,7 @@ import time
 from abc import abstractmethod, ABC
 from dataclasses import dataclass, field
 
-from krrood.ormatic.dao import to_dao
+from pycram.datastructures.dataclasses import Color
 from pycram.datastructures.enums import Arms
 from pycram.datastructures.partial_designator import PartialDesignator
 from typing_extensions import Optional, List, Union, Type
@@ -14,7 +14,7 @@ from segmind.datastructures.mixins import HasPrimaryTrackedObject, HasPrimaryAnd
 from segmind.datastructures.object_tracker import ObjectTrackerFactory
 from semantic_digital_twin.orm.ormatic_interface import BodyDAO
 from semantic_digital_twin.spatial_types.spatial_types import Pose
-from semantic_digital_twin.world_description.geometry import Color, BoundingBox
+from semantic_digital_twin.world_description.geometry import BoundingBox
 from semantic_digital_twin.world_description.world_entity import Body, Agent
 
 
