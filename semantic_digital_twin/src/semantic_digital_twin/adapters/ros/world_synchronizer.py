@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 from .messages import MetaData, WorldStateUpdate, Message, ModificationBlock, LoadModel
 from ..world_entity_kwargs_tracker import WorldEntityWithIDKwargsTracker
 from ...callbacks.callback import Callback, StateChangeCallback, ModelChangeCallback
+from ...exceptions import MissingPublishChangesKWARG
 from ...orm.ormatic_interface import *
 from ...world import World
 
@@ -139,7 +140,10 @@ class SynchronizerOnCallback(Synchronizer, Callback, ABC):
         """
         Wrapper method around world_callback that checks if this time the callback should be triggered.
         """
-        publish_changes = kwargs["publish_changes"]
+        publish_changes = kwargs.get("publish_changes", None)
+        if publish_changes is None:
+            raise MissingPublishChangesKWARG(kwargs)
+
         if not publish_changes:
             return
 
