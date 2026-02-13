@@ -54,10 +54,10 @@ class TestMultiverseEpisodeSegmenter(TestCase):
         with cls.world.modify_world():
             cls.world.add_kinematic_structure_entity(root)
         cls.spawn_objects(models_dir)
-        rclpy.init()
-        cls.node = rclpy.create_node("test_node")
+        #rclpy.init()
+        #cls.node = rclpy.create_node("test_node")
         logger.debug("Node created")
-        cls.viz_marker_publisher = VizMarkerPublisher(world=cls.world, node=cls.node)
+        #cls.viz_marker_publisher = VizMarkerPublisher(world=cls.world, node=cls.node)
         logger.debug("Viz marker publisher created")
         cls.file_player = CSVEpisodePlayer(csv_file, world=cls.world,
                                            time_between_frames=datetime.timedelta(milliseconds=4),
@@ -72,7 +72,6 @@ class TestMultiverseEpisodeSegmenter(TestCase):
         logger.debug("Episode segmenter created")
     @classmethod
     def spawn_objects(cls, models_dir):
-
         logging.log(logging.DEBUG, f"Spawning objects from {models_dir}...")
         #cls.copy_model_files_to_world_data_dir(models_dir)
         directory = Path(models_dir)
@@ -113,12 +112,11 @@ class TestMultiverseEpisodeSegmenter(TestCase):
         Copy the model files to the world data directory.
         """
         # Copy the entire folder and its contents
-        #shutil.copytree(models_dir, cls.world.conf.cache_dir + "/objects", dirs_exist_ok=True)
+        shutil.copytree(models_dir, cls.world.conf.cache_dir + "/objects", dirs_exist_ok=True)
 
     @classmethod
     def tearDownClass(cls):
         logger.debug("Stopping the file player...")
-        cls.viz_marker_publisher.stop()
         logger.debug("Viz marker publisher has been stopped, exiting the world...")
         # cls.world.exit()
         logger.debug("World has been exited.")
@@ -132,18 +130,19 @@ class TestMultiverseEpisodeSegmenter(TestCase):
         """
         Test the ContainmentDetector by checking if the iCub is contained within the scene.
         """
+        logger.debug("Testing the ContainmentDetector...")
         self.episode_segmenter.reset()
         self.episode_segmenter.detectors_to_start = [PlacingDetector]
         self.episode_segmenter.initial_detectors = [ContainmentDetector, SupportDetector]
         self.episode_segmenter.start()
         self.assertTrue(any([isinstance(e, ContainmentEvent) for e in self.episode_segmenter.logger.get_events()]))
 
-    def test_csv_replay(cls):
+    def test_csv_replay(self):
         # engine = create_engine('sqlite:///:memory:')
         # session = Session(engine)
         # mapper_registry.metadata.create_all(engine)
         #
         logger.debug("Starting the episode segmenter...")
-        cls.episode_segmenter.start()
+        self.episode_segmenter.start()
         # session.add_all(self.episode_segmenter.logger.get_events())
         # session.commit()

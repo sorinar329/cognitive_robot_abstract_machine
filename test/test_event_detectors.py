@@ -30,7 +30,7 @@ class TestEventDetectors:
         tcd = TrimeshCollisionDetector(self.world)
         milk = self.world.get_body_by_name("milk.stl")
         robot = self.world.get_body_by_name("base_link")
-        event = ContactEvent(contact_bodies=[milk, robot], of_object=robot)
+        event = ContactEvent(close_bodies=[milk, robot], of_object=robot)
         GeneralPickUpDetector.start_condition_checker(event)
 
     def test_translation_detector(self):

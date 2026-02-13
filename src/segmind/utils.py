@@ -7,6 +7,7 @@ from abc import ABC, abstractmethod
 
 import numpy as np
 from pycram.designator import ObjectDesignatorDescription
+from segmind import set_logger_level, LogLevel, logger
 from semantic_digital_twin.collision_checking.collision_detector import Collision
 from semantic_digital_twin.reasoning.predicates import is_supported_by, contact
 from semantic_digital_twin.semantic_annotations.semantic_annotations import Floor
@@ -24,7 +25,7 @@ from pycram.datastructures.pose import Transform
 
 from pycram.tf_transformations import quaternion_inverse, quaternion_multiply
 
-
+set_logger_level(LogLevel.DEBUG)
 try:
     from semantic_world.views import Container
 except ImportError:
@@ -186,6 +187,9 @@ def get_support(obj: Body, contact_bodies: Optional[List[Body]] = None) -> Optio
     :param contact_bodies: The bodies in contact with the object.
     :return: The supporting surface if it exists, None otherwise.
     """
+    print("Checking if object is in contact with supporting surface")
+    print(f"Object: {obj.name}")
+    print(f"Contacts: {contact_bodies}")
     if contact_bodies is None:
         contact_bodies = []
         for i in obj._world.bodies_with_enabled_collision:
@@ -199,39 +203,13 @@ def get_support(obj: Body, contact_bodies: Optional[List[Body]] = None) -> Optio
                 continue
             if contact(i, obj):
                 contact_bodies.append(i)
-
+    excluded_bodies = [obj]
     for cb in contact_bodies:
+        if cb in excluded_bodies:
+            continue
         if is_supported_by(obj, cb):
             return cb
-
-    return None
-    # if not contact_bodies:
-    #     contact_bodies = obj.contact_points.get_all_bodies()
-    # excluded_bodies = [obj]
-    # if isinstance(obj, Body):
-    #     excluded_bodies.extend(list(obj.child_kinematic_structure_entities))
-    # for body in contact_bodies:
-    #     if body in excluded_bodies:
-    #         continue
-    #     # if isinstance(body, Link):
-    #     #     parent_obj = body.parent_entity
-    #     # else:
-    #     #     parent_obj = body
-    #     # if issubclass(obj.obj_type, (Supporter, Location)):
-    #     if is_object_supported_by_container_body(obj, bodies_to_check=[body]):
-    #         return body
-    #     body_aabb = body.get_axis_aligned_bounding_box()
-    #     surface_z = body_aabb.max_z - 0.001
-    #     obj_bbox = obj.get_axis_aligned_bounding_box()
-    #     intersection = obj_bbox.intersection_with(body_aabb, axis_to_use=[AxisIdentifier.X, AxisIdentifier.Y])
-    #     tracked_object_base = obj.position
-    #     if tracked_object_base.z + 0.001 >= surface_z and intersection.width >= 0.5 * obj_bbox.width and \
-    #             intersection.depth >= 0.5 * obj_bbox.depth:
-    #         print(f"Object {obj.name} IS supported by {body.name}")
-    #         return body
-    # print(f"Object {obj.name} IS NOT supported")
-
-
+    logger.debug(f"No supporting surface found for object {obj.name}")
 def check_if_object_is_supported_by_another_object(obj: Body, support_obj: Body,
                                                    contact_points: Optional[list[Collision]] = None) -> bool:
     """
@@ -246,7 +224,7 @@ def check_if_object_is_supported_by_another_object(obj: Body, support_obj: Body,
         from .detectors.atomic_event_detectors import AbstractContactDetector
         all_contact_points, _ = AbstractContactDetector.get_contact_points_for_body(obj, 0.05, support_obj)
         contact_points = all_contact_points
-    
+
     normals = []
     for cp in contact_points:
         # Use the normal from the collision if available
@@ -259,7 +237,7 @@ def check_if_object_is_supported_by_another_object(obj: Body, support_obj: Body,
             if cp.body_a == obj:
                 normal = -normal
             normals.append(normal)
-            
+
     if len(normals) > 0:
         average_normal = np.mean(normals, axis=0)
         return is_vector_opposite_to_gravity(average_normal)

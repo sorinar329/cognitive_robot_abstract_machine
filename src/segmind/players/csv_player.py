@@ -55,4 +55,5 @@ class CSVEpisodePlayer(FilePlayer):
             else:
                 obj = self.world.get_body_by_name(obj_name)
                 objects_poses[obj] = obj.global_pose.to_pose()
+
         return objects_poses

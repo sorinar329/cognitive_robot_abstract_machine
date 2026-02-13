@@ -3,13 +3,12 @@ from abc import abstractmethod, ABC
 from dataclasses import dataclass, field
 
 from pycram.datastructures.dataclasses import Color
-from pycram.datastructures.enums import Arms
 from pycram.datastructures.partial_designator import PartialDesignator
 from typing_extensions import Optional, List, Union, Type
 
 from pycram.datastructures.pose import PoseStamped
-from pycram.robot_plans import PlaceActionDescription, PlaceAction, ActionDescription, PickUpActionDescription, \
-    PickUpAction
+from pycram.robot_plans import ActionDescription, PickUpActionDescription, PickUpAction, PlaceActionDescription, \
+    PlaceAction
 from segmind.datastructures.mixins import HasPrimaryTrackedObject, HasPrimaryAndSecondaryTrackedObjects
 from segmind.datastructures.object_tracker import ObjectTrackerFactory
 from semantic_digital_twin.orm.ormatic_interface import BodyDAO
@@ -211,15 +210,15 @@ class MotionEvent(EventWithOneTrackedObject, ABC):
     The MotionEvent class is used to represent an event that involves an object that was stationary and then moved or
     vice versa.
     """
-    start_pose: PoseStamped = field(init=False)
-    current_pose: PoseStamped = field(init=False)
+    start_pose: Pose = field(init=False)
+    current_pose: Pose = field(init=False)
 
-    def __init__(self, tracked_object: Body, start_pose: PoseStamped, current_pose: PoseStamped,
+    def __init__(self, tracked_object: Body, start_pose: Pose, current_pose: Pose,
                  timestamp: Optional[float] = None):
         EventWithOneTrackedObject.__init__(self, tracked_object=tracked_object,
                                            timestamp=timestamp if timestamp is not None else time.time())
-        self.start_pose: PoseStamped = start_pose
-        self.current_pose: PoseStamped = current_pose
+        self.start_pose: Pose = start_pose
+        self.current_pose: Pose = current_pose
 
     @property
     def involved_bodies(self) -> List[Body]:
@@ -262,25 +261,25 @@ class StopRotationEvent(StopMotionEvent):
 
 @dataclass(init=False, unsafe_hash=True)
 class AbstractContactEvent(EventWithTwoTrackedObjects, ABC):
-    contact_bodies: list[Body] = field(init=False, default_factory=list[Body])
-    latest_contact_bodies: list[Body] = field(init=False, default_factory=list[Body])
+    close_bodies: list[Body] = field(init=False, default_factory=list[Body])
+    latest_close_bodies: list[Body] = field(init=False, default_factory=list[Body])
     bounding_box: BoundingBox = field(init=False)
     pose: PoseStamped = field(init=False)
     with_object_bounding_box: Optional[BoundingBox] = field(init=False, default=None)
     with_object_pose: Optional[PoseStamped] = field(init=False, default=None)
 
     def __init__(self,
-                 contact_bodies: list[Body],
+                 close_bodies: list[Body],
                  of_object: Body,
-                 latest_contact_bodies: Optional[list[Body]] = None,
+                 latest_close_bodies: Optional[list[Body]] = None,
                  with_object: Optional[Body] = None,
                  timestamp: Optional[float] = None):
         EventWithTwoTrackedObjects.__init__(self,
                                             tracked_object=of_object,
                                             with_object=with_object,
                                             timestamp=timestamp if timestamp is not None else time.time())
-        self.contact_bodies: list[Body] = contact_bodies
-        self.latest_contact_bodies: list[Body] = latest_contact_bodies
+        self.close_bodies: list[Body] = close_bodies
+        self.latest_close_bodies: list[Body] = latest_close_bodies
         self.bounding_box: BoundingBox = BoundingBox.from_mesh(
             of_object.collision.combined_mesh,
             origin=of_object.global_pose
@@ -337,18 +336,18 @@ class ContactEvent(AbstractContactEvent):
 
     @property
     def objects(self):
-        return self.contact_bodies
+        return self.close_bodies.get_objects_that_have_points()
 
     @property
     def main_link(self):
-        if len(self.contact_bodies) > 0:
-            return self.contact_bodies[0].name
+        if len(self.close_bodies) > 0:
+            return self.close_bodies[0].link_a
         else:
             print(f"No contact points found for {self.tracked_object.name} in {self.__class__.__name__}")
 
     @property
     def links(self):
-        return self.contact_bodies
+        return self.close_bodies
 
 
 @dataclass(init=False, unsafe_hash=True)
@@ -361,19 +360,27 @@ class LossOfContactEvent(AbstractContactEvent):
 
     @property
     def latest_objects_that_got_removed(self):
-        return self.get_objects_that_got_removed(self.latest_contact_bodies)
+        return self.get_objects_that_got_removed(self.latest_close_bodies)
 
-    def get_objects_that_got_removed(self, latest_contact_bodies: list[Body]):
-        objects_that_got_removed: list[Body] = []
-        for obj in latest_contact_bodies:
-            if obj not in self.contact_bodies:
-                objects_that_got_removed.append(obj)
-
-        return objects_that_got_removed
+    def get_objects_that_got_removed(self, close_bodies: list[Body]):
+        return self.close_bodies.get_objects_that_got_removed(close_bodies)
 
     @property
     def color(self) -> Color:
         return Color(1, 0, 0, 1)
+
+    @property
+    def main_link(self) -> Body:
+        return self.latest_close_bodies[0]
+
+    @property
+    def links(self) -> List[Body]:
+        return self.close_bodies.get_bodies_that_got_removed(self.latest_close_bodies)
+
+    @property
+    def objects(self):
+        return self.close_bodies.get_objects_that_got_removed(self.close_bodies)
+
 
 @dataclass(init=False, unsafe_hash=True)
 class LossOfInterferenceEvent(LossOfContactEvent):
@@ -404,6 +411,7 @@ class AbstractAgentContact(AbstractContactEvent, ABC):
 
 @dataclass(init=False, unsafe_hash=True)
 class AgentContactEvent(ContactEvent, AbstractAgentContact):
+
     @property
     def object_link(self) -> Body:
         if self.with_object is not None:
@@ -425,7 +433,7 @@ class AgentLossOfContactEvent(LossOfContactEvent, AbstractAgentContact):
         if self.with_object is not None:
             return self.with_object_contact_link()
         else:
-            return self.latest_contact_bodies[0].parent_connection.child
+            return self.latest_close_bodies[0].link_b
 
 
 @dataclass(init=False, unsafe_hash=True)
@@ -499,7 +507,7 @@ class PickUpEvent(AbstractAgentObjectInteractionEvent):
     def color(self) -> Color:
         return Color(0, 1, 0, 1)
 
-    def action_description(self) -> Type[PickUpActionDescription]:
+    def action_description(self) -> PickUpActionDescription:
         return PickUpActionDescription(self.tracked_object)
 
     @property
@@ -515,10 +523,10 @@ class PlacingEvent(AbstractAgentObjectInteractionEvent):
     def color(self) -> Color:
         return Color(1, 0, 1, 1)
 
-    def action_description(self, pose: Optional[PoseStamped] = None, arm: Optional[Arms] = None) -> Type[PlaceActionDescription]:
+    def action_description(self, pose: Optional[PoseStamped] = None) -> PlaceActionDescription:
         if pose is None:
-            pose = self.tracked_object.global_pose.to_pose()
-        return PlaceActionDescription(self.tracked_object, pose, arm)
+            pose = self.tracked_object.pose
+        return PlaceActionDescription(self.tracked_object, pose)
 
     @property
     def action_type(self) -> Type[PlaceAction]:
@@ -528,7 +536,7 @@ class PlacingEvent(AbstractAgentObjectInteractionEvent):
 @dataclass(init=False, unsafe_hash=True)
 class InsertionEvent(AbstractAgentObjectInteractionEvent):
     inserted_into_objects: List[Body] = field(init=False, default_factory=list, repr=False, hash=False)
-    inserted_into_objects_frozen_cp: List[Body] = field(init=False, default_factory=list, repr=False, hash=False)
+    inserted_into_objects_frozen_cp: List[BodyDAO] = field(init=False, default_factory=list, repr=False, hash=False)
 
     def __init__(self, inserted_object: Body,
                  inserted_into_objects: List[Body],
@@ -539,7 +547,7 @@ class InsertionEvent(AbstractAgentObjectInteractionEvent):
         super().__init__(tracked_object=inserted_object, agent=agent,
                          timestamp=timestamp, end_timestamp=end_timestamp, with_object=through_hole)
         self.inserted_into_objects: List[Body] = inserted_into_objects
-        self.inserted_into_objects_frozen_cp: List[Body] = [obj.frozen_copy() for obj in inserted_into_objects]
+        self.inserted_into_objects_frozen_cp: List[BodyDAO] = [obj.frozen_copy() for obj in inserted_into_objects]
 
     @property
     def through_hole(self) -> Body:
@@ -549,8 +557,8 @@ class InsertionEvent(AbstractAgentObjectInteractionEvent):
     def action_type(self) -> Type[PlaceAction]:
         return PlaceAction
 
-    def action_description(self) -> Type[PlaceActionDescription]:
-        return PlaceActionDescription(self.tracked_object, self.through_hole.global_pose.to_pose(), insert=True)
+    def action_description(self) -> PlaceActionDescription:
+        return PlaceActionDescription(self.tracked_object, self.through_hole.pose, insert=True)
 
     def hash_tuple(self):
         hash_tuple = (*super().hash_tuple, *(obj.name for obj in self.inserted_into_objects))

@@ -136,11 +136,14 @@ class DataPlayer(EpisodePlayer, ABC):
 
         :param frame_data: The frame data.
         """
+        print(f"Processing frame data{frame_data}")
         objects_poses = self.get_objects_poses(frame_data)
+        print(objects_poses)
         joint_states = self.get_joint_states(frame_data)
+        print(joint_states)
         if len(objects_poses):
-            if self.sync_robot_only:
-                objects_poses = {self.world.robot: objects_poses[self.world.robot]}
+            #if self.sync_robot_only:
+            #    objects_poses = {self.world.robot: objects_poses[self.world.robot]}
             for obj in self.world.bodies:
                 # check in the dictionary if obj is the key and set its pose accordingly
                 if obj in objects_poses:

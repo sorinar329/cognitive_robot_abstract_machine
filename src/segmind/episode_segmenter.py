@@ -12,7 +12,6 @@ from .detectors.coarse_event_detectors import *
 from .detectors.spatial_relation_detector import SpatialRelationDetector
 from .episode_player import EpisodePlayer
 from .event_logger import EventLogger
-from .utils import check_if_object_is_supported, Imaginator
 set_logger_level(LogLevel.DEBUG)
 
 class EpisodeSegmenter(ABC):
@@ -144,7 +143,7 @@ class EpisodeSegmenter(ABC):
 
         while (not closed_threads) or (self.logger.event_queue.unfinished_tasks > 0):
             if (not self.episode_player.is_alive() or self.kill_event.is_set()) and not closed_threads:
-                time.sleep(5)
+                #time.sleep(5)
                 self.join_detectors(atomic_only=True)
                 closed_threads = True
 
