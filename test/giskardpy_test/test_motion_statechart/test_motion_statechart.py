@@ -30,7 +30,6 @@ from giskardpy.motion_statechart.goals.cartesian_goals import (
     CartesianPoseStraight,
 )
 from giskardpy.motion_statechart.goals.collision_avoidance import (
-    CollisionAvoidance,
     ExternalCollisionAvoidance,
     SelfCollisionAvoidance,
 )
@@ -102,14 +101,10 @@ from semantic_digital_twin.adapters.world_entity_kwargs_tracker import (
     WorldEntityWithIDKwargsTracker,
 )
 from semantic_digital_twin.collision_checking.collision_matrix import (
-    CollisionRule,
     MaxAvoidedCollisionsOverride,
-    CollisionMatrix,
 )
 from semantic_digital_twin.collision_checking.collision_rules import (
     AvoidCollisionBetweenGroups,
-    AvoidAllCollisions,
-    AllowAllCollisions,
 )
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.robots.abstract_robot import Manipulator, AbstractRobot
@@ -1167,7 +1162,7 @@ class TestJointTasks:
         end.start_condition = joint_goal.observation_variable
 
         kin_sim = Executor.create_from_parts(
-            BuildContext(world=pr2_world_state_reset),
+            world=pr2_world_state_reset,
         )
         kin_sim.compile(motion_statechart=msc)
         kin_sim.tick_until_end()
@@ -1786,7 +1781,7 @@ class TestCartesianTasks:
         msc.add_node(cart_straight)
         msc.add_node(EndMotion.when_true(cart_straight))
 
-        kin_sim = Executor(world=pr2_world_state_reset)
+        kin_sim = Executor(BuildContext(world=pr2_world_state_reset))
         kin_sim.compile(motion_statechart=msc)
         kin_sim.tick_until_end()
 
@@ -1836,7 +1831,7 @@ class TestDiffDriveBaseGoal:
         msc.add_node(goal := DiffDriveBaseGoal(goal_pose=goal_pose))
         msc.add_node(EndMotion.when_true(goal))
 
-        kin_sim = Executor(world=cylinder_bot_diff_world)
+        kin_sim = Executor(BuildContext(world=cylinder_bot_diff_world))
         kin_sim.compile(motion_statechart=msc)
         kin_sim.tick_until_end()
 

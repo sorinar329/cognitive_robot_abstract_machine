@@ -7,9 +7,9 @@ from rustworkx import rustworkx
 from typing_extensions import TYPE_CHECKING
 
 from .collision_manager import CollisionManager, CollisionConsumer
+from ..world_description.world_entity import Body, KinematicStructureEntity
 
 if TYPE_CHECKING:
-    from ..world_description.world_entity import Body, KinematicStructureEntity
     from ..world import World
 
 

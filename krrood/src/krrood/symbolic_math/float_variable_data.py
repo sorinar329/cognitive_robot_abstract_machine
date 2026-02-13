@@ -33,6 +33,9 @@ class FloatVariableData:
     def set_value(self, variable_index: int, value: float):
         self.data[variable_index] = value
 
+    def set_values(self, variable_index: int, values: List[float] | np.ndarray):
+        self.data[variable_index : variable_index + len(values)] = values
+
     @property
     def mapping(self) -> dict[FloatVariable, float]:
         return {variable: data for variable, data in zip(self.variables, self.data)}
