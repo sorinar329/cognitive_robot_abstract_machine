@@ -35,6 +35,8 @@ def test_generate_drawers_from_direct_condition(handles_and_containers_world):
 
     condition.visualize()
 
+    assert condition._conditions_root_ is condition
+
     solutions = condition.evaluate()
     all_solutions = list(solutions)
 
