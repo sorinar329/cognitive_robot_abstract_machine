@@ -1,9 +1,8 @@
-import os
 from pathlib import Path
 import pooch
 
 # ---- Configuration ----
-DATA_PACKAGE_NAME ="robokudo_test_data"
+DATA_PACKAGE_NAME = "robokudo_test_data"
 DATA_VERSION = "b991b2f15cd734672f449349a9e566fb67aad81e"
 KNOWN_HASH = "sha256:b9150798870b7e7d067387dc295e661a55e2360c8c9cd944b6815d0ec59047e5"
 
@@ -14,9 +13,16 @@ URL = (
 
 FILENAME = f"{DATA_PACKAGE_NAME}.zip"
 
+
 def test_data_path() -> Path:
     """
-    Will retrieve robokudo test data from the CI, if not locally present.
+    Retrieve Robokudo test data, downloading and unpacking if needed.
+
+    :return: Path to the root extracted dataset directory in the local cache.
+    :rtype: pathlib.Path
+
+    .. warning::
+       This function performs network I/O on first use.
     """
 
     downloader = pooch.HTTPDownloader()
@@ -36,8 +42,3 @@ def test_data_path() -> Path:
     extracted_dir = Path(extracted_files[0]).parents[0]
 
     return extracted_dir
-
-
-if __name__ == "__main__":
-    dataset_path = retrieve_test_data()
-    print("Dataset available at:", dataset_path)
