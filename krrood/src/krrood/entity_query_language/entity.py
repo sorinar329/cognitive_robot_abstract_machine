@@ -28,7 +28,6 @@ from .symbolic import (
     chained_logic,
     CanBehaveLikeAVariable,
     Variable,
-    optimize_or,
     Flatten,
     ForAll,
     Exists,
@@ -38,6 +37,7 @@ from .symbolic import (
     Concatenate,
     QueryObjectDescriptor,
     ResultQuantifier,
+    OR,
 )
 
 from .predicate import *  # type: ignore
@@ -136,7 +136,7 @@ def distinct(
     if isinstance(expression, QueryObjectDescriptor):
         return expression.distinct(*on)
     elif isinstance(expression, ResultQuantifier):
-        return expression._child__.distinct(*on)
+        return expression._child_.distinct(*on)
     elif isinstance(expression, Selectable):
         return entity(expression).distinct(*on)
     else:
@@ -173,7 +173,7 @@ def or_(*conditions):
     :return: An OR operator joining the conditions.
     :rtype: SymbolicExpression
     """
-    return chained_logic(optimize_or, *conditions)
+    return chained_logic(OR, *conditions)
 
 
 def not_(operand: ConditionType) -> SymbolicExpression:

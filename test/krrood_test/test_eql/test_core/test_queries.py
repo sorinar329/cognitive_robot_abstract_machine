@@ -45,7 +45,7 @@ from krrood.entity_query_language.result_quantification_constraint import (
     Range,
 )
 from krrood.entity_query_language.query_graph import QueryGraph
-from krrood.entity_query_language.symbolic import Product
+from krrood.entity_query_language.symbolic import Product, Union
 from krrood.entity_query_language.utils import chain_evaluate_variables
 from ...dataset.example_classes import VectorsWithProperty
 from ...dataset.semantic_world_like_classes import (
@@ -282,19 +282,14 @@ def test_reevaluation_of_or_and_query(handles_and_containers_world):
 
 def test_generate_with_and_or(handles_and_containers_world):
     world = handles_and_containers_world
-
-    def generate_handles_and_container1():
-
-        B = variable(Body, domain=world.bodies)
-        query = an(
-            entity(B).where(
-                or_(contains(B.name, "Handle"), contains(B.name, "1")),
-                or_(contains(B.name, "Container"), contains(B.name, "1")),
-            )
+    B = variable(Body, domain=world.bodies)
+    query = an(
+        entity(B).where(
+            or_(contains(B.name, "Handle"), contains(B.name, "1")),
+            or_(contains(B.name, "Container"), contains(B.name, "1")),
         )
-        yield from query.evaluate()
-
-    handles_and_container1 = list(generate_handles_and_container1())
+    )
+    handles_and_container1 = query.tolist()
     assert len(handles_and_container1) == 2, "Should generate at least one handle."
 
 

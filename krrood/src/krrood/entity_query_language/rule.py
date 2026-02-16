@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from .entity import ConditionType
 
 
-def refinement(*conditions: ConditionType) -> SymbolicExpression[T]:
+def refinement(*conditions: ConditionType) -> SymbolicExpression:
     """
     Add a refinement branch (ExceptIf node with its right the new conditions and its left the base/parent rule/query)
      to the current condition tree.
@@ -35,7 +35,7 @@ def refinement(*conditions: ConditionType) -> SymbolicExpression[T]:
     return new_conditions_root.right
 
 
-def alternative(*conditions: ConditionType) -> SymbolicExpression[T]:
+def alternative(*conditions: ConditionType) -> SymbolicExpression:
     """
     Add an alternative branch (logical ElseIf) to the current condition tree.
 
@@ -48,7 +48,7 @@ def alternative(*conditions: ConditionType) -> SymbolicExpression[T]:
     return alternative_or_next(RDREdge.Alternative, *conditions)
 
 
-def next_rule(*conditions: ConditionType) -> SymbolicExpression[T]:
+def next_rule(*conditions: ConditionType) -> SymbolicExpression:
     """
     Add a consequent rule that gets always executed after the current rule.
 
@@ -64,7 +64,7 @@ def next_rule(*conditions: ConditionType) -> SymbolicExpression[T]:
 def alternative_or_next(
     type_: Union[RDREdge.Alternative, RDREdge.Next],
     *conditions: ConditionType,
-) -> SymbolicExpression[T]:
+) -> SymbolicExpression:
     """
     Add an alternative/next branch to the current condition tree.
 
@@ -88,12 +88,15 @@ def alternative_or_next(
     if type_ == RDREdge.Alternative:
         new_conditions_root = Alternative(current_node, new_branch)
     elif type_ == RDREdge.Next:
-        new_conditions_root = Next(current_node, new_branch)
+        if isinstance(current_node, Next):
+            current_node.add_child(new_branch)
+            new_conditions_root = current_node
+        else:
+            new_conditions_root = Next((current_node, new_branch))
     else:
         raise ValueError(
             f"Invalid type: {type_}, expected one of: {RDREdge.Alternative}, {RDREdge.Next}"
         )
-    prev_parent._replace_child_(current_node, new_conditions_root)
-    if isinstance(prev_parent, BinaryExpression):
-        prev_parent.right = new_conditions_root
-    return new_conditions_root.right
+    if new_conditions_root is not current_node:
+        prev_parent._replace_child_(current_node, new_conditions_root)
+    return new_branch

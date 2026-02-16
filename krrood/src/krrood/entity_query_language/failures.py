@@ -310,7 +310,8 @@ class AggregatorInWhereConditionsError(AggregationUsageError):
     def __post_init__(self):
         self.message = (
             f"The where condition of the descriptor {self.descriptor} contains aggregators {self.aggregators}."
-            f"If you want filter using aggregators, use `QueryObjectDescriptor.having()` instead."
+            f"If you want filter using aggregators, use `QueryObjectDescriptor.having()` instead. Or wrap the aggregator"
+            f"in a subquery e.g. `an(entity(...).where(entity(eql.count(...)) > n))`"
         )
         super().__post_init__()
 

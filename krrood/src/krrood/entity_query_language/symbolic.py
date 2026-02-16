@@ -7,6 +7,7 @@ comparison operators) and the evaluation mechanics.
 
 from __future__ import annotations
 
+import itertools
 import operator
 import typing
 import uuid
@@ -113,9 +114,9 @@ class OperationResult:
     """
     The operand that produced the result.
     """
-    previous_bindings: Optional[Bindings] = None
+    previous_operation_result: Optional[OperationResult] = None
     """
-    The bindings of the previous operation that was evaluated before this one.
+    The result of the operation that was evaluated before this one.
     """
 
     @cached_property
@@ -123,9 +124,12 @@ class OperationResult:
         """
         :return: All the bindings from all the evaluated operations until this one, including this one.
         """
-        if self.previous_bindings is None or self.previous_bindings is self.bindings:
+        if (
+            self.previous_operation_result is None
+            or self.previous_operation_result.bindings is self.bindings
+        ):
             return self.bindings
-        return self.previous_bindings | self.bindings
+        return self.previous_operation_result.bindings | self.bindings
 
     @cached_property
     def has_value(self) -> bool:
@@ -152,6 +156,10 @@ class OperationResult:
 
     def __setitem__(self, key, value):
         self.bindings[key] = value
+
+    def update(self, other: Bindings):
+        self.bindings.update(other)
+        return self
 
     def __hash__(self):
         return id(self)
@@ -529,7 +537,7 @@ class SymbolicExpression(ABC):
         return AND(self, other)
 
     def __or__(self, other):
-        return optimize_or(self, other)
+        return OR(self, other)
 
     def _invert_(self):
         """
@@ -659,6 +667,10 @@ class MultiArityExpression(SymbolicExpression, ABC):
         for child in self._operation_children_:
             variables.extend(child._all_variable_instances_)
         return variables
+
+    @property
+    def _name_(self) -> str:
+        return self.__class__.__name__
 
 
 @dataclass(eq=False, repr=False)
@@ -1584,9 +1596,9 @@ class ExpressionBuilder(ABC):
 
 
 @dataclass(eq=False)
-class TruthAnnotatorBuilder(ExpressionBuilder, ABC):
+class FilterBuilder(ExpressionBuilder, ABC):
     """
-    Metadata for constraint specifiers.
+    Metadata for Filter subclasses.
     """
 
     conditions: Tuple[ConditionType, ...]
@@ -1640,15 +1652,15 @@ class TruthAnnotatorBuilder(ExpressionBuilder, ABC):
     @cached_property
     def conditions_expression(self) -> SymbolicExpression:
         """
-        :return: The expression representing the conditions of the constraint specifier.
+        :return: The expression representing the conditions of the Filter.
         """
         return chained_logic(AND, *self.conditions)
 
 
 @dataclass(eq=False)
-class WhereBuilder(TruthAnnotatorBuilder):
+class WhereBuilder(FilterBuilder):
     """
-    Metadata for the `Where` constraint specifier.
+    Metadata for the `Where` Filter.
     """
 
     def assert_correct_conditions(self):
@@ -1672,14 +1684,14 @@ class WhereBuilder(TruthAnnotatorBuilder):
 
 
 @dataclass(eq=False)
-class HavingBuilder(TruthAnnotatorBuilder):
+class HavingBuilder(FilterBuilder):
     """
-    Metadata for the `Having` constraint specifier.
+    Metadata for the `Having` Filter.
     """
 
     grouped_by: GroupedBy = field(kw_only=True, default=None)
     """
-    The GroupedBy expression associated with the having constraint specifier, as the having conditions are applied on
+    The GroupedBy expression associated with the having Filter, as the having conditions are applied on
      the aggregations of grouped results.
     """
 
@@ -2178,7 +2190,7 @@ class QueryObjectDescriptor(UnaryExpression, ABC):
             },
             self._is_false_,
             self,
-            child_result.bindings,
+            child_result,
         )
 
     @property
@@ -2643,44 +2655,6 @@ class Literal(Variable[T]):
 
 
 @dataclass(eq=False, repr=False)
-class Concatenate(MultiArityExpression, CanBehaveLikeAVariable[T]):
-    """
-    Concatenation of two or more variables.
-    """
-
-    _operation_children_: Tuple[Selectable[T], ...]
-    """
-    The children of the concatenate operation.
-    """
-
-    @property
-    def _variables_(self) -> Tuple[Selectable[T], ...]:
-        """
-        The variables to concatenate.
-        """
-        return self._operation_children_
-
-    def __post_init__(self):
-        self._update_children_(*self._variables_)
-        self._var_ = self
-
-    def _evaluate__(self, sources: Bindings) -> Iterable[OperationResult]:
-
-        for var in self._variables_:
-            for var_val in var._evaluate_(sources, self):
-                self._is_false_ = var_val.is_false
-                yield OperationResult(
-                    {**sources, **var_val.bindings, self._id_: var_val.value},
-                    var_val.is_false,
-                    self,
-                )
-
-    @property
-    def _name_(self):
-        return self.__class__.__name__
-
-
-@dataclass(eq=False, repr=False)
 class DomainMapping(UnaryExpression, CanBehaveLikeAVariable[T], ABC):
     """
     A symbolic expression the maps the domain of symbolic variables.
@@ -3062,34 +3036,29 @@ class AND(LogicalBinaryOperator):
 
 
 @dataclass(eq=False, repr=False)
-class OR(LogicalBinaryOperator, ABC):
+class OR(LogicalBinaryOperator):
     """
-    A symbolic single choice operation that can be used to choose between multiple symbolic expressions.
+    A logical OR operator that evaluates the right operand only when the left operand is False. It is like an 'ElseIf`.
     """
 
-    left_evaluated: bool = field(default=False, init=False)
-    right_evaluated: bool = field(default=False, init=False)
-
-    def evaluate_left(
+    def _evaluate__(
         self,
         sources: Bindings,
     ) -> Iterable[OperationResult]:
         """
-        Evaluate the left operand, taking into consideration if it should yield when it is False.
+        Evaluate the left operand, if it is False, then evaluate the right operand.
 
         :param sources: The current bindings to use for evaluation.
         :return: The new bindings after evaluating the left operand (and possibly right operand).
         """
-        left_values = self.left._evaluate_(sources, parent=self)
-
-        for left_value in left_values:
-            self.left_evaluated = True
-            left_is_false = left_value.is_false
-            if left_is_false:
+        for left_value in self.left._evaluate_(sources, parent=self):
+            if left_value.is_false:
                 yield from self.evaluate_right(left_value.bindings)
             else:
                 self._is_false_ = False
-                yield OperationResult(left_value.bindings, self._is_false_, self)
+                yield OperationResult(
+                    left_value.bindings, self._is_false_, self, left_value
+                )
 
     def evaluate_right(self, sources: Bindings) -> Iterable[OperationResult]:
         """
@@ -3098,48 +3067,66 @@ class OR(LogicalBinaryOperator, ABC):
         :param sources: The current bindings to use during evaluation.
         :return: The new bindings after evaluating the right operand.
         """
-
-        self.left_evaluated = False
-
-        right_values = self.right._evaluate_(sources, parent=self)
-
-        for right_value in right_values:
+        for right_value in self.right._evaluate_(sources, parent=self):
             self._is_false_ = right_value.is_false
-            self.right_evaluated = True
-            yield OperationResult(right_value.bindings, self._is_false_, self)
-
-        self.right_evaluated = False
+            yield OperationResult(
+                right_value.bindings, self._is_false_, self, right_value
+            )
 
 
 @dataclass(eq=False, repr=False)
-class Union(OR):
+class Union(MultiArityExpression):
     """
-    This operator is a version of the OR operator that always evaluates both the left and the right operand.
+    A symbolic union operation that can be used to evaluate multiple symbolic expressions in a sequence.
     """
 
     def _evaluate__(
         self,
         sources: Bindings,
     ) -> Iterable[OperationResult]:
-        yield from self.evaluate_left(sources)
-        yield from self.evaluate_right(sources)
+
+        yield from (
+            OperationResult(result.bindings, False, self, result)
+            for result in itertools.chain(
+                *(var._evaluate_(sources, self) for var in self._operation_children_)
+            )
+            if result.is_true
+        )
 
 
 @dataclass(eq=False, repr=False)
-class ElseIf(OR):
+class Concatenate(Union, CanBehaveLikeAVariable[T]):
     """
-    A version of the OR operator that evaluates the right operand only when the left operand is False.
+    Concatenation of two or more variables.
     """
 
-    def _evaluate__(
-        self,
-        sources: Bindings,
-    ) -> Iterable[OperationResult]:
+    _operation_children_: Tuple[Selectable, ...] = field(default_factory=tuple)
+    """
+    The children of the concatenate operation. They must be selectables.
+    """
+
+    def __post_init__(self):
+        if not all(
+            isinstance(child, Selectable) for child in self._operation_children_
+        ):
+            raise ValueError(
+                f"All children of Concatenate must be Selectable instances."
+            )
+        super().__post_init__()
+        self._var_ = self
+
+    def _evaluate__(self, sources: Bindings) -> Iterable[OperationResult]:
+        yield from (
+            result.update({self._binding_id_: result.previous_operation_result.value})
+            for result in super()._evaluate__(sources)
+        )
+
+    @property
+    def _variables_(self) -> Tuple[Selectable[T], ...]:
         """
-        Constrain the symbolic expression based on the indices of the operands.
-        This method overrides the base class method to handle ElseIf logic.
+        The variables to concatenate.
         """
-        yield from self.evaluate_left(sources)
+        return self._operation_children_
 
 
 @dataclass(eq=False, repr=False)
@@ -3257,7 +3244,7 @@ OperatorOptimizer = Callable[[SymbolicExpression, SymbolicExpression], LogicalOp
 
 def chained_logic(
     operator: TypingUnion[Type[LogicalOperator], OperatorOptimizer], *conditions
-):
+) -> LogicalOperator:
     """
     A chian of logic operation over multiple conditions, e.g. cond1 | cond2 | cond3.
 
@@ -3271,15 +3258,6 @@ def chained_logic(
             continue
         prev_operation = operator(prev_operation, condition)
     return prev_operation
-
-
-def optimize_or(left: SymbolicExpression, right: SymbolicExpression) -> OR:
-    left_vars = {v for v in left._unique_variables_ if not isinstance(v, Literal)}
-    right_vars = {v for v in right._unique_variables_ if not isinstance(v, Literal)}
-    if left_vars == right_vars:
-        return ElseIf(left, right)
-    else:
-        return Union(left, right)
 
 
 def _any_of_the_kwargs_is_a_variable(bindings: Dict[str, Any]) -> bool:

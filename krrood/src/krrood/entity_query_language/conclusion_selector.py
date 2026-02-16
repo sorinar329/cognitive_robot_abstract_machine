@@ -9,24 +9,26 @@ from .cache_data import SeenSet
 from .conclusion import Conclusion
 from .symbolic import (
     SymbolicExpression,
-    ElseIf,
+    OR,
     Union as EQLUnion,
     Literal,
     OperationResult,
     LogicalBinaryOperator,
     Bindings,
+    LogicalOperator,
+    BinaryExpression,
 )
 
 
 @dataclass(eq=False)
-class ConclusionSelector(LogicalBinaryOperator, ABC):
+class ConclusionSelector(LogicalOperator, ABC):
     """
     Base class for logical operators that selects the conclusions to pass through from it's operands' conclusions.
     """
 
 
 @dataclass(eq=False)
-class ExceptIf(ConclusionSelector):
+class ExceptIf(ConclusionSelector, BinaryExpression):
     """
     Conditional branch that yields left unless the right side produces values.
 
@@ -73,7 +75,7 @@ class ExceptIf(ConclusionSelector):
 
 
 @dataclass(eq=False)
-class Alternative(ElseIf, ConclusionSelector):
+class Alternative(OR, ConclusionSelector):
     """
     A conditional branch that behaves like an "else if" clause where the left branch
     is selected if it is true, otherwise the right branch is selected if it is true else
@@ -86,19 +88,18 @@ class Alternative(ElseIf, ConclusionSelector):
     ) -> Iterable[OperationResult]:
         outputs = super()._evaluate__(sources)
         for output in outputs:
-            # Only yield if conclusions were successfully added (not duplicates)
-            if not self.left._is_false_:
-                self._conclusion_.update(self.left._conclusion_)
-            elif not self.right._is_false_:
-                self._conclusion_.update(self.right._conclusion_)
-            yield OperationResult(output.bindings, self._is_false_, self)
+            if output.is_true:
+                self._conclusion_.update(
+                    output.previous_operation_result.operand._conclusion_
+                )
+            yield output
             self._conclusion_.clear()
 
 
 @dataclass(eq=False)
 class Next(EQLUnion, ConclusionSelector):
     """
-    A Union conclusion selector that always evaluates the left and right branches and combines their results.
+    A Union conclusion selector that always evaluates all its operands and combines their results.
     """
 
     def _evaluate__(
@@ -107,9 +108,17 @@ class Next(EQLUnion, ConclusionSelector):
     ) -> Iterable[OperationResult]:
         outputs = super()._evaluate__(sources)
         for output in outputs:
-            if self.left_evaluated:
-                self._conclusion_.update(self.left._conclusion_)
-            if self.right_evaluated:
-                self._conclusion_.update(self.right._conclusion_)
-            yield OperationResult(output.bindings, self._is_false_, self)
+            self._conclusion_.update(
+                output.previous_operation_result.operand._conclusion_
+            )
+            yield output
             self._conclusion_.clear()
+
+    def add_child(self, child: SymbolicExpression) -> None:
+        """
+        Adds a child operand to the union operator.
+
+        :param child: The child operand to add.
+        """
+        self._operation_children_ = self._operation_children_ + (child,)
+        child._parent_ = self
