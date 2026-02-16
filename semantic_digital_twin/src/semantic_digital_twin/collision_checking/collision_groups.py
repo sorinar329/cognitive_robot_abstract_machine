@@ -115,3 +115,12 @@ class CollisionGroupConsumer(CollisionConsumer, ABC):
             if body in group.bodies or body == group.root:
                 return group
         raise Exception(f"No collision group found for {body}")
+
+    def is_any_collision_checked(
+        self, group_a: CollisionGroup, group_b: CollisionGroup
+    ) -> bool:
+        for body_a in group_a.bodies:
+            for body_b in group_b.bodies:
+                if self.collision_manager.is_collision_checked(body_a, body_b):
+                    return True
+        return False

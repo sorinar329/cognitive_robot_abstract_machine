@@ -16,12 +16,14 @@ from .collision_matrix import (
     CollisionRule,
     MaxAvoidedCollisionsRule,
     DefaultMaxAvoidedCollisions,
+    CollisionCheck,
 )
 from .collision_rules import (
     Updatable,
     AllowCollisionForAdjacentPairs,
     AllowNonRobotCollisions,
     AvoidCollisionRule,
+    AllowCollisionRule,
 )
 from ..callbacks.callback import ModelChangeCallback
 from ..world_description.world_entity import Body
@@ -99,7 +101,7 @@ class CollisionManager(ModelChangeCallback):
     Rules that are applied to the collision matrix after default rules.
     These are intended for task specific rules.
     """
-    ignore_collision_rules: List[CollisionRule] = field(
+    ignore_collision_rules: List[AllowCollisionRule] = field(
         default_factory=lambda: [
             AllowCollisionForAdjacentPairs(),
             AllowNonRobotCollisions(),
@@ -192,6 +194,19 @@ class CollisionManager(ModelChangeCallback):
             self.collision_matrix.apply_buffer(buffer)
         self.get_buffer_zone_distance.cache_clear()
         self.get_violated_distance.cache_clear()
+
+    def is_collision_checked(self, body_a: Body, body_b: Body) -> bool:
+        for rule in self.ignore_collision_rules:
+            if (
+                body_a in rule.allowed_collision_bodies
+                or body_b in rule.allowed_collision_bodies
+            ):
+                return False
+            if CollisionCheck(body_a, body_b) in rule.allowed_collision_pairs:
+                return False
+            if CollisionCheck(body_b, body_a) in rule.allowed_collision_pairs:
+                return False
+        return True
 
     @profile
     def compute_collisions(self) -> CollisionCheckingResult:

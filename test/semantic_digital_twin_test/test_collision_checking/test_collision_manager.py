@@ -163,8 +163,8 @@ class TestSelfCollisionExpressionManager:
             self_collisions := SelfCollisionVariableManager(float_variable_data)
         )
         self_collisions.register_body_combination(l_tip, r_tip)
-        assert len(self_collisions.active_groups) == 1
-        group_a, group_b = list(self_collisions.active_groups)[0]
+        assert len(self_collisions.registered_group_combinations) == 1
+        group_a, group_b = list(self_collisions.registered_group_combinations.keys())[0]
 
         collision_manager.update_collision_matrix()
         collisions = collision_manager.compute_collisions()

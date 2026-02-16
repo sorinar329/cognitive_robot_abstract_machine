@@ -137,6 +137,25 @@ from semantic_digital_twin.world_description.shape_collection import ShapeCollec
 from semantic_digital_twin.world_description.world_entity import Body
 
 
+@pytest.fixture
+def pr2_with_box(pr2_world_state_reset) -> World:
+    with pr2_world_state_reset.modify_world():
+        box = Body(
+            name=PrefixedName("box"),
+            visual=ShapeCollection(shapes=[Box(scale=Scale(1, 1, 1))]),
+            collision=ShapeCollection(shapes=[Box(scale=Scale(1, 1, 1))]),
+        )
+        root_C_box = FixedConnection(
+            parent=pr2_world_state_reset.root,
+            child=box,
+            parent_T_connection_expression=HomogeneousTransformationMatrix.from_xyz_rpy(
+                x=1.2, z=0.3, reference_frame=pr2_world_state_reset.root
+            ),
+        )
+        pr2_world_state_reset.add_connection(root_C_box)
+    return pr2_world_state_reset
+
+
 def test_condition_to_str():
     msc = MotionStatechart()
     node1 = ConstTrueNode()
@@ -2825,35 +2844,20 @@ class TestCollisionAvoidance:
         with pytest.raises(HardConstraintsViolatedException):
             kin_sim.tick_until_end()
 
-    def test_avoid_collision_go_around_corner(self, pr2_world_state_reset, rclpy_node):
-        TFPublisher(world=pr2_world_state_reset, node=rclpy_node)
-        VizMarkerPublisher(world=pr2_world_state_reset, node=rclpy_node)
-        r_tip = pr2_world_state_reset.get_kinematic_structure_entity_by_name(
+    def test_avoid_collision_go_around_corner(self, pr2_with_box, rclpy_node):
+        TFPublisher(world=pr2_with_box, node=rclpy_node)
+        VizMarkerPublisher(world=pr2_with_box, node=rclpy_node)
+        r_tip = pr2_with_box.get_kinematic_structure_entity_by_name(
             "r_gripper_tool_frame"
         )
-        robot = pr2_world_state_reset.get_semantic_annotations_by_type(AbstractRobot)[0]
+        robot = pr2_with_box.get_semantic_annotations_by_type(AbstractRobot)[0]
 
-        with pr2_world_state_reset.modify_world():
-            box = Body(
-                name=PrefixedName("box"),
-                visual=ShapeCollection(shapes=[Box(scale=Scale(1, 1, 1))]),
-                collision=ShapeCollection(shapes=[Box(scale=Scale(1, 1, 1))]),
-            )
-            root_C_box = FixedConnection(
-                parent=pr2_world_state_reset.root,
-                child=box,
-                parent_T_connection_expression=HomogeneousTransformationMatrix.from_xyz_rpy(
-                    x=1.2, z=0.3, reference_frame=pr2_world_state_reset.root
-                ),
-            )
-            pr2_world_state_reset.add_connection(root_C_box)
-
-        pr2_world_state_reset.collision_manager.add_temporary_rule(
+        pr2_with_box.collision_manager.add_temporary_rule(
             AvoidExternalCollisions(
                 buffer_zone_distance=0.1,
                 violated_distance=0.0,
                 bodies=robot.bodies_with_collision,
-                world=pr2_world_state_reset,
+                world=pr2_with_box,
             )
         )
 
@@ -2884,13 +2888,13 @@ class TestCollisionAvoidance:
                                 "l_gripper_l_finger_joint": 0.55,
                                 "r_gripper_l_finger_joint": 0.55,
                             },
-                            world=pr2_world_state_reset,
+                            world=pr2_with_box,
                         )
                     ),
                     Parallel(
                         [
                             CartesianPose(
-                                root_link=pr2_world_state_reset.root,
+                                root_link=pr2_with_box.root,
                                 tip_link=r_tip,
                                 goal_pose=HomogeneousTransformationMatrix.from_xyz_axis_angle(
                                     x=0.8,
@@ -2898,7 +2902,7 @@ class TestCollisionAvoidance:
                                     z=0.84,
                                     axis=Vector3.Y(),
                                     angle=np.pi / 2.0,
-                                    reference_frame=pr2_world_state_reset.root,
+                                    reference_frame=pr2_with_box.root,
                                 ),
                                 weight=DefaultWeights.WEIGHT_ABOVE_CA,
                             ),
@@ -2912,7 +2916,7 @@ class TestCollisionAvoidance:
         msc.add_node(EndMotion.when_true(local_min))
 
         kin_sim = Executor.create_from_parts(
-            world=pr2_world_state_reset, pacer=SimulationPacer(real_time_factor=1.0)
+            world=pr2_with_box, pacer=SimulationPacer(real_time_factor=1.0)
         )
         kin_sim.compile(motion_statechart=msc)
 
@@ -2937,6 +2941,61 @@ class TestCollisionAvoidance:
         #     ],
         #     0.04,
         # )
+
+    def test_avoid_self_collision_with_l_arm(self, pr2_with_box, rclpy_node):
+        TFPublisher(world=pr2_with_box, node=rclpy_node)
+        VizMarkerPublisher(world=pr2_with_box, node=rclpy_node)
+        r_tip = pr2_with_box.get_kinematic_structure_entity_by_name(
+            "r_gripper_tool_frame"
+        )
+        base_footprint = pr2_with_box.get_kinematic_structure_entity_by_name(
+            "base_footprint"
+        )
+        robot = pr2_with_box.get_semantic_annotations_by_type(AbstractRobot)[0]
+
+        msc = MotionStatechart()
+        msc.add_node(
+            Sequence(
+                [
+                    SetSeedConfiguration(
+                        seed_configuration=JointState.from_str_dict(
+                            {
+                                "r_elbow_flex_joint": -1.43286344265,
+                                "r_forearm_roll_joint": -1.26465060073,
+                                "r_shoulder_lift_joint": 0.47990329056,
+                                "r_shoulder_pan_joint": -0.281272240139,
+                                "r_upper_arm_roll_joint": -0.528415402668,
+                                "r_wrist_flex_joint": -1.18811419869,
+                                "r_wrist_roll_joint": 2.26884630124,
+                            },
+                            world=pr2_with_box,
+                        )
+                    ),
+                    Parallel(
+                        [
+                            CartesianPose(
+                                root_link=base_footprint,
+                                tip_link=r_tip,
+                                goal_pose=HomogeneousTransformationMatrix.from_xyz_rpy(
+                                    0.2, reference_frame=r_tip
+                                ),
+                                weight=DefaultWeights.WEIGHT_ABOVE_CA,
+                            ),
+                            SelfCollisionAvoidance(robot=robot),
+                        ]
+                    ),
+                ]
+            )
+        )
+        msc.add_node(local_min := LocalMinimumReached())
+        msc.add_node(EndMotion.when_true(local_min))
+
+        kin_sim = Executor.create_from_parts(
+            world=pr2_with_box, pacer=SimulationPacer(real_time_factor=1.0)
+        )
+        kin_sim.compile(motion_statechart=msc)
+
+        kin_sim.tick_until_end(500)
 
 
 def test_constraint_collection(pr2_world_state_reset: World):

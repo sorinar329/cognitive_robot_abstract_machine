@@ -232,10 +232,6 @@ class SelfCollisionVariableManager(CollisionGroupConsumer):
     Maps body combinations to the index of point_on_body_a in the collision buffer.
     """
 
-    active_groups: set[tuple[CollisionGroup, CollisionGroup]] = field(
-        default_factory=set, init=False
-    )
-
     block_size: int = field(default=12, init=False)
     """
     block layout:
@@ -369,12 +365,13 @@ class SelfCollisionVariableManager(CollisionGroupConsumer):
         else:
             return group_b, group_a
 
-    def register_body_combination(self, body_a: Body, body_b: Body):
+    def register_groups_of_body_combination(self, body_a: Body, body_b: Body):
         """
         Register a body
         """
         key = self.body_pair_to_group_pair(body_a, body_b)
-        self.active_groups.add(key)
+        if key in self.registered_group_combinations:
+            return
 
         self.registered_group_combinations[key] = len(self.float_variable_data.data)
         if self._collision_data_start_index is None:

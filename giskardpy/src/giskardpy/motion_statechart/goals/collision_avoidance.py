@@ -356,10 +356,22 @@ class SelfCollisionAvoidance(Goal):
             context.float_variable_data
         )
         context.collision_manager.add_collision_consumer(self_collision_manager)
+        context.collision_manager.update_collision_matrix()
+
         for group_a, group_b in combinations(
             self_collision_manager.collision_groups, 2
         ):
-            self_collision_manager.register_body_combination(group_a.root, group_b.root)
+            if (
+                group_a.root not in self.robot.kinematic_structure_entities
+                or group_b.root not in self.robot.kinematic_structure_entities
+            ):
+                # this is no self collision
+                continue
+            if not self_collision_manager.is_any_collision_checked(group_a, group_b):
+                continue
+            self_collision_manager.register_groups_of_body_combination(
+                group_a.root, group_b.root
+            )
             (group_a, group_b) = self_collision_manager.body_pair_to_group_pair(
                 group_a.root, group_b.root
             )
