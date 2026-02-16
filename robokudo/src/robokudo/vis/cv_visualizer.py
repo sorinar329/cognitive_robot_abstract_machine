@@ -1,0 +1,275 @@
+"""OpenCV-based visualization for RoboKudo pipelines.
+
+This module provides OpenCV-based visualization capabilities for RoboKudo pipelines.
+It handles:
+
+* 2D image visualization with annotator overlays
+* Mouse interaction handling
+* Keyboard controls for navigation and control
+* Window management
+* Pipeline state visualization
+
+Dependencies
+-----------
+* cv2 for image display and window management
+* numpy for image manipulation
+* py_trees for behavior tree integration
+* robokudo.annotators for annotator access
+* robokudo.vis.visualizer for base visualization interface
+
+See Also
+--------
+* :mod:`robokudo.vis.visualizer` : Base visualization interface
+* :mod:`robokudo.vis.o3d_visualizer` : 3D visualization
+* :mod:`robokudo.vis.ros_visualizer` : ROS-based visualization
+"""
+
+import subprocess
+import sys
+
+import cv2
+import numpy
+import py_trees
+
+from robokudo.annotators.core import BaseAnnotator
+from robokudo.vis.visualizer import Visualizer
+
+
+class CVVisualizer(Visualizer, Visualizer.Observer):
+    """OpenCV-based visualizer for 2D image data.
+
+    This class provides visualization of 2D image data from pipeline annotators using
+    OpenCV windows. It supports:
+
+    * Image display with annotator overlays
+    * Mouse interaction handling
+    * Keyboard navigation between annotators
+    * Window management
+    * Shared visualization state
+
+    Parameters
+    ----------
+    *args
+        Variable length argument list passed to parent classes
+    **kwargs
+        Arbitrary keyword arguments passed to parent classes
+
+    Attributes
+    ----------
+    shared_visualizer_state : Visualizer.SharedState
+        Shared state object for coordinating between visualizers
+    update_output : bool
+        Flag indicating if display needs updating
+    """
+
+    def __init__(self, *args, **kwargs):
+        """Initialize the OpenCV visualizer.
+
+        Parameters
+        ----------
+        *args
+            Variable length argument list passed to parent classes
+        **kwargs
+            Arbitrary keyword arguments passed to parent classes
+        """
+        super().__init__(*args, **kwargs)
+        # This Visualizer works with a shared state and needs notifications
+        self.shared_visualizer_state.register_observer(self)
+
+    def tick(self):
+        """Update the visualization display.
+
+        This method:
+
+        * Gets current annotator outputs
+        * Updates display if needed
+        * Renders annotator name overlay
+        * Manages OpenCV window
+        """
+        # print("Tick method called")
+        annotator_outputs = self.get_visualized_annotator_outputs_for_pipeline()
+        # print(f"outputs are {annotator_outputs}")
+
+        assert self.shared_visualizer_state.active_annotator is not None
+        active_annotator_instance: BaseAnnotator = self.shared_visualizer_state.active_annotator
+        # print(f"Active annotator: {active_annotator_instance.name}")
+
+        self.update_output_flag_for_new_data()
+
+        # # Print all annotators in shared visualizer state
+        # print("All annotators in shared visualizer state:")
+        # for annotator in annotator_outputs.outputs.keys():
+        #     print(f"- {annotator}")
+
+        # Check if we have to render something
+        if self.update_output:
+            # print("Updating output")
+            self.update_output = False
+            # 2D imshow output
+
+            img = None
+            if active_annotator_instance.name not in annotator_outputs.outputs:
+                # We do not yet have visual output set up for this annotator
+                # This might happen in dynamic perception pipelines, where annotators have not been set up
+                # during construction of the tree AND don't generate image outputs.
+                # Create an empty image to show in the visualizer
+                # print(f"No visual output for annotator {active_annotator_instance.name}")
+                img = numpy.zeros((640, 480, 3), dtype="uint8")
+            else:
+                img = annotator_outputs.outputs[active_annotator_instance.name].image
+
+            img_with_annotator_text = cv2.putText(img,
+                                                  active_annotator_instance.name,
+                                                  (15, 15),
+                                                  cv2.FONT_HERSHEY_SIMPLEX,
+                                                  0.5,
+                                                  (0, 255, 0),
+                                                  2)
+            # print(f"Displaying image for {active_annotator_instance.name}")
+
+            window_title = self.window_title()
+            # print(f"Window title: {window_title}")
+            cv2.namedWindow(window_title)
+            cv2.setMouseCallback(window_title, self.mouse_callback_cv)
+            cv2.imshow(window_title, img_with_annotator_text)
+
+    def mouse_callback_cv(self, event, x, y, flags, param):
+        """
+        Mouse callback for the 2D Visualizer.
+        Prints double click events and forwards every event to the active annotator.
+
+        :param event: OpenCV mouse event type
+        :type event: int
+        :param x: X coordinate of mouse event
+        :type x: int
+        :param y: Y coordinate of mouse event
+        :type y: int
+        :param flags: OpenCV event flags
+        :type flags: int
+        :param param: Additional parameters (unused)
+        :type param: any
+        """
+        if event == cv2.EVENT_LBUTTONDBLCLK:
+            print(f"2D Visualizer double-clicked at ({x},{y})")
+
+        vis_state: Visualizer.SharedState = self.shared_visualizer_state
+        active_annotator_instance: BaseAnnotator = vis_state.active_annotator
+        active_annotator_instance.mouse_callback(event, x, y, flags, param)
+
+    def window_title(self):
+        """Get the window title for this visualizer.
+
+        :returns: Window title in format "RoboKudo/pipeline_name"
+        :rtype: str
+        """
+        window_name = "RoboKudo/" + self.pipeline.name
+        return window_name
+
+    def notify(self, observable, *args, **kwargs):
+        """Handle notification of state changes.
+
+        :param observable: The object that sent the notification
+        :type observable: object
+        """
+        self.update_output = True
+
+    @staticmethod
+    def static_post_tick():
+        """Handle keyboard input after visualization update.
+
+        This method:
+
+        * Checks for keyboard input
+        * Routes input to appropriate visualizer
+        * Handles termination requests
+        """
+        # print("static_post_tick called")
+        key = cv2.waitKey(1)
+        # print(f"Key code received: {key}")
+
+        if key == -1:  # no key pressed. return directly
+            return
+
+        cv_visualizer_for_key = CVVisualizer.get_gui_handler_for_detected_key()
+        if not cv_visualizer_for_key:
+            print("Error: Couldn't map input key from CV window to a Visualizer class.")
+            return
+
+        # Key Callback returns false when execution should be stopped.
+        if not cv_visualizer_for_key.handle_keycallback(key):
+            cv_visualizer_for_key.indicate_termination_var = True
+
+    @staticmethod
+    def get_gui_handler_for_detected_key():  # -> Optional[robokudo.vis.visualizer.CVVisualizer]:
+        """Get the visualizer instance for the focused window.
+
+        :returns: The visualizer instance for the focused window, or None if not found
+        :rtype: Optional[CVVisualizer]
+        """
+        # Place a system call to get the title of the window that is currently focussed.
+        get_imshow_title = \
+            subprocess.run(
+                "xprop -id $(xprop -root _NET_ACTIVE_WINDOW | cut -d ' ' -f 5) WM_NAME | awk -F '\"' '{print $2}'",
+                capture_output=True, shell=True)
+        if get_imshow_title.returncode != 0:
+            print(f"GUI Handling can't call system method to get window title: {get_imshow_title.stderr}")
+            sys.exit(1)
+
+        imshow_title = get_imshow_title.stdout.strip().decode('utf-8')
+        pipeline_name_of_focussed_gui = imshow_title.strip().replace('RoboKudo/', '')
+
+        cv_visualizers = [cv for cv in Visualizer.instances if isinstance(cv, CVVisualizer)]
+
+        for cv_visualizer in cv_visualizers:
+            if cv_visualizer.pipeline.name == pipeline_name_of_focussed_gui:
+                return cv_visualizer
+
+        return None
+
+    def handle_keycallback(self, key):
+        """
+        Handle a key-press that happened in the corresponding GUI of this GUIHandler.
+
+        :param key: An ASCII char
+        :type key: int
+        :return: false if GUI reports abort (right now this only happens when ESC is pressed)
+        :rtype: bool
+        """
+        # print(f"Key pressed: {key}")
+        vis_state: Visualizer.SharedState = self.shared_visualizer_state
+        active_annotator_instance: BaseAnnotator = vis_state.active_annotator
+        annotator_list = self.pipeline.get_annotators()
+
+        if key == 27:  # ESC
+            return False
+
+        if key == 81 or key == 112:
+            vis_state.active_annotator_i = len(annotator_list) - 1 \
+                if vis_state.active_annotator_i == 0 else vis_state.active_annotator_i - 1
+
+            # If the available annotators are changing dynamically, we have to ensure
+            # that we still point to a valid annotator.
+            # Naive approach: Just use the last one in the list
+            if vis_state.active_annotator_i < len(annotator_list):
+                vis_state.active_annotator = annotator_list[vis_state.active_annotator_i]
+            else:
+                vis_state.active_annotator_i = len(annotator_list) - 1
+            self.shared_visualizer_state.notify_observers()
+            # print(f"Left arrow key pressed. Active annotator: {vis_state.active_annotator.name}")
+            return True
+
+        if key == 83 or key == 110:  # right arrow
+            vis_state.active_annotator_i = 0 \
+                if vis_state.active_annotator_i == len(annotator_list) - 1 else vis_state.active_annotator_i + 1
+            vis_state.active_annotator = annotator_list[vis_state.active_annotator_i]
+            self.shared_visualizer_state.notify_observers()
+            # print(f"Right arrow key pressed. Active annotator: {vis_state.active_annotator.name}")
+            return True
+
+        if key == 32:  # space
+            blackboard = py_trees.blackboard.Blackboard()
+            blackboard.set("pipeline_trigger", True)
+
+        # all other keys can be handled by the annotator
+        active_annotator_instance.key_callback(key)
+        return True
