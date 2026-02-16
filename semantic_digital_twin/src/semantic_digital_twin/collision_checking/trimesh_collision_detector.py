@@ -122,10 +122,10 @@ class TrimeshCollisionDetector(CollisionDetector):
         return result
 
     def check_collision_between_bodies(
-        self, body_a: Body, body_b: Body
+        self, body_a: Body, body_b: Body, max_distance: float = 0.0
     ) -> Optional[Collision]:
         collision = self.check_collisions(
-            {CollisionCheck(body_a, body_b, 0.0, self._world)}
+            {CollisionCheck(body_a, body_b, max_distance, self._world)}
         )
         return collision[0] if collision else None
 

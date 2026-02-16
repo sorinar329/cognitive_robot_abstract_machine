@@ -61,7 +61,7 @@ def contact(
     :return: True if the two objects are in contact False else
     """
     tcd = TrimeshCollisionDetector(body1._world)
-    result = tcd.check_collision_between_bodies(body1, body2)
+    result = tcd.check_collision_between_bodies(body1, body2, threshold)
 
     if result is None:
         return False
