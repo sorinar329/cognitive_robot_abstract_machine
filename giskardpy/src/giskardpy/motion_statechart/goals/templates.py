@@ -5,13 +5,9 @@ from typing import List
 
 from typing_extensions import Optional
 
-from giskardpy.motion_statechart.context import MotionStatechartContext
-from giskardpy.motion_statechart.graph_node import (
-    Goal,
-    MotionStatechartNode,
-    NodeArtifacts,
-)
-from krrood.symbolic_math.symbolic_math import trinary_logic_and, sum
+from krrood.symbolic_math.symbolic_math import sum
+from ..context import MotionStatechartContext
+from ..graph_node import Goal, MotionStatechartNode, NodeArtifacts
 
 
 @dataclass(repr=False, eq=False)
@@ -55,8 +51,14 @@ class Parallel(Goal):
             self.add_node(node)
 
     def build(self, context: MotionStatechartContext) -> NodeArtifacts:
-        true_observation_variables = [x.observation_variable == True for x in self.nodes]
-        minimum_success = self.minimum_success if self.minimum_success is not None else len(self.nodes)
+        true_observation_variables = [
+            x.observation_variable == True for x in self.nodes
+        ]
+        minimum_success = (
+            self.minimum_success
+            if self.minimum_success is not None
+            else len(self.nodes)
+        )
         return NodeArtifacts(
             observation=minimum_success <= sum(*true_observation_variables)
         )

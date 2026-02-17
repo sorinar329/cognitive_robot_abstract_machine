@@ -1,18 +1,12 @@
 from dataclasses import dataclass, field, InitVar
 from enum import Enum
 
-import numpy as np
-
-from giskardpy.motion_statechart.context import MotionStatechartContext
-from giskardpy.motion_statechart.variable_managers.auxiliary_variable_manager import (
-    AuxiliaryVariableManager,
-)
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
-from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.world_entity import (
     KinematicStructureEntity,
 )
+from .context import MotionStatechartContext
 
 
 class GoalBindingPolicy(Enum):

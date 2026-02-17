@@ -1247,7 +1247,7 @@ class TestCartesianTasks:
 
     def test_simple_cartesian_pose(self, cylinder_bot_world: World, rclpy_node):
         TFPublisher(world=cylinder_bot_world, node=rclpy_node)
-        VizMarkerPublisher(world=cylinder_bot_world, node=rclpy_node, use_visuals=False)
+        VizMarkerPublisher(world=cylinder_bot_world, node=rclpy_node)
         tip = cylinder_bot_world.get_kinematic_structure_entity_by_name("bot")
 
         msc = MotionStatechart()

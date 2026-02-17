@@ -4,18 +4,15 @@ from dataclasses import field, dataclass
 from typing import Optional, Type, Tuple
 
 import krrood.symbolic_math.symbolic_math as sm
-from giskardpy.motion_statechart.exceptions import NodeInitializationError
-from giskardpy.motion_statechart.context import MotionStatechartContext
-from giskardpy.motion_statechart.graph_node import (
-    MotionStatechartNode,
-    NodeArtifacts,
-)
-from giskardpy.motion_statechart.tasks.joint_tasks import JointState
 from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
 from semantic_digital_twin.world_description.connections import (
     OmniDrive,
 )
 from semantic_digital_twin.world_description.world_entity import Connection
+from ..context import MotionStatechartContext
+from ..exceptions import NodeInitializationError
+from ..graph_node import MotionStatechartNode, NodeArtifacts
+from ..tasks.joint_tasks import JointState
 
 
 @dataclass(eq=False, repr=False)
@@ -40,9 +37,18 @@ class SetSeedConfiguration(MotionStatechartNode):
 
 @dataclass(eq=False, repr=False)
 class SetOdometry(MotionStatechartNode):
+    """
+    Sets the odometry of the robot to the given pose.
+    """
+
     base_pose: HomogeneousTransformationMatrix = field(kw_only=True)
-    _odom_joints: Tuple[Type[Connection], ...] = field(default=(OmniDrive,), init=False)
+    """The pose of the robot base."""
     odom_connection: Optional[OmniDrive] = field(default=None, kw_only=True)
+    """
+    The odometry connection to use. 
+    If it is None and there is only one drive in the world, it will be used.
+    """
+    _odom_joints: Tuple[Type[Connection], ...] = field(default=(OmniDrive,), init=False)
 
     def build(self, context: MotionStatechartContext) -> NodeArtifacts:
         if self.odom_connection is None:

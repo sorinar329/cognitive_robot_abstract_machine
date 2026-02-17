@@ -3,16 +3,16 @@ from __future__ import division
 from dataclasses import dataclass, field
 from functools import cached_property
 
-from giskardpy.motion_statechart.context import MotionStatechartContext
-from giskardpy.motion_statechart.data_types import DefaultWeights
-from giskardpy.motion_statechart.graph_node import NodeArtifacts, DebugExpression
-from giskardpy.motion_statechart.graph_node import Task
 from krrood.symbolic_math.float_variable_data import FloatVariableData
 from semantic_digital_twin.spatial_types import Point3, Vector3
 from semantic_digital_twin.world_description.geometry import Color
 from semantic_digital_twin.world_description.world_entity import (
     KinematicStructureEntity,
 )
+from ..context import MotionStatechartContext
+from ..data_types import DefaultWeights
+from ..graph_node import NodeArtifacts, DebugExpression
+from ..graph_node import Task
 
 
 @dataclass(eq=False, repr=False)

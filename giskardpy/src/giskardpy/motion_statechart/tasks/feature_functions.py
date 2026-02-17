@@ -1,20 +1,19 @@
 from __future__ import division
 
+from abc import ABC, abstractmethod
 from dataclasses import field, dataclass
 from typing import Union
-from abc import ABC, abstractmethod
 
 import krrood.symbolic_math.symbolic_math as sm
-
-from giskardpy.motion_statechart.context import MotionStatechartContext
-from giskardpy.motion_statechart.data_types import DefaultWeights
-from giskardpy.motion_statechart.graph_node import Task, NodeArtifacts, DebugExpression
 from semantic_digital_twin.spatial_types import Point3, Vector3
 from semantic_digital_twin.world_description.geometry import Color
 from semantic_digital_twin.world_description.world_entity import (
     Body,
     KinematicStructureEntity,
 )
+from ..context import MotionStatechartContext
+from ..data_types import DefaultWeights
+from ..graph_node import Task, NodeArtifacts, DebugExpression
 
 
 @dataclass(eq=False, repr=False)

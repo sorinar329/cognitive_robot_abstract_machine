@@ -3,17 +3,17 @@ from __future__ import division
 from dataclasses import dataclass, field
 from typing import Optional
 
-from giskardpy.motion_statechart.context import MotionStatechartContext
-from giskardpy.motion_statechart.data_types import DefaultWeights
-from giskardpy.motion_statechart.graph_node import Goal, NodeArtifacts
-from giskardpy.motion_statechart.tasks.cartesian_tasks import CartesianPose
-from giskardpy.motion_statechart.tasks.joint_tasks import JointPositionList, JointState
 from krrood.symbolic_math.symbolic_math import trinary_logic_and
 from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
 from semantic_digital_twin.world_description.connections import ActiveConnection1DOF
 from semantic_digital_twin.world_description.world_entity import (
     KinematicStructureEntity,
 )
+from ..context import MotionStatechartContext
+from ..data_types import DefaultWeights
+from ..graph_node import Goal, NodeArtifacts
+from ..tasks.cartesian_tasks import CartesianPose
+from ..tasks.joint_tasks import JointPositionList, JointState
 
 
 @dataclass(eq=False, repr=False)
