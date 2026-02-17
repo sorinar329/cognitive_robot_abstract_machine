@@ -4,26 +4,25 @@ RoboKudo is an open source framework for robot perception for ROS2
 ## Installation instructions for Ubuntu (tested on 24.04)
 
 ### (Optional) create a virtual environment using virtualenvwrapper
-You can use the same virtual environment as the one that CRAM uses. 
-If you want to use a different one, you can create one using virtualenvwrapper.
-
+You can use the same virtual environment as the one that CRAM uses and explained in [its main README](https://github.com/Sanic/cognitive_robot_abstract_machine/tree/robokudo?tab=readme-ov-file#installation).
+However, please make sure that you create the virtualenv with --system-site-packages as RoboKudo still needs ROS:
 ```
-sudo apt install virtualenvwrapper
-echo "export WORKON_HOME=~/venvs" >> ~/.bashrc
-echo "source /usr/share/virtualenvwrapper/virtualenvwrapper.sh" >> ~/.bashrc
-source ~/.bashrc
-mkdir -p $WORKON_HOME
-
-# --system-site-packages is only required if you are using ROS
+mkvirtualenv cram-env --system-site-packages
+```
+or create a new one:
+```
 mkvirtualenv robokudo --system-site-packages
 ```
+
 To use it, call:
 ```
 workon robokudo
 ```
 
+Using virtualenvwrapper is highly encouraged as the whole CRAM architecture uses it anyway.
+
 ### Install and use RoboKudo
-- Clone the CRAM repository to your filesystem. In this example, we'll use ~/libs: 
+- Clone the CRAM repository to your filesystem (if you haven't already). In this example, we'll use ~/libs: 
 ```
 mkdir -p ~/libs && cd ~/libs
 git clone https://github.com/cram2/cognitive_robot_abstract_machine.git
@@ -31,9 +30,11 @@ cd robokudo
 ```
 - Switch to your venv, if you use one.
 ```
+workon cram-env
+# or:
 workon robokudo
 ```
-- Install Giskardpy, `-e` is optional but prevents you from having to rebuild every time the code changes.
+- Install robokudo, `-e` is optional but prevents you from having to rebuild every time the code changes.
 ```
 pip3 install -r requirements.txt
 pip3 install -e .                           
