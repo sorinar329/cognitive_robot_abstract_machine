@@ -571,9 +571,10 @@ class SemanticAnnotation(WorldEntityWithID):
                     )
 
         for entity in list(entities):
-            entities.update(
-                self._world.get_kinematic_structure_entities_of_branch(entity)
-            )
+            if self._world.is_kinematic_structure_entity_in_world(entity):
+                entities.update(
+                    self._world.get_kinematic_structure_entities_of_branch(entity)
+                )
 
         return list(entities)
 
