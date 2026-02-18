@@ -283,40 +283,6 @@ class SelfCollisionMatrixRule(AllowCollisionRule):
 
     def _update(self, world: World): ...
 
-    def compute_collision_matrix(self, world: World) -> set[CollisionCheck]:
-        """
-        Parses the collision requrests and (temporary) collision configs in the world
-        to create a set of collision checks.
-        """
-        collision_matrix: set[CollisionCheck] = set()
-        for collision_request in self.collision_requests:
-            if collision_request.all_bodies_for_group1():
-                view_1_bodies = world.bodies_with_collision
-            else:
-                view_1_bodies = collision_request.body_group_a
-            if collision_request.all_bodies_for_group2():
-                view2_bodies = world.bodies_with_collision
-            else:
-                view2_bodies = collision_request.body_group_b
-            for body1 in view_1_bodies:
-                for body2 in view2_bodies:
-                    collision_check = CollisionCheck.create_and_validate(
-                        body_a=body1, body_b=body2, distance=0
-                    )
-                    distance = collision_request.distance
-                    if not collision_request.is_allow_collision():
-                        collision_check.distance = distance
-                        collision_check._validate()
-                    if collision_request.is_allow_collision():
-                        if collision_check in collision_matrix:
-                            collision_matrix.remove(collision_check)
-                    if collision_request.is_avoid_collision():
-                        if collision_request.is_distance_set():
-                            collision_matrix.add(collision_check)
-                        else:
-                            collision_matrix.add(collision_check)
-        return collision_matrix
-
     @classmethod
     def from_collision_srdf(cls, file_path: str, world: World) -> Self:
         """
