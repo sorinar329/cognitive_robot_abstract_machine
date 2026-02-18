@@ -263,30 +263,6 @@ class Tiago(AbstractRobot, SpecifiesLeftRightArm, HasNeck):
         return tiago
 
 
-from dataclasses import dataclass
-from typing import Self
-
-from .abstract_robot import (
-    AbstractRobot,
-    Arm,
-    Neck,
-    Finger,
-    ParallelGripper,
-    Camera,
-    Torso,
-    FieldOfView,
-    Base,
-)
-from .robot_mixins import HasNeck, SpecifiesLeftRightArm
-from ..datastructures.definitions import StaticJointState, GripperState, TorsoState
-from ..datastructures.joint_state import JointState
-from ..datastructures.prefixed_name import PrefixedName
-from ..spatial_types import Quaternion
-from ..spatial_types.spatial_types import Vector3
-from ..world import World
-from ..world_description.connections import FixedConnection
-
-
 @dataclass(eq=False)
 class TiagoMujoco(AbstractRobot, SpecifiesLeftRightArm):
     """
