@@ -15,7 +15,7 @@ from semantic_digital_twin.world_description.connections import FixedConnection
 from semantic_digital_twin.world_description.world_entity import Body
 
 set_logger_level(LogLevel.DEBUG)
-
+# ToDo: Change connections to 6DOF 
 class TestContactEvent:
     world: World
     viz_marker_publisher: VizMarkerPublisher
@@ -33,18 +33,7 @@ class TestContactEvent:
             assert (len(contact_detector.latest_close_bodies)) == 0
             assert (len(obj_tracker.get_event_history())) == 0
 
-            with self.world.modify_world():
-                root_C_cylinder = HomogeneousTransformationMatrix.from_xyz_rpy(
-                    x=self.tracked_obj.global_pose.x ,y=-3.05, z=self.tracked_obj.global_pose.z
-                )
-                with self.world.modify_world():
-                    cylinder_conn = FixedConnection(
-                        parent=self.world.root,
-                        child=self.tracked_obj,
-                        parent_T_connection_expression=root_C_cylinder
-                    )
-                    self.world.add_connection(cylinder_conn)
-
+            self.tracked_obj.parent_connection.origin = HomogeneousTransformationMatrix.from_xyz_rpy(y=-0.05)
             time.sleep(1)
 
             assert (len(contact_detector.latest_close_bodies)) == 2
@@ -53,18 +42,9 @@ class TestContactEvent:
             assert (len(obj_tracker.get_event_history())) == 2
             assert type(obj_tracker.get_latest_event()) == CloseContactEvent
 
-            with self.world.modify_world():
-                root_C_cylinder = HomogeneousTransformationMatrix.from_xyz_rpy(
-                    x=self.tracked_obj.global_pose.x, y=-3.2, z=self.tracked_obj.global_pose.z
+            self.tracked_obj.parent_connection.origin = HomogeneousTransformationMatrix.from_xyz_rpy(
+                    y=-0.2
                 )
-                with self.world.modify_world():
-                    cylinder_conn = FixedConnection(
-                        parent=self.world.root,
-                        child=self.tracked_obj,
-                        parent_T_connection_expression=root_C_cylinder
-                    )
-                    self.world.add_connection(cylinder_conn)
-
             time.sleep(1)
 
             assert (len(contact_detector.latest_contact_bodies)) == 2
@@ -74,19 +54,10 @@ class TestContactEvent:
             assert type(obj_tracker.get_latest_event()) == ContactEvent
             assert obj_tracker.get_latest_event_of_type(ContactEvent) is not None
 
-            with self.world.modify_world():
-                root_C_cylinder = HomogeneousTransformationMatrix.from_xyz_rpy(
-                    x=self.tracked_obj.global_pose.x, y=-2.2, z=self.tracked_obj.global_pose.z
-                )
-                with self.world.modify_world():
-                    cylinder_conn = FixedConnection(
-                        parent=self.world.root,
-                        child=self.tracked_obj,
-                        parent_T_connection_expression=root_C_cylinder
-                    )
-                    self.world.add_connection(cylinder_conn)
-
-            time.sleep(2)
+            self.tracked_obj.parent_connection.origin = HomogeneousTransformationMatrix.from_xyz_rpy(
+                y=-1.2
+            )
+            time.sleep(1)
 
             assert (len(contact_detector.latest_contact_bodies)) == 0
             assert (len(contact_detector.latest_close_bodies)) == 0
@@ -107,7 +78,6 @@ class TestContactEvent:
         logger = EventLogger()
         contact_detector = ContactDetector(logger, obj)
         contact_detector.start()
-        #time.sleep(2)
         return contact_detector
 
     @staticmethod
@@ -115,7 +85,6 @@ class TestContactEvent:
         logger = EventLogger()
         loss_contact_detector = LossOfContactDetector(logger, obj)
         loss_contact_detector.start()
-        #time.sleep(2)
         return loss_contact_detector
 
     def visualize(self, world):

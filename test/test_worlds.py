@@ -3,7 +3,7 @@ from semantic_digital_twin.collision_checking.trimesh_collision_detector import 
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
 from semantic_digital_twin.world import World
-from semantic_digital_twin.world_description.connections import FixedConnection
+from semantic_digital_twin.world_description.connections import FixedConnection, Connection6DoF
 from semantic_digital_twin.world_description.geometry import Cylinder, Box, Scale
 from semantic_digital_twin.world_description.shape_collection import ShapeCollection
 from semantic_digital_twin.world_description.world_entity import Body
@@ -39,37 +39,37 @@ def setup_contact_world():
         visual=shape_geometry,
     )
 
-    root_C_box1 = FixedConnection(
-        parent=root,
-        child=box_body1,
-        parent_T_connection_expression=HomogeneousTransformationMatrix.from_xyz_rpy(
-            x=0.5, y=-3.5, z=0.25
-        ),
-    )
-
-    root_C_box2 = FixedConnection(
-        parent=root,
-        child=box_body2,
-        parent_T_connection_expression=HomogeneousTransformationMatrix.from_xyz_rpy(
-            x=1.5, y=-3.5, z=0.25
-        )
-    )
-
-    root_C_cylinder = FixedConnection(
-        parent=root,
-        child=cylinder_body,
-        parent_T_connection_expression=HomogeneousTransformationMatrix.from_xyz_rpy(
-            x=1, y=-3, z=0.25
-        ),
-    )
-
     with world.modify_world():
+        root_C_box1 = Connection6DoF.create_with_dofs(
+            world=world,
+            parent=root,
+            child=box_body1,
+            parent_T_connection_expression=HomogeneousTransformationMatrix.from_xyz_rpy(
+                x=0.5, y=-3.5, z=0.25
+            ),
+        )
+
+        root_C_box2 = Connection6DoF.create_with_dofs(
+            world=world,
+            parent=root,
+            child=box_body2,
+            parent_T_connection_expression=HomogeneousTransformationMatrix.from_xyz_rpy(
+                x=1.5, y=-3.5, z=0.25
+            )
+        )
+
+        root_C_cylinder = Connection6DoF.create_with_dofs(
+            world=world,
+            parent=root,
+            child=cylinder_body,
+            parent_T_connection_expression=HomogeneousTransformationMatrix.from_xyz_rpy(
+                x=1, y=-3, z=0.25
+            ),
+        )
+
         world.add_kinematic_structure_entity(root)
         world.add_connection(root_C_cylinder)
         world.add_connection(root_C_box2)
         world.add_connection(root_C_box1)
-
-
-
 
     return world
