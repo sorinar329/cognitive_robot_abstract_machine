@@ -201,9 +201,9 @@ class OperatorMapper:
         is_negated = operator_name == "not_contains"
 
         if isinstance(left, (list, tuple, set)):
-            expression = left.in_(left)
+            expression = right.in_(left)
         elif isinstance(right, (list, tuple, set)):
-            expression = right.in_(right)
+            expression = left.in_(right)
         elif isinstance(left, str) and not isinstance(right, str):
             expression = func.instr(literal(left), right) > 0
         elif not isinstance(left, str) and isinstance(right, str):

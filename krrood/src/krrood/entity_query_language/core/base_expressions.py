@@ -425,7 +425,7 @@ class SymbolicExpression(ABC):
         if len(self._children_) == 0:
             yield self
         for child in self._children_:
-            yield from child.leaves
+            yield from child._leaves_
 
     def __and__(self, other):
         from ..operators.core_logical_operators import AND

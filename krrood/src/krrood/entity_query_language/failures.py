@@ -271,7 +271,7 @@ class NonAggregatedSelectedVariablesError(AggregationUsageError):
 
     def __post_init__(self):
         self.message = (
-            f"The variabls {self.non_aggregated_variables} are neither aggregated nor grouped by, they cannot be selected"
+            f"The variables {self.non_aggregated_variables} are neither aggregated nor grouped by, they cannot be selected"
             f" along with the aggregated variables {self.aggregated_variables}. You can only select variables that are"
             f" either aggregated or are in the grouped by variables {self.grouped_by_builder.variables_to_group_by}."
         )

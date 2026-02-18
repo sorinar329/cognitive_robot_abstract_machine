@@ -27,6 +27,8 @@ try:
     )
 except ImportError:
     GraphVisualizer = None
+    RXUtilsNode = None
+    RXUtilsColorLegend = None
 
 import rustworkx as rx
 
