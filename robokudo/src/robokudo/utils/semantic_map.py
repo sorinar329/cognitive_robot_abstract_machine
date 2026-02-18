@@ -71,7 +71,7 @@ def get_obb_from_semantic_map_region_in_cam_coordinates(
 
     .. note::
        If region is not in world frame, assumes region frame matches camera frame.
-       TODO: Add proper TF-based transform for other frames.
+       TODO: Add proper SemDT/TF-based transform for other frames.
     """
     # If the Semantic Map Region is in camera coordinates, we can keep the OBB as-is.
     # Otherwise, check if and how we shall transform it
@@ -91,7 +91,7 @@ def get_obb_from_semantic_map_region_in_cam_coordinates(
         )
 
     else:
-        # TODO Handle non-empty frames by using TF to transform them properly
+        # TODO Handle non-empty frames by using SDT/TF to transform them properly
         obb = get_obb_from_semantic_map_region(region)
 
     return obb
