@@ -1,11 +1,18 @@
 from __future__ import annotations
 
-from abc import abstractmethod, ABC
+from abc import ABC
 from dataclasses import dataclass, field
-from itertools import combinations
+from itertools import combinations, combinations_with_replacement
 
+import numpy as np
 from lxml import etree
-from typing_extensions import List, Protocol, TYPE_CHECKING, runtime_checkable, Self
+from typing_extensions import (
+    List,
+    TYPE_CHECKING,
+    Self,
+    Iterable,
+    Callable,
+)
 
 from .collision_matrix import (
     CollisionRule,
@@ -335,3 +342,365 @@ class SelfCollisionMatrixRule(AllowCollisionRule):
                 CollisionCheck.create_and_validate(body_a, body_b)
             )
         return self
+
+    def compute_self_collision_matrix(
+        self,
+        robot: AbstractRobot,
+        body_combinations: Iterable | None = None,
+        distance_threshold_zero: float = 0.0,
+        distance_threshold_always: float = 0.005,
+        distance_threshold_never_max: float = 0.05,
+        distance_threshold_never_min: float = -0.02,
+        distance_threshold_never_range: float = 0.05,
+        distance_threshold_never_zero: float = 0.0,
+        number_of_tries_always: int = 200,
+        almost_percentage: float = 0.95,
+        number_of_tries_never: int = 10000,
+        use_collision_checker: bool = True,
+        save_to_tmp: bool = True,
+        overwrite_old_matrix: bool = True,
+        progress_callback: Callable[[int, str], None] | None = None,
+    ):
+        """
+        :param use_collision_checker: if False, only the parts will be called that don't require collision checking.
+        :param progress_callback: a function that is used to display the progress. it's called with a value of 0-100 and
+                                    a string representing the current action
+        """
+        if progress_callback is None:
+            progress_callback = lambda value, text: None
+        np.random.seed(1337)
+        remaining_pairs = set()
+        if overwrite_old_matrix:
+            self_collision_matrix = {}
+        else:
+            self_collision_matrix = self.self_collision_matrix
+        # 0. GENERATE ALL POSSIBLE LINK PAIRS
+        if body_combinations is None:
+            body_combinations = set(
+                combinations_with_replacement(robot.bodies_with_collision, 2)
+            )
+        for body_a, body_b in list(body_combinations):
+            collision_check = CollisionCheck.create_and_validate(body_a, body_b)
+            remaining_pairs.add(collision_check)
+
+        # %%
+        remaining_pairs, matrix_updates = self.compute_self_collision_matrix_adjacent(
+            remaining_pairs, group
+        )
+        self_collision_matrix.update(matrix_updates)
+
+        if use_collision_checker:
+            # %%
+            remaining_pairs, matrix_updates = (
+                self.compute_self_collision_matrix_default(
+                    remaining_pairs, group, distance_threshold_zero
+                )
+            )
+            self_collision_matrix.update(matrix_updates)
+
+            # %%
+            remaining_pairs, matrix_updates = self.compute_self_collision_matrix_always(
+                link_combinations=remaining_pairs,
+                group=group,
+                distance_threshold_always=distance_threshold_always,
+                number_of_tries=number_of_tries_always,
+                almost_percentage=almost_percentage,
+            )
+            self_collision_matrix.update(matrix_updates)
+
+            # %%
+            remaining_pairs, matrix_updates = self.compute_self_collision_matrix_never(
+                link_combinations=remaining_pairs,
+                group=group,
+                distance_threshold_never_initial=distance_threshold_never_max,
+                distance_threshold_never_min=distance_threshold_never_min,
+                distance_threshold_never_range=distance_threshold_never_range,
+                distance_threshold_never_zero=distance_threshold_never_zero,
+                number_of_tries=number_of_tries_never,
+                progress_callback=progress_callback,
+            )
+            self_collision_matrix.update(matrix_updates)
+
+        if save_to_tmp:
+            self.self_collision_matrix = self_collision_matrix
+            self.save_self_collision_matrix(
+                group=group,
+                self_collision_matrix=self_collision_matrix,
+                disabled_links=set(),
+            )
+        else:
+            self.self_collision_matrix.update(self_collision_matrix)
+        return self_collision_matrix
+
+    def compute_self_collision_matrix_adjacent(
+        self, link_combinations: Set[Tuple[PrefixName, PrefixName]], group: WorldBranch
+    ) -> Tuple[
+        Set[Tuple[PrefixName, PrefixName]],
+        Dict[Tuple[PrefixName, PrefixName], DisableCollisionReason],
+    ]:
+        """
+        Find connecting links and disable all adjacent link collisions
+        """
+        self_collision_matrix = {}
+        remaining_pairs = deepcopy(link_combinations)
+        for link_a, link_b in list(link_combinations):
+            element = link_a, link_b
+            if (
+                link_a == link_b
+                or god_map.world.are_linked(
+                    link_a,
+                    link_b,
+                    do_not_ignore_non_controlled_joints=False,
+                    joints_to_be_assumed_fixed=self.fixed_joints,
+                )
+                or (
+                    not group.is_link_controlled(link_a)
+                    and not group.is_link_controlled(link_b)
+                )
+            ):
+                remaining_pairs.remove(element)
+                self_collision_matrix[element] = DisableCollisionReason.Adjacent
+        return remaining_pairs, self_collision_matrix
+
+    def compute_self_collision_matrix_default(
+        self,
+        link_combinations: Set[Tuple[PrefixName, PrefixName]],
+        group: WorldBranch,
+        distance_threshold_zero: float,
+    ) -> Tuple[
+        Set[Tuple[PrefixName, PrefixName]],
+        Dict[Tuple[PrefixName, PrefixName], DisableCollisionReason],
+    ]:
+        """
+        Disable link pairs that are in collision in default state
+        """
+        with god_map.world.reset_joint_state_context():
+            self.set_default_joint_state(group)
+            self_collision_matrix = {}
+            remaining_pairs = deepcopy(link_combinations)
+            for link_a, link_b, _ in self.find_colliding_combinations(
+                remaining_pairs, distance_threshold_zero, True
+            ):
+                link_combination = god_map.world.sort_links(link_a, link_b)
+                remaining_pairs.remove(link_combination)
+                self_collision_matrix[link_combination] = DisableCollisionReason.Default
+        return remaining_pairs, self_collision_matrix
+
+    def compute_self_collision_matrix_always(
+        self,
+        link_combinations: Set[Tuple[PrefixName, PrefixName]],
+        group: WorldBranch,
+        distance_threshold_always: float,
+        number_of_tries: int = 200,
+        almost_percentage: float = 0.95,
+    ) -> Tuple[
+        Set[Tuple[PrefixName, PrefixName]],
+        Dict[Tuple[PrefixName, PrefixName], DisableCollisionReason],
+    ]:
+        """
+        Disable link pairs that are (almost) always in collision.
+        """
+        if number_of_tries == 0:
+            return link_combinations, {}
+        with god_map.world.reset_joint_state_context():
+            self_collision_matrix = {}
+            remaining_pairs = deepcopy(link_combinations)
+            counts: DefaultDict[Tuple[PrefixName, PrefixName], int] = defaultdict(int)
+            for try_id in range(int(number_of_tries)):
+                self.set_rnd_joint_state(group)
+                for link_a, link_b, _ in self.find_colliding_combinations(
+                    remaining_pairs, distance_threshold_always, True
+                ):
+                    link_combination = god_map.world.sort_links(link_a, link_b)
+                    counts[link_combination] += 1
+            for link_combination, count in counts.items():
+                if count > number_of_tries * almost_percentage:
+                    remaining_pairs.remove(link_combination)
+                    self_collision_matrix[link_combination] = (
+                        DisableCollisionReason.AlmostAlways
+                    )
+        return remaining_pairs, self_collision_matrix
+
+    def compute_self_collision_matrix_never(
+        self,
+        link_combinations: Set[Tuple[PrefixName, PrefixName]],
+        group: WorldBranch,
+        distance_threshold_never_initial: float,
+        distance_threshold_never_min: float,
+        distance_threshold_never_range: float,
+        distance_threshold_never_zero: float,
+        number_of_tries: int = 10000,
+        progress_callback: Optional[Callable[[int, str], None]] = None,
+    ) -> Tuple[
+        Set[Tuple[PrefixName, PrefixName]],
+        Dict[Tuple[PrefixName, PrefixName], DisableCollisionReason],
+    ]:
+        """
+        Disable link pairs that are never in collision.
+        """
+        if number_of_tries == 0:
+            return link_combinations, {}
+        with god_map.world.reset_joint_state_context():
+            one_percent = number_of_tries // 100
+            self_collision_matrix = {}
+            remaining_pairs = deepcopy(link_combinations)
+            update_query = True
+            distance_ranges: Dict[
+                Tuple[PrefixName, PrefixName], Tuple[float, float]
+            ] = {}
+            once_without_contact = set()
+            for try_id in range(int(number_of_tries)):
+                self.set_rnd_joint_state(group)
+                contacts = self.find_colliding_combinations(
+                    remaining_pairs, distance_threshold_never_initial, update_query
+                )
+                update_query = False
+                contact_keys = set()
+                for link_a, link_b, distance in contacts:
+                    key = god_map.world.sort_links(link_a, link_b)
+                    contact_keys.add(key)
+                    if key in distance_ranges:
+                        old_min, old_max = distance_ranges[key]
+                        distance_ranges[key] = (
+                            min(old_min, distance),
+                            max(old_max, distance),
+                        )
+                    else:
+                        distance_ranges[key] = (distance, distance)
+                    if distance < distance_threshold_never_min:
+                        remaining_pairs.remove(key)
+                        update_query = True
+                        del distance_ranges[key]
+                once_without_contact.update(remaining_pairs.difference(contact_keys))
+                if try_id % one_percent == 0:
+                    progress_callback(try_id // one_percent, "checking collisions")
+            never_in_contact = remaining_pairs
+            for key in once_without_contact:
+                if key in distance_ranges:
+                    old_min, old_max = distance_ranges[key]
+                    distance_ranges[key] = (old_min, np.inf)
+            for key, (min_, max_) in list(distance_ranges.items()):
+                if (
+                    (max_ - min_) < distance_threshold_never_range
+                    or min_ > distance_threshold_never_zero
+                ):
+                    never_in_contact.add(key)
+                    del distance_ranges[key]
+
+            for combi in never_in_contact:
+                self_collision_matrix[combi] = DisableCollisionReason.Never
+        return remaining_pairs, self_collision_matrix
+
+    def save_self_collision_matrix(
+        self,
+        group: WorldBranch,
+        self_collision_matrix: Dict[
+            Tuple[PrefixName, PrefixName], DisableCollisionReason
+        ],
+        disabled_links: Set[PrefixName],
+        file_name: Optional[str] = None,
+    ):
+        # Create the root element
+        root = etree.Element("robot")
+        root.set("name", group.name)
+
+        # %% disabled links
+        for link_name in sorted(disabled_links):
+            child = etree.SubElement(root, self.srdf_disable_all_collisions)
+            child.set("link", link_name.short_name)
+
+        # %% self collision matrix
+        for (link_a, link_b), reason in sorted(self_collision_matrix.items()):
+            child = etree.SubElement(root, self.srdf_disable_self_collision)
+            child.set("link1", link_a.short_name)
+            child.set("link2", link_b.short_name)
+            child.set("reason", reason.name)
+
+        # Create the XML tree
+        tree = etree.ElementTree(root)
+
+        if file_name is None:
+            file_name = self.get_path_to_self_collision_matrix(group.name)
+        get_middleware().loginfo(
+            f"Saved self collision matrix for {group.name} in {file_name}."
+        )
+        tree.write(
+            file_name,
+            pretty_print=True,
+            xml_declaration=True,
+            encoding=tree.docinfo.encoding,
+        )
+        self.self_collision_matrix_cache[group.name] = (
+            file_name,
+            deepcopy(self_collision_matrix),
+            deepcopy(disabled_links),
+        )
+
+    def get_path_to_self_collision_matrix(self, group_name: str) -> str:
+        path_to_tmp = god_map.tmp_folder
+        return f"{path_to_tmp}{group_name}/{group_name}.srdf"
+
+    def blacklist_inter_group_collisions(self) -> None:
+        for group_a_name, group_b_name in combinations(
+            god_map.world.minimal_group_names, 2
+        ):
+            one_group_is_robot = (
+                group_a_name in self.robot_names or group_b_name in self.robot_names
+            )
+            if one_group_is_robot:
+                if group_a_name in self.robot_names:
+                    robot_group = god_map.world.groups[group_a_name]
+                    other_group = god_map.world.groups[group_b_name]
+                else:
+                    robot_group = god_map.world.groups[group_b_name]
+                    other_group = god_map.world.groups[group_a_name]
+                unmovable_links = robot_group.get_unmovable_links()
+                if (
+                    len(unmovable_links) > 0
+                ):  # ignore collisions between unmovable links of the robot and the env
+                    for link_a, link_b in product(
+                        unmovable_links, other_group.link_names_with_collisions
+                    ):
+                        self.self_collision_matrix[
+                            god_map.world.sort_links(link_a, link_b)
+                        ] = DisableCollisionReason.Unknown
+                continue
+            # disable all collisions of groups that aren't a robot
+            group_a: WorldBranch = god_map.world.groups[group_a_name]
+            group_b: WorldBranch = god_map.world.groups[group_b_name]
+            for link_a, link_b in product(
+                group_a.link_names_with_collisions, group_b.link_names_with_collisions
+            ):
+                self.self_collision_matrix[god_map.world.sort_links(link_a, link_b)] = (
+                    DisableCollisionReason.Unknown
+                )
+        # disable non actuated groups
+        for group in god_map.world.groups.values():
+            if group.name not in self.robot_names:
+                for link_a, link_b in set(
+                    combinations_with_replacement(group.link_names_with_collisions, 2)
+                ):
+                    key = god_map.world.sort_links(link_a, link_b)
+                    self.self_collision_matrix[key] = DisableCollisionReason.Unknown
+
+    # def get_map_T_geometry(self, link_name: PrefixName, collision_id: int = 0) -> Pose:
+    #     map_T_geometry = god_map.world.compute_fk_with_collision_offset(god_map.world.root_link_name, link_name,
+    #                                                                     collision_id)
+    #     return msg_converter.to_ros_message(map_T_geometry).pose
+
+    def set_joint_state_to_zero(self) -> None:
+        for free_variable in god_map.world.free_variables:
+            god_map.world.state[free_variable].position = 0
+        god_map.world.notify_state_change()
+
+    def set_default_joint_state(self, group: WorldBranch):
+        for joint_name in group.movable_joint_names:
+            free_variable: FreeVariable
+            for free_variable in group.joints[joint_name].free_variables:
+                if free_variable.has_position_limits():
+                    lower_limit = free_variable.get_lower_limit(Derivatives.position)
+                    upper_limit = free_variable.get_upper_limit(Derivatives.position)
+                    god_map.world.state[free_variable.name].position = (
+                        upper_limit + lower_limit
+                    ) / 2
+        god_map.world.notify_state_change()
