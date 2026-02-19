@@ -194,10 +194,15 @@ class AllowAllCollisions(AllowCollisionRule):
     Removed all collision checks from the collision matrix.
     """
 
-    world: World = field(kw_only=True)
-
     def _update(self, world: World):
         self.allowed_collision_bodies = set(world.bodies_with_collision)
+
+
+@dataclass
+class AllowCollisionForBodies(AllowCollisionRule):
+    allowed_collision_bodies: set[Body] = field(default_factory=set)
+
+    def _update(self, world: World): ...
 
 
 @dataclass
@@ -354,29 +359,28 @@ class AllowAlwaysInCollision(AllowCollisionRule):
 class AllowNeverInCollision(AllowCollisionRule):
     robot: AbstractRobot = field(kw_only=True)
     collision_checks: set[CollisionCheck] = field(default_factory=set)
-    distance_threshold_max: float = 0.075
+    distance_threshold_max: float = 0.05
     distance_threshold_min: float = -0.02
     """
     If a pair is below this distance, they are not allowed.
     """
     distance_threshold_range: float = 0.05
     distance_threshold_zero: float = 0.0
-    number_of_tries: int = 50
-    progress_callback: Callable[[int, str], None] = field(
-        default_factory=lambda: lambda value, text: None
-    )
+    number_of_tries: int = 10_000
+    progress_callback: Callable[[int, str], None] | None = field(default=None)
+
+    def __post_init__(self):
+        if self.progress_callback is None:
+            self.progress_callback = lambda value, text: None
 
     def _update(self, world: World):
         collision_matrix = CollisionMatrix()
         collision_matrix.collision_checks = self.collision_checks
         for collision_check in self.collision_checks:
-            collision_check.distance = self.distance_threshold_max
+            collision_check.distance = self.distance_threshold_max * 2
         with world.reset_state_context():
             one_percent = self.number_of_tries // 100
-            # self_collision_matrix = {}
-            # update_query = True
             distances_cache: dict[CollisionCheck, list[float]] = defaultdict(list)
-            # once_without_contact = set()
             for try_id in range(int(self.number_of_tries)):
                 self.set_robot_to_rnd_state(world)
                 closest_points = (
@@ -384,33 +388,20 @@ class AllowNeverInCollision(AllowCollisionRule):
                         collision_matrix
                     )
                 )
-                # update_query = False
-                # contact_keys = set()
                 self._update_collision_matrix(
                     closest_points=closest_points,
                     collision_matrix=collision_matrix,
                     distance_ranges=distances_cache,
                 )
-                # remaining_pairs = collision_matrix.collision_checks.copy()
-                # once_without_contact.update(remaining_pairs.difference(contact_keys))
                 if try_id % one_percent == 0:
                     self.progress_callback(try_id // one_percent, "checking collisions")
-            # never_in_contact = remaining_pairs
-            # for key in once_without_contact:
-            # if key in distance_ranges:
-            #     old_min, old_max = distance_ranges[key]
-            #     distance_ranges[key] = (old_min, np.inf)
             for key, distances in list(distances_cache.items()):
                 mean = np.mean(distances)
                 std = np.std(distances)
-                if mean - 3 * std > self.distance_threshold_range:
-                    # never_in_contact.add(key)
-                    # del distance_ranges[key]
+                if mean - 3 * std > self.distance_threshold_zero:
                     self.allowed_collision_pairs.add(key)
-
-            # for combi in never_in_contact:
-            #     self_collision_matrix[combi] = DisableCollisionReason.Never
-        # return remaining_pairs, self_collision_matrix
+                if mean + 3 * std < self.distance_threshold_range:
+                    self.allowed_collision_pairs.add(key)
 
     def _update_collision_matrix(
         self,
@@ -544,11 +535,17 @@ class SelfCollisionMatrixRule(AllowCollisionRule):
         :param progress_callback: a function that is used to display the progress. it's called with a value of 0-100 and
                                     a string representing the current action
         """
+        self.allowed_collision_pairs = set()
         np.random.seed(1337)
         # %% 0. GENERATE ALL POSSIBLE LINK PAIRS
         collision_matrix = CollisionMatrix()
         rule = AvoidSelfCollisions(robot=robot)
         rule.update(robot._world)
+        rule.apply_to_collision_matrix(collision_matrix)
+
+        rule = AllowCollisionForBodies(
+            allowed_collision_bodies=self.allowed_collision_bodies
+        )
         rule.apply_to_collision_matrix(collision_matrix)
 
         # %%
@@ -593,6 +590,13 @@ class SelfCollisionMatrixRule(AllowCollisionRule):
         rule.update(robot._world)
         rule.apply_to_collision_matrix(collision_matrix)
         self.allowed_collision_pairs.update(rule.allowed_collision_pairs)
+
+        self.allowed_collision_pairs = {
+            collision_check
+            for collision_check in self.allowed_collision_pairs
+            if collision_check.body_a not in self.allowed_collision_bodies
+            and collision_check.body_b not in self.allowed_collision_bodies
+        }
 
     def save_self_collision_matrix(
         self,

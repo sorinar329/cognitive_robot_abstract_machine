@@ -291,9 +291,18 @@ class TestCollisionRules:
             )
         }
         rule = SelfCollisionMatrixRule()
-        rule.compute_self_collision_matrix(pr2)
+        rule.compute_self_collision_matrix(pr2, number_of_tries_never=200)
         assert 0 < len(rule.allowed_collision_pairs) < len(collision_checks)
         rule.save_self_collision_matrix(robot_name=pr2.name.name, file_name="test.srdf")
+
+        base_link = pr2_world_state_reset.get_body_by_name("base_link")
+        rule = SelfCollisionMatrixRule(allowed_collision_bodies={base_link})
+        rule.compute_self_collision_matrix(pr2, number_of_tries_never=200)
+        for collision_check in rule.allowed_collision_pairs:
+            assert (
+                base_link != collision_check.body_a
+                and base_link != collision_check.body_b
+            )
 
     def test_AllowAlwaysInSelfCollision(self, pr2_world_state_reset):
         robot = pr2_world_state_reset.get_semantic_annotations_by_type(PR2)[0]
