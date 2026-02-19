@@ -515,15 +515,12 @@ class MultiArityExpression(SymbolicExpression, ABC):
     def _replace_child_field_(
         self, old_child: SymbolicExpression, new_child: SymbolicExpression
     ):
-        try:
-            old_child_index = self._operation_children_.index(old_child)
-            self._operation_children_ = (
-                self._operation_children_[:old_child_index]
-                + (new_child,)
-                + self._operation_children_[old_child_index + 1 :]
-            )
-        except ValueError:
-            pass
+        old_child_index = self._operation_children_.index(old_child)
+        self._operation_children_ = (
+            self._operation_children_[:old_child_index]
+            + (new_child,)
+            + self._operation_children_[old_child_index + 1 :]
+        )
 
     def update_children(self, *children: SymbolicExpression) -> None:
         self._operation_children_ = self._update_children_(*children)

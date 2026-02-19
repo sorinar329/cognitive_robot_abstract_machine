@@ -262,35 +262,27 @@ class InstantiatedVariable(
         """
         Create new instances of the variable type and using as keyword arguments the child variables values.
         """
-        for result in self._evaluate_product_(sources):
+        for child_result in self._evaluate_product_(sources):
             # Build once: unwrapped hashed kwargs for already provided child vars
             kwargs = {
                 self._child_var_id_name_map_[id_]: v
-                for id_, v in result.bindings.items()
+                for id_, v in child_result.bindings.items()
                 if id_ in self._child_var_id_name_map_
             }
             instance = self._type_(**kwargs)
-            yield self._process_output_and_update_values_(instance, result.bindings)
-
-    def _process_output_and_update_values_(
-        self, instance: Any, bindings: Bindings
-    ) -> OperationResult:
-        """
-        Process the predicate/variable instance and get the results.
-
-        :param instance: The created instance.
-        :param bindings: The bindings from the child variables.
-        :return: The results' dictionary.
-        """
-        values = {self._binding_id_: instance} | bindings
-        return self._build_operation_result_and_update_truth_value_(values)
+            bindings = {self._binding_id_: instance} | child_result.bindings
+            result = self._build_operation_result_and_update_truth_value_(bindings)
+            result.previous_operation_result = child_result
+            yield result
 
     def _replace_child_field_(
         self, old_child: SymbolicExpression, new_child: SymbolicExpression
     ):
+        MultiArityExpressionThatPerformsACartesianProduct._replace_child_field_(self, old_child, new_child)
         for k, v in self._child_vars_.items():
             if v is old_child:
                 self._child_vars_[k] = new_child
+                self._child_var_id_name_map_[self._child_vars_[k]._binding_id_] = k
                 break
 
 
