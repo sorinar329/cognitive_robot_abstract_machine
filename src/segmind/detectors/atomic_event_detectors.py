@@ -57,7 +57,13 @@ class AtomicEventDetector(PropagatingThread):
         self.episode_player: EpisodePlayer = episode_player
         self.fit_mode = fit_mode
         self.logger: EventLogger = logger if logger else EventLogger.current_logger
-        self.world: World = world
+        if world:
+            self.world: World = world
+        elif episode_player and episode_player.world:
+            self.world: World = episode_player.world
+        else:
+            self.world = World()
+
         self.wait_time = wait_time if wait_time is not None else timedelta(milliseconds=50)
 
         self.queues: List[Queue] = []

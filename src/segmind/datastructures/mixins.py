@@ -34,6 +34,8 @@ class HasPrimaryTrackedObject:
     """
     tracked_object: Body
     tracked_object_frozen_cp: Optional[BodyDAO] = field(init=False, default=None, repr=False, hash=False)
+    def __init__(self, tracked_object: Body):
+        self.tracked_object = tracked_object
 
     def __post_init__(self):
         self.tracked_object_frozen_cp = self.tracked_object_frozen_cp

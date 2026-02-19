@@ -1,12 +1,8 @@
 import datetime
 import threading
 from os.path import dirname
-
-from semantic_digital_twin.world_description.world_entity import Body
 from segmind import logger, set_logger_level, LogLevel
-from typing_extensions import List, Optional, Dict
-
-from .datastructures.events import *
+from semantic_digital_twin.world_description.connections import Connection6DoF
 from .datastructures.object_tracker import ObjectTracker
 from .detectors.coarse_event_detectors import *
 from .detectors.spatial_relation_detector import SpatialRelationDetector
@@ -17,6 +13,7 @@ set_logger_level(LogLevel.DEBUG)
 class EpisodeSegmenter(ABC):
 
     def __init__(self, episode_player: EpisodePlayer,
+                 world: Optional[World] = None,
                  detectors_to_start: Optional[List[Type[DetectorWithStarterEvent]]] = None,
                  initial_detectors: Optional[List[Type[AtomicEventDetector]]] = None,
                  annotate_events: bool = False,
@@ -36,11 +33,13 @@ class EpisodeSegmenter(ABC):
         self._detectors_to_start: List[Type[DetectorWithStarterEvent]] = []
         self._initial_detectors: List[Type[AtomicEventDetector]] = []
         self.episode_player: EpisodePlayer = episode_player
+        self.world: World = world
         self.logger = EventLogger(annotate_events)
         self.detectors_to_start: List[Type[DetectorWithStarterEvent]] = detectors_to_start if detectors_to_start else []
         self.initial_detectors: List[Type[AtomicEventDetector]] = initial_detectors if initial_detectors else []
         self.objects_to_avoid = ['particle', 'floor', 'kitchen']
-        self.starter_event_to_detector_thread_map: Dict[Tuple[Event, Type[DetectorWithStarterEvent]], DetectorWithStarterEvent] = {}
+        self.starter_event_to_detector_thread_map: Dict[
+            Tuple[Event, Type[DetectorWithStarterEvent]], DetectorWithStarterEvent] = {}
         self.detector_threads_list: List[EventDetectorUnion] = []
         self.object_trackers: Dict[Body, ObjectTracker] = {}
         self.plot_timeline = plot_timeline
@@ -125,12 +124,9 @@ class EpisodeSegmenter(ABC):
         Start the Episode player thread, and waits until the thread signals that it is
         ready (e.g., the replay environment is initialized with all objects in starting poses).
         """
-        logger.debug("Starting episode player thread.")
         if not self.episode_player.is_alive():
-            logger.debug("Episode player thread not alive, starting it.")
-            self.episode_player.start()
+            self.episode_player.run()
         while not self.episode_player.ready:
-            logger.debug("Waiting for episode player thread to be ready.")
             time.sleep(0.1)
 
     def run_event_detectors(self) -> None:
@@ -238,7 +234,7 @@ class EpisodeSegmenter(ABC):
         for obj in involved_objects:
             if self.avoid_object(obj):
                 continue
-            if isinstance(obj, Body) and obj.parent_entity in self.object_trackers.keys():
+            if obj in self.object_trackers.keys():
                 continue
             if obj not in self.object_trackers.keys():
                 logger.debug(f"New object {obj.name}")
@@ -274,7 +270,7 @@ class EpisodeSegmenter(ABC):
         :return: True if the object should be avoided, False otherwise.
         """
         logger.debug(f"Checking if object {obj.name} should be avoided.")
-        return not obj.has_collision()
+        return not type(obj.parent_connection) == Connection6DoF
         #return ((obj.is_an_environment or issubclass(obj.ontology_concept, (Supporter, Location)) or
         #         any([k in obj.name.lower() for k in self.objects_to_avoid])) or
         #        (isinstance(obj, Body) and self.avoid_object(obj.parent_entity)))
@@ -286,12 +282,12 @@ class EpisodeSegmenter(ABC):
         :param obj: The Object instance for which the motion detection threads are started.
         :param event: The NewObjectEvent instance that represents the creation of the object.
         """
-        for detector in (TranslationDetector,): #RotationDetector):
+        for detector in (TranslationDetector,):  # RotationDetector):
             self.create_detector_and_start_it(detector, tracked_object=obj, starter_event=event,
                                               time_between_frames=self.time_between_frames)
 
     def start_contact_threads_for_object(self, obj: Body,
-                                         event: Optional[CloseContactEvent] = None) -> None:
+                                         event: Optional[ContactEvent] = None) -> None:
         """
         Start the contact threads for the object and updates the tracked objects.
 
@@ -321,7 +317,7 @@ class EpisodeSegmenter(ABC):
         self_ = case_dict['self_']
         output_ = case_dict['output_']
         if issubclass(detector_type, GeneralPickUpDetector):
-            if isinstance(starter_event, LossOfCloseContactEvent):
+            if isinstance(starter_event, LossOfContactEvent):
                 pick_up_detectors = [detector for (_, _), detector in self_.starter_event_to_detector_thread_map.items()
                                      if isinstance(detector, GeneralPickUpDetector)]
                 if len(pick_up_detectors) > 0 and not output_:

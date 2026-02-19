@@ -48,7 +48,7 @@ class EpisodePlayer(PropagatingThread, ABC):
             super().__init__()
             self.rdr_viewer: Optional[RDRCaseViewer] = rdr_viewer
             self.stop_after_ready: bool = stop_after_ready
-            self.world: World = world if world is not None else World
+            self.world: World
             self._ready: bool = False
             self._status = PlayerStatus.CREATED
             self.time_between_frames: datetime.timedelta = time_between_frames if time_between_frames is not None else datetime.timedelta(seconds=0.01)

@@ -19,7 +19,7 @@ from segmind.datastructures.events import TranslationEvent, StopMotionEvent, Sto
 from segmind.datastructures.object_tracker import ObjectTrackerFactory
 from segmind.detectors.atomic_event_detectors import TranslationDetector, AtomicEventDetector, ContactDetector
 from segmind.detectors.coarse_event_detectors import GeneralPickUpDetector
-from segmind.detectors.spatial_relation_detector import InsertionDetector
+from segmind.detectors.spatial_relation_detector import InsertionDetector, SupportDetector
 from segmind.detectors.motion_detection_helpers import has_consistent_direction, is_displaced
 from segmind.event_logger import EventLogger
 
@@ -46,17 +46,10 @@ class TestEventDetectors:
             translation_detector.update_with_latest_motion_data()
             time.sleep(2)
             fridge = self.world.get_body_by_name("cabinet1")
-            root_T_milk_connection = HomogeneousTransformationMatrix.from_xyz_rpy(
+
+            milk.parent_connection.origin = HomogeneousTransformationMatrix.from_xyz_rpy(
                 x = fridge.global_pose.x, y=fridge.global_pose.y, z=fridge.global_pose.z
             )
-            with self.world.modify_world():
-                milk_conn = FixedConnection(
-                    parent=self.world.root,
-                    child=milk,
-                    parent_T_connection_expression=root_T_milk_connection
-                )
-                self.world.add_connection(milk_conn)
-
             # update twice to detect two displacements between three poses, since window size is 2
             translation_detector.update_with_latest_motion_data()
             translation_detector.update_with_latest_motion_data()
@@ -94,25 +87,20 @@ class TestEventDetectors:
 
             # Get initial translation data
             translation_detector.update_with_latest_motion_data()
+            sr_detector.detect_events()
 
-            root_T_milk_connection = HomogeneousTransformationMatrix.from_xyz_rpy(
+            milk.parent_connection.origin = HomogeneousTransformationMatrix.from_xyz_rpy(
                 x=fridge.global_pose.x, y=fridge.global_pose.y, z=fridge.global_pose.z
             )
-            with self.world.modify_world():
-                milk_conn = FixedConnection(
-                    parent=self.world.root,
-                    child=milk,
-                    parent_T_connection_expression=root_T_milk_connection
-                )
-                self.world.add_connection(milk_conn)
             # update trice, the first three updates will trigger the displacement threshold, while the last update will trigger the consistent zero gradient
             translation_detector.update_with_latest_motion_data()
             translation_detector.update_with_latest_motion_data()
             translation_detector.update_with_latest_motion_data()
 
+            sr_detector.detect_events()
             # because milk goes to moving state then to stop state thus we need to wait for 2 changes
             time.sleep(translation_detector.get_n_changes_wait_time(2))
-            
+            all_events = milk_tracker.get_event_history()
             assert (milk_tracker.get_latest_event_of_type(StopMotionEvent) is not None)
             assert InsideOf(milk, fridge).compute_containment_ratio() == 1.0
         except Exception as e:
@@ -134,6 +122,7 @@ class TestEventDetectors:
         # wait one timestep to detect the initial state
         time.sleep(translation_detector.get_n_changes_wait_time(1))
         return translation_detector
+
 
     def test_consistent_gradient_motion_detection_method(self):
         for i in range(3):

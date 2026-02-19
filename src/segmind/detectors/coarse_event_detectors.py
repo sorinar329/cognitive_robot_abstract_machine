@@ -293,34 +293,47 @@ class GeneralPickUpDetector(AbstractPickUpDetector):
 
 
 class PlacingDetector(AbstractInteractionDetector):
-    """
-    An abstract detector that detects if the tracked_object was placed by the agent.
-    """
+    # """
+    # An abstract detector that detects if the tracked_object was placed by the agent.
+    # """
+    #
+    # thread_prefix = "placing_"
+    #
+    # models_path: str = AbstractInteractionDetector.models_path
+    # interaction_checks_rdr: RDRDecorator = RDRDecorator(models_path, (PlacingEvent, type(None)), True, package_name="segmind",
+    #  fit=False, update_existing_rules=True, use_generated_classifier=False, fitting_decorator=EpisodePlayer.pause_resume)
+    # """
+    # A decorator that uses a Ripple Down Rules model to check if the tracked_object was picked up and returns the PickUp Event.
+    # """
+    #
+    # object_to_track_rdr: RDRDecorator = RDRDecorator(models_path, (Body, type(None)), True, package_name="segmind",
+    #  fit=False, use_generated_classifier=False, fitting_decorator=EpisodePlayer.pause_resume)
+    # """
+    # A decorator that uses a Ripple Down Rules model to get the object to track from the starter event.
+    # """
+    # @staticmethod
+    # def ask_now(case_dict):
+    #     cls_ = case_dict["cls_"]
+    #     event = case_dict["event"]
+    #     return isinstance(event, SupportEvent)
+    # start_condition_rdr: RDRDecorator = RDRDecorator(models_path, (bool,), True, package_name="segmind",
+    #  fit=False, use_generated_classifier=False, fitting_decorator=EpisodePlayer.pause_resume, ask_now=ask_now)
+    # """
+    # A decorator that uses a Ripple Down Rules model to check for starting conditions for the pick up event.
+    # """
+    # print("a")
 
-    thread_prefix = "placing_"
+    @classmethod
+    def start_condition_checker(cls, event: SupportEvent) -> bool:
+        if isinstance(event, SupportEvent):
+            return True
 
-    models_path: str = AbstractInteractionDetector.models_path
-    interaction_checks_rdr: RDRDecorator = RDRDecorator(models_path, (PlacingEvent, type(None)), True, package_name="segmind",
-     fit=False, update_existing_rules=True, use_generated_classifier=False, fitting_decorator=EpisodePlayer.pause_resume)
-    """
-    A decorator that uses a Ripple Down Rules model to check if the tracked_object was picked up and returns the PickUp Event.
-    """
-   
-    object_to_track_rdr: RDRDecorator = RDRDecorator(models_path, (Body, type(None)), True, package_name="segmind",
-     fit=False, use_generated_classifier=False, fitting_decorator=EpisodePlayer.pause_resume)
-    """
-    A decorator that uses a Ripple Down Rules model to get the object to track from the starter event.
-    """
-    @staticmethod
-    def ask_now(case_dict):
-        cls_ = case_dict["cls_"]
-        event = case_dict["event"]
-        return isinstance(event, SupportEvent)
-    start_condition_rdr: RDRDecorator = RDRDecorator(models_path, (bool,), True, package_name="segmind",
-     fit=False, use_generated_classifier=False, fitting_decorator=EpisodePlayer.pause_resume, ask_now=ask_now)
-    """
-    A decorator that uses a Ripple Down Rules model to check for starting conditions for the pick up event.
-    """
+        return False
+
+    @classmethod
+    def get_object_to_track_from_starter_event(cls, starter_event: EventUnion) -> Body:
+        return starter_event.tracked_object
+
 
     @classmethod
     def action_type(cls):
@@ -330,24 +343,30 @@ class PlacingDetector(AbstractInteractionDetector):
     def event_types(cls) -> List[Type[PlacingEvent]]:
         return [PlacingEvent]
 
-    @interaction_checks_rdr.decorator
+
     def get_interaction_event(self) -> Optional[PlacingEvent]:
-        pass
-
-    @classmethod
-    @object_to_track_rdr.decorator
-    def get_object_to_track_from_starter_event(cls, starter_event: CloseContactEvent) -> Body:
-        pass
-
-    @classmethod
-    @start_condition_rdr.decorator
-    def start_condition_checker(cls, event: EventWithOneTrackedObject) -> bool:
-        """
-        Check if an agent is in contact with the tracked_object.
-
-        :param event: The ContactEvent instance that represents the contact event.
-        """
-        pass
+        if isinstance(self.starter_event, SupportEvent):
+            return PlacingEvent(tracked_object=self.tracked_object,
+                                timestamp=self.starter_event.timestamp - self.wait_time.total_seconds(),
+                                end_timestamp=self.starter_event.timestamp)
+    # @interaction_checks_rdr.decorator
+    # def get_interaction_event(self) -> Optional[PlacingEvent]:
+    #     pass
+    #
+    # @classmethod
+    # @object_to_track_rdr.decorator
+    # def get_object_to_track_from_starter_event(cls, starter_event: CloseContactEvent) -> Body:
+    #     pass
+    #
+    # @classmethod
+    # @start_condition_rdr.decorator
+    # def start_condition_checker(cls, event: EventWithOneTrackedObject) -> bool:
+    #     """
+    #     Check if an agent is in contact with the tracked_object.
+    #
+    #     :param event: The ContactEvent instance that represents the contact event.
+    #     """
+    #     pass
 
 
 def check_for_supporting_surface(tracked_object: Body,
@@ -423,7 +442,7 @@ def select_transportable_objects(objects: List[Body], not_contained: bool = Fals
 
 EventDetectorUnion = Union[NewObjectDetector, ContactDetector, LossOfContactDetector,
 MotionDetector, TranslationDetector, RotationDetector, PlacingDetector]
-TypeEventDetectorUnion = Union[Type[ContactDetector], Type[LossOfContactDetector],
+TypeEventDetectorUnion = Union[Type[AtomicEventDetector], [ContactDetector], Type[LossOfContactDetector],
 Type[MotionDetector], Type[TranslationDetector], Type[RotationDetector],
 Type[NewObjectDetector],
 Type[PlacingDetector]]

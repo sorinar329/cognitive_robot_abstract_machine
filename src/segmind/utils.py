@@ -151,108 +151,26 @@ def check_if_object_is_supported(obj: Body, distance: Optional[float] = 0.03) ->
     :param distance: The distance to check if the object is supported.
     :return: True if the object is supported, False otherwise.
     """
-    supported = True
-    with UseProspectionWorld():
-        prospection_obj = World.current_world.get_prospection_object_for_object(obj)
-        dt = math.sqrt(2 * distance / 9.81) + 0.01  # time to fall distance
-        World.current_world.simulate(dt)
-        # cp = prospection_obj.contact_points
-        from .detectors.atomic_event_detectors import AbstractContactDetector
-        contact_points, _ = AbstractContactDetector.get_contact_points_for_body(prospection_obj, 0.05)
-        if get_support(prospection_obj, AbstractContactDetector.get_bodies_in_contact(contact_points)) is None:
-            return False
-    return supported
-
-
-def check_if_object_is_supported_using_contact_points(obj: Body, contact_points: list[Collision]) -> bool:
-    """
-    Check if the object is supported by any other object using the contact points.
-
-    :param obj: The object to check if it is supported.
-    :param contact_points: The contact points of the object.
-    :return: True if the object is supported, False otherwise.
-    """
-    from .detectors.atomic_event_detectors import AbstractContactDetector
-    for body in AbstractContactDetector.get_bodies_in_contact(contact_points):
-        if check_if_object_is_supported_by_another_object(obj, body, AbstractContactDetector.get_points_of_body(contact_points, body)):
+    for i in obj._world.bodies_with_enabled_collision:
+        if is_supported_by(i, obj, distance):
             return True
 
+    return False
 
-def get_support(obj: Body, contact_bodies: Optional[List[Body]] = None) -> Optional[Body]:
+
+def get_support(obj: Body) -> Optional[Body]:
     """
     Check if the object is in contact with a supporting surface and returns it.
 
     :param obj: The object to check if it is in contact with a supporting surface.
-    :param contact_bodies: The bodies in contact with the object.
     :return: The supporting surface if it exists, None otherwise.
     """
-    print("Checking if object is in contact with supporting surface")
-    print(f"Object: {obj.name}")
-    print(f"Contacts: {contact_bodies}")
-    if contact_bodies is None:
-        contact_bodies = []
-        for i in obj._world.bodies_with_enabled_collision:
-            if not obj.has_collision():
-                continue
-            if obj.name.name == "root":
-                continue
-            if obj.name.name == "iCub":
-                continue
-            if i == obj:
-                continue
-            if contact(i, obj):
-                contact_bodies.append(i)
-    excluded_bodies = [obj]
-    for cb in contact_bodies:
-        if cb in excluded_bodies:
-            continue
-        if is_supported_by(obj, cb):
-            return cb
-    logger.debug(f"No supporting surface found for object {obj.name}")
-def check_if_object_is_supported_by_another_object(obj: Body, support_obj: Body,
-                                                   contact_points: Optional[list[Collision]] = None) -> bool:
-    """
-    Check if the object is supported by another object.
+    if obj in obj._world.bodies_with_enabled_collision:
+        for b in obj._world.bodies_with_enabled_collision:
+            if is_supported_by(obj, b):
+                return b
 
-    :param obj: The object to check if it is supported.
-    :param support_obj: The object that supports the object.
-    :param contact_points: The contact points between the object and the support object.
-    :return: True if the object is supported by the support object, False otherwise.
-    """
-    if contact_points is None:
-        from .detectors.atomic_event_detectors import AbstractContactDetector
-        all_contact_points, _ = AbstractContactDetector.get_contact_points_for_body(obj, 0.05, support_obj)
-        contact_points = all_contact_points
-
-    normals = []
-    for cp in contact_points:
-        # Use the normal from the collision if available
-        # In TrimeshCollisionDetector, map_V_n_input is a-b
-        if cp.map_V_n_input is not None and any(cp.map_V_n_input):
-            # If body_a is obj, the normal points from obj to support_obj.
-            # For support, we want the normal pointing UP (against gravity).
-            # If body_a is support_obj, then map_V_n_input points support -> obj, which is what we want.
-            normal = cp.map_V_n_input
-            if cp.body_a == obj:
-                normal = -normal
-            normals.append(normal)
-
-    if len(normals) > 0:
-        average_normal = np.mean(normals, axis=0)
-        return is_vector_opposite_to_gravity(average_normal)
-    return False
-
-
-def is_vector_opposite_to_gravity(vector: List[float], gravity_vector: Optional[List[float]] = None) -> bool:
-    """
-    Check if the vector is opposite to the gravity vector.
-
-    :param vector: A list of float values that represent the vector.
-    :param gravity_vector: A list of float values that represent the gravity vector.
-    :return: True if the vector is opposite to the gravity vector, False otherwise.
-    """
-    gravity_vector = [0, 0, -1] if gravity_vector is None else gravity_vector
-    return np.dot(vector, gravity_vector) < 0
+    return None
 
 
 class Imaginator:

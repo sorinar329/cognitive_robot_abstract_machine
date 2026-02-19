@@ -8,19 +8,16 @@ from pathlib import Path
 from unittest import TestCase
 from segmind import logger, set_logger_level, LogLevel
 import rclpy
-from pycram.testing import SemanticWorldTestCase, setup_world
 from semantic_digital_twin.adapters.ros.visualization.viz_marker import VizMarkerPublisher
 from semantic_digital_twin.adapters.urdf import URDFParser
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
-from semantic_digital_twin.orm.model import HomogeneousTransformationMatrixMapping
 from semantic_digital_twin.spatial_types import Vector3
 from semantic_digital_twin.spatial_types.spatial_types import Pose, HomogeneousTransformationMatrix
 from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.connections import FixedConnection, Connection6DoF
-from sqlalchemy import create_engine
-from sqlalchemy.orm.session import Session
 
-from segmind.datastructures.events import ContainmentEvent
+
+from segmind.datastructures.events import ContainmentEvent, InsertionEvent
 from segmind.detectors.coarse_event_detectors import GeneralPickUpDetector, PlacingDetector
 from segmind.detectors.spatial_relation_detector import InsertionDetector, SupportDetector, ContainmentDetector
 from segmind.episode_segmenter import NoAgentEpisodeSegmenter
@@ -54,21 +51,19 @@ class TestMultiverseEpisodeSegmenter(TestCase):
         with cls.world.modify_world():
             cls.world.add_kinematic_structure_entity(root)
         cls.spawn_objects(models_dir)
-        #rclpy.init()
-        #cls.node = rclpy.create_node("test_node")
+        rclpy.init()
+        cls.node = rclpy.create_node("test_node")
         logger.debug("Node created")
-        #cls.viz_marker_publisher = VizMarkerPublisher(world=cls.world, node=cls.node)
+        cls.viz_marker_publisher = VizMarkerPublisher(world=cls.world, node=cls.node)
+        cls.viz_marker_publisher.with_tf_publisher()
         logger.debug("Viz marker publisher created")
         cls.file_player = CSVEpisodePlayer(csv_file, world=cls.world,
                                            time_between_frames=datetime.timedelta(milliseconds=4),
                                            position_shift=Vector3(0, 0, -0.05))
         logger.debug("File player created")
-        cls.episode_segmenter = NoAgentEpisodeSegmenter(cls.file_player, annotate_events=True,
-                                                        plot_timeline=True,
-                                                        plot_save_path=f'{dirname(__file__)}/test_results/{Path(dirname(csv_file)).stem}',
+        cls.episode_segmenter = NoAgentEpisodeSegmenter(episode_player=cls.file_player, annotate_events=True,
                                                         detectors_to_start=[GeneralPickUpDetector, PlacingDetector],
-                                                        initial_detectors=[InsertionDetector, SupportDetector,
-                                                                           ContainmentDetector])
+                                                        initial_detectors=[ContainmentDetector])
         logger.debug("Episode segmenter created")
     @classmethod
     def spawn_objects(cls, models_dir):
@@ -77,27 +72,21 @@ class TestMultiverseEpisodeSegmenter(TestCase):
         directory = Path(models_dir)
         urdf_files = [f.name for f in directory.glob('*.urdf')]
         for file in urdf_files:
-
-            file_path = "/home/sorin/dev/Segmind/resources/multiverse_episodes/icub_montessori_no_hands/models/" + file
+            file_path = "/home/sorin/dev/workspace/Segmind/resources/multiverse_episodes/icub_montessori_no_hands/models/" + file
             obj_name = Path(file).stem
+
             if obj_name == "iCub":
-                file = "iCub.urdf"
-                obj_type = Agent
-                pose = [-0.8, 0, 0.55]
-
-            elif obj_name == "scene":
-                obj_type = Region
-                pose = [0, 0, 0]
-
-            else:
-                obj_type = Body
-                pose = [0, 0, 0]
+                continue
             try:
+                if obj_name == "scene":
+                    obj_world = URDFParser.from_file(file_path).parse()
+                    with cls.world.modify_world():
+                        cls.world.merge_world(obj_world, root_connection=FixedConnection.create_with_dofs(
+                            world=cls.world, parent=cls.world.root, child=obj_world.root
+                        ))
                 obj_world = URDFParser.from_file(file_path).parse()
                 with cls.world.modify_world():
-                    cls.world.merge_world(obj_world, root_connection=Connection6DoF.create_with_dofs(world=cls.world, parent=cls.world.root, child=obj_world.root,
-                                                                                     parent_T_connection_expression=HomogeneousTransformationMatrix.from_xyz_rpy(x=pose[0], y=pose[1], z=pose[2])
-                                                                                     ))
+                    cls.world.merge_world(obj_world)
 
             except Exception as e:
                 #import pdb

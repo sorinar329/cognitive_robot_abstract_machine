@@ -53,10 +53,11 @@ class DataPlayer(EpisodePlayer, ABC):
 
     frame_callback_lock: RLock = RLock()
 
-    def __init__(self, time_between_frames: Optional[timedelta] = None, use_realtime: bool = False,
-                 stop_after_ready: bool = False, world: Optional[World] = None):
+    def __init__(self, world: World, time_between_frames: Optional[timedelta] = None, use_realtime: bool = False,
+                 stop_after_ready: bool = False):
         super().__init__(time_between_frames=time_between_frames, use_realtime=use_realtime,
                          stop_after_ready=stop_after_ready, world=world)
+        self.world = world
         self.frame_callbacks: List[Callable[[float], None]] = []
         self.frame_data_generator: FrameDataGenerator = self.get_frame_data_generator()
         self.sync_robot_only: bool = False
@@ -136,34 +137,22 @@ class DataPlayer(EpisodePlayer, ABC):
 
         :param frame_data: The frame data.
         """
-        print(f"Processing frame data{frame_data}")
         objects_poses = self.get_objects_poses(frame_data)
         joint_states = self.get_joint_states(frame_data)
         if len(objects_poses):
             #if self.sync_robot_only:
             #    objects_poses = {self.world.robot: objects_poses[self.world.robot]}
-            for obj in self.world.bodies:
+            for obj in self.world.bodies_with_enabled_collision:
                 # check in the dictionary if obj is the key and set its pose accordingly
                 if obj in objects_poses:
-                    with self.world.modify_world():
-                        new_pose = FixedConnection(
-                            parent=obj.parent_connection.parent,
-                            child=obj,
-                            parent_T_connection_expression=HomogeneousTransformationMatrix.from_xyz_rpy(
-                                x=objects_poses[obj].x, y=objects_poses[obj].y, z=objects_poses[obj].z
-                            )
-                            # parent=obj.parent_connection.parent,
-                            # child=obj,
-                            # = HomogeneousTransformationMatrix.from_xyz_rpy(
-                            #     x=objects_poses[obj].x, y=objects_poses[obj].y, z=objects_poses[obj].z,
-                            #     roll=objects_poses[obj].to_quaternion().x, pitch=objects_poses[obj].to_quaternion().y,
-                            #     yaw=objects_poses[obj].to_quaternion().z,
-                            # )
-                        )
-                        self.world.add_connection(new_pose)
+                    obj.parent_connection.origin=HomogeneousTransformationMatrix.from_xyz_rpy(
+                        x=objects_poses[obj].x,
+                        y=objects_poses[obj].y,
+                        z=objects_poses[obj].z
+                    )
             #self.world.reset_multiple_objects_base_poses(objects_poses)
-        if len(joint_states):
-            self.world.robot.set_multiple_joint_positions(joint_states)
+        #if len(joint_states):
+        #    self.world.robot.set_multiple_joint_positions(joint_states)
 
     @abstractmethod
     def get_objects_poses(self, frame_data: FrameData) -> Dict[Body, Pose]:
@@ -183,7 +172,7 @@ class FilePlayer(DataPlayer, ABC):
     file_path: str
     models_dir: Optional[str]
 
-    def __init__(self, file_path: str, models_dir: Optional[str] = None, world: Optional[World] = None,
+    def __init__(self, file_path: str, world: World, models_dir: Optional[str] = None,
                  time_between_frames: Optional[timedelta] = None, use_realtime: bool = False,
                  stop_after_ready: bool = False, position_shift: Optional[Vector3] = None):
         """

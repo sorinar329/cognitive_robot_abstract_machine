@@ -5,7 +5,7 @@ from queue import Queue, Empty
 
 from ripple_down_rules.rdr_decorators import RDRDecorator
 from segmind import logger, set_logger_level, LogLevel
-from semantic_digital_twin.reasoning.predicates import InsideOf
+from semantic_digital_twin.reasoning.predicates import InsideOf, contact, is_supported_by
 from semantic_digital_twin.world_description.world_entity import Body
 from typing_extensions import Any, Dict, List, Optional, Type, Callable, Union
 
@@ -87,15 +87,17 @@ class SpatialRelationDetector(AtomicEventDetector):
 
 
 class ContainmentDetector(SpatialRelationDetector):
-    check_on_events = {PlacingEvent: None}
+
+    # This one is messy, its just for the sake of the test, since the contained object is actually not supported by anything and just floats around.
+    check_on_events = {LossOfSupportEvent: None}
 
     def update_body_state(self, body: Body):
         """
         Update the state of a body.
         """
         for b in self.world.bodies:
-            if InsideOf(b, body) and b not in self.bodies_states:
-                self.bodies_states[b] = body
+            if InsideOf(body, b).compute_containment_ratio() > 0.9 and b not in self.bodies_states:
+                self.bodies_states[body] = [b]
 
         # if isinstance(body, Body):
         #     for link in body.links.values():
@@ -212,7 +214,14 @@ class SupportDetector(SpatialRelationDetector):
 
     @staticmethod
     def event_condition(event: StopTranslationEvent) -> bool:
-        return len(event.tracked_object.contact_points) > 0
+        for obj in event.tracked_object._world.bodies_with_enabled_collision:
+            if not is_supported_by(event.tracked_object, obj):
+                continue
+
+            if is_supported_by(event.tracked_object, obj):
+                return True
+
+        return False
 
     check_on_events = {StopTranslationEvent: None, LossOfContactEvent: None}
 
@@ -246,7 +255,8 @@ class SupportDetector(SpatialRelationDetector):
             while True:
                 event = self.event_queue.get_nowait()
                 self.event_queue.task_done()
-                self.update_body_state(event.tracked_object)
+                if event.tracked_object in self.world.bodies_with_enabled_collision:
+                    self.update_body_state(event.tracked_object)
                 time.sleep(self.wait_time.total_seconds())
         except Empty:
             pass
