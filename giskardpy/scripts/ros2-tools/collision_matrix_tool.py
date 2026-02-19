@@ -43,6 +43,7 @@ from giskardpy.qp.qp_controller_config import QPControllerConfig
 from semantic_digital_twin.adapters.ros.tf_publisher import TFPublisher
 from semantic_digital_twin.adapters.ros.visualization.viz_marker import (
     VizMarkerPublisher,
+    ShapeSource,
 )
 from semantic_digital_twin.adapters.urdf import URDFParser
 from semantic_digital_twin.collision_checking.collision_matrix import CollisionCheck
@@ -90,7 +91,9 @@ class SelfCollisionMatrixInterface:
         self.world = World()
         with self.world.modify_world():
             self.world.add_body(Body(name=PrefixedName("map")))
-        VizMarkerPublisher(self.world, rospy.node).with_tf_publisher()
+        VizMarkerPublisher(
+            self.world, rospy.node, shape_source=ShapeSource.COLLISION_ONLY
+        ).with_tf_publisher()
 
     def load_urdf(self, urdf_path: str):
         robot_world = URDFParser.from_file(urdf_path).parse()
@@ -157,6 +160,11 @@ class SelfCollisionMatrixInterface:
                 collision_check.body_b,
                 DisableCollisionReason.Unknown,
             )
+
+    def safe_srdf(self, file_path: str):
+        self.collision_matrix.save_self_collision_matrix(
+            self.robot.name.name, file_path
+        )
 
     def add_body(self, body: Body):
         self.collision_matrix.allowed_collision_bodies.discard(body)
@@ -878,11 +886,8 @@ class Application(QMainWindow):
     def _save_srdf_button_callback(self):
         srdf_path = self.popup_srdf_path_with_dialog(True)
         if srdf_path is not None:
-            god_map.collision_expression_manager.save_self_collision_matrix(
-                self.world.groups[self.group_name],
-                self.table.reasons,
-                self.table.disabled_link_prefix_names,
-                file_name=srdf_path,
+            self.self_collision_matrix_interface.safe_srdf(
+                file_path=srdf_path,
             )
             self.progress.set_progress(100, f"Saved {self.__srdf_path}")
 
