@@ -3,6 +3,9 @@ from itertools import combinations
 
 import pytest
 
+from semantic_digital_twin.adapters.ros.visualization.viz_marker import (
+    VizMarkerPublisher,
+)
 from semantic_digital_twin.collision_checking.collision_detector import (
     CollisionCheckingResult,
 )
@@ -23,6 +26,9 @@ from semantic_digital_twin.collision_checking.collision_rules import (
     AvoidExternalCollisions,
     AllowSelfCollisions,
     AvoidSelfCollisions,
+    SelfCollisionMatrixRule,
+    AllowDefaultInCollision,
+    AllowAlwaysInCollision,
 )
 from semantic_digital_twin.collision_checking.pybullet_collision_detector import (
     BulletCollisionDetector,
@@ -274,6 +280,36 @@ class TestCollisionRules:
             )
             == 4
         )
+
+    def test_compute_self_collision_matrix(self, pr2_world_state_reset):
+        pr2 = pr2_world_state_reset.get_semantic_annotations_by_type(PR2)[0]
+        rule = SelfCollisionMatrixRule()
+        rule.compute_self_collision_matrix(pr2)
+
+    def test_AllowAlwaysInSelfCollision(self, pr2_world_state_reset):
+        robot = pr2_world_state_reset.get_semantic_annotations_by_type(PR2)[0]
+        rule = AllowDefaultInCollision(
+            bodies=pr2_world_state_reset.bodies_with_collision,
+            robot=robot,
+        )
+        rule.update(pr2_world_state_reset)
+        assert (
+            0
+            < len(rule.allowed_collision_pairs)
+            < len(list(combinations(pr2_world_state_reset.bodies_with_collision, 2)))
+        )
+
+    def test_AllowAlwaysInCollision(self, pr2_world_state_reset):
+        robot = pr2_world_state_reset.get_semantic_annotations_by_type(PR2)[0]
+        collision_checks = {
+            CollisionCheck(body_a, body_b)
+            for body_a, body_b in combinations(
+                pr2_world_state_reset.bodies_with_collision, 2
+            )
+        }
+        rule = AllowAlwaysInCollision(robot=robot, collision_checks=collision_checks)
+        rule.update(pr2_world_state_reset)
+        assert 0 < len(rule.allowed_collision_pairs) < len(collision_checks)
 
     def test_AllowCollisionForAdjacentPairs(self, pr2_world_state_reset):
         pr2 = pr2_world_state_reset.get_semantic_annotations_by_type(PR2)[0]
