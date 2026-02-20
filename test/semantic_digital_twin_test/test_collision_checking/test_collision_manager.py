@@ -21,6 +21,7 @@ from semantic_digital_twin.collision_checking.collision_variable_managers import
     SelfCollisionVariableManager,
 )
 from semantic_digital_twin.robots.minimal_robot import MinimalRobot
+from semantic_digital_twin.world import World
 
 
 class TestExternalCollisionExpressionManager:
@@ -221,3 +222,11 @@ class TestSelfCollisionExpressionManager:
         result = compiled_expression(self_collisions.float_variable_data.data)
         expected = expr.evaluate()
         assert np.allclose(result, expected)
+
+
+def test_collision_rules_survive_merge(pr2_world_copy):
+    expected = len(pr2_world_copy.collision_manager.rules)
+    world = World()
+    with world.modify_world():
+        world.merge_world(pr2_world_copy)
+    assert len(world.collision_manager.rules) == expected

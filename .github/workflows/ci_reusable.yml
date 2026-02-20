@@ -48,7 +48,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: /github/home/.cache/semantic_digital_twin
-          key: ${{ runner.os }}-cache-${{ github.ref_name }}-${{ inputs.lib }}
+          key: ${{ runner.os }}-cache-${{ github.ref_name }}-pycram
           restore-keys: |
             ${{ runner.os }}-cache-
 

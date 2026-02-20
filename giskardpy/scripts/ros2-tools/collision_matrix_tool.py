@@ -220,7 +220,7 @@ class ReasonCheckBox(QCheckBox):
 
     row: int
     column: int
-    table: Table
+    table: CollisionMatrixTable
     """
     Backreference to the Table instance.
     """
@@ -275,7 +275,7 @@ class ReasonCheckBox(QCheckBox):
 
 
 @dataclass
-class Table(QTableWidget):
+class CollisionMatrixTable(QTableWidget):
     """
     Table for displaying and editing self-collision matrix.
     """
@@ -671,7 +671,7 @@ class Application(QMainWindow):
 
         self.progress = ProgressBarWithText(self)
 
-        self.table = Table(self.self_collision_matrix_interface)
+        self.table = CollisionMatrixTable(self.self_collision_matrix_interface)
 
         layout = QVBoxLayout()
         layout.addLayout(self._create_urdf_box_layout())
