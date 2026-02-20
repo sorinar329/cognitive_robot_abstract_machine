@@ -663,8 +663,9 @@ def tiago_apartment_world(tiago_world, apartment_world_setup):
 def pr2_world_state_reset(pr2_world_setup):
     world = deepcopy(pr2_world_setup)
     PR2.from_world(world)
-    with world.reset_state_context():
-        yield world
+    state = world.state.data.copy()
+    yield world
+    world.state.data[:] = state
 
 
 ###############################
