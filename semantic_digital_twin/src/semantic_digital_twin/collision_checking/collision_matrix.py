@@ -25,6 +25,7 @@ class CollisionCheck(SubclassJSONSerializer):
     """
     Represents a collision check between two bodies.
     """
+
     body_a: Body
     """
     First body in the collision check.
@@ -187,7 +188,11 @@ class MaxAvoidedCollisionsRule(ABC):
     """
 
     @abstractmethod
-    def get_max_avoided_collisions(self, body: Body) -> int | None: ...
+    def get_max_avoided_collisions(self, body: Body) -> int | None:
+        """
+        :param body: The body for which to get the maximum number of collisions that can be avoided.
+        :return: The maximum number of collisions that can be avoided for the given body, or None if no rule is defined for it.
+        """
 
 
 @dataclass
@@ -207,9 +212,15 @@ class MaxAvoidedCollisionsOverride(MaxAvoidedCollisionsRule):
     """
 
     value: int
+    """
+    Maximum number of avoided collisions for the given bodies.
+    """
     bodies: set[Body]
+    """
+    Bodies for which the maximum number of avoided collisions is overridden.
+    """
 
     def get_max_avoided_collisions(self, body: Body) -> int | None:
-        if body in self.bodies:
-            return self.value
-        return None
+        if body not in self.bodies:
+            return None
+        return self.value

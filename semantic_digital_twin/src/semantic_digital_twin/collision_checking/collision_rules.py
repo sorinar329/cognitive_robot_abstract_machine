@@ -219,6 +219,10 @@ class AllowAllCollisions(AllowCollisionRule):
 
 @dataclass
 class AllowCollisionForBodies(AllowCollisionRule):
+    """
+    Removes all collision checks that include one of the given bodies from the collision matrix.
+    """
+
     allowed_collision_bodies: set[Body] = field(default_factory=set)
 
     def _update(self, world: World): ...
@@ -477,14 +481,19 @@ class AllowCollisionForAdjacentPairs(AllowCollisionRule):
 
     def _update(self, world: World):
         for body_a, body_b in combinations(world.bodies_with_collision, 2):
-            if (
-                not world.is_controlled_connection_in_chain(body_a, body_b)
-                or body_a == body_b.parent_kinematic_structure_entity
-                or body_b == body_a.parent_kinematic_structure_entity
-            ):
+            if self._no_controlled_connection_between_bodies(world, body_a, body_b):
                 self.allowed_collision_pairs.add(
                     CollisionCheck.create_and_validate(body_a, body_b)
                 )
+
+    def _no_controlled_connection_between_bodies(
+        self, world: World, body_a: Body, body_b: Body
+    ) -> bool:
+        return (
+            not world.is_controlled_connection_in_chain(body_a, body_b)
+            or body_a == body_b.parent_kinematic_structure_entity
+            or body_b == body_a.parent_kinematic_structure_entity
+        )
 
 
 @dataclass

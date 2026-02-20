@@ -3,7 +3,6 @@ from dataclasses import dataclass, field
 from functools import lru_cache
 
 import numpy as np
-from line_profiler.explicit_profiler import profile
 
 from krrood.symbolic_math.float_variable_data import (
     FloatVariableData,
@@ -18,10 +17,17 @@ from ..world_description.world_entity import Body
 @dataclass
 class ExternalCollisionVariableManager(CollisionGroupConsumer):
     """
-    Owns symbols and buffer
+    Transforms collision results for registered groups into local frames convenient for external (registered vs non-registered groups) collision avoidance,
+    saves the data in a FloatVariableManager,
+    and provides spatial objects that refer to them.
+
+    For each registered group, the closest collisions are stored, depending on their maximum number of avoided collisions.
     """
 
     float_variable_data: FloatVariableData = field(default_factory=FloatVariableData)
+    """
+    Reference to the FloatVariableManager that stores the collision data.
+    """
 
     registered_groups: dict[CollisionGroup, int] = field(
         default_factory=dict, init=False
@@ -30,8 +36,9 @@ class ExternalCollisionVariableManager(CollisionGroupConsumer):
     Maps bodies to the index of point_on_body_a in the collision buffer.
     """
 
-    block_size: int = field(default=9, init=False)
+    _block_size: int = field(default=9, init=False)
     """
+    The block size in the `float_variable_manager` of all float variables belonging to a collision.
     block layout:
         9 per collision
         point_on_body_a,  (3)
@@ -41,17 +48,41 @@ class ExternalCollisionVariableManager(CollisionGroupConsumer):
         violated_distance (1)
     """
     _point_on_a_offset: int = field(init=False, default=0)
+    """
+    Offset of the point_on_body_a variable in the block.
+    """
     _contact_normal_offset: int = field(init=False, default=3)
+    """
+    Offset of the contact_normal variable in the block.
+    """
     _contact_distance_offset: int = field(init=False, default=6)
+    """
+    Offset of the contact_distance variable in the block.
+    """
     _buffer_distance_offset: int = field(init=False, default=7)
+    """
+    Offset of the buffer_distance variable in the block.
+    """
     _violated_distance_offset: int = field(init=False, default=8)
+    """
+    Offset of the violated_distance variable in the block.
+    """
 
     _collision_data_start_index: int = field(init=False, default=None)
+    """
+    The index of the first collision data block in the `float_variable_manager`.
+    """
     _single_reset_block: np.ndarray = field(init=False)
+    """
+    A block that is used to reset the collision data.
+    """
     _reset_data: np.ndarray = field(init=False, default_factory=lambda: np.array([]))
+    """
+    The data that is used to reset the whole collision data.
+    """
 
     def __post_init__(self):
-        self._single_reset_block = np.zeros(self.block_size)
+        self._single_reset_block = np.zeros(self._block_size)
         self._single_reset_block[self._contact_distance_offset] = 100
 
     def __hash__(self):
@@ -60,7 +91,6 @@ class ExternalCollisionVariableManager(CollisionGroupConsumer):
     def on_collision_matrix_update(self):
         pass
 
-    @profile
     def on_compute_collisions(self, collision: CollisionCheckingResult):
         """
         Takes collisions, checks if they are external, and inserts them
@@ -69,17 +99,14 @@ class ExternalCollisionVariableManager(CollisionGroupConsumer):
         self.reset_collision_data()
         closest_contacts: dict[CollisionGroup, list[ClosestPoints]] = defaultdict(list)
         for collision in collision.contacts:
-            # 1. check if collision is external
             group_a = self.get_collision_group(collision.body_a)
             group_b = self.get_collision_group(collision.body_b)
-            if (
-                group_a not in self.registered_groups
-                and group_b not in self.registered_groups
-            ) or (
-                group_a in self.registered_groups and group_b in self.registered_groups
+            if (group_a in self.registered_groups) == (
+                group_b in self.registered_groups
             ):
                 continue
             if group_a not in self.registered_groups:
+                # swap group_a and group_b, such that group_a is the registered group
                 collision = collision.reverse()
                 group_a, group_b = group_b, group_a
             closest_contacts[group_a].append(collision)
@@ -109,7 +136,6 @@ class ExternalCollisionVariableManager(CollisionGroupConsumer):
                     ),
                 )
 
-    @profile
     def insert_data_block(
         self,
         group: CollisionGroup,
@@ -120,7 +146,17 @@ class ExternalCollisionVariableManager(CollisionGroupConsumer):
         buffer_distance: float,
         violated_distance: float,
     ):
-        start_idx = self.registered_groups[group] + idx * self.block_size
+        """
+        Inserts a data block into the collision buffer.
+        :param group: Registered collision group of the external collision.
+        :param idx: Index of the collision in the collision buffer.
+        :param group_a_P_point_on_a: Point on body A in the contact frame.
+        :param root_V_contact_normal: Contact normal in the root frame.
+        :param contact_distance: Distance between the bodies at the contact point.
+        :param buffer_distance: Buffer distance for collision detection.
+        :param violated_distance: Violated distance for collision detection.
+        """
+        start_idx = self.registered_groups[group] + idx * self._block_size
         self.float_variable_data.data[
             start_idx : start_idx + self._contact_normal_offset
         ] = group_a_P_point_on_a[:3]
@@ -144,7 +180,6 @@ class ExternalCollisionVariableManager(CollisionGroupConsumer):
         end_index = start_index + self._reset_data.size
         self.float_variable_data.data[start_index:end_index] = self._reset_data
 
-    @profile
     def register_group_of_body(self, body: Body):
         """
         Register the collision group associated with a body.
@@ -211,10 +246,17 @@ class ExternalCollisionVariableManager(CollisionGroupConsumer):
 @dataclass
 class SelfCollisionVariableManager(CollisionGroupConsumer):
     """
-    Owns symbols and buffer
+    Transforms collision results for registered groups into local frames convenient for self (registered vs registered groups) collision avoidance,
+    saves the data in a FloatVariableManager,
+    and provides spatial objects that refer to them.
+
+    For each combination of registered group, the closest collision is stored.
     """
 
     float_variable_data: FloatVariableData = field(default_factory=FloatVariableData)
+    """
+    The FloatVariableData that stores the collision data.
+    """
 
     registered_group_combinations: dict[tuple[CollisionGroup, CollisionGroup], int] = (
         field(default_factory=dict, init=False)
@@ -225,6 +267,7 @@ class SelfCollisionVariableManager(CollisionGroupConsumer):
 
     block_size: int = field(default=12, init=False)
     """
+    The block size in the `float_variable_manager` of all float variables belonging to a collision.
     block layout:
         12 per collision
         point_on_body_a,  (3)
@@ -235,15 +278,42 @@ class SelfCollisionVariableManager(CollisionGroupConsumer):
         violated_distance (1)
     """
     _point_on_a_offset: int = field(init=False, default=0)
+    """
+    Offset of the point_on_body_a variable in the block.
+    """
     _point_on_b_offset: int = field(init=False, default=3)
+    """
+    Offset of the point_on_body_b variable in the block.
+    """
     _contact_normal_offset: int = field(init=False, default=6)
+    """
+    Offset of the contact_normal variable in the block.
+    """
     _contact_distance_offset: int = field(init=False, default=9)
+    """
+    Offset of the contact_distance variable in the block.
+    """
     _buffer_distance_offset: int = field(init=False, default=10)
+    """
+    Offset of the buffer_distance variable in the block.
+    """
     _violated_distance_offset: int = field(init=False, default=11)
+    """
+    Offset of the violated_distance variable in the block.
+    """
 
     _collision_data_start_index: int = field(init=False, default=None)
+    """
+    The start index of the collision data in the `float_variable_manager`.
+    """
     _single_reset_block: np.ndarray = field(init=False)
+    """
+    A block of reset data that is inserted at the beginning of each collision data block.
+    """
     _reset_data: np.ndarray = field(init=False, default_factory=lambda: np.array([]))
+    """
+    The reset data that is inserted at the beginning of each collision data block.
+    """
 
     def __post_init__(self):
         self._single_reset_block = np.zeros(self.block_size)
@@ -316,6 +386,17 @@ class SelfCollisionVariableManager(CollisionGroupConsumer):
         buffer_distance: float,
         violated_distance: float,
     ):
+        """
+        Inserts a data block into the collision buffer.
+        :param group_a: Registered collision group of body A.
+        :param group_b: Registered collision group of body B.
+        :param group_a_P_point_on_a: Point on body A in the contact frame.
+        :param group_b_P_point_on_b: Point on body B in the contact frame.
+        :param group_b_V_contact_normal: Contact normal in the root frame.
+        :param contact_distance: Distance between the bodies at the contact point.
+        :param buffer_distance: Buffer distance for collision detection.
+        :param violated_distance: Violated distance for collision detection.
+        """
         block_start_idx = self.registered_group_combinations[group_a, group_b]
 
         start_idx = block_start_idx + self._point_on_a_offset
@@ -357,7 +438,7 @@ class SelfCollisionVariableManager(CollisionGroupConsumer):
 
     def register_groups_of_body_combination(self, body_a: Body, body_b: Body):
         """
-        Register a body
+        Register a combination of bodies for self collision avoidance.
         """
         key = self.body_pair_to_group_pair(body_a, body_b)
         if key in self.registered_group_combinations:
