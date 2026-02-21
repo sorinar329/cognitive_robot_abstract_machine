@@ -20,6 +20,7 @@ from typing_extensions import (
     Union,
     Callable,
     Iterator,
+    List,
 )
 
 from .base_expressions import (
@@ -37,6 +38,12 @@ from ..utils import (
     is_iterable,
     make_list,
 )
+
+
+DomainType = Iterable[T]
+"""
+The type of the domain used for the variable.
+"""
 
 
 @dataclass(eq=False, repr=False)
@@ -60,12 +67,13 @@ class CanHaveDomainSource(CanBehaveLikeAVariable[T], ABC):
 
 
 @dataclass(eq=False, repr=False)
-class HasDomain(CanHaveDomainSource[T], ABC):
+class Variable(CanHaveDomainSource[T]):
     """
-    A superclass for expressions that have a domain.
+    An atomic expression of EQL that has a domain of possible values. It can be evaluated to yield values from its
+    domain.
     """
 
-    _domain_: Iterable[T] = field(default_factory=list)
+    _domain_: DomainType = field(default_factory=list)
     """
     The original domain value.
     """
@@ -75,10 +83,12 @@ class HasDomain(CanHaveDomainSource[T], ABC):
     """
     The re-enterable generator of values for this variable. This is created from the provided `_domain_`.
     """
+    _domain_source_: DomainSource = field(init=False, default=DomainSource.EXPLICIT)
+    """
+    The source of the domain for Variable is always EXPLICIT.
+    """
 
     def __post_init__(self):
-        self._domain_source_ = DomainSource.EXPLICIT
-
         super().__post_init__()
 
         self._update_domain_(self._domain_)
@@ -90,8 +100,6 @@ class HasDomain(CanHaveDomainSource[T], ABC):
         if isinstance(domain, ReEnterableLazyIterable):
             self._re_enterable_domain_generator_ = domain
             return
-        elif isinstance(domain, Selectable):
-            domain = (v.value for v in domain._evaluate_({}, parent=self))
         if not is_iterable(domain):
             domain = [domain]
         self._re_enterable_domain_generator_.set_iterable(domain)
@@ -117,39 +125,31 @@ class HasDomain(CanHaveDomainSource[T], ABC):
     def _original_value_is_iterable_and_this_operation_preserves_that_(self):
         return is_iterable(next(iter(self._re_enterable_domain_generator_), None))
 
-
-@dataclass(eq=False, repr=False)
-class HasType(CanHaveDomainSource[T], ABC):
-    """
-    A superclass for expressions that have a type. It differs from `CanHaveDomainSource` in that it must have a type.
-    """
-
-    _type_: Union[Type[T], Callable] = field(kw_only=True)
-    """
-    The result type of the variable. (The value of `T`)
-    """
-
     @cached_property
-    def _name_(self):
-        return self._type_.__name__
+    def _name_(self) -> str:
+        if self._type_:
+            return self._type_.__name__
+        else:
+            try:
+                first_value = next(iter(self._re_enterable_domain_generator_))
+                return f"{self.__class__.__name__}({type(first_value).__name__}, ...)"
+            except StopIteration:
+                return f"{self.__class__.__name__}()"
 
 
 @dataclass(eq=False, repr=False)
-class Variable(HasType[T], HasDomain[T]):
-    """
-    A Variable that queries will assign. The Variable produces results of type `T`.
-    """
-
-
-@dataclass(eq=False, repr=False)
-class Literal(HasDomain[T]):
+class Literal(Variable[T]):
     """
     Literals are variables that do not necessarily have a type but they must have a domain.
     """
 
-    _wrap_in_iterator_: bool = field(default=True, kw_only=True)
+    _value_: T = field(kw_only=True)
     """
-    Whether to wrap the domain in an iterator.
+    The value of the literal.
+    """
+    _domain_: List[T] = field(init=False, repr=False)
+    """
+    The domain of the literal. It is constructed from the `_value_` and is always a singleton iterable.
     """
     _name__: Optional[str] = field(default=None, kw_only=True)
     """
@@ -159,23 +159,20 @@ class Literal(HasDomain[T]):
     def __post_init__(
         self,
     ):
-        if self._wrap_in_iterator_:
-            self._domain_ = [self._domain_]
+        self._domain_ = [self._value_]
         super().__post_init__()
 
     @cached_property
     def _name_(self) -> str:
         if self._name__:
             return self._name__
-        elif self._type_:
-            return f"{self.__class__.__name__}({self._type_.__name__})"
         else:
-            return f"{self.__class__.__name__}({type(next(iter(self._re_enterable_domain_generator_), None))}, ...)"
+            return super()._name_
 
 
 @dataclass(eq=False, repr=False)
 class InstantiatedVariable(
-    MultiArityExpressionThatPerformsACartesianProduct, HasType[T]
+    MultiArityExpressionThatPerformsACartesianProduct, CanHaveDomainSource[T]
 ):
     """
     A variable which does not have an explicit domain, but creates new instances using the `_type_` and `_kwargs_`
@@ -184,6 +181,10 @@ class InstantiatedVariable(
     functions.
     """
 
+    _type_: Union[Type[T], Callable] = field(kw_only=True)
+    """
+    The result type of the variable. (The value of `T`)
+    """
     _kwargs_: Dict[str, Any] = field(default_factory=dict)
     """
     The properties of the variable as keyword arguments.
@@ -217,7 +218,9 @@ class InstantiatedVariable(
         """
         for k, v in self._kwargs_.items():
             self._child_vars_[k] = (
-                v if isinstance(v, SymbolicExpression) else Literal(v, _name__=k)
+                v
+                if isinstance(v, SymbolicExpression)
+                else Literal(_value_=v, _name__=k)
             )
             self._child_var_id_name_map_[self._child_vars_[k]._binding_id_] = k
 
@@ -260,6 +263,10 @@ class InstantiatedVariable(
                 self._child_var_id_name_map_[self._child_vars_[k]._binding_id_] = k
                 break
 
+    @cached_property
+    def _name_(self):
+        return self._type_.__name__
+
 
 @dataclass(eq=False, repr=False)
 class ExternallySetVariable(CanHaveDomainSource[T]):
@@ -280,9 +287,3 @@ class ExternallySetVariable(CanHaveDomainSource[T]):
          `_evaluate_` is called, and there's no value in the bindings `sources` for this variable.
         """
         yield from []
-
-
-DomainType = TypingUnion[Iterable[T], CanBehaveLikeAVariable[T], None]
-"""
-The type of the domain used for the variable.
-"""

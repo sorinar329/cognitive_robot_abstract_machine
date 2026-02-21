@@ -254,7 +254,7 @@ class MatchVariable(Match[T]):
     constraints.
     """
 
-    domain: DomainType = field(default=None, kw_only=True)
+    domain: Optional[DomainType] = field(default=None, kw_only=True)
     """
     The domain to use for the variable created by the match.
     """

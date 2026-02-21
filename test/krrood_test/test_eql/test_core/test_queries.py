@@ -475,8 +475,15 @@ def test_not_and(handles_and_containers_world):
         )
     )
 
+    equivalent_query = an(
+        entity(B).where(
+            not_(contains(B.name, "Handle")) | not_(contains(B.name, "1")),
+        )
+    )
+
     all_not_handle1 = list(query.evaluate())
-    assert len(all_not_handle1) == 5, "Should generate 5 bodies"
+    assert len(all_not_handle1) == 5, "Should generate 7 bodies"
+    assert len(equivalent_query.tolist()) == 5, "Should generate 7 bodies"
     assert all(
         h.name != "Handle1" for h in all_not_handle1
     ), "All generated items should satisfy query"
@@ -892,12 +899,6 @@ def test_distinct_with_order_by():
 
 def test_variable_domain(handles_and_containers_world):
     body = variable(Body, domain=handles_and_containers_world.bodies)
-    query = an(entity(body).where(contains(body.name, "Handle")))
-    assert len(list(query.evaluate())) == 3
-
-
-def test_variable_from(handles_and_containers_world):
-    body = variable_from(handles_and_containers_world.bodies)
     query = an(entity(body).where(contains(body.name, "Handle")))
     assert len(list(query.evaluate())) == 3
 

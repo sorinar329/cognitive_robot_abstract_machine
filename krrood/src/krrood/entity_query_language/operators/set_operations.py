@@ -46,6 +46,15 @@ class Union(MultiArityExpression):
             child_result.bindings, self._is_false_, self, child_result
         )
 
+    def add_child(self, child: SymbolicExpression) -> None:
+        """
+        Adds a child operand to the union operator.
+
+        :param child: The child operand to add.
+        """
+        self._operation_children_ = self._operation_children_ + (child,)
+        child._parent_ = self
+
 
 @dataclass(eq=False, repr=False)
 class PerformsCartesianProduct(SymbolicExpression, ABC):

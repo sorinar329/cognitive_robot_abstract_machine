@@ -209,7 +209,7 @@ class SymbolicExpression(ABC):
         children = dict(enumerate(children))
         for k, v in children.items():
             if not isinstance(v, SymbolicExpression):
-                children[k] = Literal(v)
+                children[k] = Literal(_value_=v)
         for k, v in children.items():
             # With graph structure, do not copy nodes; just connect an edge.
             v._parent_ = self
@@ -641,7 +641,7 @@ class OperationResult:
     The result of the operation that was evaluated before this one.
     """
 
-    @cached_property
+    @property
     def all_bindings(self) -> Bindings:
         """
         :return: All the bindings from all the evaluated operations until this one, including this one.
@@ -653,11 +653,11 @@ class OperationResult:
             return self.bindings
         return self.previous_operation_result.bindings | self.bindings
 
-    @cached_property
+    @property
     def has_value(self) -> bool:
         return self.operand._binding_id_ in self.bindings
 
-    @cached_property
+    @property
     def is_true(self) -> bool:
         return not self.is_false
 
