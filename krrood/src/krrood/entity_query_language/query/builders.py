@@ -101,20 +101,19 @@ class FilterBuilder(ExpressionBuilder, ABC):
         aggregators, non_aggregators = [], []
 
         def walk(expr: SymbolicExpression):
-            if isinstance(expr, Query):
-                # subqueries are a boundary, we don't need to traverse them.
-                return False
 
             if isinstance(expr, Aggregator):
                 aggregators.append(expr)
-                # we don't need to traverse the child of aggregators.
-                return False
             elif isinstance(expr, Selectable) and not isinstance(expr, Literal):
                 non_aggregators.append(expr)
 
             # Stop traversal early if both found
             if aggregators and non_aggregators:
                 return True
+
+            if isinstance(expr, (Query, Aggregator)):
+                # Subqueries/Aggregator are a boundary, we don't need to traverse inside them.
+                return False
 
             return any(walk(child) for child in expr._children_)
 
