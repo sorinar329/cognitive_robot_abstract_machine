@@ -24,7 +24,7 @@ import open3d
 
 import numpy as np
 import sensor_msgs.msg
-from typing_extensions import TYPE_CHECKING, Any, Tuple, Dict, List, Type
+from typing_extensions import TYPE_CHECKING, Any, Tuple, Dict, List, Type, deprecated
 
 from .types.tf import StampedTransform
 
@@ -69,10 +69,28 @@ class CASViews:
     """Query information"""
 
     VIEWPOINT_CAM_TO_WORLD: str = "viewpoint_cam_to_world"
-    """Camera to world transform"""
+    """DEPRECATED: Use CAM_TO_WORLD_TRANSFORM or CAM_TO_WORLD_POSE instead.
+    Camera to world transform"""
 
     VIEWPOINT_WORLD_TO_CAM: str = "viewpoint_world_to_cam"
-    """World to camera transform"""
+    """DEPRECATED: Use WORLD_TO_CAM_TRANSFORM or WORLD_TO_CAM_POSE instead.
+    World to camera transform"""
+
+    CAM_TO_WORLD_TRANSFORM: str = "cam_to_world_transform"
+    """Camera to world. 
+    Type: semantic_digital_twin.spatial_types.spatial_types.HomogeneousTransformationMatrix"""
+
+    WORLD_TO_CAM_TRANSFORM: str = "viewpoint_world_to_cam"
+    """World to camera transform.
+    Type: semantic_digital_twin.spatial_types.spatial_types.HomogeneousTransformationMatrix"""
+
+    CAM_TO_WORLD_POSE: str = "cam_to_world_pose"
+    """Camera to world transform.
+    Type: semantic_digital_twin.spatial_types.spatial_types.Pose"""
+
+    WORLD_TO_CAM_POSE: str = "world_to_cam_pose"
+    """World to camera transform.
+    Type: semantic_digital_twin.spatial_types.spatial_types.Pose"""
 
     OBJECT_IMAGE: str = "object_image"
     """Object image data. This view is used in imagistic reasoning pipelines where a 
@@ -172,14 +190,6 @@ class CAS:
     @cloud.setter
     def cloud(self, value: open3d.geometry.PointCloud) -> None:
         self.views[CASViews.CLOUD] = value
-
-    @property
-    def cloud_organized(self) -> Optional[Any]:
-        return self.views.get(CASViews.CLOUD_ORGANIZED)
-
-    @cloud_organized.setter
-    def cloud_organized(self, value: Any) -> None:
-        self.views[CASViews.CLOUD_ORGANIZED] = value
 
     @property
     def viewpoint_cam_to_world(self) -> Optional[StampedTransform]:
