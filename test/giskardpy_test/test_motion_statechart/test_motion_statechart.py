@@ -2823,6 +2823,58 @@ class TestCollisionAvoidance:
             kin_sim.tick_until_end(500)
         assert len(cylinder_bot_world.collision_manager.collision_consumers) == 0
 
+    def test_multiple_external_collision_avoidance_motions(
+        self, cylinder_bot_world: World
+    ):
+        robot = cylinder_bot_world.get_semantic_annotations_by_type(AbstractRobot)[0]
+        tip = cylinder_bot_world.get_kinematic_structure_entity_by_name("bot")
+        env1 = cylinder_bot_world.get_kinematic_structure_entity_by_name("environment")
+
+        collision_manager = cylinder_bot_world.collision_manager
+        collision_manager.temporary_rules.extend(
+            [
+                AvoidCollisionBetweenGroups(
+                    buffer_zone_distance=0.05,
+                    violated_distance=0.0,
+                    body_group_a=[tip],
+                    body_group_b=[env1],
+                ),
+            ]
+        )
+        collision_manager.max_avoided_bodies_rules.append(
+            MaxAvoidedCollisionsOverride(2, {robot.root})
+        )
+
+        def run_motion(goal_x):
+            msc = MotionStatechart()
+            msc.add_nodes(
+                [
+                    CartesianPose(
+                        root_link=cylinder_bot_world.root,
+                        tip_link=tip,
+                        goal_pose=HomogeneousTransformationMatrix.from_xyz_rpy(
+                            x=goal_x, reference_frame=cylinder_bot_world.root
+                        ),
+                    ),
+                    ExternalCollisionAvoidance(robot=robot),
+                    local_min := LocalMinimumReached(),
+                ]
+            )
+            msc.add_node(EndMotion.when_true(local_min))
+
+            kin_sim = Executor(MotionStatechartContext(world=cylinder_bot_world))
+            kin_sim.compile(motion_statechart=msc)
+            kin_sim.tick_until_end(500)
+            return kin_sim
+
+        # First motion
+        run_motion(1.0)
+        assert len(cylinder_bot_world.collision_manager.collision_consumers) == 0
+
+        # Second motion
+        run_motion(0.5)
+        assert len(cylinder_bot_world.collision_manager.collision_consumers) == 0
+
     def test_self_collision_avoidance(self, self_collision_bot_world: World):
 
         robot = self_collision_bot_world.get_semantic_annotations_by_type(
