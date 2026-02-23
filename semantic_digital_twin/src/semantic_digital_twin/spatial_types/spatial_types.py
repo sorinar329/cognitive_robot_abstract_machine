@@ -1681,6 +1681,7 @@ class Pose(sm.SymbolicMathType, SpatialType, SubclassJSONSerializer):
         position: Optional[Point3] = None,
         orientation: Optional[Quaternion] = None,
         reference_frame: Optional[KinematicStructureEntity] = None,
+        timestamp: Optional[float] = None,
     ):
         """
         Initialize a 3D point with orientation and a reference frame in a kinematic structure.
@@ -1692,6 +1693,7 @@ class Pose(sm.SymbolicMathType, SpatialType, SubclassJSONSerializer):
         :param reference_frame: The reference frame (kinematic structure entity) relative to which
                                 this point is defined. This may be None if the point is not tied
                                 to any specific reference frame.
+        :param timestamp: The timestamp associated with this pose. If None, the current time is used.
         """
         if position is None:
             position = Point3()
@@ -1704,6 +1706,7 @@ class Pose(sm.SymbolicMathType, SpatialType, SubclassJSONSerializer):
         )
         self._casadi_sx = transformation_matrix._casadi_sx
         self.reference_frame = reference_frame
+        self.timestamp: float = timestamp
 
     def _verify_type(self):
         if self.shape != (4, 4):

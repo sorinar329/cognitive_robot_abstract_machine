@@ -111,6 +111,9 @@ class CollisionCheck:
 @dataclass
 class Collision:
     contact_distance: float
+    """
+    Distance between the two bodies at the contact point.
+    """
     body_a: Body = field(default=None)
     """
     First body in the collision.

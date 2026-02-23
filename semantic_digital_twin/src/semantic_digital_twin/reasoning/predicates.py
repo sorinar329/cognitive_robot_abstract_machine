@@ -1,17 +1,20 @@
 from __future__ import annotations
 from abc import ABC
 from dataclasses import dataclass
+from typing import Optional
 
 import numpy as np
 import math
 import trimesh.boolean
 from krrood.entity_query_language.predicate import (
     Predicate,
-    Symbol, symbolic_function,
+    Symbol,
+    symbolic_function,
 )
 from random_events.interval import Interval
 from typing_extensions import List, TYPE_CHECKING, Iterable, Type
 
+from ..collision_checking.collision_detector import Collision
 from ..collision_checking.trimesh_collision_detector import TrimeshCollisionDetector
 from ..datastructures.prefixed_name import PrefixedName
 from ..datastructures.variables import SpatialVariables
@@ -47,6 +50,21 @@ def stable(obj: Body) -> bool:
 
 
 @symbolic_function
+def collision_between_two_bodies(
+    body1: Body, body2: Body, threshold: float = 0.001
+) -> Optional[Collision]:
+    """
+    Check collision between two bodies and return the result.
+
+    :param body1: The first body
+    :param body2: The second body
+    :return: The result of the collision detection.
+    """
+    tcd = TrimeshCollisionDetector(body1._world)
+    return tcd.check_collision_between_bodies(body1, body2, threshold)
+
+
+@symbolic_function
 def contact(
     body1: Body,
     body2: Body,
@@ -60,8 +78,7 @@ def contact(
     :param threshold: The threshold for contact detection
     :return: True if the two objects are in contact False else
     """
-    tcd = TrimeshCollisionDetector(body1._world)
-    result = tcd.check_collision_between_bodies(body1, body2, threshold)
+    result = collision_between_two_bodies(body1, body2, threshold)
 
     if result is None:
         return False
@@ -189,6 +206,7 @@ def reachable(pose: HomogeneousTransformationMatrix, root: Body, tip: Body) -> b
     except UnreachableException as e:
         return False
     return True
+
 
 @symbolic_function
 def is_supported_by(
