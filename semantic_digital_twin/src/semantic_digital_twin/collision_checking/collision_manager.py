@@ -236,15 +236,6 @@ class CollisionManager(ModelChangeCallback):
         self.get_buffer_zone_distance.cache_clear()
         self.get_violated_distance.cache_clear()
 
-    def is_collision_checked(self, body_a: Body, body_b: Body) -> bool:
-        """
-        Checks if the collision matrix contains a collision check for the given bodies.
-        """
-        return (
-            CollisionCheck(body_a, body_b) in self.collision_matrix.collision_checks
-            or CollisionCheck(body_b, body_a) in self.collision_matrix.collision_checks
-        )
-
     def compute_collisions(self) -> CollisionCheckingResult:
         """
         Computes collisions based on the current collision matrix.

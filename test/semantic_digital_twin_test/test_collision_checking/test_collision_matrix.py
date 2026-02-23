@@ -346,7 +346,9 @@ class TestCollisionRules:
                 pr2_world_state_reset.bodies_with_collision, 2
             )
         }
-        rule = AllowNeverInCollision(robot=robot, collision_checks=collision_checks)
+        rule = AllowNeverInCollision(
+            robot=robot, collision_checks=collision_checks, number_of_tries=200
+        )
         rule.update(pr2_world_state_reset)
         assert 0 < len(rule.allowed_collision_pairs) < len(collision_checks)
 

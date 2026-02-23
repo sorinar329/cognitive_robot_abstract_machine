@@ -17,6 +17,7 @@ from ..exceptions import (
 from ..world_description.world_entity import Body
 
 if TYPE_CHECKING:
+    from semantic_digital_twin.collision_checking.collision_groups import CollisionGroup
     from ..world import World
 
 
@@ -143,6 +144,30 @@ class CollisionMatrix:
 
     def remove_collision_checks(self, collision_checks: set[CollisionCheck]):
         self.collision_checks -= collision_checks
+
+    def is_collision_checked(self, body_a: Body, body_b: Body) -> bool:
+        """
+        Checks if the collision matrix contains a collision check for the given bodies.
+        """
+        return (
+            CollisionCheck(body_a, body_b) in self.collision_checks
+            or CollisionCheck(body_b, body_a) in self.collision_checks
+        )
+
+    def is_collision_groups_combination_checked(
+        self, group_a: CollisionGroup, group_b: CollisionGroup
+    ) -> bool:
+        """
+        Checks if any combination of bodies between groups is in the collision matrix.
+        :param group_a: The first collision group.
+        :param group_b: The second collision group.
+        :return: True if any combination of bodies between the groups is in the collision matrix, False otherwise.
+        """
+        for body_a in group_a.bodies:
+            for body_b in group_b.bodies:
+                if self.is_collision_checked(body_a, body_b):
+                    return True
+        return False
 
 
 @dataclass

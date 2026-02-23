@@ -8,6 +8,7 @@ from semantic_digital_twin.collision_checking.collision_matrix import (
     CollisionRule,
     CollisionMatrix,
 )
+from semantic_digital_twin.collision_checking.collision_rules import AvoidSelfCollisions
 from semantic_digital_twin.collision_checking.collision_variable_managers import (
     SelfCollisionVariableManager,
     ExternalCollisionVariableManager,
@@ -549,9 +550,24 @@ class SelfCollisionAvoidance(Goal):
     Reference to the self collision variable manager shared by other self collision avoidance nodes.
     """
 
+    def create_self_collision_matrix(
+        self, context: MotionStatechartContext
+    ) -> CollisionMatrix:
+        """
+        Creates a collision matrix that contains all body combinations except those that are always filtered.
+        We need this because we don't know how the collision matrix might change during the motion
+        """
+        collision_matrix = CollisionMatrix()
+        avoid_self_collisions = AvoidSelfCollisions(robot=self.robot)
+        avoid_self_collisions.update(context.world)
+        avoid_self_collisions.apply_to_collision_matrix(collision_matrix)
+        for ignore_collision_rule in context.collision_manager.ignore_collision_rules:
+            ignore_collision_rule.apply_to_collision_matrix(collision_matrix)
+        return collision_matrix
+
     def expand(self, context: MotionStatechartContext) -> None:
         self.self_collision_manager = context.self_collision_manager
-        context.collision_manager.update_collision_matrix()
+        collision_matrix = self.create_self_collision_matrix(context)
 
         for group_a, group_b in combinations(
             self.self_collision_manager.collision_groups, 2
@@ -561,6 +577,11 @@ class SelfCollisionAvoidance(Goal):
                 or group_b.root not in self.robot.kinematic_structure_entities
             ):
                 # this is no self collision
+                continue
+            if not collision_matrix.is_collision_groups_combination_checked(
+                group_a, group_b
+            ):
+                # skip because this self collision is never checked
                 continue
             self.self_collision_manager.register_groups_of_body_combination(
                 group_a.root, group_b.root
