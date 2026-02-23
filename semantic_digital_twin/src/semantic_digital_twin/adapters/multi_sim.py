@@ -19,6 +19,7 @@ from base_simulator import (
     SimulatorViewer,
     SimulatorAttribute,
     SimulatorCallbackResult,
+    SimulatorConstraints,
 )
 from krrood.utils import recursive_subclasses
 from scipy.spatial.transform import Rotation
@@ -61,6 +62,7 @@ from ..mixin import SimulatorAdditionalProperty
 from ..world_description.world_modification import (
     AddKinematicStructureEntityModification,
     AddActuatorModification,
+    AddConnectionModification,
 )
 
 logger = logging.getLogger(__name__)
@@ -1982,9 +1984,89 @@ class RegionSpawner(KinematicStructureEntitySpawner, ABC):
         )
 
 
+class ConnectionSpawner(EntitySpawner):
+    """
+    A spawner to spawn a Connection object in the simulator.
+    """
+
+    entity_type: ClassVar[Type[Connection]] = Connection
+    """
+    The type of the entity to spawn.
+    """
+
+    def _spawn(self, simulator: BaseSimulator, entity: Connection) -> bool:
+        """
+        Spawns a Connection object in the simulator, including its dof and its child body.
+
+        :param simulator: The simulator to spawn the Connection in.
+        :param entity: The Connection object to spawn.
+
+        :return: True if the Connection was spawned successfully, False otherwise.
+        """
+        return self._spawn_connection(simulator, entity)
+
+    @abstractmethod
+    def _spawn_connection(
+        self, simulator: BaseSimulator, connection: Connection
+    ) -> bool:
+        """
+        Spawns a Connection object in the simulator.
+
+        :param simulator: The simulator to spawn the Connection in.
+        :param connection: The Connection object to spawn.
+
+        :return: True if the Connection was spawned successfully, False otherwise.
+        """
+        raise NotImplementedError
+
+
+class FixedConnectionSpawner(ConnectionSpawner, ABC):
+    """
+    A spawner to spawn a FixedConnection object in the simulator.
+    """
+
+    entity_type: ClassVar[Type[Connection]] = FixedConnection
+    """
+    The type of the entity to spawn.
+    """
+
+
+class Connection1DOFSpawner(ConnectionSpawner, ABC):
+    """
+    A spawner to spawn an ActiveConnection1DOF object in the simulator.
+    """
+
+    entity_type: ClassVar[Type[Connection]] = ActiveConnection1DOF
+    """
+    The type of the entity to spawn.
+    """
+
+
+class ConnectionPrismaticSpawner(ConnectionSpawner, ABC):
+    """
+    A spawner to spawn a PrismaticConnection object in the simulator.
+    """
+
+    entity_type: ClassVar[Type[Connection]] = PrismaticConnection
+    """
+    The type of the entity to spawn.
+    """
+
+
+class ConnectionRevoluteSpawner(ConnectionSpawner, ABC):
+    """
+    A spawner to spawn a RevoluteConnection object in the simulator.
+    """
+
+    entity_type: ClassVar[Type[Connection]] = RevoluteConnection
+    """
+    The type of the entity to spawn.
+    """
+
+
 class ActuatorSpawner(EntitySpawner):
     """
-    A spawner to spawn an Actuator object in the Multiverse simulator.
+    A spawner to spawn an Actuator object in the simulator.
     """
 
     entity_type: ClassVar[Type[Actuator]] = Actuator
@@ -1994,9 +2076,9 @@ class ActuatorSpawner(EntitySpawner):
 
     def _spawn(self, simulator: BaseSimulator, entity: Actuator) -> bool:
         """
-        Spawns an Actuator object in the Multiverse simulator, including its dofs.
+        Spawns an Actuator object in the simulator, including its dof.
 
-        :param simulator: The Multiverse simulator to spawn the entity in.
+        :param simulator: The simulator to spawn the entity in.
         :param entity: The Actuator object to spawn.
 
         :return: True if the entity is spawned successfully, False otherwise.
@@ -2006,10 +2088,12 @@ class ActuatorSpawner(EntitySpawner):
     @abstractmethod
     def _spawn_actuator(self, simulator: BaseSimulator, actuator: Actuator) -> bool:
         """
-        Spawns an Actuator object in the Multiverse simulator.
+        Spawns an Actuator object in the simulator.
 
-        :param simulator: The Multiverse simulator to spawn the entity in.
+        :param simulator: The simulator to spawn the entity in.
         :param actuator: The Actuator object to spawn.
+
+        :return: True if the Actuator was spawned successfully, False otherwise.
         """
         raise NotImplementedError
 
@@ -2088,12 +2172,65 @@ class MujocoRegionSpawner(MujocoKinematicStructureEntitySpawner, RegionSpawner):
     ...
 
 
+class MujocoConnectionSpawner(MujocoEntitySpawner, ConnectionSpawner):
+    """
+    A spawner to spawn a Connection object in the Mujoco simulator.
+    """
+
+    mujoco_joint_converter: ClassVar[Type[MujocoJointConverter]] = Any
+
+    def _spawn_connection(
+        self, simulator: MujocoSimulator, connection: Connection
+    ) -> bool:
+        joint_props = Mujoco1DOFJointConverter.convert(connection)
+        joint_name = joint_props.pop("name")
+        result = simulator.add_entity(
+            entity_name=joint_name,
+            entity_type="joint",
+            entity_properties=joint_props,
+            parent_name=connection.child.name.name,
+        )
+        return (
+            result.type
+            == SimulatorCallbackResult.ResultType.SUCCESS_AFTER_EXECUTION_ON_MODEL
+        )
+
+
+class MujocoFixedConnectionSpawner(MujocoEntitySpawner, FixedConnectionSpawner):
+    """
+    This spawner does nothing. FixedConnections are implicitly created in Mujoco.
+    """
+
+    def _spawn_connection(
+        self, simulator: MujocoSimulator, connection: Connection
+    ) -> bool:
+        return True
+
+
+class MujocoPrismaticJointSpawner(MujocoConnectionSpawner, ConnectionPrismaticSpawner):
+    """
+    A spawner to spawn a PrismaticConnection object in the MuJoCo simulator.
+    """
+
+    mujoco_joint_converter: ClassVar[Type[MujocoJointConverter]] = (
+        MujocoPrismaticJointConverter
+    )
+
+
+class MujocoRevoluteJointSpawner(MujocoConnectionSpawner, ConnectionRevoluteSpawner):
+    """
+    A spawner to spawn a RevoluteConnection object in the MuJoCo simulator.
+    """
+
+    mujoco_joint_converter: ClassVar[Type[MujocoJointConverter]] = (
+        MujocoRevoluteJointConverter
+    )
+
+
 class MujocoActuatorSpawner(MujocoEntitySpawner, ActuatorSpawner):
     """
     A spawner to spawn a MujocoActuator object in the MuJoCo simulator.
     """
-
-    entity_type: ClassVar[Type[Actuator]] = Actuator
 
     def _spawn_actuator(self, simulator: MujocoSimulator, actuator: Actuator) -> bool:
         actuator_props = MujocoActuatorConverter.convert(actuator)
@@ -2133,8 +2270,8 @@ class MujocoActuatorSpawner(MujocoEntitySpawner, ActuatorSpawner):
 @dataclass
 class MultiSimSynchronizer(ModelChangeCallback, ABC):
     """
-    A callback to synchronize the world model with the Multiverse simulator.
-    This callback will listen to the world model changes and update the Multiverse simulator accordingly.
+    A callback to synchronize the world model with the simulator.
+    This callback will listen to the world model changes and update the simulator accordingly.
     """
 
     world: World
@@ -2144,7 +2281,7 @@ class MultiSimSynchronizer(ModelChangeCallback, ABC):
 
     simulator: BaseSimulator
     """
-    The Multiverse simulator to synchronize with the world.
+    The simulator to synchronize with the world.
     """
 
     entity_converter: Type[EntityConverter] = NoneType
@@ -2162,6 +2299,9 @@ class MultiSimSynchronizer(ModelChangeCallback, ABC):
             if isinstance(modification, AddKinematicStructureEntityModification):
                 entity = modification.kinematic_structure_entity
                 self.entity_spawner.spawn(simulator=self.simulator, entity=entity)
+            elif isinstance(modification, AddConnectionModification):
+                connection = modification.connection
+                self.entity_spawner.spawn(simulator=self.simulator, entity=connection)
             elif isinstance(modification, AddActuatorModification):
                 entity = modification.actuator
                 self.entity_spawner.spawn(simulator=self.simulator, entity=entity)
@@ -2179,12 +2319,12 @@ class MujocoSynchronizer(MultiSimSynchronizer):
 
 class MultiSim(ABC):
     """
-    Class to handle the simulation of a world using the Multiverse simulator.
+    Class to handle the simulation of a world using the simulator.
     """
 
     simulator_class: ClassVar[Type[BaseSimulator]]
     """
-    The class of the Multiverse simulator to use.
+    The class of the simulator to use.
     """
 
     synchronizer_class: ClassVar[Type[MultiSimSynchronizer]]
@@ -2199,7 +2339,7 @@ class MultiSim(ABC):
 
     simulator: BaseSimulator
     """
-    The Multiverse simulator instance.
+    The simulator instance.
     """
 
     synchronizer: MultiSimSynchronizer
@@ -2215,10 +2355,9 @@ class MultiSim(ABC):
     def __init__(
         self,
         world: World,
-        viewer: SimulatorViewer,
+        viewer: SimulatorViewer = None,
         headless: bool = False,
         step_size: float = 1e-3,
-        real_time_factor: float = 1.0,
         **kwargs,
     ):
         """
@@ -2228,7 +2367,6 @@ class MultiSim(ABC):
         :param viewer: The MultiverseViewer to read/write objects.
         :param headless: Whether to run the simulation in headless mode.
         :param step_size: The step size for the simulation.
-        :param real_time_factor: The real time factor for the simulation (1.0 = real time, 2.0 = twice as fast, -1.0 = as fast as possible).
         """
         self.builder_class().build_world(world=world, file_path=self.default_file_path)
         self.simulator = self.simulator_class(
@@ -2236,7 +2374,6 @@ class MultiSim(ABC):
             viewer=viewer,
             headless=headless,
             step_size=step_size,
-            real_time_factor=real_time_factor,
             **kwargs,
         )
         self.synchronizer = self.synchronizer_class(
@@ -2245,14 +2382,16 @@ class MultiSim(ABC):
         )
         self._viewer = viewer
 
-    def start_simulation(self):
+    def start_simulation(self, constraints: Optional[SimulatorConstraints] = None):
         """
         Starts the simulation. This will start one physics simulation thread and render it at 60Hz.
+
+        :param constraints: The constraints to apply to the simulation.
         """
         assert (
             self.simulator.state != SimulatorState.RUNNING
         ), "Simulation is already running."
-        self.simulator.start()
+        self.simulator.start(constraints=constraints)
 
     def stop_simulation(self):
         """
@@ -2386,6 +2525,9 @@ class MultiSim(ABC):
         if origin_state == SimulatorState.PAUSED:
             self.pause_simulation()
         return stable
+
+    def is_running(self):
+        return self.simulator.state == SimulatorState.RUNNING
 
 
 class MujocoSim(MultiSim):

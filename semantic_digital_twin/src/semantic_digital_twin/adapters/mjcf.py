@@ -85,6 +85,13 @@ class MJCFParser:
         self.tree = ET.fromstring(self.spec.to_xml())
         self.world = World()
 
+    @classmethod
+    def from_xml_string(cls, xml_string: str) -> "MJCFParser":
+        file_path = "/tmp/scene.xml"
+        with open(file_path, "w") as f:
+            f.write(xml_string)
+        return cls(file_path)
+
     def parse(self) -> World:
         """
         Parse the MJCF file and convert it into a World object.
