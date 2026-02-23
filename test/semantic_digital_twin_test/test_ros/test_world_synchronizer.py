@@ -521,12 +521,12 @@ def test_synchronous_state_synchronization(rclpy_node):
 
         synchronizer_1 = StateSynchronizer(
             node=rclpy_node,
-            world=w1,
+            _world=w1,
             synchronous=True,
         )
         synchronizer_2 = StateSynchronizer(
             node=receiver_node,
-            world=w2,
+            _world=w2,
         )
 
         # Allow time for publishers/subscribers to discover each other
@@ -569,12 +569,12 @@ def test_synchronous_model_synchronization(rclpy_node):
 
         synchronizer_1 = ModelSynchronizer(
             node=rclpy_node,
-            world=w1,
+            _world=w1,
             synchronous=True,
         )
         synchronizer_2 = ModelSynchronizer(
             node=receiver_node,
-            world=w2,
+            _world=w2,
         )
 
         # Allow time for publishers/subscribers to discover each other
@@ -624,8 +624,8 @@ def test_synchronous_publish_blocks_until_receiver_acknowledges(rclpy_node):
         w1 = create_dummy_world()
         w2 = create_dummy_world()
 
-        synchronizer_1 = StateSynchronizer(node=rclpy_node, world=w1, synchronous=True)
-        synchronizer_2 = StateSynchronizer(node=receiver_node, world=w2)
+        synchronizer_1 = StateSynchronizer(node=rclpy_node, _world=w1, synchronous=True)
+        synchronizer_2 = StateSynchronizer(node=receiver_node, _world=w2)
 
         # Allow time for publishers/subscribers to discover each other
         time.sleep(0.2)
