@@ -16,7 +16,8 @@ from giskardpy.motion_statechart.graph_node import MotionStatechartNode, NodeArt
 from giskardpy.motion_statechart.motion_statechart import MotionStatechart
 from pycram.datastructures.pose import PoseStamped
 from semantic_digital_twin.reasoning.predicates import (
-    contact, collision_between_two_bodies,
+    contact,
+    collision_between_bodies,
 )
 from semantic_digital_twin.spatial_types.spatial_types import Pose
 from semantic_digital_twin.world import World
@@ -69,8 +70,10 @@ from ..utils import (
 
 set_logger_level(LogLevel.DEBUG)
 
+
 class DetectorStateChart(MotionStatechart):
     pass
+
 
 class AtomicEventDetector(PropagatingThread):
     """
@@ -359,14 +362,16 @@ class DetectorWithTwoTrackedObjects(
 
 @dataclass(eq=False, repr=False)
 class ContactDetectorNode(MotionStatechartNode):
-    latest_contact_bodies: List[Body] = field(default_factory=list, kw_only=True, init=False)
-    latest_close_bodies: List[Body] = field(default_factory=list, kw_only=True, init=False)
+    latest_contact_bodies: List[Body] = field(
+        default_factory=list, kw_only=True, init=False
+    )
+    latest_close_bodies: List[Body] = field(
+        default_factory=list, kw_only=True, init=False
+    )
     tracked_obj: Body = field(kw_only=True)
     logger: EventLogger = field(kw_only=True)
     with_object: Optional[Body] = field(default=None, kw_only=True)
     max_closeness_distance: float = field(default=0.1, kw_only=True)
-
-
 
     def build(self, context: MotionStatechartContext) -> NodeArtifacts:
         #self.contact_bodies = context.world.bodies.filter(lambda b: b.is_tracked)
@@ -384,7 +389,7 @@ class ContactDetectorNode(MotionStatechartNode):
         for obj in objects:
             if obj is self.tracked_obj:
                 continue
-            if collision := collision_between_two_bodies(
+            if collision := collision_between_bodies(
                 self.tracked_obj, obj, threshold=self.max_closeness_distance
             ):
                 close_bodies.append(obj)
@@ -433,12 +438,12 @@ class ContactDetectorNode(MotionStatechartNode):
 
 
     def get_events(
-            self,
-            new_close_objects: list[Body],
-            new_contact_objects: list[Body],
-            close_bodies: list[Body],
-            contact_bodies: list[Body],
-            event_type: Type[AbstractContactEvent],
+        self,
+        new_close_objects: list[Body],
+        new_contact_objects: list[Body],
+        close_bodies: list[Body],
+        contact_bodies: list[Body],
+        event_type: Type[AbstractContactEvent],
     ):
         if event_type is CloseContactEvent:
             close_contact_event_type = CloseContactEvent
@@ -480,28 +485,29 @@ class ContactDetectorNode(MotionStatechartNode):
 
         return events
 
-    def on_tick(self, context: MotionStatechartContext) -> Optional[ObservationStateValues]:
-        # close_bodies, contact_bodies = self.get_contact_bodies()
-        # if len(contact_bodies) > 0:
-        #     self.contact_bodies = contact_bodies
-        #     return ObservationStateValues.TRUE
-        # for body in context.world.bodies_with_collision:
-        #     if body == self.tracked_obj: continue
-        #     if contact(body, self.tracked_obj):
-        #         self.contact_bodies.append(body)
-        #         #self.logger.log_event(ContactEvent(body.name, self.tracked_obj.name))
-        #         return ObservationStateValues.TRUE
-        # return ObservationStateValues.FALSE
+    def on_tick(
+        self, context: MotionStatechartContext
+    ) -> Optional[ObservationStateValues]:
         events = self.detect_events()
+        detected_contact = []
+        detected_close_contact = []
         if len(events) > 0:
             for event in events:
                 if isinstance(event, CloseContactEvent):
                     logger.debug(
                         f"{self.tracked_obj.name} got into close contact with {event.with_object.name}"
                     )
-                if isinstance(event, ContactEvent):
                     self.logger.log_event(event)
-                    return ObservationStateValues.TRUE
+                    detected_close_contact.append(event)
+                if isinstance(event, ContactEvent):
+                    logger.debug(
+                        f"{self.tracked_obj.name} got into contact with {event.with_object.name}"
+                    )
+                    self.logger.log_event(event)
+                    detected_contact.append(event)
+
+        if detected_contact:
+            return ObservationStateValues.TRUE
 
         return ObservationStateValues.FALSE
 
@@ -636,7 +642,7 @@ class AbstractContactDetector(DetectorWithTwoTrackedObjects, ABC):
             )
             if obj is self.tracked_object:
                 continue
-            if collision := collision_between_two_bodies(
+            if collision := collision_between_bodies(
                 self.tracked_object, obj, threshold=self.max_closeness_distance
             ):
                 close_bodies.append(obj)

@@ -3,7 +3,6 @@ from datetime import timedelta
 
 import numpy as np
 from pycram.testing import SemanticWorldTestCase, setup_world
-from semantic_digital_twin.collision_checking.trimesh_collision_detector import TrimeshCollisionDetector
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.reasoning.predicates import InsideOf
 from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
@@ -14,20 +13,33 @@ from semantic_digital_twin.world_description.shape_collection import ShapeCollec
 from semantic_digital_twin.world_description.world_entity import Body
 from typing_extensions import List, Type
 
-from segmind.datastructures.events import TranslationEvent, StopMotionEvent, StopTranslationEvent, \
-    CloseContactEvent, Event, EventUnion
+from segmind.datastructures.events import (
+    TranslationEvent,
+    StopMotionEvent,
+    StopTranslationEvent,
+    CloseContactEvent,
+    Event,
+    EventUnion,
+)
 from segmind.datastructures.object_tracker import ObjectTrackerFactory
-from segmind.detectors.atomic_event_detectors import TranslationDetector, AtomicEventDetector, ContactDetector
+from segmind.detectors.atomic_event_detectors import (
+    TranslationDetector,
+    AtomicEventDetector,
+    ContactDetector,
+)
 from segmind.detectors.coarse_event_detectors import GeneralPickUpDetector
-from segmind.detectors.spatial_relation_detector import InsertionDetector, SupportDetector
-from segmind.detectors.motion_detection_helpers import has_consistent_direction, is_displaced
+from segmind.detectors.spatial_relation_detector import (
+    InsertionDetector,
+    SupportDetector,
+)
+from segmind.detectors.motion_detection_helpers import (
+    has_consistent_direction,
+    is_displaced,
+)
 from segmind.event_logger import EventLogger
 
 
-
-
 class TestEventDetectors:
-
 
     def test_general_pick_up_start_condition_checker(self):
         self.world = setup_world()
@@ -47,8 +59,12 @@ class TestEventDetectors:
             time.sleep(2)
             fridge = self.world.get_body_by_name("cabinet1")
 
-            milk.parent_connection.origin = HomogeneousTransformationMatrix.from_xyz_rpy(
-                x = fridge.global_pose.x, y=fridge.global_pose.y, z=fridge.global_pose.z
+            milk.parent_connection.origin = (
+                HomogeneousTransformationMatrix.from_xyz_rpy(
+                    x=fridge.global_pose.x,
+                    y=fridge.global_pose.y,
+                    z=fridge.global_pose.z,
+                )
             )
             # update twice to detect two displacements between three poses, since window size is 2
             translation_detector.update_with_latest_motion_data()
@@ -56,15 +72,19 @@ class TestEventDetectors:
             # wait one timestep to detect that it is moving
             time.sleep(translation_detector.get_n_changes_wait_time(1))
             translation_event = milk_tracker.get_latest_event_of_type(TranslationEvent)
-            assert(translation_event is not None)
+            assert translation_event is not None
 
             # update once to detect two consistent gradients of zero value between last three updates.
             translation_detector.update_with_latest_motion_data()
 
             # wait one timestep to detect that it is not moving
             time.sleep(translation_detector.get_n_changes_wait_time(1))
-            assert(milk_tracker.get_first_event_of_type_after_event(StopTranslationEvent, translation_event)
-                            is not None)
+            assert (
+                milk_tracker.get_first_event_of_type_after_event(
+                    StopTranslationEvent, translation_event
+                )
+                is not None
+            )
         except Exception as e:
             raise e
         finally:
@@ -77,7 +97,9 @@ class TestEventDetectors:
         fridge = self.world.get_body_by_name("cabinet1")
         milk_tracker = ObjectTrackerFactory.get_tracker(milk)
         time_between_frames = timedelta(seconds=0.01)
-        translation_detector = self.run_and_get_translation_detector(milk, time_between_frames)
+        translation_detector = self.run_and_get_translation_detector(
+            milk, time_between_frames
+        )
         logger = EventLogger()
         sr_detector = InsertionDetector(logger=logger, world=self.world)
         sr_detector.start()
@@ -89,8 +111,12 @@ class TestEventDetectors:
             translation_detector.update_with_latest_motion_data()
             sr_detector.detect_events()
 
-            milk.parent_connection.origin = HomogeneousTransformationMatrix.from_xyz_rpy(
-                x=fridge.global_pose.x, y=fridge.global_pose.y, z=fridge.global_pose.z
+            milk.parent_connection.origin = (
+                HomogeneousTransformationMatrix.from_xyz_rpy(
+                    x=fridge.global_pose.x,
+                    y=fridge.global_pose.y,
+                    z=fridge.global_pose.z,
+                )
             )
             # update trice, the first three updates will trigger the displacement threshold, while the last update will trigger the consistent zero gradient
             translation_detector.update_with_latest_motion_data()
@@ -101,7 +127,7 @@ class TestEventDetectors:
             # because milk goes to moving state then to stop state thus we need to wait for 2 changes
             time.sleep(translation_detector.get_n_changes_wait_time(2))
             all_events = milk_tracker.get_event_history()
-            assert (milk_tracker.get_latest_event_of_type(StopMotionEvent) is not None)
+            assert milk_tracker.get_latest_event_of_type(StopMotionEvent) is not None
             assert InsideOf(milk, fridge).compute_containment_ratio() == 1.0
         except Exception as e:
             raise e
@@ -112,40 +138,40 @@ class TestEventDetectors:
             sr_detector.join()
 
     @staticmethod
-    def run_and_get_translation_detector(obj: Body, time_between_frames: timedelta = timedelta(seconds=0.01))\
-            -> TranslationDetector:
+    def run_and_get_translation_detector(
+        obj: Body, time_between_frames: timedelta = timedelta(seconds=0.01)
+    ) -> TranslationDetector:
         logger = EventLogger()
-        translation_detector = TranslationDetector(logger, obj,
-                                                   time_between_frames=time_between_frames,
-                                                   window_size=2)
+        translation_detector = TranslationDetector(
+            logger, obj, time_between_frames=time_between_frames, window_size=2
+        )
         translation_detector.start()
         # wait one timestep to detect the initial state
         time.sleep(translation_detector.get_n_changes_wait_time(1))
         return translation_detector
 
-
     def test_consistent_gradient_motion_detection_method(self):
         for i in range(3):
             a = np.zeros((3, 3))
             a[:, i] = 1
-            assert(has_consistent_direction(a.tolist()))
+            assert has_consistent_direction(a.tolist())
             a = np.zeros((3, 3))
             a[:, i] = -1
-            assert(has_consistent_direction(a.tolist()))
+            assert has_consistent_direction(a.tolist())
             a = np.zeros((3, 3))
             a[:, i] = -1
             a[1, i] = 1
-            assert(has_consistent_direction(a.tolist())) is False
+            assert (has_consistent_direction(a.tolist())) is False
 
     def test_displacement_motion_detection_method(self):
         for i in range(3):
             a = np.zeros((3, 3))
             a[:, i] = 1
-            assert(is_displaced(a.tolist(), 1.5))
+            assert is_displaced(a.tolist(), 1.5)
             a = np.zeros((3, 3))
             a[:, i] = -1
-            assert(is_displaced(a.tolist(), 1.5))
+            assert is_displaced(a.tolist(), 1.5)
             a = np.zeros((3, 3))
             a[:, i] = -1
             a[1, i] = 1
-            assert(is_displaced(a.tolist(), 1.5)) == False
+            assert (is_displaced(a.tolist(), 1.5)) == False

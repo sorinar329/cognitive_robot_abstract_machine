@@ -8,7 +8,6 @@ from abc import ABC, abstractmethod
 import numpy as np
 from pycram.designator import ObjectDesignatorDescription
 from segmind import set_logger_level, LogLevel, logger
-from semantic_digital_twin.collision_checking.collision_detector import Collision
 from semantic_digital_twin.reasoning.predicates import is_supported_by, contact
 from semantic_digital_twin.semantic_annotations.semantic_annotations import Floor
 from semantic_digital_twin.spatial_types import Vector3
@@ -29,7 +28,9 @@ try:
     from semantic_world.views import Container
 except ImportError:
     Container = None
-    print("Container view is not available. Some functionalities may not work as expected.")
+    print(
+        "Container view is not available. Some functionalities may not work as expected."
+    )
 
 from gtts import gTTS
 import pygame
@@ -39,10 +40,10 @@ speech_lock = threading.RLock()
 
 def text_to_speech(text: str):
     # The text that you want to convert to audio
-    text = 'Hello' if text is None else text
+    text = "Hello" if text is None else text
 
     # Language in which you want to convert
-    language = 'en'
+    language = "en"
 
     # Passing the text and language to the engine,
     # here we have marked slow=False. Which tells
@@ -72,34 +73,53 @@ def text_to_speech(text: str):
             print("Audio not available, running in silent mode.")
 
 
-def is_object_supported_by_container_body(obj: Body, distance: float = 0.07,
-                                          bodies_to_check: Optional[List[Body]] = None) -> bool:
+def is_object_supported_by_container_body(
+    obj: Body, distance: float = 0.07, bodies_to_check: Optional[List[Body]] = None
+) -> bool:
     if bodies_to_check is None:
         bodies_to_check = obj.contact_points.get_all_bodies()
     if hasattr(obj.world, "views") and obj.world.views is not None:
-        containers = [v for v in obj.world.views['views'] if isinstance(v, Container)]
+        containers = [v for v in obj.world.views["views"] if isinstance(v, Container)]
         container_bodies = [c.body for c in containers]
         container_body_names = [c.name.name for c in container_bodies]
         return any(body.name in container_body_names for body in bodies_to_check)
     else:
-        if any("drawer" in body.name and "handle" not in body.name for body in bodies_to_check):
+        if any(
+            "drawer" in body.name and "handle" not in body.name
+            for body in bodies_to_check
+        ):
             return True
         else:
-            possible_containers = obj.update_containment(axis_to_use=[AxisIdentifier.X, AxisIdentifier.Y])
-            possible_containers = [b for b in possible_containers if "drawer" in b.name and "handle" not in b.name]
+            possible_containers = obj.update_containment(
+                axis_to_use=[AxisIdentifier.X, AxisIdentifier.Y]
+            )
+            possible_containers = [
+                b
+                for b in possible_containers
+                if "drawer" in b.name and "handle" not in b.name
+            ]
             for b in bodies_to_check:
                 b_contact_bodies = b.contact_points.get_all_bodies()
-                if any(contact_body in possible_containers for contact_body in b_contact_bodies):
+                if any(
+                    contact_body in possible_containers
+                    for contact_body in b_contact_bodies
+                ):
                     return True
             return False
 
 
-def get_arm_and_grasp_description_for_object(obj: Body) -> Tuple[Arms, GraspDescription]:
+def get_arm_and_grasp_description_for_object(
+    obj: Body,
+) -> Tuple[Arms, GraspDescription]:
     obj_pose = obj.pose
     left_arm_pose = World.current_world.robot.get_link_pose("l_gripper_tool_frame")
     right_arm_pose = World.current_world.robot.get_link_pose("r_gripper_tool_frame")
-    obj_distance_from_left_arm = left_arm_pose.position.euclidean_distance(obj_pose.position)
-    obj_distance_from_right_arm = right_arm_pose.position.euclidean_distance(obj_pose.position)
+    obj_distance_from_left_arm = left_arm_pose.position.euclidean_distance(
+        obj_pose.position
+    )
+    obj_distance_from_right_arm = right_arm_pose.position.euclidean_distance(
+        obj_pose.position
+    )
     if obj_distance_from_left_arm < obj_distance_from_right_arm:
         arm = Arms.LEFT
         grasp = GraspDescription(Grasp.LEFT, Grasp.TOP)
@@ -177,6 +197,7 @@ class Imaginator:
     """
     A class that provides methods for imagining objects.
     """
+
     surfaces_created: List[Body] = []
     latest_surface_idx: int = 0
 
@@ -191,7 +212,9 @@ class Imaginator:
         return cls._imagine_support(aabb=aabb)
 
     @classmethod
-    def imagine_support_for_object(cls, obj: Body, support_thickness: Optional[float] = 0.005) -> Body:
+    def imagine_support_for_object(
+        cls, obj: Body, support_thickness: Optional[float] = 0.005
+    ) -> Body:
         """
         Imagine a support that supports the object and has a specified thickness.
 
@@ -202,9 +225,12 @@ class Imaginator:
         return cls._imagine_support(obj=obj, support_thickness=support_thickness)
 
     @classmethod
-    def _imagine_support(cls, obj: Optional[Body] = None,
-                         aabb: Optional[BoundingBox] = None,
-                         support_thickness: Optional[float] = None) -> Body:
+    def _imagine_support(
+        cls,
+        obj: Optional[Body] = None,
+        aabb: Optional[BoundingBox] = None,
+        support_thickness: Optional[float] = None,
+    ) -> Body:
         """
         Imagine a support for the object or with the size of the axis-aligned bounding box.
 
@@ -218,12 +244,19 @@ class Imaginator:
         elif obj is not None:
             obj_aabb = obj.get_axis_aligned_bounding_box()
         else:
-            raise ValueError("Either object or axis-aligned bounding box should be provided.")
+            raise ValueError(
+                "Either object or axis-aligned bounding box should be provided."
+            )
         print(f"support index: {cls.latest_surface_idx}")
         support_name = f"imagined_support_{cls.latest_surface_idx}"
-        support_thickness = obj_aabb.depth if support_thickness is None else support_thickness
-        box_vis_shape = BoundingBox(Color(1, 1, 0, 1), Vector3(0, 0, 0),
-                                       Vector3(obj_aabb.width, obj_aabb.depth, support_thickness * 0.5))
+        support_thickness = (
+            obj_aabb.depth if support_thickness is None else support_thickness
+        )
+        box_vis_shape = BoundingBox(
+            Color(1, 1, 0, 1),
+            Vector3(0, 0, 0),
+            Vector3(obj_aabb.width, obj_aabb.depth, support_thickness * 0.5),
+        )
         support = ObjectDesignatorDescription(list(support_name))
         support_obj = Body(support_name, Supporter, None, support, color=support.color)
         support_position = obj_aabb.base_origin
@@ -231,9 +264,18 @@ class Imaginator:
         # cp = support_obj.closest_points(0.05)
         # contacted_objects = cp.get_objects_that_have_points()
         from .detectors.atomic_event_detectors import AbstractContactDetector
-        contact_points, _ = AbstractContactDetector.get_contact_points_for_body(support_obj, 0.05)
-        contacted_objects = AbstractContactDetector.get_bodies_in_contact(contact_points)
-        contacted_surfaces = [obj for obj in contacted_objects if obj in cls.surfaces_created and obj != support_obj]
+
+        contact_points, _ = AbstractContactDetector.get_contact_points_for_body(
+            support_obj, 0.05
+        )
+        contacted_objects = AbstractContactDetector.get_bodies_in_contact(
+            contact_points
+        )
+        contacted_surfaces = [
+            obj
+            for obj in contacted_objects
+            if obj in cls.surfaces_created and obj != support_obj
+        ]
         for obj in contacted_surfaces:
             support_obj = support_obj.merge(obj)
             cls.surfaces_created.remove(obj)
@@ -251,14 +293,21 @@ def get_angle_between_vectors(vector_1: List[float], vector_2: List[float]) -> f
     :param vector_2: A list of float values that represent the second vector.
     :return: A float value that represents the angle between the two vectors.
     """
-    angle = np.arccos(np.dot(vector_1, vector_2) / (np.linalg.norm(vector_1) * np.linalg.norm(vector_2)))
+    angle = np.arccos(
+        np.dot(vector_1, vector_2)
+        / (np.linalg.norm(vector_1) * np.linalg.norm(vector_2))
+    )
     if isinstance(angle, np.ndarray):
         angle = float(angle.squeeze())
     return angle
 
 
-def calculate_transform_difference_and_check_if_small(transform_1: Transform, transform_2: Transform,
-                                                      translation_threshold: float, angle_threshold: float) -> bool:
+def calculate_transform_difference_and_check_if_small(
+    transform_1: Transform,
+    transform_2: Transform,
+    translation_threshold: float,
+    angle_threshold: float,
+) -> bool:
     """
     Calculate the translation and rotation of the object with respect to the hand to check if it was picked up,
      uses the translation and rotation thresholds to determine if the object was picked up.
@@ -272,13 +321,18 @@ def calculate_transform_difference_and_check_if_small(transform_1: Transform, tr
     """
     trans_1, quat_1 = transform_1.translation_as_list(), transform_1.rotation_as_list()
     trans_2, quat_2 = transform_2.translation_as_list(), transform_2.rotation_as_list()
-    trans_diff_cond = calculate_translation_difference_and_check(trans_1, trans_2, translation_threshold)
-    rot_diff_cond = calculate_angle_between_quaternions_and_check(quat_1, quat_2, angle_threshold)
+    trans_diff_cond = calculate_translation_difference_and_check(
+        trans_1, trans_2, translation_threshold
+    )
+    rot_diff_cond = calculate_angle_between_quaternions_and_check(
+        quat_1, quat_2, angle_threshold
+    )
     return trans_diff_cond and rot_diff_cond
 
 
-def calculate_translation_difference_and_check(trans_1: List[float], trans_2: List[float],
-                                               threshold: float) -> bool:
+def calculate_translation_difference_and_check(
+    trans_1: List[float], trans_2: List[float], threshold: float
+) -> bool:
     """
     Calculate the translation difference and checks if it is small.
 
@@ -315,7 +369,9 @@ def calculate_translation(position_1: List[float], position_2: List[float]) -> L
     return [p2 - p1 for p1, p2 in zip(position_1, position_2)]
 
 
-def calculate_abs_translation_difference(trans_1: List[float], trans_2: List[float]) -> List[float]:
+def calculate_abs_translation_difference(
+    trans_1: List[float], trans_2: List[float]
+) -> List[float]:
     """
     Calculate the translation difference.
 
@@ -348,7 +404,9 @@ def calculate_translation_vector(point_1: List[float], point_2: List[float]):
     return [p2 - p1 for p1, p2 in zip(point_1, point_2)]
 
 
-def calculate_angle_between_quaternions_and_check(quat_1: List[float], quat_2: List[float], threshold: float) -> bool:
+def calculate_angle_between_quaternions_and_check(
+    quat_1: List[float], quat_2: List[float], threshold: float
+) -> bool:
     """
     Calculate the angle between two quaternions and checks if it is small.
 
@@ -362,7 +420,9 @@ def calculate_angle_between_quaternions_and_check(quat_1: List[float], quat_2: L
     return quat_diff_angle <= threshold
 
 
-def calculate_angle_between_quaternions(quat_1: List[float], quat_2: List[float]) -> float:
+def calculate_angle_between_quaternions(
+    quat_1: List[float], quat_2: List[float]
+) -> float:
     """
     Calculate the angle between two quaternions.
 
@@ -375,7 +435,9 @@ def calculate_angle_between_quaternions(quat_1: List[float], quat_2: List[float]
     return quat_diff_angle
 
 
-def calculate_quaternion_difference(quat_1: List[float], quat_2: List[float]) -> List[float]:
+def calculate_quaternion_difference(
+    quat_1: List[float], quat_2: List[float]
+) -> List[float]:
     """
     Calculate the quaternion difference.
 
