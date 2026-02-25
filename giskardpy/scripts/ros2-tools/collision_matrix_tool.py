@@ -831,16 +831,14 @@ class Application(QMainWindow):
             srdf_file, _ = QFileDialog.getSaveFileName(
                 self,
                 "QFileDialog.getSaveFileName()",
-                self.__srdf_path,
-                "srdf files (*.srdf);;All files (*)",
+                filter="srdf files (*.srdf);;All files (*)",
                 options=options,
             )
         else:
             srdf_file, _ = QFileDialog.getOpenFileName(
                 self,
                 "QFileDialog.getOpenFileName()",
-                self.__srdf_path,
-                "srdf files (*.srdf);;All files (*)",
+                filter="srdf files (*.srdf);;All files (*)",
                 options=options,
             )
 

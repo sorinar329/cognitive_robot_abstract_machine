@@ -602,7 +602,7 @@ class SemanticAnnotation(WorldEntityWithSimulatorProperties):
 
         for entity in list(entities):
             world = entity._world
-            if world.is_kinematic_structure_entity_in_world(entity):
+            if world is not None:
                 entities.update(
                     world.get_kinematic_structure_entities_of_branch(entity)
                 )

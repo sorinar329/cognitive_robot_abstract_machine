@@ -2728,7 +2728,10 @@ class TestCollisionAvoidance:
         assert collisions.contacts[0].distance > 0.049
         assert len(cylinder_bot_world.collision_manager.collision_consumers) == 0
 
-    def test_update_collision_matrix_later(self, cylinder_bot_world: World):
+    def test_update_collision_matrix_later(self, cylinder_bot_world: World, rclpy_node):
+        VizMarkerPublisher(
+            _world=cylinder_bot_world, node=rclpy_node
+        ).with_tf_publisher()
         robot = cylinder_bot_world.get_semantic_annotations_by_type(AbstractRobot)[0]
         tip = cylinder_bot_world.get_kinematic_structure_entity_by_name("bot")
         env1 = cylinder_bot_world.get_kinematic_structure_entity_by_name("environment")
@@ -2774,6 +2777,7 @@ class TestCollisionAvoidance:
         kin_sim.compile(motion_statechart=msc)
 
         kin_sim.tick_until_end(500)
+        msc.draw("muh.pdf")
         cylinder_bot_world.collision_manager.clear_temporary_rules()
         cylinder_bot_world.collision_manager.add_temporary_rule(AvoidAllCollisions())
         cylinder_bot_world.collision_manager.update_collision_matrix()
