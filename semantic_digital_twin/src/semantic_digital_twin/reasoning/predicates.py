@@ -13,6 +13,7 @@ from krrood.entity_query_language.predicate import (
 from random_events.interval import Interval
 from typing_extensions import List, TYPE_CHECKING, Iterable, Type
 
+from ..collision_checking.collision_detector import ClosestPoints
 from ..collision_checking.trimesh_collision_detector import FCLCollisionDetector
 from ..datastructures.prefixed_name import PrefixedName
 from ..datastructures.variables import SpatialVariables
@@ -45,6 +46,26 @@ def stable(obj: Body) -> bool:
     :return: True if the given object is stable in the world False else
     """
     raise NotImplementedError("Needs multiverse")
+
+
+@symbolic_function
+def collision_between_bodies(
+    body1: Body,
+    body2: Body,
+    threshold: float = 0.001,
+) -> ClosestPoints:
+    """
+    Checks if two objects are in contact or not.
+
+    :param body1: The first object
+    :param body2: The second object
+    :param threshold: The threshold for contact detection
+    :return: True if the two objects are in contact False else
+    """
+    tcd = FCLCollisionDetector(_world=body1._world)
+    result = tcd.check_collision_between_bodies(body1, body2, distance=threshold)
+
+    return result
 
 
 @symbolic_function
