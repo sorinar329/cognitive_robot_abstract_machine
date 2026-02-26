@@ -2,11 +2,11 @@ import time
 
 import rclpy
 
-from Segmind.test import setup_contact_world
+from segmind.datastructures.events import ContactEvent
 from segmind.detectors.atomic_event_detectors import (
     DetectorStateChart,
     ContactDetector,
-    ContactDetectorNode,
+    ContactDetectorNode, LossOfContactDetectorNode,
 )
 from segmind.event_logger import EventLogger
 
@@ -20,6 +20,7 @@ from semantic_digital_twin.adapters.ros.visualization.viz_marker import (
     VizMarkerPublisher,
 )
 from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
+from test import setup_contact_world
 
 
 def test_motion_state_chart():
@@ -32,24 +33,38 @@ def test_motion_state_chart():
     logger = EventLogger()
     cylinder = world.get_body_by_name("cylinder_body")
     contact_detector = ContactDetectorNode(
-        name="contact_detector", logger=logger, tracked_obj=cylinder
+        name="contact_detector", logger=logger, tracked_object=cylinder
     )
 
-    sc.add_nodes([Sequence([contact_detector])])
+    loss_of_contact_detector = LossOfContactDetectorNode(
+        name="loss_of_contact_detector", logger=logger, tracked_object=cylinder)
+
+    sc.add_nodes([Sequence([contact_detector]),
+                  Sequence([loss_of_contact_detector])
+                  ])
 
     kin_sim = Executor(MotionStatechartContext(world=world))
 
     kin_sim.compile(motion_statechart=sc)
     kin_sim.tick()
-
-    events = logger.get_events()
+    # No Contact yet
+    assert len([i for i in logger.get_events() if isinstance(i, ContactEvent)]) == 0
+    assert contact_detector.observation_state == 0.0
 
     cylinder.parent_connection.origin = HomogeneousTransformationMatrix.from_xyz_rpy(
         y=-0.4
     )
+    kin_sim.tick()
+
+    # Contact with 2 objects
+    assert len([i for i in logger.get_events() if isinstance(i, ContactEvent)]) == 2
+    assert contact_detector.observation_state == 1.0
+
+    cylinder.parent_connection.origin = HomogeneousTransformationMatrix.from_xyz_rpy(
+        z=2
+    )
 
     kin_sim.tick()
 
-    events = logger.get_events()
-
-    print(events)
+    kin_sim.motion_statechart.draw("/home/sorin/dev/Segmind/test/img/" + "sony.pdf")
+    print(logger.get_events())

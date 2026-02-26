@@ -360,175 +360,9 @@ class DetectorWithTwoTrackedObjects(
         )
         return f"{self.thread_id} - {self.tracked_object.name}" + with_object_name
 
-@dataclass(eq=False, repr=False)
-class ContactDetectorNode(MotionStatechartNode):
-    latest_contact_bodies: List[Body] = field(
-        default_factory=list, kw_only=True, init=False
-    )
-    latest_close_bodies: List[Body] = field(
-        default_factory=list, kw_only=True, init=False
-    )
-    tracked_obj: Body = field(kw_only=True)
-    logger: EventLogger = field(kw_only=True)
-    with_object: Optional[Body] = field(default=None, kw_only=True)
-    max_closeness_distance: float = field(default=0.1, kw_only=True)
-
-    def build(self, context: MotionStatechartContext) -> NodeArtifacts:
-        #self.contact_bodies = context.world.bodies.filter(lambda b: b.is_tracked)
-        return NodeArtifacts()
 
 
-    def get_contact_bodies(self) -> Tuple[list[Body], list[Body]]:
-        close_bodies = []
-        contact_bodies = []
-        objects = (
-            [self.with_object]
-            if self.with_object
-            else self.tracked_obj._world.bodies_with_collision
-        )
-        for obj in objects:
-            if obj is self.tracked_obj:
-                continue
-            if collision := collision_between_bodies(
-                self.tracked_obj, obj, threshold=self.max_closeness_distance
-            ):
-                close_bodies.append(obj)
-                if collision.distance <= 0.001:
-                    contact_bodies.append(obj)
-        return close_bodies, contact_bodies
 
-
-    def trigger_events(
-        self, close_bodies: list[Body], contact_bodies: list[Body]
-    ) -> Union[List[CloseContactEvent], List[AgentContactEvent]]:
-        """
-        Check if the object got into contact with another object.
-
-        :param contact_points: The current contact points.
-        :param interference_points: The current interference points.
-        :return: An instance of the ContactEvent/AgentContactEvent class that represents the event if the object got
-         into contact, else None.
-        """
-        new_close_objects = []
-        new_contact_objects = []
-        for body in close_bodies:
-            if body not in self.latest_close_bodies:
-                new_close_objects.append(body)
-
-        for body in contact_bodies:
-            if body not in self.latest_contact_bodies:
-                new_contact_objects.append(body)
-
-        if self.with_object is not None:
-            new_close_objects = [
-                obj for obj in new_close_objects if obj == self.with_object
-            ]
-            new_contact_objects = [
-                body for body in new_contact_objects if body == self.with_object
-            ]
-        if len(new_close_objects) == 0 and len(new_contact_objects) == 0:
-            return []
-        return self.get_events(
-            new_close_objects,
-            new_contact_objects,
-            close_bodies,
-            contact_bodies,
-            CloseContactEvent,
-        )
-
-
-    def get_events(
-        self,
-        new_close_objects: list[Body],
-        new_contact_objects: list[Body],
-        close_bodies: list[Body],
-        contact_bodies: list[Body],
-        event_type: Type[AbstractContactEvent],
-    ):
-        if event_type is CloseContactEvent:
-            close_contact_event_type = CloseContactEvent
-            contact_event_type = ContactEvent
-
-        else:
-            raise NotImplementedError(f"Invalid event type {event_type}")
-
-        events = []
-        for obj in new_close_objects:
-            events.append(
-                close_contact_event_type(
-                    close_bodies=close_bodies,
-                    latest_close_bodies=self.latest_close_bodies,
-                    of_object=self.tracked_obj,
-                    with_object=obj,
-                )
-            )
-
-        for obj in new_contact_objects:
-            events.append(
-                contact_event_type(
-                    close_bodies=contact_bodies,
-                    latest_close_bodies=self.latest_contact_bodies,
-                    of_object=self.tracked_obj,
-                    with_object=obj,
-                )
-            )
-
-        return events
-
-    def detect_events(self) -> List[Event]:
-        close_bodies, contact_bodies = self.get_contact_bodies()
-
-        events = self.trigger_events(close_bodies, contact_bodies)
-
-        self.latest_close_bodies = close_bodies
-        self.latest_contact_bodies = contact_bodies
-
-        return events
-
-    def on_tick(
-        self, context: MotionStatechartContext
-    ) -> Optional[ObservationStateValues]:
-        events = self.detect_events()
-        detected_contact = []
-        detected_close_contact = []
-        if len(events) > 0:
-            for event in events:
-                if isinstance(event, CloseContactEvent):
-                    logger.debug(
-                        f"{self.tracked_obj.name} got into close contact with {event.with_object.name}"
-                    )
-                    self.logger.log_event(event)
-                    detected_close_contact.append(event)
-                if isinstance(event, ContactEvent):
-                    logger.debug(
-                        f"{self.tracked_obj.name} got into contact with {event.with_object.name}"
-                    )
-                    self.logger.log_event(event)
-                    detected_contact.append(event)
-
-        if detected_contact:
-            return ObservationStateValues.TRUE
-
-        return ObservationStateValues.FALSE
-
-
-# class LossOfContactDetectorNode(MotionStatechartNode):
-#     tracked_obj: Body = field(kw_only=True)
-#     logger: EventLogger = field(kw_only=True)
-#     with_object: Optional[Body] = field(default=None, kw_only=True)
-#     contact_bodies: List[Body] = field(default_factory=list, kw_only=True, init=False)
-#     close_bodies: List[Body] = field(default_factory=list, kw_only=True, init=False)
-#
-#     def build(self, context: MotionStatechartContext) -> NodeArtifacts:
-#         return NodeArtifacts()
-#
-#     def on_tick(self, context: MotionStatechartContext) -> Optional[ObservationStateValues]:
-#         for body in context.world.bodies_with_collision:
-#             if body == self.tracked_obj: continue
-#             if contact(body, self.tracked_obj):
-#                 self.contact_bodies.append(body)
-#                 return ObservationStateValues.FALSE
-#         return ObservationStateValues.TRUE
 
 
 class AbstractContactDetector(DetectorWithTwoTrackedObjects, ABC):
@@ -552,59 +386,24 @@ class AbstractContactDetector(DetectorWithTwoTrackedObjects, ABC):
             self, logger, tracked_object, with_object, wait_time, *args, **kwargs
         )
         self.max_closeness_distance = max_closeness_distance
-        self.latest_close_bodies: Optional[list[Body]] = []
         self.latest_contact_bodies: Optional[list[Body]] = []
 
     def get_events(
         self,
-        new_objects_contact: list[Body],
-        new_bodies_interference: list[Body],
-        close_bodies: list[Body],
+        new_bodies_contact: list[Body],
         contact_bodies: list[Body],
         event_type: Type[AbstractContactEvent],
     ):
-        if event_type is CloseContactEvent:
-            contact_event_type = CloseContactEvent
-            agent_contact_event_type = AgentContactEvent
-            interference_event_type = ContactEvent
-            agent_interference_event_type = AgentInterferenceEvent
-        elif event_type is LossOfCloseContactEvent:
-            contact_event_type = LossOfCloseContactEvent
-            agent_contact_event_type = AgentLossOfContactEvent
-            interference_event_type = LossOfContactEvent
-            agent_interference_event_type = AgentLossOfInterferenceEvent
-        else:
-            raise NotImplementedError(f"Invalid event type {event_type}")
         events = []
-        for body in new_bodies_interference:
-            if issubclass(self.obj_type, Agent):
-                event_type = agent_interference_event_type
-            else:
-                event_type = interference_event_type
+        for body in new_bodies_contact:
             events.append(
                 event_type(
                     close_bodies=contact_bodies,
-                    latest_close_bodies=self.latest_close_bodies,
+                    latest_close_bodies=self.latest_contact_bodies,
                     of_object=self.tracked_object,
                     with_object=body,
                 )
             )
-        for obj in new_objects_contact:
-            if obj in new_bodies_interference:
-                continue
-            else:
-                if issubclass(self.obj_type, Agent):
-                    event_type = agent_contact_event_type
-                else:
-                    event_type = contact_event_type
-                events.append(
-                    event_type(
-                        close_bodies=close_bodies,
-                        latest_close_bodies=self.latest_close_bodies,
-                        of_object=self.tracked_object,
-                        with_object=obj,
-                    )
-                )
         return events
 
     @property
@@ -619,17 +418,15 @@ class AbstractContactDetector(DetectorWithTwoTrackedObjects, ABC):
         Detects the closest points between the object to track and another object in the scene if the with_object
         attribute is set, else, between the object to track and all other objects in the scene.
         """
-        close_bodies, contact_bodies = self.get_contact_bodies()
+        contact_bodies = self.get_contact_bodies()
 
-        events = self.trigger_events(close_bodies, contact_bodies)
+        events = self.trigger_events(contact_bodies)
 
-        self.latest_close_bodies = close_bodies
         self.latest_contact_bodies = contact_bodies
 
         return events
 
-    def get_contact_bodies(self) -> Tuple[list[Body], list[Body]]:
-        close_bodies = []
+    def get_contact_bodies(self) -> list[Body]:
         contact_bodies = []
         objects = (
             [self.with_object]
@@ -642,17 +439,14 @@ class AbstractContactDetector(DetectorWithTwoTrackedObjects, ABC):
             )
             if obj is self.tracked_object:
                 continue
-            if collision := collision_between_bodies(
-                self.tracked_object, obj, threshold=self.max_closeness_distance
-            ):
-                close_bodies.append(obj)
-                if collision.distance <= 0.001:
-                    contact_bodies.append(obj)
-        return close_bodies, contact_bodies
+            if contact(self.tracked_object, obj):
+                contact_bodies.append(obj)
+        return contact_bodies
+
 
     @abstractmethod
     def trigger_events(
-        self, close_bodies: list[Body], contact_bodies: list[Body]
+        self, contact_bodies: list[Body]
     ) -> List[Event]:
         """
         Checks if the detection condition is met, (e.g., the object is in contact with another object),
@@ -665,6 +459,178 @@ class AbstractContactDetector(DetectorWithTwoTrackedObjects, ABC):
 
     def _join(self, timeout=None):
         pass
+
+
+@dataclass(eq=False, repr=False)
+class ContactDetectorNode(MotionStatechartNode, AbstractContactDetector):
+    latest_contact_bodies: List[Body] = field(
+        default_factory=list, kw_only=True, init=False
+    )
+    tracked_object: Body = field(kw_only=True)
+    logger: EventLogger = field(kw_only=True)
+    with_object: Optional[Body] = field(default=None, kw_only=True)
+    max_closeness_distance: float = field(default=0.1, kw_only=True)
+
+    def build(self, context: MotionStatechartContext) -> NodeArtifacts:
+        return NodeArtifacts()
+
+
+    def trigger_events(
+        self, contact_bodies: list[Body]
+    ) -> Union[List[CloseContactEvent], List[AgentContactEvent]]:
+        """
+        Check if the object got into contact with another object.
+
+        :param contact_points: The current contact points.
+        :param interference_points: The current interference points.
+        :return: An instance of the ContactEvent/AgentContactEvent class that represents the event if the object got
+         into contact, else None.
+        """
+        new_contact_objects = []
+        for body in contact_bodies:
+            if body not in self.latest_contact_bodies:
+                new_contact_objects.append(body)
+        if self.with_object is not None:
+            new_contact_objects = [
+                body for body in new_contact_objects if body == self.with_object
+            ]
+        if len(new_contact_objects) == 0:
+            return []
+        return self.get_events(
+            new_contact_objects,
+            contact_bodies,
+            ContactEvent,
+        )
+
+    def on_tick(
+        self, context: MotionStatechartContext
+    ) -> Optional[ObservationStateValues]:
+        events = self.detect_events()
+        detected_contact = []
+        if len(events) > 0:
+            for event in events:
+                if isinstance(event, ContactEvent):
+                    logger.debug(
+                        f"{self.tracked_object.name} got into contact with {event.with_object.name}"
+                    )
+                    self.logger.log_event(event)
+                    detected_contact.append(event)
+
+        if detected_contact:
+            return ObservationStateValues.TRUE
+
+        return ObservationStateValues.FALSE
+
+
+@dataclass(eq=False, repr=False)
+class LossOfContactDetectorNode(MotionStatechartNode, AbstractContactDetector):
+    tracked_object: Body = field(kw_only=True)
+    logger: EventLogger = field(kw_only=True)
+    with_object: Optional[Body] = field(default=None, kw_only=True)
+    latest_contact_bodies: List[Body] = field(
+        default_factory=list, kw_only=True, init=False
+    )
+
+
+    def build(self, context: MotionStatechartContext) -> NodeArtifacts:
+        return NodeArtifacts()
+
+    def on_tick(
+        self, context: MotionStatechartContext
+    ) -> Optional[ObservationStateValues]:
+        events = self.detect_events()
+        detected_loss_of_contact = []
+        if len(events) > 0:
+            for event in events:
+                if isinstance(event, LossOfContactEvent):
+                    logger.debug(
+                        f"{self.tracked_object.name} lost contact with {event.with_object.name}"
+                    )
+                    self.logger.log_event(event)
+                    detected_loss_of_contact.append(event)
+
+        if detected_loss_of_contact:
+            return ObservationStateValues.TRUE
+
+        return ObservationStateValues.FALSE
+
+
+    def trigger_events(
+        self,  contact_bodies: list[Body]
+    ) -> List[LossOfCloseContactEvent]:
+        """
+        Check if the object lost contact with another object.
+
+        :param contact_points: The current contact points.
+        :param interference_points: The current interference points.
+        :return: An instance of the LossOfContactEvent/AgentLossOfContactEvent class that represents the event if the
+         object lost contact, else None.
+        """
+        objects_that_lost_contact= (
+            self.get_bodies_that_lost_contact(contact_bodies)
+        )
+        if (len(objects_that_lost_contact) == 0):
+            return []
+        return self.get_events(
+            objects_that_lost_contact,
+            contact_bodies,
+            LossOfContactEvent
+        )
+
+    def get_bodies_that_lost_contact(
+        self, contact_bodies: list[Body]
+    ) -> List[Body]:
+        """
+        Get the objects that lost contact with the object to track.
+
+        :param contact_points: The current contact points.
+        :param interference_points: The current interference points.
+        :return: A list of Object instances that represent the objects that lost contact with the object to track.
+        """
+
+        objects_that_lost_contact = []
+        for body in self.latest_contact_bodies:
+            if body not in contact_bodies:
+                objects_that_lost_contact.append(body)
+
+        if self.with_object is not None:
+            objects_that_lost_contact = [
+                body
+                for body in objects_that_lost_contact
+                if body.parent_entity == self.with_object
+            ]
+
+        return objects_that_lost_contact
+
+    # def get_events(
+    #     self,
+    #     new_close_objects: list[Body],
+    #     new_contact_objects: list[Body],
+    #     close_bodies: list[Body],
+    #     contact_bodies: list[Body],
+    # ):
+    #     events = []
+    #     for obj in new_close_objects:
+    #         events.append(
+    #             LossOfCloseContactEvent(
+    #                 close_bodies=close_bodies,
+    #                 latest_close_bodies=self.latest_close_bodies,
+    #                 of_object=self.tracked_object,
+    #                 with_object=obj,
+    #             )
+    #         )
+    #
+    #     for obj in new_contact_objects:
+    #         events.append(
+    #             LossOfContactEvent(
+    #                 close_bodies=contact_bodies,
+    #                 latest_close_bodies=self.latest_contact_bodies,
+    #                 of_object=self.tracked_object,
+    #                 with_object=obj,
+    #             )
+    #         )
+    #
+    #     return events
 
 
 class ContactDetector(AbstractContactDetector):
