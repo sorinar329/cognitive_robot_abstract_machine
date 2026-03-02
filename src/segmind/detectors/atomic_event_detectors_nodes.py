@@ -87,10 +87,7 @@ class BaseContactDetector(MotionStatechartNode, ABC):
         events = self.update_latest_contact_bodies_and_trigger_events(objects_to_check)
         for e in events:
             self.context.logger.log_event(e)
-        if events:
-            return ObservationStateValues.TRUE
-
-        return ObservationStateValues.FALSE
+        return ObservationStateValues.TRUE if events else ObservationStateValues.FALSE
 
     def get_contact_bodies(self, tracked_objects: List[Body]) -> Dict[Body, Set[Body]]:
         """
@@ -104,13 +101,14 @@ class BaseContactDetector(MotionStatechartNode, ABC):
             it is currently in contact with.
         """
 
-        contact_bodies = {}
+        contact_bodies: Dict[Body, Set[Body]] = {}
+        bodies_with_collision = self.context.world.bodies_with_collision
         for obj in tracked_objects:
-            for body in self.context.world.bodies_with_collision:
+            for body in bodies_with_collision:
                 if body is obj:
                     continue
                 if contact(obj, body):
-                    contact_bodies[obj] = contact_bodies.get(obj, set()) | {body}
+                    contact_bodies.setdefault(obj, set()).add(body)
         return contact_bodies
 
     @abstractmethod
