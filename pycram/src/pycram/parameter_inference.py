@@ -4,6 +4,7 @@ import logging
 from abc import abstractmethod, ABC
 from dataclasses import dataclass, field
 
+from anyio.functools import lru_cache
 from typing_extensions import (
     Any,
     List,
@@ -223,6 +224,15 @@ class DesignatorDomain:
             d.extend(designator_domain.domain(self.plan.context))
         return d
 
+    @lru_cache(maxsize=None)
+    def create_variables(
+        self,
+    ) -> Dict[str, Variable]:
+        return {
+            k: variable(v.domain_type, v.domain(self.plan.context))
+            for k, v in self.parameter_domains.items()
+        }
+
 
 @dataclass
 class DomainSpecification(Generic[T], ABC):
@@ -261,15 +271,9 @@ class InferenceSystem(ABC):
     ) -> Generator[Dict[str, Any]]:
         pass
 
-    def create_variables(
-        self, designator_description: PartialDesignator
-    ) -> Dict[str, Variable]:
-        designator_domain = self.plan_domain.designator_domains[designator_description]
-        return {
-            k: variable(v.domain_type, v.domain(self.plan.context))
-            for k, v in designator_domain.parameter_domains.items()
-        }
-
     def assign_parameterizer(self, parameterizer: ParameterInferer):
         self.plan_domain = parameterizer.plan_domain
         self.plan = parameterizer.plan
+
+    def get_variables(self, description: PartialDesignator):
+        return self.plan_domain[description].create_variables()

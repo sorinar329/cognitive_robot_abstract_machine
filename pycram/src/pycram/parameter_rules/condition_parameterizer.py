@@ -13,7 +13,7 @@ class ConditionParameterizer(InferenceSystem):
     def infer_bindings_for_designator(
         self, designator: PartialDesignator
     ) -> Generator[Dict[str, Any]]:
-        variables = self.create_variables(designator)
+        variables = self.get_variables(designator)
 
         unbound_condition = designator.performable.pre_condition(
             variables, self.plan.context, designator.kwargs

@@ -74,3 +74,7 @@ def test_infer_arm_param(immutable_model_world):
         ApproachDirection.RIGHT,
     ]
     assert bindings["object_designator"] == world.get_body_by_name("milk.stl")
+
+
+def test_result_rule(immutable_model_world):
+    world, view, context = immutable_model_world

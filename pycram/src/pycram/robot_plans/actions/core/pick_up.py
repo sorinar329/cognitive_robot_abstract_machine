@@ -4,7 +4,7 @@ import logging
 from dataclasses import dataclass
 from datetime import timedelta
 
-from typing_extensions import Union, Optional, Any, Iterable
+from typing_extensions import Union, Optional, Any, Iterable, Dict
 
 from krrood.entity_query_language.entity import and_, not_, or_
 from krrood.entity_query_language.symbolic import SymbolicExpression
@@ -13,6 +13,7 @@ from semantic_digital_twin.reasoning.robot_predicates import is_body_in_gripper
 from semantic_digital_twin.world_description.world_entity import Body
 from ...motions.gripper import MoveGripperMotion, MoveTCPMotion
 from ....config.action_conf import ActionConfig
+from ....datastructures.dataclasses import Context
 from ....datastructures.enums import (
     Arms,
     MovementType,
@@ -182,30 +183,30 @@ class PickUpAction(ActionDescription):
             ),
         ).perform()
 
-    def pre_condition(self, bound=True) -> SymbolicExpression:
-        variables = self.bound_variables if bound else self.unbound_variables
-        manipulator = ViewManager.get_end_effector_view(
-            variables[self.arm], self.robot_view
-        )
+    @staticmethod
+    def pre_condition(
+        variables: Dict, context: Context, kwargs: Dict[str, Any]
+    ) -> SymbolicExpression:
+        manipulator = ViewManager.get_end_effector_view(variables["arm"], context.robot)
         return and_(
             GripperIsFree(manipulator),
             reachability_validator(
-                PoseStamped.from_spatial_type(self.object_designator.global_pose),
+                PoseStamped.from_spatial_type(kwargs["object_designator"].global_pose),
                 manipulator.tool_frame,
-                self.robot_view,
-                self.world,
-                self.robot_view.full_body_controlled,
+                context.robot,
+                context.world,
+                context.robot.full_body_controlled,
             ),
         )
 
-    def post_condition(self, bound=True) -> SymbolicExpression:
-        variables = self.bound_variables if bound else self.unbound_variables
-        manipulator = ViewManager.get_end_effector_view(
-            variables[self.arm], self.robot_view
-        )
+    @staticmethod
+    def post_condition(
+        variables: Dict, context: Context, kwargs: Dict[str, Any]
+    ) -> SymbolicExpression:
+        manipulator = ViewManager.get_end_effector_view(variables["arm"], context.robot)
         return or_(
             not_(GripperIsFree(manipulator)),
-            is_body_in_gripper(self.object_designator, manipulator) > 0.9,
+            is_body_in_gripper(kwargs["object_designator"], manipulator) > 0.9,
         )
 
     @classmethod

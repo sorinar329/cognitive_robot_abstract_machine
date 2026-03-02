@@ -3,12 +3,20 @@ from __future__ import annotations
 
 from inspect import signature
 
-from typing_extensions import List, Tuple, Any, Dict, TypeVar, Iterator, Iterable, Type
+from typing_extensions import List, Tuple, Any, Dict, TypeVar, Iterator, Iterable, Type, TYPE_CHECKING
 
+from krrood.entity_query_language.entity import variable, set_of
+from krrood.entity_query_language.entity_result_processors import a
+from ..parameter_inference import ParameterIdentifier
 from ..plan import PlanNode
 from ..utils import is_iterable, lazy_product
 
-T = TypeVar("T")
+if TYPE_CHECKING:
+    from ..robot_plans import ActionDescription
+else:
+    ActionDescription = TypeVar("ActionDescription")
+
+T = TypeVar("T", bound=ActionDescription)
 
 
 class PartialDesignator(Iterable[T]):
@@ -47,6 +55,8 @@ class PartialDesignator(Iterable[T]):
     Reference to the PlanNode that is used to execute the performable
     """
 
+    kwarg_types: Dict[str, Any] = None
+
     def __init__(self, performable: Type[T], *args, **kwargs):
         self.performable = performable
         # We use the init of the performable class since typing for the whole class messes up the signature of the class.
@@ -66,6 +76,8 @@ class PartialDesignator(Iterable[T]):
         for key in dict(signature(self.performable).parameters).keys():
             if key not in self.kwargs.keys():
                 self.kwargs[key] = None
+        self.kwarg_types = {f.name: f.type for f in self.performable.fields}
+
 
     def __call__(self, *fargs, **fkwargs):
         """
@@ -119,11 +131,19 @@ class PartialDesignator(Iterable[T]):
 
         :return: A list of parameter names that are missing from the performable
         """
-        missing = {k: v for k, v in self.kwargs.items() if v is None}
+        missing = {k: v for k, v in self.kwargs.items() if v is None or v == Ellipsis}
         return list(missing.keys())
 
+
     def find_missing_parameter(self):
-        pass
+        unbound_variables = {name: variable(self.kwarg_types[name], domain=self.plan.parameter_infeerer.infer_domain_for_parameter(ParameterIdentifier(self, name))) for name in self.kwargs.keys()}
+        condition = self.performable.pre_condition(unbound_variables, self.plan.context, self.kwargs)
+        query = a(set_of(*unbound_variables.values()).where(condition))
+        var_to_field = dict(zip(unbound_variables.values(), self.performable.fields))
+        for result in query.evaluate():
+            bindings = result.data
+            yield {var_to_field[k].name: v for k, v in bindings.items()}
+
 
     def resolve(self) -> T:
         """
@@ -187,3 +207,7 @@ class PartialDesignator(Iterable[T]):
         for key, value in self.kwargs.items():
             if "DesignatorDescription" in [c.__name__ for c in value.__class__.__mro__]:
                 value.plan_node = self._plan_node
+
+    @property
+    def plan(self):
+        return self._plan_node.plan

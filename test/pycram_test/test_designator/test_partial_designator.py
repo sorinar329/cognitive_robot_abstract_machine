@@ -1,30 +1,28 @@
-import pytest
 import numpy as np
+import pytest
 
+from pycram.datastructures.enums import (
+    Arms,
+    ApproachDirection,
+    VerticalAlignment,
+)
 from pycram.datastructures.grasp import GraspDescription
 from pycram.datastructures.partial_designator import PartialDesignator
 from pycram.datastructures.pose import PoseStamped
+from pycram.designators.object_designator import BelieveObject
 from pycram.language import SequentialPlan
+from pycram.motion_executor import simulated_robot
+from pycram.parameter_rules.default_type_domains import load_default_domains
 from pycram.robot_plans import (
     PickUpAction,
-    PickUpAction,
     SetGripperAction,
-    MoveTorsoAction,
-    NavigateAction,
     MoveTorsoActionDescription,
     NavigateActionDescription,
     PickUpActionDescription,
 )
-from pycram.designators.object_designator import BelieveObject
-from pycram.datastructures.enums import (
-    Arms,
-    Grasp,
-    ApproachDirection,
-    VerticalAlignment,
-)
 from pycram.utils import is_iterable, lazy_product
-from pycram.motion_executor import simulated_robot
 from semantic_digital_twin.datastructures.definitions import GripperState, TorsoState
+from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
 
 
 def test_partial_desig_construction():
@@ -263,3 +261,31 @@ def test_correct_error():
     with pytest.raises(RuntimeError) as cm:
         list(lazy_product(bad_generator()))
     assert "bad_generator" in str(cm.value)
+
+
+def test_parameter_inference(immutable_model_world):
+    world, robot_view, context = immutable_model_world
+
+    pick_action = PickUpActionDescription(
+        world.get_body_by_name("milk.stl"),
+        ...,
+        GraspDescription(
+            ApproachDirection.FRONT,
+            VerticalAlignment.NoAlignment,
+            robot_view.right_arm.manipulator,
+        ),
+    )
+
+    plan = SequentialPlan(context, pick_action)
+
+    load_default_domains(plan)
+
+    robot_view.root.parent_connection.origin = (
+        HomogeneousTransformationMatrix.from_xyz_rpy(
+            1.8,
+            1.4,
+            0,
+        )
+    )
+
+    inferred_params = list(pick_action.find_missing_parameter())

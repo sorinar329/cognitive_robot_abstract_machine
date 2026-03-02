@@ -116,8 +116,6 @@ def test_pick_up_pre_conditions(mutable_model_world):
 
 def test_pick_up_pre_condition_find_parameter(immutable_model_world):
     world, view, context = immutable_model_world
-    node = rclpy.create_node("test")
-    VizMarkerPublisher(world, node).with_tf_publisher()
 
     pick_action = PickUpAction(
         world.get_body_by_name("milk.stl"),
