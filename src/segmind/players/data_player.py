@@ -159,10 +159,7 @@ class DataPlayer(EpisodePlayer, ABC):
         objects_poses = self.get_objects_poses(frame_data)
         joint_states = self.get_joint_states(frame_data)
         if len(objects_poses):
-            # if self.sync_robot_only:
-            #    objects_poses = {self.world.robot: objects_poses[self.world.robot]}
-            for obj in self.world.bodies_with_enabled_collision:
-                # check in the dictionary if obj is the key and set its pose accordingly
+            for obj in self.world.bodies_with_collision:
                 if obj in objects_poses:
                     obj.parent_connection.origin = (
                         HomogeneousTransformationMatrix.from_xyz_rpy(
@@ -171,9 +168,7 @@ class DataPlayer(EpisodePlayer, ABC):
                             z=objects_poses[obj].z,
                         )
                     )
-            # self.world.reset_multiple_objects_base_poses(objects_poses)
-        # if len(joint_states):
-        #    self.world.robot.set_multiple_joint_positions(joint_states)
+
 
     @abstractmethod
     def get_objects_poses(self, frame_data: FrameData) -> Dict[Body, Pose]:

@@ -1,9 +1,15 @@
 import datetime
 import threading
 from os.path import dirname
+
+from pandas.core.internals import DataManager
+
+from giskardpy.executor import Pacer, SimulationPacer
+from krrood.symbolic_math.symbolic_math import FloatVariable
 from segmind import logger, set_logger_level, LogLevel
 from semantic_digital_twin.world_description.connections import Connection6DoF
 from .datastructures.object_tracker import ObjectTracker
+from .detectors.atomic_event_detectors_nodes import SegmindContext
 from .detectors.coarse_event_detectors import *
 from .detectors.spatial_relation_detector import SpatialRelationDetector
 from .episode_player import EpisodePlayer
@@ -151,6 +157,15 @@ class EpisodeSegmenter(ABC):
             self.episode_player.start()
         while not self.episode_player.ready:
             time.sleep(0.1)
+
+    def run_event_detectors_sequential(self, tracked_objs: List[Body] = []):
+        for obj in tracked_objs:
+            translation_detector = TranslationDetector(
+                logger=self.logger, tracked_object=obj
+            )
+
+
+
 
     def run_event_detectors(self) -> None:
         """
@@ -556,3 +571,59 @@ class NoAgentEpisodeSegmenter(EpisodeSegmenter):
         Start the motion detection threads for the objects in the world.
         """
         self.run_objects_initial_event_detectors()
+
+
+@dataclass
+class EpisodeSegmenterExecutor:
+    context: SegmindContext
+    player: EpisodePlayer
+    pacer: Pacer = field(default_factory=SimulationPacer)
+    statechart: DetectorStateChart = field(init=False)
+    _control_cycle_index : int = field(init=False)
+    _time_variable: FloatVariable = field(init=False)
+
+    @property
+    def control_cycles(self):
+        return self.context.float_variable_data.data[self._control_cycle_index]
+
+    @control_cycles.setter
+    def control_cycles(self, value):
+        self.context.float_variable_data.set_value(self._control_cycle_index, value)
+
+    @property
+    def time(self) -> float:
+        return self.control_cycles * self.context.qp_controller_config.control_dt
+
+
+    def compile(self, statechart: DetectorStateChart):
+        self.statechart = statechart
+        self.control_cycles = 0
+        self.statechart.compile(self.context)
+        #self.context.collision_manager.update_collision_matrix()
+        # do one tick to immediately active nodes whose start condition is constant true.
+        self.statechart.tick(self.context)
+        self.player.start()
+
+    def tick(self):
+        self.control_cycles += 1
+        #if self.context.collision_manager.has_consumers():
+        #    self.context.collision_manager.compute_collisions()
+        self.statechart.tick(self.context)
+        #ToDo: Here we need to add the state model updates.
+
+    def tick_until_end(self, timeout: int = 1_000):
+        """
+        Calls tick until is_end_motion() returns True.
+        :param timeout: Max number of ticks to perform.
+        #ToDo: So in the Dataplayer thread we can add an EndMotion Node and that will trigger the end.
+        """
+        try:
+            for i in range(timeout):
+                self.tick()
+                self.pacer.sleep()
+                if self.statechart.is_end_motion():
+                    return
+            raise TimeoutError("Timeout reached while waiting for end of motion.")
+        finally:
+            self.statechart.cleanup_nodes(context=self.context)
+            self.context.cleanup()
