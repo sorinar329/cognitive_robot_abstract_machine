@@ -1,13 +1,15 @@
 import datetime
 import threading
 from os.path import dirname
+from pathlib import Path
 
 from pandas.core.internals import DataManager
 
 from giskardpy.executor import Pacer, SimulationPacer
 from krrood.symbolic_math.symbolic_math import FloatVariable
 from segmind import logger, set_logger_level, LogLevel
-from semantic_digital_twin.world_description.connections import Connection6DoF
+from semantic_digital_twin.adapters.urdf import URDFParser
+from semantic_digital_twin.world_description.connections import Connection6DoF, FixedConnection
 from .datastructures.object_tracker import ObjectTracker
 from .detectors.atomic_event_detectors_nodes import SegmindContext
 from .detectors.coarse_event_detectors import *
@@ -627,3 +629,36 @@ class EpisodeSegmenterExecutor:
         finally:
             self.statechart.cleanup_nodes(context=self.context)
             self.context.cleanup()
+
+
+    def spawn_scene(self, models_dir):
+        directory = Path(models_dir)
+        models_dir="/home/sorin/dev/Segmind/resources/multiverse_episodes/icub_montessori_no_hands/models/"
+        urdf_files = [f.name for f in directory.glob("*.urdf")]
+        for file in urdf_files:
+            file_path = (
+                   models_dir
+                    + file
+            )
+            obj_name = Path(file).stem
+
+            if obj_name == "iCub":
+                continue
+            try:
+                if obj_name == "scene":
+                    obj_world = URDFParser.from_file(file_path).parse()
+                    world_C_scene = FixedConnection(
+                        parent=self.context.world.root, child=obj_world.root
+                    )
+                    with self.context.world.modify_world():
+                        self.context.world.merge_world(obj_world, world_C_scene)
+                else:
+                    obj_world = URDFParser.from_file(file_path).parse()
+                    with self.context.world.modify_world():
+                        self.context.world.merge_world(obj_world)
+
+            except Exception as e:
+                # import pdb
+                # pdb.set_trace()
+
+                continue
