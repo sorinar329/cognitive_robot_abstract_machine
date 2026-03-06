@@ -6,7 +6,11 @@ from typing import Tuple
 
 import numpy as np
 import trimesh
+from polytope import bounding_box
+from probabilistic_model.distributions.helper import make_dirac
 from random_events.product_algebra import Event
+from random_events.set import Set
+from random_events.variable import Symbolic
 from typing_extensions import (
     TYPE_CHECKING,
     List,
@@ -773,7 +777,7 @@ class HasSupportingSurface(HasStorageSpace, ABC):
 
         surface_circuit = self._build_surface_sampler(
             category_of_interest=category_of_interest,
-            object_bloat_and_variance=largest_xy_object_dimension,
+            object_bloat=largest_xy_object_dimension,
         )
 
         if surface_circuit is None:
@@ -787,18 +791,17 @@ class HasSupportingSurface(HasStorageSpace, ABC):
     def _build_surface_sampler(
         self,
         category_of_interest: Optional[Type[SemanticAnnotation]] = None,
-        object_bloat_and_variance: float = 0.1,
+        object_bloat: float = 0.1,
     ):
         """
         Build a probabilistic circuit representing the supporting surface, truncated by the objects on the surface,
         and with Gaussian mixtures around the objects of interest.
 
         :param category_of_interest: The type of object sample points around.
-        :param object_bloat_and_variance: The amount of bloat to apply to the object events, and the standard
-            deviation to use for the Gaussian mixtures.
+        :param object_bloat: The amount of bloat to apply to the object event.
         """
         truncated_event_2d = self._2d_surface_sample_space_excluding_objects(
-            object_bloat_and_variance
+            object_bloat
         )
 
         objects_of_interest = (
@@ -808,10 +811,9 @@ class HasSupportingSurface(HasStorageSpace, ABC):
         )
         if objects_of_interest:
             return self._2d_gaussian_sampler_from_2d_sample_space(
-                world_P_obj_list=[
-                    obj.root.global_pose.to_position() for obj in objects_of_interest
-                ],
-                variance=object_bloat_and_variance,
+                objects_of_interest=objects_of_interest,
+                # using values too low makes sampling from truncated gaussians very instable
+                variance=1,
                 sample_space=truncated_event_2d,
             )
         else:
@@ -840,14 +842,14 @@ class HasSupportingSurface(HasStorageSpace, ABC):
 
     def _2d_gaussian_sampler_from_2d_sample_space(
         self,
-        world_P_obj_list: List[Point3],
+        objects_of_interest: List[HasRootBody],
         variance: float,
         sample_space: Event,
     ) -> Optional[ProbabilisticCircuit]:
         """
         Create a Gaussian mixture model from a list of points, truncated by an event.
 
-        :param world_P_obj_list: A list of points representing the positions of the objects to sample around, in the world frame.
+        :param objects_of_interest: A list of points representing the positions of the objects to sample around, in the world frame.
         :param variance: The standard deviation to use for the Gaussian mixtures.
         :param sample_space: The event to truncate the Gaussian mixture model with.
 
@@ -857,24 +859,26 @@ class HasSupportingSurface(HasStorageSpace, ABC):
         surface_circuit = ProbabilisticCircuit()
         surface_circuit_root = SumUnit(probabilistic_circuit=surface_circuit)
 
-        for world_P_obj in world_P_obj_list:
-
+        for object_of_interest in objects_of_interest:
+            world_P_obj = object_of_interest.root.global_pose.to_position()
+            surface_P_obj = self._world.transform(world_P_obj, self.supporting_surface)
             p_object_root = ProductUnit(probabilistic_circuit=surface_circuit)
             surface_circuit_root.add_subcircuit(p_object_root, 1.0)
 
             x_p = GaussianDistribution(
                 SpatialVariables.x.value,
-                float(world_P_obj[0]),
+                float(surface_P_obj[0]),
                 variance,
             )
             y_p = GaussianDistribution(
                 SpatialVariables.y.value,
-                float(world_P_obj[1]),
+                float(surface_P_obj[1]),
                 variance,
             )
             p_object_root.add_subcircuit(leaf(x_p, surface_circuit))
             p_object_root.add_subcircuit(leaf(y_p, surface_circuit))
 
+        sample_space.fill_missing_variables(surface_circuit.variables)
         surface_circuit.log_truncated_in_place(sample_space)
 
         return surface_circuit

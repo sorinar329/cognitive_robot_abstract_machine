@@ -1,6 +1,9 @@
 import time
 import unittest
 from dataclasses import dataclass
+
+from random_events.product_algebra import Event
+
 from semantic_digital_twin.orm.ormatic_interface import *
 
 import numpy as np
@@ -624,27 +627,40 @@ class TestFactories(unittest.TestCase):
                 scale=Scale(0.1, 0.03, 0.2),
                 world_root_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(x=-0.5),
             )
+            cereal2 = Cereal.create_with_new_body_in_world(
+                name=PrefixedName("cereal"),
+                world=world,
+                scale=Scale(0.1, 0.03, 0.2),
+                world_root_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(y=0.2),
+            )
             table = Table.create_with_new_body_in_world(
                 name=PrefixedName("table"), world=world, scale=Scale(1.0, 1.0, 0.1)
             )
             table.add_object(milk)
             table.add_object(cereal)
+            table.add_object(cereal2)
 
-        points = table.sample_points_from_surface(
-            category_of_interest=type(cereal),
-            amount=10,
-        )
-        self.assertEqual(len(points), 10)
+        with world.modify_world():
+            table.calculate_supporting_surface()
 
-        min_point, max_point = table.min_max_points
-        assert all(p.reference_frame == table.supporting_surface for p in points)
-        assert all(p.x >= min_point.x for p in points)
-        assert all(p.x <= max_point.x for p in points)
-        assert all(p.y >= min_point.y for p in points)
-        assert all(p.y <= max_point.y for p in points)
-        assert np.allclose([p.z for p in points], 0.0025)
+        circuit = table._build_surface_sampler(type(cereal))
+        [x_var, y_var] = circuit.variables
+        import plotly.graph_objects as go
 
-    def test_sample_points_from_surface_with_object(self):
+        go.Figure(circuit.marginal([x_var, y_var]).plot()).show()
+        # for obj in table.objects:
+        #     if obj.id not in obj_variable.domain.all_elements:
+        #         continue
+        #     print(f"Testing object {obj.id}")
+        #     current_model, _ = circuit.conditional({obj_variable: obj.id})
+        #     expectation = current_model.expectation([x_var, y_var])
+        #     supporting_surface_T_obj = world.transform(
+        #         obj.root.global_pose, table.supporting_surface
+        #     )
+        #     assert expectation[x_var] == supporting_surface_T_obj.x
+        #     assert expectation[y_var] == supporting_surface_T_obj.y
+
+    def test_remove_objects_from_sampling_event(self):
         world = World()
         root = Body(name=PrefixedName("root"))
         with world.modify_world():
@@ -668,25 +684,20 @@ class TestFactories(unittest.TestCase):
             table.add_object(milk)
             table.add_object(cereal)
 
-            cereal_to_place = Cereal.create_with_new_body_in_world(
-                name=PrefixedName("cereal_to_place"),
-                world=world,
-                scale=Scale(0.1, 0.03, 0.2),
-            )
+        with world.modify_world():
+            table.calculate_supporting_surface()
 
-        points = table.sample_points_from_surface(
-            cereal_to_place,
-            amount=10,
-        )
-        self.assertEqual(len(points), 10)
+        surface_event: Event = table._2d_surface_sample_space_excluding_objects(0)
 
-        min_point, max_point = table.min_max_points
-        assert all(p.reference_frame == table.supporting_surface for p in points)
-        assert all(p.x >= min_point.x for p in points)
-        assert all(p.x <= max_point.x for p in points)
-        assert all(p.y >= min_point.y for p in points)
-        assert all(p.y <= max_point.y for p in points)
-        assert np.allclose([p.z for p in points], 0.1025)
+        surface_P_milk = world.transform(
+            milk.root.global_pose, table.supporting_surface
+        ).to_position()
+        surface_P_cereal = world.transform(
+            cereal.root.global_pose, table.supporting_surface
+        ).to_position()
+
+        assert not surface_event.contains(surface_P_milk[:2])
+        assert not surface_event.contains(surface_P_cereal[:2])
 
     def test_sample_points_from_surface_with_object_and_category_of_interest(self):
         world = World()
@@ -706,11 +717,18 @@ class TestFactories(unittest.TestCase):
                 scale=Scale(0.1, 0.03, 0.2),
                 world_root_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(x=-0.5),
             )
+            cereal2 = Cereal.create_with_new_body_in_world(
+                name=PrefixedName("cereal"),
+                world=world,
+                scale=Scale(0.1, 0.03, 0.2),
+                world_root_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(y=0.2),
+            )
             table = Table.create_with_new_body_in_world(
                 name=PrefixedName("table"), world=world, scale=Scale(1.0, 1.0, 0.1)
             )
             table.add_object(milk)
             table.add_object(cereal)
+            table.add_object(cereal2)
 
             cereal_to_place = Cereal.create_with_new_body_in_world(
                 name=PrefixedName("cereal_to_place"),
@@ -721,9 +739,9 @@ class TestFactories(unittest.TestCase):
         points = table.sample_points_from_surface(
             cereal_to_place,
             type(cereal),
-            amount=10,
+            amount=100,
         )
-        self.assertEqual(len(points), 10)
+        self.assertEqual(len(points), 100)
 
         min_point, max_point = table.min_max_points
         assert all(p.reference_frame == table.supporting_surface for p in points)

@@ -42,8 +42,17 @@ from probabilistic_model.distributions import (
 )
 from probabilistic_model.distributions.helper import make_dirac
 from probabilistic_model.error import IntractableError
-from probabilistic_model.interfaces.drawio.drawio import DrawIOInterface, circled_product, circled_sum
-from probabilistic_model.probabilistic_model import ProbabilisticModel, OrderType, CenterType, MomentType
+from probabilistic_model.interfaces.drawio.drawio import (
+    DrawIOInterface,
+    circled_product,
+    circled_sum,
+)
+from probabilistic_model.probabilistic_model import (
+    ProbabilisticModel,
+    OrderType,
+    CenterType,
+    MomentType,
+)
 from probabilistic_model.utils import MissingDict
 
 
@@ -664,7 +673,7 @@ class SumUnit(InnerUnit):
                     new_weight = sub_weight + weight
 
                     # add an edge to that subcircuit
-                    self.add_subcircuit(sub_subcircuit, new_weight, mount=False)
+                    self.add_subcircuit(sub_subcircuit, new_weight)
 
                 # remove the old node
                 self.probabilistic_circuit.remove_node(subcircuit)
