@@ -70,9 +70,7 @@ def test_same_query_multiple_backends(session, database):
 
 
 def test_probabilistic_backend_with_symbolic_expression():
-
     prob_q = underspecified(Position)(x=..., y=..., z=variable_from([1, 2, 3]))
-    prob_q.expression.build()
     parameters = UnderspecifiedParameters(prob_q)
     assert parameters.variables["Position.z"] == Symbolic(
         "Position.z", Set.from_iterable([1, 2, 3])

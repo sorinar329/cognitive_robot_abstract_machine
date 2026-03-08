@@ -101,14 +101,15 @@ class AbstractMatchExpression(Generic[T], ABC):
         """
         ...
 
-    def resolve(self, *args, **kwargs):
+    def resolve(self, *args, **kwargs) -> Self:
         """
         Resolve the match by creating the variable and conditions expressions.
         """
         if self.resolved:
-            return
+            return self
         self._resolve(*args, **kwargs)
         self.resolved = True
+        return self
 
     @abstractmethod
     def _resolve(self, *args, **kwargs):
@@ -161,6 +162,7 @@ class AbstractMatchExpression(Generic[T], ABC):
 
     @property
     def literals(self) -> Iterator[AttributeMatch]:
+        self.resolve()
         for expression in self.descendants:
             if isinstance(expression.assigned_variable, Literal):
                 yield expression
@@ -211,7 +213,7 @@ class Match(AbstractMatchExpression[T], HasFactoryAndKwargs[T]):
         else:
             assert_never(self.factory)
 
-    def __call__(self, **kwargs) -> Union[Self, T, CanBehaveLikeAVariable[T]]:
+    def __call__(self, **kwargs) -> Union[T, Self, CanBehaveLikeAVariable[T]]:
         """
         Update the match with new keyword arguments to constrain the type we are matching with.
 
@@ -332,8 +334,10 @@ class Match(AbstractMatchExpression[T], HasFactoryAndKwargs[T]):
         return self.name
 
     def where(self, *conditions: ConditionType) -> Match[T]:
+        _ = self.expression
         self._where_conditions_.extend(conditions)
         self.expression.where(*conditions)
+        self.expression.build()
         return self
 
     def _update_kwargs_from_literal_values(self):

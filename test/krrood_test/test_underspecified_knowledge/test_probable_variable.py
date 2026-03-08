@@ -137,15 +137,11 @@ def test_query_writing_with_match_and_copy():
 
 
 def test_probable_variable_with_concrete_kwarg():
-    probable_pose = underspecified(Pose)
-
-    prob_q = probable_pose(
+    prob_q = underspecified(Pose)(
         position=underspecified(Position)(x=..., y=..., z=...),
         orientation=Orientation(x=0.0, y=0.0, z=0.0, w=1.0),
-    )
-    prob_q.expression
-    prob_q.where(probable_pose.variable.position.x > 0.5)
-    prob_q.expression.build()
+    ).resolve()
+    prob_q.where(prob_q.variable.position.x > 0.5)
     instance = prob_q.construct_instance()
 
     correct_instance = Pose(Position(..., ..., ...), Orientation(0.0, 0.0, 0.0, 1.0))
@@ -156,13 +152,11 @@ def test_probable_variable_with_concrete_kwarg():
 
 def test_new_underspecified_with_factory():
 
-    probable_pose = underspecified(Pose)
-    prob_q = probable_pose(
+    prob_q = underspecified(Pose)(
         position=underspecified(Position.from_abc)(a=..., b=..., c=...),
         orientation=Orientation(x=0.0, y=0.0, z=0.0, w=1.0),
-    )
-    prob_q.expression
-    prob_q = prob_q.where(probable_pose.variable.position.x > 0.5)
+    ).resolve()
+    prob_q.where(prob_q.variable.position.x > 0.5)
     prob_q.expression.build()
     r = prob_q.construct_instance()
     assert r == Pose(Position(..., ..., ...), Orientation(0.0, 0.0, 0.0, 1.0))
@@ -173,7 +167,6 @@ def test_underspecified_with_list():
         positions=[underspecified(Position)(x=1.0, y=..., z=...), Position(1, 2, 3)],
         some_strings=["a", "b"],
     )
-    q.expression.build()
 
     for literal in q.literals:
         if literal.assigned_value is ...:

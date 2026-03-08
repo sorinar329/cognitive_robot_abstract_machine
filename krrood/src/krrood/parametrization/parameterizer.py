@@ -47,6 +47,7 @@ class UnderspecifiedParameters:
     """
 
     def __post_init__(self):
+        self.statement.expression.build()
         self._random_event_compiler = WhereExpressionToRandomEventTranslator(
             and_(*self.statement._where_conditions_)
         )

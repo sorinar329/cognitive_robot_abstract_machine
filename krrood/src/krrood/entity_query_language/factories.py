@@ -118,7 +118,7 @@ def match_variable(
 
 
 def underspecified(
-    expression: Union[Type[T], Selectable[T], Callable[..., T]],
+    expression: Union[Type[T], Callable[..., T]],
 ) -> Union[Type[T], Match[T]]:
     """
     Same as :py:func:`krrood.entity_query_language.factories.match` but instead of searching for solutions in
