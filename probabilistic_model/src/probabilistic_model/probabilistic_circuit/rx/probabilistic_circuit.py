@@ -1110,7 +1110,7 @@ class ProbabilisticCircuit(ProbabilisticModel, SubclassJSONSerializer):
             if node.result_of_current_query == -np.inf
         ]
 
-        if root not in self.graph.nodes():
+        if root not in set(self.graph.nodes()):
             return None, -np.inf
 
         # clean the circuit up
