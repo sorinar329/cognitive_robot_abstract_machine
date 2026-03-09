@@ -73,9 +73,7 @@ class TestMultiverseEpisodeSegmenter(TestCase):
 
         sc.add_nodes([contact_detector, loss_of_contact_detector])
         self.episode_executor.compile(sc)
-        time.sleep(5)
-        for i in range(100):
-            self.episode_executor.tick()
+        # Todo: Discuss this. So in compile i actually start the thread and the context apparently gets the right world data, problem is that the thread stops as soon as i tick, why?
 
         # self.file_player.start()
         # self.episode_executor.player.start()
