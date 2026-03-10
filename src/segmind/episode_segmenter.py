@@ -578,7 +578,7 @@ class NoAgentEpisodeSegmenter(EpisodeSegmenter):
 @dataclass
 class EpisodeSegmenterExecutor:
     context: SegmindContext
-    player: EpisodePlayer
+    player: EpisodePlayer | None = None
     pacer: Pacer = field(default_factory=SimulationPacer)
     statechart: DetectorStateChart = field(init=False)
     _control_cycle_index: int = field(init=False)
@@ -603,13 +603,14 @@ class EpisodeSegmenterExecutor:
         # self.context.collision_manager.update_collision_matrix()
         # do one tick to immediately active nodes whose start condition is constant true.
         self.statechart.tick(self.context)
-        self.player.start()
+        if self.player:
+            self.player.start()
 
     def tick(self):
-        self.player.pause()
-        self.control_cycles += 1
+        #self.player.pause()
+        #self.control_cycles += 1
         self.statechart.tick(self.context)
-        self.player.resume()
+        #self.player.resume()
         # ToDo: Here we need to add the state model updates.
 
     def tick_until_end(self, timeout: int = 1_000):

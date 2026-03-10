@@ -7,12 +7,14 @@ from unittest import TestCase
 
 import rclpy
 
+from segmind.datastructures.events import SupportEvent, ContactEvent
 from segmind.detectors.atomic_event_detectors import DetectorStateChart
 from segmind.detectors.atomic_event_detectors_nodes import (
     SegmindContext,
     ContactDetector,
     LossOfContactDetector,
 )
+from segmind.detectors.spatial_relation_detector_nodes import SupportDetector, LossOfSupportDetector
 from segmind.episode_segmenter import EpisodeSegmenterExecutor
 from segmind.event_logger import EventLogger
 from segmind.players.csv_player import CSVEpisodePlayer
@@ -39,10 +41,11 @@ class TestMultiverseEpisodeSegmenter(TestCase):
         rclpy.init()
         cls.node = rclpy.create_node("test_node")
         cls.viz_marker_publisher = VizMarkerPublisher(node=cls.node, _world=cls.world)
+
         cls.viz_marker_publisher.with_tf_publisher()
         cls.context = SegmindContext(world=cls.world)
         cls.file_player = CSVEpisodePlayer(
-            file_path="/home/sorin/dev/workspace/Segmind/resources/multiverse_episodes/icub_montessori_no_hands/data.csv",
+            file_path="/home/sorin/dev/Segmind/resources/multiverse_episodes/icub_montessori_no_hands/data.csv",
             world=cls.world,
             time_between_frames=datetime.timedelta(milliseconds=4),
             position_shift=Vector3(0, 0, 0),
@@ -51,16 +54,15 @@ class TestMultiverseEpisodeSegmenter(TestCase):
             context=cls.context, player=cls.file_player
         )
         cls.episode_executor.spawn_scene(
-            models_dir="/home/sorin/dev/workspace/Segmind/resources/multiverse_episodes/icub_montessori_no_hands/models/"
+            models_dir="/home/sorin/dev/Segmind/resources/multiverse_episodes/icub_montessori_no_hands/models/"
         )
 
     def test_replay_episode(self):
-        # self.file_player.start()
         sc = DetectorStateChart()
         logger = EventLogger()
 
         self.context = SegmindContext(
-            world=self.world, logger=logger, latest_contact_bodies={}
+            world=self.world, logger=logger, latest_contact_bodies={}, latest_support={}
         )
 
         contact_detector = ContactDetector(
@@ -70,13 +72,22 @@ class TestMultiverseEpisodeSegmenter(TestCase):
             name="loss_of_contact_detector",
             context=self.context,
         )
+        support_detector = SupportDetector(
+            name="support_detector",
+            context=self.context,
+        )
+        loss_of_support_detector = LossOfSupportDetector(
+            name="los_detector",
+            context=self.context,
+        )
 
-        sc.add_nodes([contact_detector, loss_of_contact_detector])
+
+        sc.add_nodes([contact_detector, loss_of_contact_detector, support_detector,loss_of_support_detector])
         self.episode_executor.compile(sc)
-        # Todo: Discuss this. So in compile i actually start the thread and the context apparently gets the right world data, problem is that the thread stops as soon as i tick, why?
+        time.sleep(5)
+        while self.episode_executor.player.is_alive():
+             time.sleep(0.01)
+             self.episode_executor.tick()
 
-        # self.file_player.start()
-        # self.episode_executor.player.start()
-        # So the context actually acts as the subcriber.
-
-        # self.episode_executor.tick_until_end()
+        assert len([i for i in logger.get_events() if isinstance(i, SupportEvent)]) > 0
+        assert len([i for i in logger.get_events() if isinstance(i, ContactEvent)]) > 0

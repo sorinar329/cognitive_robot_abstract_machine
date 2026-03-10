@@ -23,6 +23,7 @@ from segmind.detectors.spatial_relation_detector_nodes import (
 SupportDetector,
 LossOfSupportDetector
 )
+from segmind.episode_segmenter import EpisodeSegmenterExecutor
 from segmind.event_logger import EventLogger
 
 from giskardpy.executor import Executor
@@ -63,7 +64,7 @@ class TestMotionStatechart:
         )
 
         #ToDo: We need the EpisodeSegmenter here as an Executer and change the name of kin_sim
-        kin_sim = Executor(self.context)
+        self.segmind_executor = EpisodeSegmenterExecutor(context=self.context)
 
         contact_detector = ContactDetector(
             name="contact_detector", context=self.context, tracked_object=cylinder
@@ -76,8 +77,8 @@ class TestMotionStatechart:
 
         sc.add_nodes([contact_detector, loss_of_contact_detector])
 
-        kin_sim.compile(motion_statechart=sc)
-        kin_sim.tick()
+        self.segmind_executor.compile(sc)
+        self.segmind_executor.tick()
         # No Contact yet
         assert (
             len(
@@ -95,14 +96,14 @@ class TestMotionStatechart:
         cylinder.parent_connection.origin = (
             HomogeneousTransformationMatrix.from_xyz_rpy(y=-0.4)
         )
-        kin_sim.tick()
+        self.segmind_executor.tick()
 
         # Contact with 2 objects
         assert len([i for i in logger.get_events() if isinstance(i, ContactEvent)]) == 2
         assert contact_detector.observation_state == 1.0
 
         # 3. Tick Again to see if there was no new contact-event added, also the observation_state should be 0.0
-        kin_sim.tick()
+        self.segmind_executor.tick()
 
         assert len([i for i in logger.get_events() if isinstance(i, ContactEvent)]) == 2
         assert contact_detector.observation_state == 0.0
@@ -112,7 +113,7 @@ class TestMotionStatechart:
         )
 
         # 4. Loss of contact with 2 objects
-        kin_sim.tick()
+        self.segmind_executor.tick()
         assert (
             len([i for i in logger.get_events() if isinstance(i, LossOfContactEvent)])
             == 2
@@ -120,7 +121,7 @@ class TestMotionStatechart:
         assert loss_of_contact_detector.observation_state == 1.0
 
         # 5. Tick Again to check if the obs state turned back to 0.0
-        kin_sim.tick()
+        self.segmind_executor.tick()
         assert (
             len([i for i in logger.get_events() if isinstance(i, LossOfContactEvent)])
             == 2
@@ -131,7 +132,7 @@ class TestMotionStatechart:
         cylinder.parent_connection.origin = (
             HomogeneousTransformationMatrix.from_xyz_rpy(y=-0.4)
         )
-        kin_sim.tick()
+        self.segmind_executor.tick()
 
         # Contact with 2 objects
         assert len([i for i in logger.get_events() if isinstance(i, ContactEvent)]) == 4
@@ -142,7 +143,7 @@ class TestMotionStatechart:
             HomogeneousTransformationMatrix.from_xyz_rpy(z=2)
         )
 
-        kin_sim.tick()
+        self.segmind_executor.tick()
         assert (
             len([i for i in logger.get_events() if isinstance(i, LossOfContactEvent)])
             == 4
@@ -280,7 +281,8 @@ class TestMotionStatechart:
             len([i for i in logger.get_events() if isinstance(i, LossOfContactEvent)])
             == 2
         )
-
+        kin_sim.motion_statechart.draw("/home/sorin/dev/Segmind/test/img/" + "test.pdf")
+        rclpy.shutdown()
     def visualize(self, world):
         rclpy.init()
         node = rclpy.create_node("test_node")

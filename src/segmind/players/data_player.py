@@ -149,6 +149,7 @@ class DataPlayer(EpisodePlayer, ABC):
                 self._wait_to_maintain_frame_rate(last_processing_time, wait_time)
 
             is_first_frame = False
+        self._status = PlayerStatus.STOPPED
 
     def process_objects_data(self, frame_data: FrameData):
         """

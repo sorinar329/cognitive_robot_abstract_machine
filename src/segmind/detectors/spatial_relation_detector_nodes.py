@@ -200,7 +200,7 @@ class BaseContainmentDetector(DetectorStateChartNode):
 
 
     @abstractmethod
-    def update_latest_support_and_trigger_events(
+    def update_latest_containment_and_trigger_events(
         self, objects_to_check: List[Body]
     ) -> List[Event]:
         """
@@ -211,3 +211,13 @@ class BaseContainmentDetector(DetectorStateChartNode):
         """
 
         pass
+
+
+@dataclass(eq=False, repr=False)
+class ContainmentDetector(BaseContainmentDetector):
+
+    def update_latest_containment_and_trigger_events(
+        self, objects_to_check: List[Body]
+    ) -> List[Event]:
+        new_containment_pairs = self.get_containment_pairs(objects_to_check)
+        latest_containment = self.context.latest_containments
