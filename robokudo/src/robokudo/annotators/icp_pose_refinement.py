@@ -27,6 +27,7 @@ from timeit import default_timer
 import numpy
 import open3d as o3d
 import py_trees
+from typing_extensions import Optional
 
 import robokudo.annotators
 import robokudo.annotators.core
@@ -60,33 +61,27 @@ class ICPPoseRefinementAnnotator(robokudo.annotators.core.ThreadedAnnotator):
         """Configuration descriptor for ICP refinement."""
 
         class Parameters:
-            """Parameters for configuring model loading.
+            """Parameters for configuring model loading."""
 
-            Path parameters:
+            def __init__(self) -> None:
+                self.ros_pkg_path: Optional[str] = None
+                """If set, use use data_path as a relative path to self.ros_pkg_path"""
 
-            :ivar ros_pkg_path: ROS package containing models, defaults to None
-            :type ros_pkg_path: str, optional
-            :ivar data_path: Path to model directory (absolute or relative to ros_pkg_path), defaults to None
-            :type data_path: str, optional
-            """
+                self.data_path: Optional[str] = None
+                """Relative Path to the folder containing the models"""
 
-            def __init__(self):
-                self.ros_pkg_path = None  # If set, use use data_path as a relative path to self.ros_pkg_path
-                self.data_path = (
-                    None  # Relative Path to the folder containing the models
-                )
+        # Overwrite the parameters explicitly to enable auto-completion
+        parameters = Parameters()
 
-        parameters = (
-            Parameters()
-        )  # overwrite the parameters explicitly to enable auto-completion
-
-    def __init__(self, name="ICPPoseRefinementAnnotator", descriptor=Descriptor()):
+    def __init__(
+        self,
+        name: str = "ICPPoseRefinementAnnotator",
+        descriptor: "ICPPoseRefinementAnnotator.Descriptor" = Descriptor(),
+    ) -> None:
         """Initialize the ICP pose refiner.
 
         :param name: Name of this annotator instance, defaults to "ICPPoseRefinementAnnotator"
-        :type name: str, optional
         :param descriptor: Configuration descriptor, defaults to Descriptor()
-        :type descriptor: ICPPoseRefinementAnnotator.Descriptor, optional
         """
         super().__init__(name, descriptor)
         self.rk_logger.debug("%s.__init__()" % self.__class__.__name__)
@@ -105,7 +100,7 @@ class ICPPoseRefinementAnnotator(robokudo.annotators.core.ThreadedAnnotator):
             self.class_name_to_ply_model["JeroenCup"] = ply_model
 
     # TODO Rewrite this so that we can load multiple files from the directory at once
-    def get_model_path(self, class_name: str = ""):
+    def get_model_path(self, class_name: str = "") -> Optional[Path]:
         """Get path to PLY model file.
 
         Resolves model path using:
@@ -114,9 +109,7 @@ class ICPPoseRefinementAnnotator(robokudo.annotators.core.ThreadedAnnotator):
         * Direct data path otherwise
 
         :param class_name: Name of object class to load model for
-        :type class_name: str, optional
         :return: Path to PLY file or None if not found
-        :rtype: pathlib.Path or None
         """
         if self.descriptor.parameters.ros_pkg_path is not None:
             # if using ros_pkg_path, data_path has to be set as well!
@@ -148,7 +141,7 @@ class ICPPoseRefinementAnnotator(robokudo.annotators.core.ThreadedAnnotator):
             self.rk_logger.error(f"No ply model found at '{ply_path}'")
         return ply_path
 
-    def compute(self):
+    def compute(self) -> py_trees.common.Status:
         """Process object hypotheses and refine poses.
 
         The method:
@@ -162,7 +155,6 @@ class ICPPoseRefinementAnnotator(robokudo.annotators.core.ThreadedAnnotator):
           * Generates visualization markers
 
         :return: SUCCESS after processing, even if annotator deactivated
-        :rtype: py_trees.Status
         """
         start_timer = default_timer()
 
