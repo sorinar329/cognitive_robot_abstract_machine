@@ -24,11 +24,20 @@ class SemanticDigitalTwinConnector(BaseAnnotator):
         self.rk_logger.debug("%s.__init__()" % self.__class__.__name__)
 
         urdf_dir = os.path.join(
-            Path.home(), "robokudo_ws", "src", "semantic_digital_twin", "resources", "urdf"
+            Path.home(),
+            "Git",
+            "fmuehlis",
+            "Github",
+            "cognitive_robot_abstract_machine",
+            "semantic_digital_twin",
+            "resources",
+            "urdf",
         )
         apartment = os.path.join(urdf_dir, "apartment.urdf")
 
-        self.semdt_adapter = SemanticDigitalTwinAdapter(self.get_cas)  # , urdf_path=apartment)
+        self.semdt_adapter = SemanticDigitalTwinAdapter(
+            self.get_cas
+        )  # , urdf_path=apartment)
 
         self.tracked_sw_objects = []
 
