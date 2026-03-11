@@ -1,13 +1,15 @@
 from abc import abstractmethod, ABC
 from dataclasses import dataclass, field
 from typing import Optional, List, Dict, Set, Any
+import numpy as np
 
 from giskardpy.motion_statechart.context import MotionStatechartContext
 from giskardpy.motion_statechart.data_types import ObservationStateValues
 from giskardpy.motion_statechart.graph_node import MotionStatechartNode
 from giskardpy.motion_statechart.motion_statechart import MotionStatechart
-from segmind.datastructures.events import Event, ContactEvent, LossOfContactEvent
+from segmind.datastructures.events import Event, ContactEvent, LossOfContactEvent, MotionEvent, TranslationEvent, RotationEvent, StopTranslationEvent, StopRotationEvent
 from semantic_digital_twin.reasoning.predicates import contact
+from semantic_digital_twin.spatial_types.spatial_types import Pose
 from semantic_digital_twin.world_description.connections import Connection6DoF
 from semantic_digital_twin.world_description.world_entity import Body
 
@@ -46,7 +48,11 @@ class SegmindContext(MotionStatechartContext):
     :param latest_support: Dictionary mapping each body to the set of bodies
     that currently support it.
     """
-
+    
+    latest_poses: Dict[Body, List[Pose]] = field(default_factory=dict)
+    
+    latest_motion_events: Dict[Body, MotionEvent] = field(default_factory=dict)
+    
     logger: Any = None
     """
     :param latest_support: Dictionary mapping each body to the set of bodies
@@ -226,3 +232,146 @@ class LossOfContactDetector(BaseContactDetector):
                 events.extend([LossOfContactEvent(of_object=obj, with_object=s) for s in loss_contacts])
 
         return events
+
+
+@dataclass(eq=False, repr=False)
+class MotionDetector(DetectorStateChartNode, ABC):
+    """
+    Abstract base class for motion-based detectors.
+
+    Provides shared functionality for monitoring poses of
+    bodies and generating events when movement is detected.
+    """
+
+    tracked_object: Optional[Body] = field(kw_only=True, default=None)
+    """
+    :param tracked_object: Optional body that should be monitored.
+    If None, all trackable objects in the world are checked.
+    """
+
+    context: SegmindContext = field(kw_only=True)
+    """
+    :param context: Segmind context containing world information,
+    contact history and logging utilities.
+    """
+    window_size: int = 4
+
+    def on_tick(
+            self, context: SegmindContext
+    ) -> Optional[ObservationStateValues]:
+        """
+        Executes one update cycle of the detector.
+
+        Determines the objects that should be monitored for movement,
+        computes new movement status and triggers events if
+        motion is detected.
+
+        :param context: The statechart execution context.
+        :return: ObservationStateValues.TRUE if events were triggered,
+        otherwise ObservationStateValues.FALSE.
+        """
+
+        objects_to_check = (
+            [self.tracked_object] if self.tracked_object else [
+                body
+                for body in self.context.world.bodies
+                if type(body.parent_connection) is Connection6DoF
+            ]
+        )
+        events = self.update_latest_pose_and_trigger_events(objects_to_check)
+        for e in events:
+            self.context.logger.log_event(e)
+        return ObservationStateValues.TRUE if events else ObservationStateValues.FALSE
+    
+    
+    def update_latest_pose_and_trigger_events(self, tracked_objs: List[Body]) -> List[Event]:
+        events = []
+        for obj in tracked_objs:
+            latest_poses = self.context.latest_poses.setdefault(obj, [])
+            latest_poses.append(obj.global_pose.to_pose())
+            if len(latest_poses) > self.window_size:
+                event = self.check_obj_movement(obj)
+                if event:
+                    events.append(event)
+                latest_poses.pop(0)
+        return events
+
+    @abstractmethod
+    def check_obj_movement(self, obj: Body) -> Optional[Event]:
+        """
+        Determines if an object is moving based on its pose history.
+
+        :param obj: The body to check.
+        :return: An Event if movement is detected, otherwise None.
+        """
+        pass
+
+    def _check_movement_and_trigger_event(
+        self,
+        obj: Body,
+        is_moving: bool,
+        motion_event_type: type,
+        stop_motion_event_type: type
+    ) -> Optional[Event]:
+        latest_motion_event = self.context.latest_motion_events.get(obj)
+        latest_poses = self.context.latest_poses[obj]
+
+        if is_moving:
+            # 1. Check the latest poses for movement -> If there was never an MotionEvent with the obj, create a new MotionEvent.
+            # 2. If there IS a MotionEvent, remove it and replace it with the new one (continuation).
+            if latest_motion_event is not None and latest_motion_event.current_pose == latest_poses[-1]:
+                return None
+
+            new_event = motion_event_type(
+                tracked_object=obj,
+                start_pose=latest_poses[0],
+                current_pose=latest_poses[-1]
+            )
+            self.context.latest_motion_events[obj] = new_event
+            return new_event
+        else:
+            # 3. If there is no Motion:
+            # 3.1 If there was no MotionEvent of that object before, do nothing.
+            if latest_motion_event is None:
+                return None
+            
+            # 3.2 If there was a MotionEvent before, create a StopMotionEvent when all 4 Poses are not showing any difference.
+            # We already know is_moving is false, but we need to check if ALL poses in the window are the same.
+            # The window size is self.window_size + 1 (because we append then check then pop).
+            # Actually update_latest_pose_and_trigger_events pops AFTER check_obj_movement.
+            # So latest_poses has window_size + 1 elements.
+            all_poses_same = all(np.allclose(p.to_list(), latest_poses[0].to_list()) for p in latest_poses)
+            if all_poses_same:
+                stop_event = stop_motion_event_type(
+                    tracked_object=obj,
+                    start_pose=latest_motion_event.start_pose,
+                    current_pose=latest_poses[-1]
+                )
+                del self.context.latest_motion_events[obj]
+                return stop_event
+        
+        return None
+
+
+@dataclass(eq=False, repr=False)
+class TranslationDetector(MotionDetector):
+    def check_obj_movement(self, obj: Body) -> Optional[Event]:
+        latest_poses = self.context.latest_poses[obj]
+        # Simple movement check: is the last pose different from the previous one?
+        # Or should it be: is the last pose different from the first one in the window?
+        # The requirement says "when all 4 Poses are not showing any difference" for StopMotionEvent.
+        is_moving = not np.allclose(latest_poses[-1].to_position().to_list(), latest_poses[-2].to_position().to_list())
+        return self._check_movement_and_trigger_event(
+            obj, is_moving, TranslationEvent, StopTranslationEvent
+        )
+
+
+@dataclass(eq=False, repr=False)
+class RotationDetector(MotionDetector):
+    def check_obj_movement(self, obj: Body) -> Optional[Event]:
+        latest_poses = self.context.latest_poses[obj]
+        # We need to define how to check orientation closeness.
+        is_moving = not np.allclose(latest_poses[-1].to_quaternion().to_list(), latest_poses[-2].to_quaternion().to_list())
+        return self._check_movement_and_trigger_event(
+            obj, is_moving, RotationEvent, StopRotationEvent
+        )
