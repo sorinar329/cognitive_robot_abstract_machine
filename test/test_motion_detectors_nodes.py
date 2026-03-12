@@ -1,5 +1,6 @@
 import time
 from typing import List
+import numpy as np
 
 from segmind.datastructures.events import (
     TranslationEvent,
@@ -10,7 +11,9 @@ from segmind.datastructures.events import (
 from segmind.detectors.atomic_event_detectors_nodes import (
     DetectorStateChart,
     TranslationDetector,
+    StopTranslationDetector,
     RotationDetector,
+    StopRotationDetector,
     SegmindContext,
 )
 from segmind.episode_segmenter import EpisodeSegmenterExecutor
@@ -40,61 +43,60 @@ class TestMotionDetectorsNodes:
         translation_detector = TranslationDetector(
             name="translation_detector", context=context, tracked_object=cylinder, window_size=2
         )
+        stop_translation_detector = StopTranslationDetector(
+            name="stop_translation_detector", context=context, tracked_object=cylinder, window_size=2
+        )
 
-        sc.add_nodes([translation_detector])
+        sc.add_nodes([translation_detector, stop_translation_detector])
         executor.compile(sc)
 
-        # 1. Initial tick - window not full yet (window_size=2, so we need 3 poses)
-        executor.tick()
-        assert len(context.latest_poses[cylinder]) == 1
-        assert len(logger.get_events()) == 0
-
-        # 2. Second tick - window still not full
+        # 1. Initial tick in compile() + 1 explicit tick()
         executor.tick()
         assert len(context.latest_poses[cylinder]) == 2
         assert len(logger.get_events()) == 0
 
-        # 3. Third tick - window full, no movement
+        # 2. Third tick - filling window (window_size=2 needs 3 poses)
         executor.tick()
-        assert len(context.latest_poses[cylinder]) == 2 # after pop(0)
+        assert len(context.latest_poses[cylinder]) == 3 # [p0, p0, p0]
         assert len(logger.get_events()) == 0
 
-        # 4. Fourth tick - movement
-        cylinder.parent_connection.origin = HomogeneousTransformationMatrix.from_xyz_rpy(x=0.1)
+        # 3. Fourth tick - movement start
+        # window before tick: [p0, p0, p0]
+        # window after tick: [p0, p0, p1]
+        # is_moving will be True because distance(p0, p1) > 0.005
+        current_x = cylinder.parent_connection.origin.x
+        cylinder.parent_connection.origin = HomogeneousTransformationMatrix.from_xyz_rpy(x=current_x + 0.1)
         executor.tick()
         # Movement detected -> TranslationEvent
         events = logger.get_events()
         assert len(events) == 1
         assert isinstance(events[0], TranslationEvent)
         assert context.latest_motion_events[cylinder] == events[0]
+        assert np.allclose(events[0].current_pose.to_position().x, cylinder.global_pose.x)
 
-        # 5. Fifth tick - continued movement
-        cylinder.parent_connection.origin = HomogeneousTransformationMatrix.from_xyz_rpy(x=0.2)
+        # 4. Fifth tick - continued movement
+        current_x = cylinder.parent_connection.origin.x
+        cylinder.parent_connection.origin = HomogeneousTransformationMatrix.from_xyz_rpy(x=current_x + 0.1)
         executor.tick()
-        # Still moving -> New TranslationEvent replaces old one
+        # Still moving -> Update current_pose of the existing TranslationEvent, but NO new event logged
+        events = logger.get_events()
+        assert len(events) == 1
+
+        # 5. Sixth tick - stop movement (not all window poses same yet)
+        # window: [p2, p3, p3] -> is_moving = False (p3 == p3).
+        # But not all poses are same (p2 != p3). So no StopTranslationEvent yet.
+        executor.tick()
+        events = logger.get_events()
+        if len(events) != 1:
+             print(f"\nDEBUG: Events after 6th tick: {events}")
+        assert len(events) == 1
+
+        # 6. Seventh tick - all poses same
+        # window: [p3, p3, p3] -> all_poses_same = True -> StopTranslationEvent
+        executor.tick()
         events = logger.get_events()
         assert len(events) == 2
-        assert isinstance(events[1], TranslationEvent)
-        assert context.latest_motion_events[cylinder] == events[1]
-        assert events[1].start_pose != events[1].current_pose
-
-        # 6. Sixth tick - stop movement (last two poses different, but we need ALL window poses same for stop)
-        # latest_poses before tick: [x=0.1, x=0.2]
-        # after append: [x=0.1, x=0.2, x=0.2]
-        # check_obj_movement sees [x=0.1, x=0.2, x=0.2]. is_moving = False (0.2 == 0.2).
-        # But not all poses are same (0.1 != 0.2). So no StopTranslationEvent yet.
-        executor.tick()
-        events = logger.get_events()
-        assert len(events) == 2 # No new event
-
-        # 7. Seventh tick - all poses same
-        # latest_poses before tick: [x=0.2, x=0.2]
-        # after append: [x=0.2, x=0.2, x=0.2]
-        # all poses same -> StopTranslationEvent
-        executor.tick()
-        events = logger.get_events()
-        assert len(events) == 3
-        assert isinstance(events[2], StopTranslationEvent)
+        assert isinstance(events[1], StopTranslationEvent)
         assert cylinder not in context.latest_motion_events
 
     def test_rotation_detector(self):
@@ -113,33 +115,46 @@ class TestMotionDetectorsNodes:
         rotation_detector = RotationDetector(
             name="rotation_detector", context=context, tracked_object=cylinder, window_size=2
         )
+        stop_rotation_detector = StopRotationDetector(
+            name="stop_rotation_detector", context=context, tracked_object=cylinder, window_size=2
+        )
 
-        sc.add_nodes([rotation_detector])
+        sc.add_nodes([rotation_detector, stop_rotation_detector])
         executor.compile(sc)
 
         # 1. Initial ticks
         executor.tick()
+        assert len(context.latest_poses[cylinder]) == 2
         executor.tick()
-        executor.tick()
+        # window is now [p0, p0, p0], window_size is 2, window_size+1 is 3.
+        assert len(context.latest_poses[cylinder]) == 3
         assert len(logger.get_events()) == 0
 
-        # 2. Rotation movement
+        # 2. Rotation movement start
+        # window: [p0, p0, p1] -> is_moving = True (distance > 0)
         cylinder.parent_connection.origin = HomogeneousTransformationMatrix.from_xyz_rpy(roll=0.1)
         executor.tick()
+        # latest_poses: [p0, p1, p2] (p1=p0, p2=p1) -> [p0, p0, p1]
         events = logger.get_events()
         assert len(events) == 1
         assert isinstance(events[0], RotationEvent)
 
         # 3. Continued rotation
+        # latest_poses: [p0, p1, p2]
         cylinder.parent_connection.origin = HomogeneousTransformationMatrix.from_xyz_rpy(roll=0.2)
         executor.tick()
         events = logger.get_events()
-        assert len(events) == 2
-        assert isinstance(events[1], RotationEvent)
+        assert len(events) == 1
 
-        # 4. Stop rotation
-        executor.tick() # No event yet (window [roll=0.1, roll=0.2, roll=0.2])
-        executor.tick() # StopRotationEvent
+        # 4. Stop rotation (not all poses same)
+        # latest_poses: [p1, p2, p2] (p2=p2) -> is_moving = False
+        executor.tick() 
         events = logger.get_events()
-        assert len(events) == 3
-        assert isinstance(events[2], StopRotationEvent)
+        assert len(events) == 1
+
+        # 5. Stop rotation (all poses same)
+        # latest_poses: [p2, p2, p2] -> all_poses_same = True -> StopRotationEvent
+        executor.tick() 
+        events = logger.get_events()
+        assert len(events) == 2
+        assert isinstance(events[1], StopRotationEvent)

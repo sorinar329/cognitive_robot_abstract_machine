@@ -609,6 +609,8 @@ class EpisodeSegmenterExecutor:
     def tick(self):
         #self.player.pause()
         #self.control_cycles += 1
+        if hasattr(self.context, "tick_count"):
+            self.context.tick_count += 1
         self.statechart.tick(self.context)
         #self.player.resume()
         # ToDo: Here we need to add the state model updates.
