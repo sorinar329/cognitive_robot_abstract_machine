@@ -4,9 +4,17 @@ from typing import Optional, List, Dict, Set
 from giskardpy.motion_statechart.context import MotionStatechartContext
 from giskardpy.motion_statechart.data_types import ObservationStateValues
 from giskardpy.motion_statechart.graph_node import MotionStatechartNode
-from segmind.datastructures.events import Event, SupportEvent, LossOfSupportEvent, ContainmentEvent, \
-    LossOfContainmentEvent
-from segmind.detectors.atomic_event_detectors_nodes import SegmindContext, DetectorStateChartNode
+from segmind.datastructures.events import (
+    Event,
+    SupportEvent,
+    LossOfSupportEvent,
+    ContainmentEvent,
+    LossOfContainmentEvent,
+)
+from segmind.detectors.atomic_event_detectors_nodes import (
+    SegmindContext,
+    DetectorStateChartNode,
+)
 from semantic_digital_twin.reasoning.predicates import is_supported_by, InsideOf
 from semantic_digital_twin.world_description.connections import Connection6DoF
 from semantic_digital_twin.world_description.world_entity import Body
@@ -34,9 +42,7 @@ class BaseSupportDetector(DetectorStateChartNode, ABC):
     history and logging utilities.
     """
 
-    def on_tick(
-        self, context: SegmindContext
-    ) -> Optional[ObservationStateValues]:
+    def on_tick(self, context: SegmindContext) -> Optional[ObservationStateValues]:
         """
         Executes one detector update cycle.
 
@@ -44,7 +50,9 @@ class BaseSupportDetector(DetectorStateChartNode, ABC):
         :return: TRUE if events were generated, FALSE otherwise.
         """
         objects_to_check = (
-            [self.tracked_object] if self.tracked_object else [
+            [self.tracked_object]
+            if self.tracked_object
+            else [
                 body
                 for body in self.context.world.bodies
                 if type(body.parent_connection) is Connection6DoF
@@ -69,7 +77,7 @@ class BaseSupportDetector(DetectorStateChartNode, ABC):
             for body in bodies_with_collision:
                 if obj is body:
                     continue
-                if is_supported_by(obj, body):
+                if is_supported_by(obj, body, max_intersection_height=0.01):
                     support_pairs.setdefault(obj, set()).add(body)
         return support_pairs
 
@@ -104,10 +112,19 @@ class SupportDetector(BaseSupportDetector):
         latest_support = self.context.latest_support
         new_support_pairs = self.get_support_pairs(objects_to_check)
         for body, support in new_support_pairs.items():
-            new_supports = support if body not in latest_support else support - latest_support[body]
+            new_supports = (
+                support
+                if body not in latest_support
+                else support - latest_support[body]
+            )
             if new_supports:
                 latest_support.setdefault(body, set()).update(new_supports)
-                events.extend([SupportEvent(tracked_object=body, with_object=s) for s in new_supports])
+                events.extend(
+                    [
+                        SupportEvent(tracked_object=body, with_object=s)
+                        for s in new_supports
+                    ]
+                )
 
         return events
 
@@ -129,10 +146,19 @@ class LossOfSupportDetector(BaseSupportDetector):
         latest_support = self.context.latest_support
         new_support_pairs = self.get_support_pairs(objects_to_check)
         for body, support in list(latest_support.items()):
-            loss_supports = support if body not in new_support_pairs else support - new_support_pairs[body]
+            loss_supports = (
+                support
+                if body not in new_support_pairs
+                else support - new_support_pairs[body]
+            )
             if loss_supports:
                 latest_support.pop(body)
-                events.extend([LossOfSupportEvent(tracked_object=body, with_object=s) for s in loss_supports])
+                events.extend(
+                    [
+                        LossOfSupportEvent(tracked_object=body, with_object=s)
+                        for s in loss_supports
+                    ]
+                )
 
         return events
 
@@ -159,9 +185,7 @@ class BaseContainmentDetector(DetectorStateChartNode):
     history and logging utilities.
     """
 
-    def on_tick(
-        self, context: SegmindContext
-    ) -> Optional[ObservationStateValues]:
+    def on_tick(self, context: SegmindContext) -> Optional[ObservationStateValues]:
         """
         Executes one detector update cycle.
 
@@ -182,7 +206,9 @@ class BaseContainmentDetector(DetectorStateChartNode):
 
         return ObservationStateValues.TRUE if events else ObservationStateValues.FALSE
 
-    def get_containment_pairs(self, tracked_objects: List[Body]) -> Dict[Body, Set[Body]]:
+    def get_containment_pairs(
+        self, tracked_objects: List[Body]
+    ) -> Dict[Body, Set[Body]]:
         """
         Computes support relationships.
 
@@ -198,7 +224,6 @@ class BaseContainmentDetector(DetectorStateChartNode):
                 if InsideOf(obj, body).compute_containment_ratio() > 0.9:
                     containment_pairs.setdefault(obj, set()).add(body)
         return containment_pairs
-
 
     @abstractmethod
     def update_latest_containment_and_trigger_events(
@@ -224,10 +249,19 @@ class ContainmentDetector(BaseContainmentDetector):
         latest_containment = self.context.latest_containments
         events = []
         for obj, containment_list in new_containment_pairs.items():
-            new_containments= containment_list if obj not in latest_containment else containment_list - latest_containment[obj]
+            new_containments = (
+                containment_list
+                if obj not in latest_containment
+                else containment_list - latest_containment[obj]
+            )
             if new_containments:
                 latest_containment.setdefault(obj, set()).update(new_containments)
-                events.extend([ContainmentEvent(tracked_object=obj, with_object=c) for c in new_containments])
+                events.extend(
+                    [
+                        ContainmentEvent(tracked_object=obj, with_object=c)
+                        for c in new_containments
+                    ]
+                )
 
         return events
 
@@ -242,9 +276,18 @@ class LossOfContainmentDetector(BaseContainmentDetector):
         latest_containment = self.context.latest_containments
         events = []
         for obj, containment_list in list(latest_containment.items()):
-            lost_containments = containment_list if obj not in new_containment_pairs else containment_list - new_containment_pairs[obj]
+            lost_containments = (
+                containment_list
+                if obj not in new_containment_pairs
+                else containment_list - new_containment_pairs[obj]
+            )
             if lost_containments:
                 latest_containment.pop(obj)
-                events.extend([LossOfContainmentEvent(tracked_object=obj, with_object=c) for c in lost_containments])
+                events.extend(
+                    [
+                        LossOfContainmentEvent(tracked_object=obj, with_object=c)
+                        for c in lost_containments
+                    ]
+                )
 
         return events

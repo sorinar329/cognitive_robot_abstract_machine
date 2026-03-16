@@ -13,6 +13,7 @@ from segmind.datastructures.events import (
     ContainmentEvent,
     TranslationEvent,
     StopTranslationEvent,
+    PlacingEvent,
 )
 from segmind.detectors.atomic_event_detectors import DetectorStateChart
 from segmind.detectors.atomic_event_detectors_nodes import (
@@ -22,6 +23,7 @@ from segmind.detectors.atomic_event_detectors_nodes import (
     TranslationDetector,
     StopTranslationDetector,
 )
+from segmind.detectors.coarse_event_detector_nodes import PlacingDetector
 from segmind.detectors.spatial_relation_detector_nodes import (
     SupportDetector,
     LossOfSupportDetector,
@@ -102,6 +104,10 @@ class TestMultiverseEpisodeSegmenter(TestCase):
             name="stop_translation_detector", context=self.context
         )
 
+        placing_detector = PlacingDetector(
+            name="placing_detector", context=self.context
+        )
+
         sc.add_nodes(
             [
                 contact_detector,
@@ -111,13 +117,16 @@ class TestMultiverseEpisodeSegmenter(TestCase):
                 translation_detector,
                 containment_detector,
                 stop_translation_detector,
+                placing_detector,
             ]
         )
+
         support_detector.start_condition = contact_detector.observation_variable
         loss_of_support_detector.start_condition = (
             loss_of_contact_detector.observation_variable
         )
         containment_detector.start_condition = support_detector.observation_variable
+        placing_detector.start_condition = support_detector.observation_variable
         self.episode_executor.compile(sc)
         time.sleep(5)
         while self.episode_executor.player.is_alive():
@@ -130,14 +139,26 @@ class TestMultiverseEpisodeSegmenter(TestCase):
         stop_translation_events = [
             i for i in logger.get_events() if isinstance(i, StopTranslationEvent)
         ]
+        placing_events = [i for i in logger.get_events() if isinstance(i, PlacingEvent)]
 
+        support_events = [i for i in logger.get_events() if isinstance(i, SupportEvent)]
+
+        print(f"Number of support events: {len(support_events)}")
         print(f"Number of translation events: {len(translation_events)}")
         print(f"Number of stop translation events: {len(stop_translation_events)}")
+        print(f"Number of placing events: {len(placing_events)}")
         for e in translation_events:
             print(f"Translation Event: {e}")
 
         for e in stop_translation_events:
             print(f"Stop Translation Event: {e}")
+
+        for e in placing_events:
+            print(f"Placing Event: {e}")
+
+        for e in support_events:
+            print(f"Support Event: {e}")
+
         assert len([i for i in logger.get_events() if isinstance(i, SupportEvent)]) > 0
         assert len([i for i in logger.get_events() if isinstance(i, ContactEvent)]) > 0
         assert (
