@@ -7,16 +7,26 @@ from unittest import TestCase
 
 import rclpy
 
-from segmind.datastructures.events import SupportEvent, ContactEvent, ContainmentEvent, TranslationEvent, \
-    StopTranslationEvent
+from segmind.datastructures.events import (
+    SupportEvent,
+    ContactEvent,
+    ContainmentEvent,
+    TranslationEvent,
+    StopTranslationEvent,
+)
 from segmind.detectors.atomic_event_detectors import DetectorStateChart
 from segmind.detectors.atomic_event_detectors_nodes import (
     SegmindContext,
     ContactDetector,
-    LossOfContactDetector, TranslationDetector, StopTranslationDetector,
+    LossOfContactDetector,
+    TranslationDetector,
+    StopTranslationDetector,
 )
-from segmind.detectors.spatial_relation_detector_nodes import SupportDetector, LossOfSupportDetector, \
-    ContainmentDetector
+from segmind.detectors.spatial_relation_detector_nodes import (
+    SupportDetector,
+    LossOfSupportDetector,
+    ContainmentDetector,
+)
 from segmind.episode_segmenter import EpisodeSegmenterExecutor
 from segmind.event_logger import EventLogger
 from segmind.players.csv_player import CSVEpisodePlayer
@@ -47,7 +57,7 @@ class TestMultiverseEpisodeSegmenter(TestCase):
         cls.viz_marker_publisher.with_tf_publisher()
         cls.context = SegmindContext(world=cls.world)
         cls.file_player = CSVEpisodePlayer(
-            file_path="/home/sorin/dev/Segmind/resources/multiverse_episodes/icub_montessori_no_hands/data.csv",
+            file_path="/home/sorin/dev/workspace/Segmind/resources/multiverse_episodes/icub_montessori_no_hands/data.csv",
             world=cls.world,
             time_between_frames=datetime.timedelta(milliseconds=4),
             position_shift=Vector3(0, 0, 0),
@@ -56,16 +66,14 @@ class TestMultiverseEpisodeSegmenter(TestCase):
             context=cls.context, player=cls.file_player
         )
         cls.episode_executor.spawn_scene(
-            models_dir="/home/sorin/dev/Segmind/resources/multiverse_episodes/icub_montessori_no_hands/models/"
+            models_dir="/home/sorin/dev/workspace/Segmind/resources/multiverse_episodes/icub_montessori_no_hands/models/"
         )
 
     def test_replay_episode(self):
         sc = DetectorStateChart()
         logger = EventLogger()
 
-        self.context = SegmindContext(
-            world=self.world, logger=logger
-        )
+        self.context = SegmindContext(world=self.world, logger=logger)
 
         contact_detector = ContactDetector(
             name="contact_detector", context=self.context
@@ -94,8 +102,17 @@ class TestMultiverseEpisodeSegmenter(TestCase):
             name="stop_translation_detector", context=self.context
         )
 
-        sc.add_nodes([contact_detector, loss_of_contact_detector, support_detector,loss_of_support_detector,
-                      translation_detector,containment_detector, stop_translation_detector])
+        sc.add_nodes(
+            [
+                contact_detector,
+                loss_of_contact_detector,
+                support_detector,
+                loss_of_support_detector,
+                translation_detector,
+                containment_detector,
+                stop_translation_detector,
+            ]
+        )
         support_detector.start_condition = contact_detector.observation_variable
         loss_of_support_detector.start_condition = (
             loss_of_contact_detector.observation_variable
@@ -104,12 +121,15 @@ class TestMultiverseEpisodeSegmenter(TestCase):
         self.episode_executor.compile(sc)
         time.sleep(5)
         while self.episode_executor.player.is_alive():
-             time.sleep(0.1)
-             self.episode_executor.tick()
+            time.sleep(0.1)
+            self.episode_executor.tick()
 
-
-        translation_events = [i for i in logger.get_events() if isinstance(i, TranslationEvent)]
-        stop_translation_events = [i for i in logger.get_events() if isinstance(i, StopTranslationEvent)]
+        translation_events = [
+            i for i in logger.get_events() if isinstance(i, TranslationEvent)
+        ]
+        stop_translation_events = [
+            i for i in logger.get_events() if isinstance(i, StopTranslationEvent)
+        ]
 
         print(f"Number of translation events: {len(translation_events)}")
         print(f"Number of stop translation events: {len(stop_translation_events)}")
@@ -120,5 +140,10 @@ class TestMultiverseEpisodeSegmenter(TestCase):
             print(f"Stop Translation Event: {e}")
         assert len([i for i in logger.get_events() if isinstance(i, SupportEvent)]) > 0
         assert len([i for i in logger.get_events() if isinstance(i, ContactEvent)]) > 0
-        assert len([i for i in logger.get_events() if isinstance(i, ContainmentEvent)]) > 0
-        assert len(translation_events) == len(stop_translation_events) and len(translation_events) > 0
+        assert (
+            len([i for i in logger.get_events() if isinstance(i, ContainmentEvent)]) > 0
+        )
+        assert (
+            len(translation_events) == len(stop_translation_events)
+            and len(translation_events) > 0
+        )

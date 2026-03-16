@@ -1,3 +1,4 @@
+import math
 from abc import abstractmethod, ABC
 from dataclasses import dataclass, field
 from typing import Optional, List, Dict, Set, Any
@@ -7,7 +8,16 @@ from giskardpy.motion_statechart.context import MotionStatechartContext
 from giskardpy.motion_statechart.data_types import ObservationStateValues
 from giskardpy.motion_statechart.graph_node import MotionStatechartNode
 from giskardpy.motion_statechart.motion_statechart import MotionStatechart
-from segmind.datastructures.events import Event, ContactEvent, LossOfContactEvent, MotionEvent, TranslationEvent, RotationEvent, StopTranslationEvent, StopRotationEvent
+from segmind.datastructures.events import (
+    Event,
+    ContactEvent,
+    LossOfContactEvent,
+    MotionEvent,
+    TranslationEvent,
+    RotationEvent,
+    StopTranslationEvent,
+    StopRotationEvent,
+)
 from semantic_digital_twin.reasoning.predicates import contact
 from semantic_digital_twin.spatial_types.spatial_types import Pose
 from semantic_digital_twin.world_description.connections import Connection6DoF
@@ -24,12 +34,11 @@ class SegmindContext(MotionStatechartContext):
 
     """
 
-
     IndexedBodyPairs = Dict[Body, Set[Body]]
     """
     Type hint for dictionaries mapping bodies to sets of bodies
     """
-    
+
     object_moving_status: Dict[Body, bool] = field(default_factory=dict)
     """
     Dictionary mapping each body to a boolean indicating if it is currently moving.
@@ -65,7 +74,8 @@ class SegmindContext(MotionStatechartContext):
     The event logger used to record detected events.
     """
 
-#ToDo: See if we can create our own MotionStatechartNode or change its name (talk to simon)
+
+# ToDo: See if we can create our own MotionStatechartNode or change its name (talk to simon)
 @dataclass(repr=False, eq=False)
 class DetectorStateChartNode(MotionStatechartNode):
     pass
@@ -83,7 +93,7 @@ class DetectorStateChart(MotionStatechart):
     pass
 
 
-#ToDo: there is a lot of duplication with SupportDetector, so we have to make it more robust
+# ToDo: there is a lot of duplication with SupportDetector, so we have to make it more robust
 @dataclass(eq=False, repr=False)
 class BaseContactDetector(DetectorStateChartNode, ABC):
     """
@@ -105,9 +115,7 @@ class BaseContactDetector(DetectorStateChartNode, ABC):
     contact history and logging utilities.
     """
 
-    def on_tick(
-        self, context: SegmindContext
-    ) -> Optional[ObservationStateValues]:
+    def on_tick(self, context: SegmindContext) -> Optional[ObservationStateValues]:
         """
         Executes one update cycle of the detector.
 
@@ -121,7 +129,9 @@ class BaseContactDetector(DetectorStateChartNode, ABC):
         """
 
         objects_to_check = (
-            [self.tracked_object] if self.tracked_object else [
+            [self.tracked_object]
+            if self.tracked_object
+            else [
                 body
                 for body in self.context.world.bodies
                 if type(body.parent_connection) is Connection6DoF
@@ -198,10 +208,16 @@ class ContactDetector(BaseContactDetector):
         latest_contact_bodies = self.context.latest_contact_bodies
         events = []
         for obj, contact_list in new_contact_pairs.items():
-            new_contacts = contact_list if obj not in latest_contact_bodies else contact_list - latest_contact_bodies[obj]
+            new_contacts = (
+                contact_list
+                if obj not in latest_contact_bodies
+                else contact_list - latest_contact_bodies[obj]
+            )
             if new_contacts:
                 latest_contact_bodies.setdefault(obj, set()).update(new_contacts)
-                events.extend([ContactEvent(of_object=obj, with_object=c) for c in new_contacts])
+                events.extend(
+                    [ContactEvent(of_object=obj, with_object=c) for c in new_contacts]
+                )
 
         return events
 
@@ -232,10 +248,19 @@ class LossOfContactDetector(BaseContactDetector):
         latest_contact_bodies = self.context.latest_contact_bodies
         events = []
         for obj, contact_list in list(latest_contact_bodies.items()):
-            loss_contacts = contact_list if obj not in new_contact_pairs else contact_list - new_contact_pairs[obj]
+            loss_contacts = (
+                contact_list
+                if obj not in new_contact_pairs
+                else contact_list - new_contact_pairs[obj]
+            )
             if loss_contacts:
                 latest_contact_bodies.pop(obj)
-                events.extend([LossOfContactEvent(of_object=obj, with_object=s) for s in loss_contacts])
+                events.extend(
+                    [
+                        LossOfContactEvent(of_object=obj, with_object=s)
+                        for s in loss_contacts
+                    ]
+                )
 
         return events
 
@@ -267,10 +292,7 @@ class MotionDetector(DetectorStateChartNode, ABC):
     Threshold for the distance between two poses to be considered movement.
     """
 
-
-    def on_tick(
-            self, context: SegmindContext
-    ) -> Optional[ObservationStateValues]:
+    def on_tick(self, context: SegmindContext) -> Optional[ObservationStateValues]:
         """
         Executes one update cycle of the detector.
 
@@ -284,7 +306,9 @@ class MotionDetector(DetectorStateChartNode, ABC):
         """
 
         objects_to_check = (
-            [self.tracked_object] if self.tracked_object else [
+            [self.tracked_object]
+            if self.tracked_object
+            else [
                 body
                 for body in self.context.world.bodies
                 if type(body.parent_connection) is Connection6DoF
@@ -294,9 +318,10 @@ class MotionDetector(DetectorStateChartNode, ABC):
         for e in events:
             self.context.logger.log_event(e)
         return ObservationStateValues.TRUE if events else ObservationStateValues.FALSE
-    
-    
-    def update_latest_pose_and_trigger_events(self, tracked_objs: List[Body]) -> List[Event]:
+
+    def update_latest_pose_and_trigger_events(
+        self, tracked_objs: List[Body]
+    ) -> List[Event]:
         """
         Updates the pose history for each tracked object and checks for motion events.
 
@@ -336,12 +361,13 @@ class MotionDetector(DetectorStateChartNode, ABC):
         """
         pass
 
-    @abstractmethod
     def _calculate_is_moving(self, obj: Body) -> bool:
-        """
-        Calculates if the object is currently moving based on the latest poses.
-        """
-        pass
+        latest_poses = self.context.latest_poses[obj]
+        p1 = np.array(latest_poses[-1].to_position().to_list())
+        p2 = np.array(latest_poses[-2].to_position().to_list())
+        distance = np.linalg.norm(p1 - p2)
+        return distance > self.distance_threshold
+
 
 @dataclass(eq=False, repr=False)
 class TranslationDetector(MotionDetector):
@@ -363,7 +389,7 @@ class TranslationDetector(MotionDetector):
                 new_event = TranslationEvent(
                     tracked_object=obj,
                     start_pose=latest_poses[0],
-                    current_pose=latest_poses[-1]
+                    current_pose=latest_poses[-1],
                 )
                 self.context.latest_motion_events[obj] = new_event
                 return new_event
@@ -374,12 +400,6 @@ class TranslationDetector(MotionDetector):
 
         return None
 
-    def _calculate_is_moving(self, obj: Body) -> bool:
-        latest_poses = self.context.latest_poses[obj]
-        p1 = np.array(latest_poses[-1].to_position().to_list())
-        p2 = np.array(latest_poses[-2].to_position().to_list())
-        distance = np.linalg.norm(p1 - p2)
-        return distance > self.distance_threshold
 
 @dataclass(eq=False, repr=False)
 class StopTranslationDetector(MotionDetector):
@@ -387,13 +407,6 @@ class StopTranslationDetector(MotionDetector):
     Detector for stop translation events.
     Triggers a StopTranslationEvent when an object that was moving stops.
     """
-
-    def _calculate_is_moving(self, obj: Body) -> bool:
-        latest_poses = self.context.latest_poses[obj]
-        p1 = np.array(latest_poses[-1].to_position().to_list())
-        p2 = np.array(latest_poses[-2].to_position().to_list())
-        distance = np.linalg.norm(p1 - p2)
-        return distance > self.distance_threshold
 
     def _check_movement_and_trigger_event(self, obj: Body) -> Optional[Event]:
         latest_motion_event = self.context.latest_motion_events.get(obj)
@@ -411,13 +424,16 @@ class StopTranslationDetector(MotionDetector):
             # Check if ALL poses in the window are within the threshold of the last pose.
             # This ensures the object has truly stayed still for the entire window.
             p_last = np.array(latest_poses[-1].to_position().to_list())
-            all_poses_same = all(np.linalg.norm(np.array(p.to_position().to_list()) - p_last) < self.distance_threshold
-                                 for p in latest_poses)
+            all_poses_same = all(
+                np.linalg.norm(np.array(p.to_position().to_list()) - p_last)
+                < self.distance_threshold
+                for p in latest_poses
+            )
             if all_poses_same:
                 stop_event = StopTranslationEvent(
                     tracked_object=obj,
                     start_pose=latest_motion_event.start_pose,
-                    current_pose=latest_poses[-1]
+                    current_pose=latest_poses[-1],
                 )
                 del self.context.latest_motion_events[obj]
                 return stop_event
@@ -435,8 +451,10 @@ class RotationDetector(MotionDetector):
     def check_obj_movement(self, obj: Body) -> Optional[Event]:
         latest_poses = self.context.latest_poses[obj]
         # Check orientation closeness using quaternions.
-        is_moving = not np.allclose(latest_poses[-1].to_quaternion().to_list(),
-                                    latest_poses[-2].to_quaternion().to_list())
+        is_moving = not np.allclose(
+            latest_poses[-1].to_quaternion().to_list(),
+            latest_poses[-2].to_quaternion().to_list(),
+        )
         self.context.object_moving_status[obj] = is_moving
         return self._check_movement_and_trigger_event(obj)
 
@@ -450,7 +468,7 @@ class RotationDetector(MotionDetector):
                 new_event = RotationEvent(
                     tracked_object=obj,
                     start_pose=latest_poses[0],
-                    current_pose=latest_poses[-1]
+                    current_pose=latest_poses[-1],
                 )
                 self.context.latest_motion_events[obj] = new_event
                 return new_event
@@ -471,8 +489,10 @@ class StopRotationDetector(MotionDetector):
     def check_obj_movement(self, obj: Body) -> Optional[Event]:
         latest_poses = self.context.latest_poses[obj]
         # Check orientation closeness using quaternions.
-        is_moving = not np.allclose(latest_poses[-1].to_quaternion().to_list(),
-                                    latest_poses[-2].to_quaternion().to_list())
+        is_moving = not np.allclose(
+            latest_poses[-1].to_quaternion().to_list(),
+            latest_poses[-2].to_quaternion().to_list(),
+        )
         self.context.object_moving_status[obj] = is_moving
         return self._check_movement_and_trigger_event(obj)
 
@@ -485,14 +505,18 @@ class StopRotationDetector(MotionDetector):
             if latest_motion_event is None:
                 return None
 
-            all_poses_same = all(np.allclose(p.to_quaternion().to_list(),
-                                             latest_poses[0].to_quaternion().to_list())
-                                 for p in latest_poses)
+            all_poses_same = all(
+                np.allclose(
+                    p.to_quaternion().to_list(),
+                    latest_poses[0].to_quaternion().to_list(),
+                )
+                for p in latest_poses
+            )
             if all_poses_same:
                 stop_event = StopRotationEvent(
                     tracked_object=obj,
                     start_pose=latest_motion_event.start_pose,
-                    current_pose=latest_poses[-1]
+                    current_pose=latest_poses[-1],
                 )
                 del self.context.latest_motion_events[obj]
                 return stop_event
