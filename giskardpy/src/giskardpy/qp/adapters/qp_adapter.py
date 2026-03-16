@@ -1239,8 +1239,6 @@ class InequalityModel(ProblemDataPart):
             ):
                 if derivative == Derivatives.velocity:
                     continue
-                if derivative == Derivatives.acceleration:
-                    continue
                 J_vel = (
                     expressions.jacobian(
                         variables=self.get_free_variable_symbols(derivative),
@@ -1258,80 +1256,6 @@ class InequalityModel(ProblemDataPart):
             model = sm.hstack(parts)
             num_slack_variables = sum(
                 self.control_horizon for c in self.velocity_constraints
-            )
-            slack_model = sm.Matrix.eye(num_slack_variables) * self.config.mpc_dt
-            return model, slack_model
-        return sm.Matrix(), sm.Matrix()
-
-    def acceleration_constraint_model(self) -> Tuple[sm.Matrix, sm.Matrix]:
-        """
-        same structure as vel constraint model
-        task acceleration = Jd_q * qd + (J_q + Jd_qd) * qdd + J_qd * qddd
-        """
-        # FIXME no test case for this so probably buggy
-        number_of_acc_rows = (
-            len(self.acceleration_constraints) * self.config.prediction_horizon
-        )
-        if number_of_acc_rows > 0:
-            expressions = sm.Matrix(
-                self.get_derivative_constraint_expressions(Derivatives.acceleration)
-            )
-            assert self.config.max_derivative >= Derivatives.jerk
-            model = sm.Matrix.zeros(
-                number_of_acc_rows, self.number_of_non_slack_columns
-            )
-            J_q = (
-                expressions.jacobian(
-                    variables=self.get_free_variable_symbols(Derivatives.position),
-                )
-                * self.config.mpc_dt
-            )
-            Jd_q = (
-                expressions.jacobian_dot(
-                    variables=self.get_free_variable_symbols(Derivatives.position),
-                    variables_dot=self.get_free_variable_symbols(Derivatives.velocity),
-                )
-                * self.config.mpc_dt
-            )
-            J_qd = (
-                expressions.jacobian(
-                    variables=self.get_free_variable_symbols(Derivatives.velocity),
-                )
-                * self.config.mpc_dt
-            )
-            Jd_qd = (
-                expressions.jacobian_dot(
-                    variables=self.get_free_variable_symbols(Derivatives.velocity),
-                    variables_dot=self.get_free_variable_symbols(
-                        Derivatives.acceleration
-                    ),
-                )
-                * self.config.mpc_dt
-            )
-            J_vel_block = sm.Matrix.eye(self.config.prediction_horizon).kron(Jd_q)
-            J_acc_block = sm.Matrix.eye(self.config.prediction_horizon).kron(
-                J_q + Jd_qd
-            )
-            J_jerk_block = sm.Matrix.eye(self.config.prediction_horizon).kron(J_qd)
-            horizontal_offset = (
-                self.number_of_free_variables * self.config.prediction_horizon
-            )
-            model[:, :horizontal_offset] = J_vel_block
-            model[:, horizontal_offset : horizontal_offset * 2] = J_acc_block
-            model[:, horizontal_offset * 2 : horizontal_offset * 3] = J_jerk_block
-
-            # delete rows if control horizon of constraint shorter than prediction horizon
-            rows_to_delete = []
-            for t in range(self.config.prediction_horizon):
-                for i, c in enumerate(self.velocity_constraints):
-                    v_index = i + (t * len(self.velocity_constraints))
-                    if t + 1 > self.control_horizon:
-                        rows_to_delete.append(v_index)
-            model.remove(rows_to_delete, [])
-
-            # slack model
-            num_slack_variables = sum(
-                self.control_horizon for c in self.acceleration_constraints
             )
             slack_model = sm.Matrix.eye(num_slack_variables) * self.config.mpc_dt
             return model, slack_model
@@ -1480,20 +1404,12 @@ class InequalityModel(ProblemDataPart):
         slack_model_parts = []
 
         max_derivative = self.config.max_derivative
-        derivative_model, derivative_model_slack = (
-            sm.Matrix(),
-            sm.Matrix(),
-        )
 
         inequality_model, inequality_slack_model = self.inequality_constraint_model(
             max_derivative
         )
         vel_constr_model, vel_constr_slack_model = self.velocity_constraint_model()
 
-        # derivative model
-        if len(derivative_model) > 0:
-            model_parts.append(derivative_model)
-            slack_model_parts.append(derivative_model_slack)
         # neq integral constraints
         if len(vel_constr_model) > 0:
             model_parts.append(vel_constr_model)
