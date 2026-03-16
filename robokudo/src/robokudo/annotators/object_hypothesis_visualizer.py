@@ -5,11 +5,16 @@ This module provides an annotator for visualizing object hypotheses in both
 """
 
 import copy
+from pathlib import Path
+from typing import Dict, List, Tuple
+
+import numpy as np
 from timeit import default_timer
 
 import cv2
 import open3d as o3d
 import py_trees
+import trimesh
 
 import robokudo
 import robokudo.annotators.core
@@ -20,8 +25,9 @@ import robokudo.utils.error_handling
 import robokudo.utils.o3d_helper
 import robokudo.utils.type_conversion
 from robokudo.cas import CASViews
-from robokudo.utils.file_loader import FileLoader
 from robokudo_msgs.action import Query
+from semantic_digital_twin.world_description.geometry import FileMesh, Mesh
+from semantic_digital_twin.world_description.world_entity import Body
 
 
 class ObjectHypothesisVisualizer(robokudo.annotators.core.BaseAnnotator):
@@ -65,16 +71,40 @@ class ObjectHypothesisVisualizer(robokudo.annotators.core.BaseAnnotator):
         """
         super().__init__(name, descriptor)
         self.rk_logger.debug("%s.__init__()" % self.__class__.__name__)
-        self._mesh_cache = {}
+        self._mesh_cache: Dict[Tuple[object, ...], o3d.geometry.TriangleMesh] = {}
+
+    def _iter_mesh_visuals(self, body: Body) -> List[Mesh]:
+        """Return mesh-based visual shapes for a body."""
+        return [shape for shape in body.visual if isinstance(shape, Mesh)]
+
+    def _mesh_cache_key(self, shape: Mesh) -> Tuple[object, ...]:
+        """Create a stable cache key for mesh conversion results."""
+        if isinstance(shape, FileMesh):
+            try:
+                filename = str(Path(shape.filename).resolve())
+            except OSError:
+                filename = shape.filename
+            return ("filemesh", filename)
+        return ("mesh", id(shape.mesh))
+
+    def _mesh_shape_to_o3d(self, shape: Mesh) -> o3d.geometry.TriangleMesh:
+        """Convert a mesh shape to Open3D, cache the result, and apply its local origin."""
+        tm: trimesh.Trimesh = shape.mesh
+        cache_key = self._mesh_cache_key(shape)
+        if cache_key not in self._mesh_cache:
+            self._mesh_cache[cache_key] = robokudo.utils.o3d_helper.trimesh_to_o3d_mesh(tm)
+        mesh_instance = copy.deepcopy(self._mesh_cache[cache_key])
+        mesh_instance.transform(shape.origin.to_np())
+        return mesh_instance
 
     def draw_text_middle(
-        self,
-        image,
-        text,
-        color=(0, 0, 255),
-        font=cv2.FONT_HERSHEY_SIMPLEX,
-        font_scale=1,
-        thickness=2,
+            self,
+            image,
+            text,
+            color=(0, 0, 255),
+            font=cv2.FONT_HERSHEY_SIMPLEX,
+            font_scale=1,
+            thickness=2,
     ):
         """Draw text in the middle of an image.
 
@@ -147,9 +177,9 @@ class ObjectHypothesisVisualizer(robokudo.annotators.core.BaseAnnotator):
                     return f"{oh.id}: {best_classification.classname}, {best_classification.confidence:.2f}"
 
             if (
-                self.descriptor.parameters.query_aware
-                and query is not None
-                and query.obj.type != ""
+                    self.descriptor.parameters.query_aware
+                    and query is not None
+                    and query.obj.type != ""
             ):
                 matching_object_hypotheses = []
                 for oh in object_hypotheses:
@@ -202,21 +232,15 @@ class ObjectHypothesisVisualizer(robokudo.annotators.core.BaseAnnotator):
                 cluster_frame.transform(transform)
                 visualized_geometries.append(cluster_frame)
 
-                # TODO Fetch mesh from Body
-                # if object_hypothesis.object_knowledge is not None:
-                #     ok = object_hypothesis.object_knowledge  # type:
-                #
-                #     if ok.mesh_ros_package == "" or ok.mesh_relative_path == "":
-                #         continue
-                #     mesh_path = FileLoader.get_path_to_file_in_ros_package(
-                #         ros_pkg_name=ok.mesh_ros_package,
-                #         relative_path=ok.mesh_relative_path)
-                #
-                #     if mesh_path not in self._mesh_cache:
-                #         self._mesh_cache[mesh_path] = o3d.io.read_triangle_mesh(mesh_path)
-                #     mesh_instance = copy.deepcopy(self._mesh_cache[mesh_path])
-                #     mesh_instance.transform(transform)
-                #     visualized_geometries.append(mesh_instance)
+                body = object_hypothesis.object_knowledge
+                if body is not None:
+                    for mesh_shape in self._iter_mesh_visuals(body):
+                        mesh_instance = self._mesh_shape_to_o3d(mesh_shape)
+                        mesh_instance.transform(transform)
+                        visualized_geometries.append(mesh_instance)
+                        robokudo.utils.o3d_helper.draw_mesh_wireframe_on_image(
+                            visualization_img, mesh_shape, transform, self.get_cas()
+                        )
 
         if self.descriptor.parameters.visualize_full_cloud:
             visualized_geometries.append(self.get_cas().get(CASViews.CLOUD))
