@@ -90,8 +90,6 @@ from giskardpy.motion_statechart.test_nodes.test_nodes import (
 from giskardpy.qp.constraint import EqualityConstraint
 from giskardpy.qp.constraint_collection import ConstraintCollection
 from giskardpy.qp.qp_controller_config import QPControllerConfig
-from giskardpy.qp.exceptions import HardConstraintsViolatedException
-from giskardpy.qp.qp_controller_config import QPControllerConfig
 from giskardpy.utils.math import angle_between_vector
 from krrood.symbolic_math.symbolic_math import (
     trinary_logic_and,
@@ -1223,11 +1221,6 @@ class TestJointTasks:
         kin_sim = Executor(
             MotionStatechartContext(
                 world=pr2_world_state_reset,
-                qp_controller_config=QPControllerConfig(
-                    target_frequency=20,
-                    prediction_horizon=7,
-                    qp_solver_class=QPSolverPIQP,
-                ),
             )
         )
         kin_sim.compile(motion_statechart=msc)

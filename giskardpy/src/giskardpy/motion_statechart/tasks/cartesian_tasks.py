@@ -235,7 +235,7 @@ class CartesianPositionTrajectory(CartesianTask):
             frame_P_goal=root_P_goal,
             frame_P_current=root_P_current,
             reference_velocity=self.reference_velocity,
-            weight=self.weight,
+            quadratic_weight=self.weight,
         )
 
         self.compile_current_point_on_tick(context)
