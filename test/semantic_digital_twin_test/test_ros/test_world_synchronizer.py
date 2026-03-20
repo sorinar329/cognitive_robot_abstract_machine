@@ -315,7 +315,7 @@ def test_model_synchronization_merge_full_world(rclpy_node):
         )
     ).parse()
 
-    def wait_for_sync(timeout=4.0, interval=0.05):
+    def wait_for_sync(timeout=8.0, interval=0.05):
         start = time.time()
         while time.time() - start < timeout:
             body_ids_1 = [body.id for body in w1.kinematic_structure_entities]

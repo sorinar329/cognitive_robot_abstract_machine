@@ -111,6 +111,24 @@ class WorldModelModification(WorldModification, ABC):
 
 
 @dataclass
+class WorldModelModificationViaID(WorldModelModification, ABC):
+    """
+    A record of a modification to the model (structure) of the world that only stores the ID of the modified object.
+    """
+
+    @classmethod
+    def from_domain_object(cls, domain_object: WorldEntityWithID) -> Self:
+        """
+        Creates an instance of the class from a given domain object.
+
+        :param domain_object: The domain object to create an instance from.
+
+        :return: An instance of the class.
+        """
+        return cls(object_json=to_json(domain_object.id))
+
+
+@dataclass
 class AttributeUpdateModification(WorldModification):
     """
     An update to one or more attributes of an entity in the world.
@@ -197,7 +215,7 @@ class AddKinematicStructureEntityModification(WorldModelModification):
 
 
 @dataclass
-class RemoveBodyModification(WorldModelModification):
+class RemoveBodyModification(WorldModelModificationViaID):
     """
     Removal of a body from the world.
     """
@@ -233,10 +251,17 @@ class AddConnectionModification(WorldModelModification):
 
 
 @dataclass
-class RemoveConnectionModification(WorldModelModification):
+class RemoveConnectionModification(WorldModelModificationViaID):
     """
     Removal of a connection from the world.
     """
+
+    @classmethod
+    def from_domain_object(cls, domain_object: Connection) -> Self:
+        parent_id = domain_object.parent.id
+        child_id = domain_object.child.id
+        object_json = {"parent": to_json(parent_id), "child": to_json(child_id)}
+        return cls(object_json=object_json)
 
     @classmethod
     def from_kwargs(cls, kwargs: Dict[str, Any]):
@@ -293,7 +318,7 @@ class AddDegreeOfFreedomModification(WorldModelModification):
 
 
 @dataclass
-class RemoveDegreeOfFreedomModification(WorldModelModification):
+class RemoveDegreeOfFreedomModification(WorldModelModificationViaID):
 
     @classmethod
     def from_kwargs(cls, kwargs: Dict[str, Any]):
@@ -323,11 +348,11 @@ class AddSemanticAnnotationModification(WorldModelModification):
 
 
 @dataclass
-class RemoveSemanticAnnotationModification(WorldModelModification):
+class RemoveSemanticAnnotationModification(WorldModelModificationViaID):
 
     @classmethod
     def from_kwargs(cls, kwargs: Dict[str, Any]):
-        return cls(object_json=kwargs["semantic_annotation"].to_json())
+        return cls(object_json=to_json(kwargs["semantic_annotation"].id))
 
     def to_domain_object(self, world: World) -> SemanticAnnotation:
         return world.get_semantic_annotation_by_id(from_json(self.object_json))
@@ -353,7 +378,7 @@ class AddActuatorModification(WorldModelModification):
 
 
 @dataclass
-class RemoveActuatorModification(WorldModelModification):
+class RemoveActuatorModification(WorldModelModificationViaID):
 
     @classmethod
     def from_kwargs(cls, kwargs: Dict[str, Any]):
