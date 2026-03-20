@@ -5,20 +5,27 @@ from collections import defaultdict
 from dataclasses import dataclass
 from typing import Self
 
-from pkg_resources import resource_filename
+from importlib.resources import files
+from pathlib import Path
 
-from .robot_mixins import HasNeck, SpecifiesLeftRightArm
-from ..collision_checking.collision_matrix import MaxAvoidedCollisionsOverride
-from ..collision_checking.collision_rules import (
+from semantic_digital_twin.robots.robot_mixins import HasNeck, SpecifiesLeftRightArm
+from semantic_digital_twin.collision_checking.collision_matrix import (
+    MaxAvoidedCollisionsOverride,
+)
+from semantic_digital_twin.collision_checking.collision_rules import (
     SelfCollisionMatrixRule,
     AvoidAllCollisions,
     AvoidExternalCollisions,
     AvoidSelfCollisions,
 )
-from ..datastructures.definitions import StaticJointState, GripperState, TorsoState
-from ..datastructures.joint_state import JointState
-from ..datastructures.prefixed_name import PrefixedName
-from ..robots.abstract_robot import (
+from semantic_digital_twin.datastructures.definitions import (
+    StaticJointState,
+    GripperState,
+    TorsoState,
+)
+from semantic_digital_twin.datastructures.joint_state import JointState
+from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
+from semantic_digital_twin.robots.abstract_robot import (
     Neck,
     Finger,
     ParallelGripper,
@@ -29,9 +36,12 @@ from ..robots.abstract_robot import (
     AbstractRobot,
     Base,
 )
-from ..spatial_types import Quaternion, Vector3
-from ..world import World
-from ..world_description.connections import ActiveConnection, FixedConnection
+from semantic_digital_twin.spatial_types import Quaternion, Vector3
+from semantic_digital_twin.world import World
+from semantic_digital_twin.world_description.connections import (
+    ActiveConnection,
+    FixedConnection,
+)
 
 
 @dataclass(eq=False)
@@ -54,7 +64,7 @@ class PR2(AbstractRobot, SpecifiesLeftRightArm, HasNeck):
         Loads the SRDF file for the PR2 robot, if it exists.
         """
         srdf_path = os.path.join(
-            resource_filename("semantic_digital_twin", "../../"),
+            Path(files("semantic_digital_twin")).parent.parent,
             "resources",
             "collision_configs",
             "pr2.srdf",

@@ -11,11 +11,11 @@ from semantic_digital_twin.world_description.connections import (
     PrismaticConnection,
     ActiveConnection1DOF,
 )
-from ..context import MotionStatechartContext
-from ..data_types import DefaultWeights
-from ..exceptions import NodeInitializationError
-from ..graph_node import NodeArtifacts
-from ..graph_node import Task
+from giskardpy.motion_statechart.context import MotionStatechartContext
+from giskardpy.motion_statechart.data_types import DefaultWeights
+from giskardpy.motion_statechart.exceptions import NodeInitializationError
+from giskardpy.motion_statechart.graph_node import NodeArtifacts
+from giskardpy.motion_statechart.graph_node import Task
 
 
 @dataclass(eq=False, repr=False)
@@ -63,7 +63,7 @@ class JointPositionList(Task):
                 name=str(connection.name),
                 reference_velocity=velocity,
                 equality_bound=error,
-                weight=self.weight,
+                quadratic_weight=self.weight,
                 task_expression=current,
             )
             errors.append(sm.abs(error) < self.threshold)

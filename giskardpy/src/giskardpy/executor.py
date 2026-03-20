@@ -2,20 +2,19 @@ import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 
+import numpy as np
 from typing_extensions import Optional
 
+from giskardpy.data_types.exceptions import NoQPControllerConfigException
+from giskardpy.motion_statechart.context import MotionStatechartContext
+from giskardpy.motion_statechart.motion_statechart import MotionStatechart
+from giskardpy.qp.exceptions import EmptyProblemException
+from giskardpy.qp.qp_controller import QPController
+from giskardpy.qp.qp_controller_config import QPControllerConfig
 from krrood.symbolic_math.symbolic_math import FloatVariable
-from semantic_digital_twin.world import World
-from semantic_digital_twin.world_description.world_state import WorldStateTrajectory
 from semantic_digital_twin.world_description.world_state_trajectory_plotter import (
     WorldStateTrajectoryPlotter,
 )
-from .data_types.exceptions import NoQPControllerConfigException
-from .motion_statechart.context import MotionStatechartContext
-from .motion_statechart.motion_statechart import MotionStatechart
-from .qp.exceptions import EmptyProblemException
-from .qp.qp_controller import QPController
-from .qp.qp_controller_config import QPControllerConfig
 
 
 @dataclass
@@ -89,13 +88,8 @@ class Executor:
 
     tmp_folder: str = field(default="/tmp/")
     """Path to safe temporary files."""
-    record_trajectory: bool = False
-    """Whether to record the trajectory of the robot."""
-    world_state_trajectory: WorldStateTrajectory = field(init=False)
-    """The trajectory of the robot's world state."""
-    trajectory_plotter: WorldStateTrajectoryPlotter = field(
-        default_factory=WorldStateTrajectoryPlotter
-    )
+
+    trajectory_plotter: WorldStateTrajectoryPlotter | None = field(default=None)
     """The trajectory plotter used to plot the robot's trajectory."""
 
     pacer: Pacer = field(default_factory=SimulationPacer)
@@ -122,26 +116,27 @@ class Executor:
 
     def _create_control_cycles_variable(self):
         self.context.control_cycle_variable = FloatVariable("control_cycles")
-        self._control_cycle_index = self.context.float_variable_data.add_variable(
+        self.context.float_variable_data.register_expression(
             self.context.control_cycle_variable
         )
 
     @property
-    def control_cycles(self):
-        return self.context.float_variable_data.data[self._control_cycle_index]
+    def control_cycles(self) -> float:
+        return float(self.context.control_cycle_variable.evaluate()[0])
 
     @control_cycles.setter
     def control_cycles(self, value):
-        self.context.float_variable_data.set_value(self._control_cycle_index, value)
+        self.context.float_variable_data.set_value(
+            self.context.control_cycle_variable, value
+        )
 
     def compile(self, motion_statechart: MotionStatechart):
         self.motion_statechart = motion_statechart
         self.control_cycles = 0
         self.motion_statechart.compile(self.context)
         self._compile_qp_controller(self.context.qp_controller_config)
-        self.world_state_trajectory = WorldStateTrajectory.from_world_state(
-            self.context.world.state, time=self.time
-        )
+        if self.trajectory_plotter is not None:
+            self.trajectory_plotter.reset(self.context.world.state, self.time)
         self.context.collision_manager.update_collision_matrix()
         # do one tick to immediately active nodes whose start condition is constant true.
         self.motion_statechart.tick(self.context)
@@ -153,7 +148,7 @@ class Executor:
         self.motion_statechart.tick(self.context)
         if self.qp_controller is None:
             return
-        next_cmd = self.qp_controller.get_cmd(
+        next_cmd = self.qp_controller.compute_command(
             world_state=self.context.world.state.data,
             life_cycle_state=self.motion_statechart.life_cycle_state.data,
             float_variables=self.context.float_variable_data.data,
@@ -163,7 +158,10 @@ class Executor:
             self.qp_controller.config.control_dt,
             self.qp_controller.config.max_derivative,
         )
-        self.world_state_trajectory.append(self.context.world.state, self.time)
+        if self.trajectory_plotter is not None:
+            self.trajectory_plotter.world_state_trajectory.append(
+                self.context.world.state, self.time
+            )
 
     def tick_until_end(self, timeout: int = 1_000):
         """
@@ -215,6 +213,4 @@ class Executor:
             raise EmptyProblemException()
 
     def plot_trajectory(self, file_name: str = "./trajectory.pdf"):
-        self.trajectory_plotter.plot_trajectory(
-            self.context.world_state_trajectory, file_name
-        )
+        self.trajectory_plotter.plot_trajectory(file_name)

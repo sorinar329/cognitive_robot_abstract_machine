@@ -4,8 +4,8 @@ from abc import ABC
 from collections import defaultdict
 from dataclasses import dataclass, field
 from itertools import combinations
+from itertools import product
 from typing import Dict, Any
-from itertools import combinations, combinations_with_replacement
 
 import numpy as np
 from lxml import etree
@@ -13,20 +13,23 @@ from typing_extensions import (
     List,
     TYPE_CHECKING,
     Self,
-    Iterable,
     Callable,
     ClassVar,
 )
 
-from .collision_detector import ClosestPoints, CollisionCheckingResult
 from krrood.adapters.json_serializer import SubclassJSONSerializer, to_json, from_json
-from .collision_matrix import (
+from semantic_digital_twin.adapters.world_entity_kwargs_tracker import (
+    WorldEntityWithIDKwargsTracker,
+)
+from semantic_digital_twin.collision_checking.collision_detector import (
+    CollisionCheckingResult,
+)
+from semantic_digital_twin.collision_checking.collision_matrix import (
     CollisionRule,
     CollisionMatrix,
     CollisionCheck,
 )
-from ..adapters.world_entity_kwargs_tracker import WorldEntityWithIDKwargsTracker
-from ..robots.abstract_robot import AbstractRobot
+from semantic_digital_twin.robots.abstract_robot import AbstractRobot
 
 if TYPE_CHECKING:
     from ..world import World
@@ -174,27 +177,37 @@ class AvoidExternalCollisions(AvoidCollisionRule, SubclassJSONSerializer):
     def _update(self, world: World):
         self.added_collision_checks = set()
         if self.body_subset is None:
-            self.body_subset = set(self.robot.bodies_with_collision)
-        external_bodies = set(world.bodies_with_collision) - set(self.body_subset)
-        for body_a in self.body_subset:
-            for body_b in external_bodies:
-                collision_check = CollisionCheck.create_and_validate(
-                    body_a=body_a, body_b=body_b, distance=self.buffer_zone_distance
-                )
-                self.added_collision_checks.add(collision_check)
+            body_subset = set(self.robot.bodies_with_collision)
+        else:
+            body_subset = self.body_subset
+        external_bodies = set(world.bodies_with_collision) - set(body_subset)
+        for body_a, body_b in product(body_subset, external_bodies):
+            collision_check = CollisionCheck.create_and_validate(
+                body_a=body_a, body_b=body_b, distance=self.buffer_zone_distance
+            )
+            self.added_collision_checks.add(collision_check)
 
     def to_json(self) -> Dict[str, Any]:
         return {
             **super().to_json(),
             "robot": to_json(self.robot.id),
-            "body_subset": to_json(self.body_subset),
+            "body_subset": to_json(
+                {b.id for b in self.body_subset} if self.body_subset else None
+            ),
         }
 
     @classmethod
     def _from_json(cls, data: Dict[str, Any], **kwargs) -> Self:
         tracker = WorldEntityWithIDKwargsTracker.from_kwargs(kwargs)
-        robot = tracker.get_world_entity_with_id(id=from_json(data["robot"]))
-        return cls(robot=robot, body_subset=from_json(data["body_subset"], **kwargs))
+        robot = tracker.get_world_entity_with_id(id=from_json(data["robot"], **kwargs))
+        body_subset_ids = from_json(data["body_subset"], **kwargs)
+        body_subset = None
+        if body_subset_ids is not None:
+            body_subset = {
+                tracker.get_world_entity_with_id(id=body_id)
+                for body_id in body_subset_ids
+            }
+        return cls(robot=robot, body_subset=body_subset)
 
 
 @dataclass

@@ -13,13 +13,15 @@ from typing_extensions import Dict, Any, Self, Optional, List, Iterator
 from typing_extensions import TYPE_CHECKING
 
 from krrood.adapters.json_serializer import SubclassJSONSerializer, to_json, from_json
-from .geometry import Shape, BoundingBox, Color
-from ..datastructures.variables import SpatialVariables
-from ..spatial_types import HomogeneousTransformationMatrix, Point3
+from semantic_digital_twin.world_description.geometry import Shape, BoundingBox, Color
+from semantic_digital_twin.datastructures.variables import SpatialVariables
+from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix, Point3
 
 if TYPE_CHECKING:
-    from .world_entity import KinematicStructureEntity
-    from ..world import World
+    from semantic_digital_twin.world_description.world_entity import (
+        KinematicStructureEntity,
+    )
+    from semantic_digital_twin.world import World
 
 logger = logging.getLogger(__name__)
 
@@ -382,7 +384,5 @@ class BoundingBoxCollection(ShapeCollection):
             max(all_x),
             max(all_y),
             max(all_z),
-            HomogeneousTransformationMatrix.from_xyz_quaternion(
-                reference_frame=self.reference_frame
-            ),
+            HomogeneousTransformationMatrix(reference_frame=self.reference_frame),
         )

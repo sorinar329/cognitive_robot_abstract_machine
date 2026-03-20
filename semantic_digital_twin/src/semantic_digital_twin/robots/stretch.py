@@ -3,9 +3,10 @@ from collections import defaultdict
 from dataclasses import dataclass
 from typing import Self
 
-from pkg_resources import resource_filename
+from importlib.resources import files
+from pathlib import Path
 
-from .abstract_robot import (
+from semantic_digital_twin.robots.abstract_robot import (
     AbstractRobot,
     Arm,
     Neck,
@@ -15,18 +16,22 @@ from .abstract_robot import (
     Torso,
     Base,
 )
-from .robot_mixins import HasNeck, HasArms
-from ..collision_checking.collision_rules import (
+from semantic_digital_twin.robots.robot_mixins import HasNeck, HasArms
+from semantic_digital_twin.collision_checking.collision_rules import (
     SelfCollisionMatrixRule,
     AvoidExternalCollisions,
 )
-from ..datastructures.definitions import StaticJointState, GripperState, TorsoState
-from ..datastructures.joint_state import JointState
-from ..datastructures.prefixed_name import PrefixedName
-from ..spatial_types import Quaternion
-from ..spatial_types.spatial_types import Vector3
-from ..world import World
-from ..world_description.connections import ActiveConnection
+from semantic_digital_twin.datastructures.definitions import (
+    StaticJointState,
+    GripperState,
+    TorsoState,
+)
+from semantic_digital_twin.datastructures.joint_state import JointState
+from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
+from semantic_digital_twin.spatial_types import Quaternion
+from semantic_digital_twin.spatial_types.spatial_types import Vector3
+from semantic_digital_twin.world import World
+from semantic_digital_twin.world_description.connections import ActiveConnection
 
 
 @dataclass(eq=False)
@@ -153,7 +158,7 @@ class Stretch(AbstractRobot, HasArms, HasNeck):
 
     def _setup_collision_rules(self):
         srdf_path = os.path.join(
-            resource_filename("semantic_digital_twin", "../../"),
+            Path(files("semantic_digital_twin")).parent.parent,
             "resources",
             "collision_configs",
             "stretch.srdf",
