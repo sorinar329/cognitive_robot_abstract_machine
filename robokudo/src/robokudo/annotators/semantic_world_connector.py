@@ -54,6 +54,9 @@ class SemanticDigitalTwinConnector(BaseAnnotator):
         data: Dict[str, Any] = {}
         cas = self.get_cas()
 
+        if hasattr(oh, "roi"):
+            data["oh_roi"] = oh.roi.roi
+
         positions = cas.filter_by_type(PositionAnnotation, oh.annotations)
         if len(positions) > 0:
             translation_vector = np.array(positions[0].translation)

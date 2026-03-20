@@ -32,6 +32,7 @@ import open3d as o3d
 from pymongo import MongoClient
 from sensor_msgs.msg import CameraInfo
 from typing_extensions import Any, List, Type, TYPE_CHECKING, Tuple
+from robokudo import world
 
 from robokudo.utils import serialization as serializer
 from robokudo.cas import CAS, CASViews
@@ -393,7 +394,7 @@ class Storage:
         :param matrix_dict: The transform matrix
         :return: The restored HomogeneousTransformationMatrix from matrix_dict
         """
-        tracker = robokudo.world.get_world_entity_tracker()
+        tracker = world.get_world_entity_tracker()
         kwargs = tracker.create_kwargs()
         return HomogeneousTransformationMatrix.from_json(matrix_dict, **kwargs)
 
