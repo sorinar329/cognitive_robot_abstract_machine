@@ -29,6 +29,7 @@ from .dataset.example_classes import (
     JSONSerializableClass,
 )
 from .dataset.semantic_world_like_classes import *
+from .dataset import cyclic_dependent_alternative_mappings
 from .test_eql.conf.world.doors_and_drawers import DoorsAndDrawersWorld
 from .test_eql.conf.world.handles_and_containers import (
     HandlesAndContainersWorld,
@@ -57,6 +58,7 @@ def generate_sqlalchemy_interface():
     all_classes |= set(classes_of_module(example_classes))
     all_classes |= set(classes_of_module(semantic_world_like_classes))
     all_classes |= set(classes_of_module(cyclic_dao_dependency))
+    all_classes |= set(classes_of_module(cyclic_dependent_alternative_mappings))
     all_classes |= {Symbol}
 
     # remove classes that don't need persistence

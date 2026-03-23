@@ -26,6 +26,7 @@ import krrood.ormatic.type_dict
 import krrood.symbol_graph.symbol_graph
 import sqlalchemy.sql.sqltypes
 import test.krrood_test.dataset.cyclic_dao_dependency
+import test.krrood_test.dataset.cyclic_dependent_alternative_mappings
 import test.krrood_test.dataset.example_classes
 import test.krrood_test.dataset.semantic_world_like_classes
 import typing
@@ -454,6 +455,58 @@ class CallableWrapperDAO(
     )
 
 
+class CyclicDependentAlternativeMappingContainerDAO(
+    Base,
+    DataAccessObject[
+        test.krrood_test.dataset.cyclic_dependent_alternative_mappings.CyclicDependentAlternativeMappingContainer
+    ],
+):
+
+    __tablename__ = "CyclicDependentAlternativeMappingContainerDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    dependency_id: Mapped[int] = mapped_column(
+        ForeignKey("DependencyMappingDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+    main_id: Mapped[int] = mapped_column(
+        ForeignKey("MainMappingDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+
+    dependency: Mapped[DependencyMappingDAO] = relationship(
+        "DependencyMappingDAO",
+        uselist=False,
+        foreign_keys=[dependency_id],
+        post_update=True,
+    )
+    main: Mapped[MainMappingDAO] = relationship(
+        "MainMappingDAO", uselist=False, foreign_keys=[main_id], post_update=True
+    )
+
+
+class DependencyMappingDAO(
+    Base,
+    DataAccessObject[
+        test.krrood_test.dataset.cyclic_dependent_alternative_mappings.DependencyMapping
+    ],
+):
+
+    __tablename__ = "DependencyMappingDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    name: Mapped[builtins.str] = mapped_column(String(255), use_existing_column=True)
+    value: Mapped[builtins.int] = mapped_column(use_existing_column=True)
+
+
 class GenericClassDAO(
     Base, DataAccessObject[test.krrood_test.dataset.example_classes.GenericClass]
 ):
@@ -730,6 +783,35 @@ class JSONWrapperDAO(
     more_objects: Mapped[
         typing.List[test.krrood_test.dataset.example_classes.JSONSerializableClass]
     ] = mapped_column(JSON, nullable=False, use_existing_column=True)
+
+
+class MainMappingDAO(
+    Base,
+    DataAccessObject[
+        test.krrood_test.dataset.cyclic_dependent_alternative_mappings.MainMapping
+    ],
+):
+
+    __tablename__ = "MainMappingDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    name: Mapped[builtins.str] = mapped_column(String(255), use_existing_column=True)
+
+    dependency_id: Mapped[typing.Optional[builtins.int]] = mapped_column(
+        ForeignKey("DependencyMappingDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+
+    dependency: Mapped[DependencyMappingDAO] = relationship(
+        "DependencyMappingDAO",
+        uselist=False,
+        foreign_keys=[dependency_id],
+        post_update=True,
+    )
 
 
 class MixinDAO(Base, DataAccessObject[test.krrood_test.dataset.example_classes.Mixin]):

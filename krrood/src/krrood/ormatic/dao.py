@@ -261,6 +261,16 @@ class FromDataAccessObjectState(DataAccessObjectState[FromDataAccessObjectWorkIt
     Cache for synthetic parent DAOs to maintain identity across discovery and filling phases.
     """
 
+    dependencies: Dict[int, Set[int]] = field(default_factory=dict)
+    """
+    Map of DAO IDs to the set of DAO IDs they depend on.
+    """
+
+    current_dao: Optional[DataAccessObject] = None
+    """
+    The DAO instance currently being processed during the discovery phase.
+    """
+
     def is_initialized(self, dao_instance: DataAccessObject) -> bool:
         """
         Check if the given DAO instance has been fully initialized.
@@ -510,6 +520,8 @@ class DataAccessObject(HasGeneric[T]):
         :param class_to_check: The class to check.
         :return: True if alternative mapping is used.
         """
+        if not inspect.isclass(class_to_check):
+            return False
         return issubclass(class_to_check, DataAccessObject) and issubclass(
             class_to_check.original_class(), AlternativeMapping
         )
@@ -832,7 +844,9 @@ class DataAccessObject(HasGeneric[T]):
             # Use pop() to treat the deque as a stack (LIFO) for DFS
             work_item = state.work_items.pop()
             discovery_order.append(work_item)
+            state.current_dao = work_item.dao_instance
             work_item.dao_instance._fill_from_dao(work_item.domain_object, state)
+            state.current_dao = None
 
         state.discovery_mode = False
 
@@ -858,10 +872,55 @@ class DataAccessObject(HasGeneric[T]):
 
         # Pass 2.2: Finalize resolution and resolve AlternativeMappings.
         state.resolution_mode = True
-        for work_item in reversed(discovery_order):
+
+        id_to_work_item = {id(wi.dao_instance): wi for wi in discovery_order}
+        discovery_order_indices = {
+            id(wi.dao_instance): i for i, wi in enumerate(discovery_order)
+        }
+        dependants: Dict[int, Set[int]] = {dao_id: set() for dao_id in id_to_work_item}
+        pending_dependency_counts = {dao_id: 0 for dao_id in id_to_work_item}
+
+        for dao_id, deps in state.dependencies.items():
+            if dao_id not in id_to_work_item:
+                continue
+            for dep_id in deps:
+                if dep_id in id_to_work_item and dep_id != dao_id:
+                    dependants[dep_id].add(dao_id)
+                    pending_dependency_counts[dao_id] += 1
+
+        unresolved_indices = set(range(len(discovery_order)))
+        ready_indices = [
+            i
+            for i, wi in enumerate(discovery_order)
+            if pending_dependency_counts[id(wi.dao_instance)] == 0
+        ]
+
+        while unresolved_indices:
+            if not ready_indices:
+                # Cycle detected
+                next_index = max(unresolved_indices)
+                ready_indices.append(next_index)
+
+            # Prioritize items discovered later
+            ready_indices.sort()
+            current_index = ready_indices.pop()
+
+            if current_index not in unresolved_indices:
+                continue
+
+            unresolved_indices.remove(current_index)
+            work_item = discovery_order[current_index]
+
             if not state.is_initialized(work_item.dao_instance):
                 work_item.dao_instance._resolve_from_dao(work_item.domain_object, state)
                 state.mark_initialized(work_item.dao_instance)
+
+            for dependant_id in dependants[id(work_item.dao_instance)]:
+                pending_dependency_counts[dependant_id] -= 1
+                if pending_dependency_counts[dependant_id] == 0:
+                    dep_index = discovery_order_indices[dependant_id]
+                    if dep_index in unresolved_indices:
+                        ready_indices.append(dep_index)
 
     def _finalize_containers(
         self,
@@ -926,6 +985,9 @@ class DataAccessObject(HasGeneric[T]):
         :param state: The conversion state.
         :return: The uninitialized domain object.
         """
+        if state.discovery_mode and state.current_dao is not None:
+            state.dependencies.setdefault(id(state.current_dao), set()).add(id(self))
+
         if not state.has(self):
             domain_object = state.allocate_and_memoize(
                 self, self.constructable_original_class()

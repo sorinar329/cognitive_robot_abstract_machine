@@ -10,6 +10,7 @@ from pycram.datastructures.pose import PoseStamped
 from pycram.motion_executor import simulated_robot
 from pycram.orm.ormatic_interface import *  # type: ignore
 from pycram.plans.factories import sequential, execute_single
+from pycram.plans.plan import Plan
 from pycram.robot_plans.actions.composite.transporting import TransportAction
 from pycram.robot_plans.actions.core.navigation import NavigateAction
 from pycram.robot_plans.actions.core.robot_body import MoveTorsoAction, ParkArmsAction
@@ -82,7 +83,7 @@ def test_replay_simple_plan(pycram_testing_session, simple_plan):
 
     fetched_plan = session.scalars(select(PlanMappingDAO)).one()
 
-    recreated_plan = fetched_plan.from_dao()
+    recreated_plan: Plan = fetched_plan.from_dao()
 
 
 @pytest.fixture

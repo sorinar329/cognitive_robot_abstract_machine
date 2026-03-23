@@ -1,8 +1,22 @@
+from typing import Container
+
 import pytest
 from sqlalchemy import select
 from krrood.ormatic.dao import to_dao
 from ..dataset.cyclic_dao_dependency import IssueMain, IssueDependency, PlanReproduction
-from ..dataset.ormatic_interface import IssueMainMappingDAO, PlanReproductionDAO
+from ..dataset.cyclic_dependent_alternative_mappings import (
+    CyclicDependentAlternativeMappingContainer,
+    MainMapping,
+    Dependency,
+    Main,
+)
+from ..dataset.ormatic_interface import (
+    IssueMainMappingDAO,
+    PlanReproductionDAO,
+    CyclicDependentAlternativeMappingContainerDAO,
+    MainMappingDAO,
+    ContainerDAO,
+)
 
 
 def test_alternative_mapping_hash_failure(session, database):
@@ -45,3 +59,34 @@ def test_alternative_mapping_hash_failure(session, database):
         recreated.dependency.parent.dependencies[0].parent
         is recreated.dependency.parent
     )
+
+
+def test_chained_alternative_mapping_fix(session, database):
+    """
+    Test that the refcount solution correctly resolves chained AlternativeMappings.
+    """
+    # Setup domain objects
+    dependency = Dependency(name="dep", value=42)
+    main = Main(name="main", dependency=dependency)
+    container = CyclicDependentAlternativeMappingContainer(
+        dependency=dependency, main=main
+    )
+    container_dao = to_dao(container)
+    # Re-mocking for each call if needed, but the current mock should suffice
+
+    # Discovery order: cont_dao -> dep_dao -> main_dao
+    # Reversed: main_dao -> dep_dao -> cont_dao
+    # With refcount:
+    # dep_dao has 0 incoming dependencies from these three.
+    # main_dao depends on dep_dao.
+    # cont_dao depends on dep_dao and main_dao.
+
+    # Order should be: dep_dao resolved, then main_dao resolved, then cont_dao resolved.
+
+    recreated = container_dao.from_dao()
+
+    assert isinstance(recreated.dependency, Dependency)
+    assert recreated.dependency.value == 42
+    assert isinstance(recreated.main.dependency, Dependency)
+    assert recreated.main.dependency.value == 42
+    assert recreated.main.dependency is recreated.dependency
