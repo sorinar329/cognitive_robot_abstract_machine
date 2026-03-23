@@ -17,9 +17,11 @@ from segmind.detectors.atomic_event_detectors_nodes import (
 from semantic_digital_twin.world_description.connections import Connection6DoF
 from semantic_digital_twin.world_description.world_entity import Body
 
+from segmind.detectors.base import AbstractDetector
+
 
 @dataclass
-class AbstractInteractionDetector(DetectorStateChartNode, ABC):
+class AbstractInteractionDetector(AbstractDetector):
     """
     Abstract base class for interaction-based detectors.
 
@@ -27,49 +29,33 @@ class AbstractInteractionDetector(DetectorStateChartNode, ABC):
     bodies and generating events when detected.
     """
 
-    tracked_object: Optional[Body] = field(kw_only=True, default=None)
-    """
-    :param tracked_object: Optional body that should be monitored.
-    If None, all trackable objects in the world are checked.
-    """
-
-    context: SegmindContext = field(kw_only=True)
-    """
-    :param context: Segmind context containing world information,
-    contact history and logging utilities.
-    """
-
     shift_threshold: float = 15
+    """
+    The threshold for the time difference between two events to be considered an interaction.
+    """
 
-
-    def on_tick(self, context: SegmindContext) -> Optional[ObservationStateValues]:
-        objects_to_check = (
-            [self.tracked_object]
-            if self.tracked_object
-            else [
-                body
-                for body in self.context.world.bodies
-                if type(body.parent_connection) is Connection6DoF
-            ]
-        )
-        events = self.check_and_trigger_events(objects_to_check)
-        for e in events:
-            self.context.logger.log_event(e)
-
-        return ObservationStateValues.TRUE if events else ObservationStateValues.FALSE
-
-    @abstractmethod
-    def check_and_trigger_events(self, obj: List[Body]) -> List[Event]:
+    def update_context_and_events(self, tracked_objects: List[Body]) -> List[Event]:
         pass
-
 
 @dataclass
 class PlacingDetector(AbstractInteractionDetector):
-    # Here we need to look at different logged events and by time, check if its a placing event
-    # PlacingEvent -> StopMotionEvent + Support or Containment Event
 
-    def check_and_trigger_events(self, obj: Body) -> List[Event]:
 
+    def update_context_and_events(self, obj: List[Body]) -> List[Event]:
+        """
+        Updates the system context with new placing event instances based on past
+        actions logged in the system. It analyzes and filters specific event types
+        to detect new events that can be generated. This function ensures distinct
+        events are created by maintaining exclusivity through a pairing mechanism.
+
+        Args:
+            obj (List[Body]): Input list of body objects to be processed. Currently
+                              not utilized in the function logic.
+
+        Returns:
+            List[Event]: A list of PlacingEvent instances generated after analyzing
+                         stop translation and support events.
+        """
         stop_translation_event = [
             i
             for i in self.context.logger.get_events()
@@ -80,29 +66,21 @@ class PlacingDetector(AbstractInteractionDetector):
         ]
 
         events = []
-        # Now we need to check if the stop translation event and the support event are close enough timestamp wise
         for i in stop_translation_event:
             for j in support_event:
-
                 if i.tracked_object == j.tracked_object:
-
                     if abs(i.timestamp - j.timestamp) < self.shift_threshold:
-
                         # needs to be reworked, it doesnt work
                         key = (id(i), id(j))
-
                         # ✅ exclusivity check
                         if key in self.context.placing_pairs:
                             continue
-
                         self.context.placing_pairs.add(key)
-
                         e = PlacingEvent(
                             tracked_object=i.tracked_object,
                             with_object=j.with_object,
                             timestamp=i.timestamp,
                         )
-
                         events.append(e)
                         break
         return events
@@ -110,8 +88,31 @@ class PlacingDetector(AbstractInteractionDetector):
 
 @dataclass
 class PickUpDetector(AbstractInteractionDetector):
-    def check_and_trigger_events(self, obj: Body) -> List[Event]:
+    """
+    Detects and processes interactions suggesting an object has been picked up.
 
+    The PickUpDetector class determines if a "pickup" event has occurred by analyzing
+    contextual events such as TranslationEvent and LossOfSupportEvent. It ensures
+    that such events are detected and processed by checking their timestamps and
+    associating them with corresponding objects. The resulting detected events are
+    then returned. This class interfaces with a logger to gather the needed event
+    data and uses a context to manage event pairs and thresholds.
+    """
+
+    def update_context_and_events(self, obj: List[Body]) -> List[Event]:
+        """
+        Updates the context and generates a list of events based on translation events and loss
+        of support events. The method identifies pairs of related events that are close in
+        timestamp, determines if they are exclusive, and creates a new event when conditions
+        are met.
+
+        Parameters:
+            obj (List[Body]): A list of body objects to update the context and analyze events.
+
+        Returns:
+            List[Event]: A list of generated events based on the processed relationships
+            between translation and loss of support events.
+        """
         translation_event = [
             i
             for i in self.context.logger.get_events()
@@ -120,29 +121,20 @@ class PickUpDetector(AbstractInteractionDetector):
         loss_of_support_event = [
             i for i in self.context.logger.get_events() if isinstance(i, LossOfSupportEvent)
         ]
-
         events = []
-        # Now we need to check if the stop translation event and the support event are close enough timestamp wise
         for i in translation_event:
             for j in loss_of_support_event:
                 if i.tracked_object == j.tracked_object:
                     if abs(i.timestamp - j.timestamp) < self.shift_threshold:
-
-                        # needs to be reworked, it doesnt work
                         key = (id(i), id(j))
-
-                        # ✅ exclusivity check
                         if key in self.context.placing_pairs:
                             continue
-
                         self.context.placing_pairs.add(key)
-
                         e = PickUpEvent(
                             tracked_object=i.tracked_object,
                             with_object=j.with_object,
                             timestamp=i.timestamp,
                         )
-
                         events.append(e)
                         break
         return events

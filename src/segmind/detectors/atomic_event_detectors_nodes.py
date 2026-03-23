@@ -18,141 +18,28 @@ from segmind.datastructures.events import (
     StopTranslationEvent,
     StopRotationEvent,
 )
+from segmind.detectors.base import (
+    AbstractDetector,
+    DetectorStateChartNode,
+    SegmindContext,
+)
 from semantic_digital_twin.reasoning.predicates import contact
 from semantic_digital_twin.spatial_types.spatial_types import Pose
 from semantic_digital_twin.world_description.connections import Connection6DoF
 from semantic_digital_twin.world_description.world_entity import Body
 
 
-@dataclass
-class SegmindContext(MotionStatechartContext):
-    """
-    Context object shared across the motion statechart detectors.
-
-    Stores the latest detected contact and support relationships
-    between bodies in the simulation as well as the event logger.
-
-    """
-
-    IndexedBodyPairs = Dict[Body, Set[Body]]
-    """
-    Type hint for dictionaries mapping bodies to sets of bodies
-    """
-
-    object_moving_status: Dict[Body, bool] = field(default_factory=dict)
-    """
-    Dictionary mapping each body to a boolean indicating if it is currently moving.
-    """
-
-    latest_contact_bodies: IndexedBodyPairs = field(default_factory=dict)
-    """
-    Dictionary mapping each body to the set of bodies it is currently in contact with.
-    """
-
-    latest_support: IndexedBodyPairs = field(default_factory=dict)
-    """
-    Dictionary mapping each body to the set of bodies that currently support it.
-    """
-
-    latest_containments: IndexedBodyPairs = field(default_factory=dict)
-    """
-    Dictionary mapping each body to the set of bodies that currently contain it.
-    """
-
-    latest_poses: Dict[Body, List[Pose]] = field(default_factory=dict)
-    """
-    Dictionary mapping each body to a list of its recent poses (pose history).
-    """
-
-    latest_motion_events: Dict[Body, MotionEvent] = field(default_factory=dict)
-    """
-    Dictionary mapping each body to its currently active motion event, if any.
-    """
-
-    logger: Any = None
-    """
-    The event logger used to record detected events.
-    """
-
-    placing_pairs: set = field(default_factory=set)
-
-    """
-    List of holes
-    """
-    holes : List[Body] = field(default_factory=list)
-
-    """
-    List of insertion pairs
-    """
-    insertion_pairs: set = field(default_factory=set)
-
-
-# ToDo: See if we can create our own MotionStatechartNode or change its name (talk to simon)
-@dataclass(repr=False, eq=False)
-class DetectorStateChartNode(MotionStatechartNode):
-    pass
-
-
-@dataclass
-class DetectorStateChart(MotionStatechart):
-    """
-    Statechart responsible for running the different motion detectors.
-
-    Currently acts as a container for the detectors and inherits the
-    functionality from MotionStatechart.
-    """
-
-    pass
-
-
 # ToDo: there is a lot of duplication with SupportDetector, so we have to make it more robust
 @dataclass(eq=False, repr=False)
-class BaseContactDetector(DetectorStateChartNode, ABC):
+class BaseContactDetector(AbstractDetector):
     """
     Abstract base class for contact-based detectors.
-
     Provides shared functionality for detecting contacts between
     bodies and generating events when contact relationships change.
     """
 
-    tracked_object: Optional[Body] = field(kw_only=True, default=None)
-    """
-    :param tracked_object: Optional body that should be monitored.
-    If None, all trackable objects in the world are checked.
-    """
-
-    context: SegmindContext = field(kw_only=True)
-    """
-    :param context: Segmind context containing world information,
-    contact history and logging utilities.
-    """
-
-    def on_tick(self, context: SegmindContext) -> Optional[ObservationStateValues]:
-        """
-        Executes one update cycle of the detector.
-
-        Determines the objects that should be checked for contacts,
-        computes new contact relationships and triggers events if
-        contact changes are detected.
-
-        :param context: The statechart execution context.
-        :return: ObservationStateValues.TRUE if events were triggered,
-        otherwise ObservationStateValues.FALSE.
-        """
-
-        objects_to_check = (
-            [self.tracked_object]
-            if self.tracked_object
-            else [
-                body
-                for body in self.context.world.bodies
-                if type(body.parent_connection) is Connection6DoF
-            ]
-        )
-        events = self.update_latest_contact_bodies_and_trigger_events(objects_to_check)
-        for e in events:
-            self.context.logger.log_event(e)
-        return ObservationStateValues.TRUE if events else ObservationStateValues.FALSE
+    def update_context_and_events(self, tracked_objects: List[Body]) -> List[Event]:
+        pass
 
     def get_contact_bodies(self, tracked_objects: List[Body]) -> Dict[Body, Set[Body]]:
         """
@@ -176,24 +63,6 @@ class BaseContactDetector(DetectorStateChartNode, ABC):
                     contact_bodies.setdefault(obj, set()).add(body)
         return contact_bodies
 
-    @abstractmethod
-    def update_latest_contact_bodies_and_trigger_events(
-        self,
-        tracked_objects: List[Body],
-    ) -> List[Event]:
-        """
-        Updates the stored contact relationships and generates events
-        when changes are detected.
-
-        Implementations define how contact changes are interpreted
-        (e.g. new contact or loss of contact).
-
-        :param tracked_objects: List of bodies to check for contact changes.
-        :return: List of events generated during the update.
-        """
-
-        pass
-
 
 @dataclass(eq=False, repr=False)
 class ContactDetector(BaseContactDetector):
@@ -202,7 +71,7 @@ class ContactDetector(BaseContactDetector):
     between bodies.
     """
 
-    def update_latest_contact_bodies_and_trigger_events(
+    def update_context_and_events(
         self,
         tracked_objects: List[Body],
     ) -> List[Event]:
@@ -241,7 +110,7 @@ class LossOfContactDetector(BaseContactDetector):
     contacts between bodies are lost.
     """
 
-    def update_latest_contact_bodies_and_trigger_events(
+    def update_context_and_events(
         self,
         tracked_objects: List[Body],
     ) -> List[Event]:
@@ -278,62 +147,25 @@ class LossOfContactDetector(BaseContactDetector):
 
 
 @dataclass(eq=False, repr=False)
-class MotionDetector(DetectorStateChartNode, ABC):
+class MotionDetector(AbstractDetector):
     """
-    Abstract base class for motion-based detectors.
+    Base class for motion-based detectors.
 
     Provides shared functionality for monitoring poses of
     bodies and generating events when movement is detected.
     """
 
-    tracked_object: Optional[Body] = field(kw_only=True, default=None)
-    """
-    :param tracked_object: Optional body that should be monitored.
-    If None, all trackable objects in the world are checked.
-    """
-
-    context: SegmindContext = field(kw_only=True)
-    """
-    :param context: Segmind context containing world information,
-    contact history and logging utilities.
-    """
     window_size: int = 4
+    """
+    The window size indicates how many poses to consider for movement.
+    """
 
     distance_threshold: float = 0.005
     """
     Threshold for the distance between two poses to be considered movement.
     """
 
-    def on_tick(self, context: SegmindContext) -> Optional[ObservationStateValues]:
-        """
-        Executes one update cycle of the detector.
-
-        Determines the objects that should be monitored for movement,
-        computes new movement status and triggers events if
-        motion is detected.
-
-        :param context: The statechart execution context.
-        :return: ObservationStateValues.TRUE if events were triggered,
-        otherwise ObservationStateValues.FALSE.
-        """
-
-        objects_to_check = (
-            [self.tracked_object]
-            if self.tracked_object
-            else [
-                body
-                for body in self.context.world.bodies
-                if type(body.parent_connection) is Connection6DoF
-            ]
-        )
-        events = self.update_latest_pose_and_trigger_events(objects_to_check)
-        for e in events:
-            self.context.logger.log_event(e)
-        return ObservationStateValues.TRUE if events else ObservationStateValues.FALSE
-
-    def update_latest_pose_and_trigger_events(
-        self, tracked_objs: List[Body]
-    ) -> List[Event]:
+    def update_context_and_events(self, tracked_objs: List[Body]) -> List[Event]:
         """
         Updates the pose history for each tracked object and checks for motion events.
 
@@ -358,7 +190,6 @@ class MotionDetector(DetectorStateChartNode, ABC):
         :param obj: The body to check.
         :return: An Event if movement/stop is detected, otherwise None.
         """
-        # Determine movement based on current detector type.
         is_moving = self._calculate_is_moving(obj)
         self.context.object_moving_status[obj] = is_moving
         return self._check_movement_and_trigger_event(obj)
@@ -374,6 +205,18 @@ class MotionDetector(DetectorStateChartNode, ABC):
         pass
 
     def _calculate_is_moving(self, obj: Body) -> bool:
+        """
+        Determines whether an object is moving by evaluating the distance between its
+        two latest recorded positions.
+
+        Parameters:
+        obj (Body): The object for which the motion status is being calculated.
+
+        Returns:
+        bool: True if the object's movement exceeds the defined distance threshold,
+              indicating that the object is moving; False otherwise.
+        """
+
         latest_poses = self.context.latest_poses[obj]
         p1 = np.array(latest_poses[-1].to_position().to_list())
         p2 = np.array(latest_poses[-2].to_position().to_list())
@@ -389,14 +232,27 @@ class TranslationDetector(MotionDetector):
     """
 
     def _check_movement_and_trigger_event(self, obj: Body) -> Optional[Event]:
+        """
+        Checks the movement of an object and triggers a motion event if applicable.
+
+        If an object is detected as moving and no active motion event exists, a new
+        motion event is created and returned. If an object is moving and an existing
+        motion event is found, the current pose is updated in the motion event. When
+        the object is not moving, no event is triggered or updated.
+
+        Parameters:
+        obj : Body
+            The object whose movement is being checked.
+
+        Returns:
+        Optional[Event]
+            A newly created motion event if the object starts moving, or None otherwise.
+        """
         latest_motion_event = self.context.latest_motion_events.get(obj)
         latest_poses = self.context.latest_poses[obj]
         is_moving = self.context.object_moving_status.get(obj)
 
         if is_moving:
-            # If the object is moving:
-            # 1. If it wasn't moving before, create a new TranslationEvent.
-            # 2. If it was already moving, update the current_pose but don't return a new event.
             if latest_motion_event is None:
                 new_event = TranslationEvent(
                     tracked_object=obj,
@@ -406,7 +262,6 @@ class TranslationDetector(MotionDetector):
                 self.context.latest_motion_events[obj] = new_event
                 return new_event
             else:
-                # Update current pose of the existing event
                 latest_motion_event.current_pose = latest_poses[-1]
                 return None
 
@@ -421,20 +276,29 @@ class StopTranslationDetector(MotionDetector):
     """
 
     def _check_movement_and_trigger_event(self, obj: Body) -> Optional[Event]:
+        """
+        Checks the movement of an object and triggers an event if necessary.
+
+        This method examines the motion status of an object within the context. If
+        the object is not moving and meets specific conditions, a stop event is
+        triggered. The stop event indicates that the object has stopped translation
+        based on a configured distance threshold.
+
+        Parameters:
+        obj (Body): The object being monitored for movement.
+
+        Returns:
+        Optional[Event]: Returns a StopTranslationEvent if the object meets
+        the criteria for stopping translation, otherwise returns None.
+        """
         latest_motion_event = self.context.latest_motion_events.get(obj)
         latest_poses = self.context.latest_poses[obj]
         is_moving = self.context.object_moving_status.get(obj)
 
         if not is_moving:
-            # If the object is not moving:
-            # 1. If it was moving before, check if it truly stopped (all poses in window are same).
-            # 2. If it stopped, create a StopTranslationEvent and clear the active event.
             if latest_motion_event is None:
                 return None
 
-            # Check if ALL poses in the window are the same.
-            # Check if ALL poses in the window are within the threshold of the last pose.
-            # This ensures the object has truly stayed still for the entire window.
             p_last = np.array(latest_poses[-1].to_position().to_list())
             all_poses_same = all(
                 np.linalg.norm(np.array(p.to_position().to_list()) - p_last)

@@ -20,49 +20,17 @@ from semantic_digital_twin.world_description.connections import Connection6DoF
 from semantic_digital_twin.world_description.world_entity import Body
 from abc import ABC, abstractmethod
 
+from segmind.detectors.base import AbstractDetector
+
 
 @dataclass(eq=False, repr=False)
-class BaseSupportDetector(DetectorStateChartNode, ABC):
+class BaseSupportDetector(AbstractDetector):
     """
     Abstract base class for support-based detectors.
 
     Provides shared functionality for detecting support between
     bodies and generating events when support relationships change.
     """
-
-    tracked_object: Optional[Body] = field(kw_only=True, default=None)
-    """
-    :param tracked_object: Optional body that should be monitored.
-    If None, all trackable objects in the world are checked.
-    """
-
-    context: SegmindContext = field(kw_only=True)
-    """
-    :param context: Segmind context containing world information,
-    history and logging utilities.
-    """
-
-    def on_tick(self, context: SegmindContext) -> Optional[ObservationStateValues]:
-        """
-        Executes one detector update cycle.
-
-        :param context: Motion statechart context.
-        :return: TRUE if events were generated, FALSE otherwise.
-        """
-        objects_to_check = (
-            [self.tracked_object]
-            if self.tracked_object
-            else [
-                body
-                for body in self.context.world.bodies
-                if type(body.parent_connection) is Connection6DoF
-            ]
-        )
-        events = self.update_latest_support_and_trigger_events(objects_to_check)
-        for e in events:
-            self.context.logger.log_event(e)
-
-        return ObservationStateValues.TRUE if events else ObservationStateValues.FALSE
 
     def get_support_pairs(self, tracked_objects: List[Body]) -> Dict[Body, Set[Body]]:
         """
@@ -81,24 +49,25 @@ class BaseSupportDetector(DetectorStateChartNode, ABC):
                     support_pairs.setdefault(obj, set()).add(body)
         return support_pairs
 
-    @abstractmethod
-    def update_latest_support_and_trigger_events(
+    def update_context_and_events(
         self, objects_to_check: List[Body]
     ) -> List[Event]:
-        """
-        Updates the cached support relationships and generates events.
-
-        :param objects_to_check: Bodies that should be evaluated for support changes.
-        :return: List of generated support-related events.
-        """
-
         pass
 
 
 @dataclass(eq=False, repr=False)
 class SupportDetector(BaseSupportDetector):
+    """
+    Class for detecting and updating newly established support relationships.
 
-    def update_latest_support_and_trigger_events(
+    This class provides functionality to detect and update support relationships
+    between physical bodies. It evaluates the given objects and generates events
+    for newly established support connections. This can be useful in simulations
+    or physics-based environments to monitor and handle dynamic interactions
+    between objects.
+    """
+
+    def update_context_and_events(
         self, objects_to_check: List[Body]
     ) -> List[Event]:
         """
@@ -131,8 +100,18 @@ class SupportDetector(BaseSupportDetector):
 
 @dataclass(eq=False, repr=False)
 class LossOfSupportDetector(BaseSupportDetector):
+    """
+    Detects and manages the loss of support relationships among objects.
 
-    def update_latest_support_and_trigger_events(
+    This class is a specialized support detector that identifies when previously
+    registered support relationships are no longer present. It processes a given
+    set of objects to detect and update the context with events signifying the loss
+    of such support relationships. This functionality is particularly useful in
+    simulation or analysis scenarios where maintaining updated context for object
+    interactions is essential.
+    """
+
+    def update_context_and_events(
         self, objects_to_check: List[Body]
     ) -> List[Event]:
         """
@@ -165,46 +144,13 @@ class LossOfSupportDetector(BaseSupportDetector):
 
 # Attention: Class will be refactored!!
 @dataclass(eq=False, repr=False)
-class BaseContainmentDetector(DetectorStateChartNode):
+class BaseContainmentDetector(AbstractDetector):
     """
     Abstract base class for contaiment-based detectors.
 
     Provides shared functionality for detecting containment between
     bodies and generating events when containment relationships change.
     """
-
-    tracked_object: Optional[Body] = field(kw_only=True, default=None)
-    """
-    :param tracked_object: Optional body that should be monitored.
-    If None, all trackable objects in the world are checked.
-    """
-
-    context: SegmindContext = field(kw_only=True)
-    """
-    :param context: Segmind context containing world information,
-    history and logging utilities.
-    """
-
-    def on_tick(self, context: SegmindContext) -> Optional[ObservationStateValues]:
-        """
-        Executes one detector update cycle.
-
-        :param context: Motion statechart context.
-        :return: TRUE if events were generated, FALSE otherwise.
-        """
-        trackable_objects = [
-            body
-            for body in self.context.world.bodies
-            if type(body.parent_connection) is Connection6DoF
-        ]
-        objects_to_check = (
-            [self.tracked_object] if self.tracked_object else trackable_objects
-        )
-        events = self.update_latest_containment_and_trigger_events(objects_to_check)
-        for e in events:
-            self.context.logger.log_event(e)
-
-        return ObservationStateValues.TRUE if events else ObservationStateValues.FALSE
 
     def get_containment_pairs(
         self, tracked_objects: List[Body]
@@ -225,8 +171,8 @@ class BaseContainmentDetector(DetectorStateChartNode):
                     containment_pairs.setdefault(obj, set()).add(body)
         return containment_pairs
 
-    @abstractmethod
-    def update_latest_containment_and_trigger_events(
+
+    def update_context_and_events(
         self, objects_to_check: List[Body]
     ) -> List[Event]:
         """
@@ -241,10 +187,32 @@ class BaseContainmentDetector(DetectorStateChartNode):
 
 @dataclass(eq=False, repr=False)
 class ContainmentDetector(BaseContainmentDetector):
+    """
+    Handles detection of containment events between objects.
 
-    def update_latest_containment_and_trigger_events(
+    This class performs the task of identifying and updating containment relations between
+    given objects. It determines when a new containment relationship is established and
+    generates corresponding containment events. The purpose of this class is to provide
+    event-driven responses based on the spatial interactions of objects.
+    """
+
+    def update_context_and_events(
         self, objects_to_check: List[Body]
     ) -> List[Event]:
+        """
+        Updates the tracking context with new containment relationships and generates
+        containment events for identified changes. The function processes a list of
+        objects, compares the current containment status against the latest tracked
+        data, and generates events for any newly identified containment relationships.
+
+        Parameters:
+        objects_to_check: List[Body]
+            A list of objects to evaluate for containment pairs.
+
+        Returns:
+        List[Event]
+            A list of containment events generated based on new containment pairs.
+        """
         new_containment_pairs = self.get_containment_pairs(objects_to_check)
         latest_containment = self.context.latest_containments
         events = []
@@ -268,10 +236,40 @@ class ContainmentDetector(BaseContainmentDetector):
 
 @dataclass(eq=False, repr=False)
 class LossOfContainmentDetector(BaseContainmentDetector):
+    """
+    Detects and processes loss of containment events.
 
-    def update_latest_containment_and_trigger_events(
+    The LossOfContainmentDetector class is responsible for identifying instances where an
+    object loses containment with another object. It updates the current containment context
+    and generates a list of events representing these loss of containment occurrences. This
+    class extends BaseContainmentDetector and utilizes its utilities for containment
+    verification and context management.
+
+    Methods:
+        update_context_and_events: Updates the containment context with new states and generates
+        loss of containment events.
+
+    """
+    def update_context_and_events(
         self, objects_to_check: List[Body]
     ) -> List[Event]:
+        """
+        Updates the context with the latest containment pairs and generates events for
+        any lost containments.
+
+        This method checks the current state of containment pairs against the previously
+        stored state in the context. If any containments have been lost, it removes
+        them from the context and generates corresponding events.
+
+        Parameters:
+        objects_to_check: List[Body]
+            A list of Body objects to verify for updated containment relationships.
+
+        Returns:
+        List[Event]
+            A list of events representing the loss of containments between tracked
+            objects and their corresponding contained objects.
+        """
         new_containment_pairs = self.get_containment_pairs(objects_to_check)
         latest_containment = self.context.latest_containments
         events = []
@@ -295,52 +293,52 @@ class LossOfContainmentDetector(BaseContainmentDetector):
 
 
 @dataclass(eq=False, repr=False)
-class InsertionDetector(MotionStatechartNode):
-    tracked_object: Optional[Body] = field(kw_only=True, default=None)
-    context: SegmindContext = field(kw_only=True)
+class InsertionDetector(AbstractDetector):
+    """
+    Detects insertion events based on object interaction context.
+
+    The InsertionDetector class is used to analyze the interaction between tracked
+    objects and identify insertion events. It tracks specific events such as
+    contacts and containment, and generates an InsertionEvent when specific
+    conditions are met. The class leverages a context that holds relevant
+    event logs and tracked objects.
+    """
+
     shift_threshold: float = 15.0
+    """
+    The threshold for the time difference between two events to be considered an insertion.
+    """
 
-    def on_tick(self, context: SegmindContext) -> Optional[ObservationStateValues]:
-        objects_to_check = (
-            [self.tracked_object]
-            if self.tracked_object
-            else [
-                body
-                for body in self.context.world.bodies
-                if type(body.parent_connection) is Connection6DoF
-            ]
-        )
-        events = self.update_and_trigger_events(objects_to_check)
-        for e in events:
-            self.context.logger.log_event(e)
-        return ObservationStateValues.TRUE if events else ObservationStateValues.FALSE
+    def update_context_and_events(self, tracked_objs: List[Body]) -> List[Event]:
+        """
+        Updates context and processes tracked objects to generate a list of events.
 
+        This method analyzes contact and containment events within the tracked objects,
+        compares their timestamps with a threshold, and generates insertion events if
+        specific conditions are met. It modifies the context state to track insertion
+        pairs that have already been processed and ensures exclusivity during event
+        generation.
 
-    def update_and_trigger_events(self, tracked_objs: List[Body]) -> List[Event]:
+        Args:
+            tracked_objs (List[Body]): List of tracked objects to analyze.
+
+        Returns:
+            List[Event]: A list of generated events after processing the tracked objects.
+        """
         events = []
-
         contact_events = [i for i in self.context.logger.get_events() if isinstance(i, ContactEvent)]
         contact_events_with_holes = [i for i in contact_events if i.with_object in self.context.holes]
         containment_event = [i for i in self.context.logger.get_events() if isinstance(i, ContainmentEvent)]
-
-
 
         for i in contact_events_with_holes:
             for j in containment_event:
                 if i.tracked_object == j.tracked_object:
                     if abs(i.timestamp - j.timestamp) < self.shift_threshold:
-
-                        # needs to be reworked, it doesnt work
                         key = (id(i), id(j))
-
-                        # ✅ exclusivity check
                         if key in self.context.insertion_pairs:
                             continue
-
                         self.context.insertion_pairs.add(key)
-
                         e = InsertionEvent(i.tracked_object, [j.with_object], i.with_object, timestamp=i.timestamp)
-
                         events.append(e)
                         break
         return events

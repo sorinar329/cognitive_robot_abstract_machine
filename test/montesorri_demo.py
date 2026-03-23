@@ -13,7 +13,10 @@ from segmind.datastructures.events import (
     ContainmentEvent,
     TranslationEvent,
     StopTranslationEvent,
-    PlacingEvent, InsertionEvent, PickUpEvent, LossOfContactEvent,
+    PlacingEvent,
+    InsertionEvent,
+    PickUpEvent,
+    LossOfContactEvent,
 )
 from segmind.detectors.atomic_event_detectors import DetectorStateChart
 from segmind.detectors.atomic_event_detectors_nodes import (
@@ -23,24 +26,25 @@ from segmind.detectors.atomic_event_detectors_nodes import (
     TranslationDetector,
     StopTranslationDetector,
 )
-from segmind.detectors.coarse_event_detector_nodes import PlacingDetector, PickUpDetector
+from segmind.detectors.coarse_event_detector_nodes import (
+    PlacingDetector,
+    PickUpDetector,
+)
 from segmind.detectors.spatial_relation_detector_nodes import (
     SupportDetector,
     LossOfSupportDetector,
-    ContainmentDetector, InsertionDetector,
+    ContainmentDetector,
+    InsertionDetector,
 )
 from segmind.episode_segmenter import EpisodeSegmenterExecutor
 from segmind.event_logger import EventLogger
 from segmind.players.csv_player import CSVEpisodePlayer
-from segmind.players.data_player import DataPlayer
 from semantic_digital_twin.adapters.ros.visualization.viz_marker import (
     VizMarkerPublisher,
 )
-from semantic_digital_twin.adapters.urdf import URDFParser
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.spatial_types import Vector3
 from semantic_digital_twin.world import World
-from semantic_digital_twin.world_description.connections import FixedConnection
 from semantic_digital_twin.world_description.world_entity import Body
 
 
@@ -61,7 +65,7 @@ class TestMultiverseEpisodeSegmenter(TestCase):
         cls.sc = DetectorStateChart()
         cls.context = SegmindContext(world=cls.world, logger=cls.logger)
         cls.file_player = CSVEpisodePlayer(
-            file_path="/home/sorin/dev/Segmind/resources/multiverse_episodes/icub_montessori_no_hands/data.csv",
+            file_path="/home/sorin/dev/workspace/Segmind/resources/multiverse_episodes/icub_montessori_no_hands/data.csv",
             world=cls.world,
             time_between_frames=datetime.timedelta(milliseconds=4),
             position_shift=Vector3(0, 0, 0),
@@ -70,13 +74,11 @@ class TestMultiverseEpisodeSegmenter(TestCase):
             context=cls.context, player=cls.file_player
         )
         cls.episode_executor.spawn_scene(
-            models_dir="/home/sorin/dev/Segmind/resources/multiverse_episodes/icub_montessori_no_hands/models/"
+            models_dir="/home/sorin/dev/workspace/Segmind/resources/multiverse_episodes/icub_montessori_no_hands/models/"
         )
 
     def test_replay_episode(self):
         sc = DetectorStateChart()
-        logger = EventLogger()
-
 
         self.context = self.episode_executor.context
 
@@ -115,9 +117,7 @@ class TestMultiverseEpisodeSegmenter(TestCase):
             name="insertion_detector", context=self.context
         )
 
-        pickup_detector = PickUpDetector(
-            name="pickup_detector", context=self.context
-        )
+        pickup_detector = PickUpDetector(name="pickup_detector", context=self.context)
 
         sc.add_nodes(
             [
@@ -130,7 +130,7 @@ class TestMultiverseEpisodeSegmenter(TestCase):
                 stop_translation_detector,
                 placing_detector,
                 insertion_detector,
-                pickup_detector
+                pickup_detector,
             ]
         )
 
@@ -150,7 +150,8 @@ class TestMultiverseEpisodeSegmenter(TestCase):
 
         time.sleep(5)
         while self.episode_executor.player.is_alive():
-            time.sleep(0.01)
+            time.sleep(0.1)
+            # here we need to subscribe to the world, and add the states to a queue
             self.episode_executor.tick()
 
         translation_events = [
@@ -159,19 +160,33 @@ class TestMultiverseEpisodeSegmenter(TestCase):
         stop_translation_events = [
             i for i in self.logger.get_events() if isinstance(i, StopTranslationEvent)
         ]
-        placing_events = [i for i in self.logger.get_events() if isinstance(i, PlacingEvent)]
+        placing_events = [
+            i for i in self.logger.get_events() if isinstance(i, PlacingEvent)
+        ]
 
-        support_events = [i for i in self.logger.get_events() if isinstance(i, SupportEvent)]
+        support_events = [
+            i for i in self.logger.get_events() if isinstance(i, SupportEvent)
+        ]
 
-        insertion_events = [i for i in self.logger.get_events() if isinstance(i, InsertionEvent)]
+        insertion_events = [
+            i for i in self.logger.get_events() if isinstance(i, InsertionEvent)
+        ]
 
-        contact_events = [i for i in self.logger.get_events() if isinstance(i, ContactEvent)]
+        contact_events = [
+            i for i in self.logger.get_events() if isinstance(i, ContactEvent)
+        ]
 
-        containment_events = [i for i in self.logger.get_events() if isinstance(i, ContainmentEvent)]
+        containment_events = [
+            i for i in self.logger.get_events() if isinstance(i, ContainmentEvent)
+        ]
 
-        pickup_events = [i for i in self.logger.get_events() if isinstance(i, PickUpEvent)]
+        pickup_events = [
+            i for i in self.logger.get_events() if isinstance(i, PickUpEvent)
+        ]
 
-        loss_of_contact_events = [i for i in self.logger.get_events() if isinstance(i, LossOfContactEvent)]
+        loss_of_contact_events = [
+            i for i in self.logger.get_events() if isinstance(i, LossOfContactEvent)
+        ]
         print(f"Number of pickup events: {len(pickup_events)}")
         print(f"Number of support events: {len(support_events)}")
         print(f"Number of translation events: {len(translation_events)}")
@@ -181,10 +196,10 @@ class TestMultiverseEpisodeSegmenter(TestCase):
         print(f"Number of contact events: {len(containment_events)}")
         print(f"Number of loss_of_contact events: {len(loss_of_contact_events)}")
 
-        #for e in translation_events:
+        # for e in translation_events:
         #    print(f"Translation Event: {e}")
 
-        #for e in stop_translation_events:
+        # for e in stop_translation_events:
         #    print(f"Stop Translation Event: {e}")
 
         for e in placing_events:
@@ -193,28 +208,30 @@ class TestMultiverseEpisodeSegmenter(TestCase):
         for e in support_events:
             print(f"Support Event: {e}")
 
-        #for e in loss_of_contact_events:
+        # for e in loss_of_contact_events:
         #    print(f"Loss of Contact Event: {e}")
 
-        #for e in insertion_events:
+        # for e in insertion_events:
         #    print(f"Insertion Event: {e}")
 
-        #for e in contact_events:
-#            print(f"Contact Event: {e}")
+        # for e in contact_events:
+        #            print(f"Contact Event: {e}")
 
-        #for e in containment_events:
- #           print(f"Containment Event: {e}")
+        # for e in containment_events:
+        #           print(f"Containment Event: {e}")
 
-        #for e in pickup_events:
-  #          print(f"Pickup Event: {e}")
+        # for e in pickup_events:
+        #          print(f"Pickup Event: {e}")
 
         assert len(self.context.holes) > 0
         assert len(contact_events) > 0
         assert len(loss_of_contact_events) > 0
+
+        # ToDo: Fix bug in placing detector and insertion
         assert len(support_events) >= len(placing_events) > 0
         assert len(translation_events) >= len(stop_translation_events) > 0
         assert len(containment_events) >= len(insertion_events) > 0
 
-
-
-        self.episode_executor.statechart.draw("/home/sorin/dev/Segmind/plots/" + "sony.pdf")
+        self.episode_executor.statechart.draw(
+            "/home/sorin/dev/workspace/Segmind/plots/" + "sony.pdf"
+        )
