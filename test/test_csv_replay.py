@@ -4,7 +4,6 @@ from pathlib import Path
 
 import rclpy
 
-from cognitive_robot_abstract_machine.test.krrood_test.dataset.semantic_world_like_classes import FixedConnection
 from segmind import logger, set_logger_level, LogLevel
 from segmind.episode_segmenter import NoAgentEpisodeSegmenter, EpisodeSegmenter
 from segmind.players.csv_player import CSVEpisodePlayer

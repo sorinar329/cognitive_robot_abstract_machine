@@ -13,7 +13,6 @@ from segmind.datastructures.events import (
     LossOfSupportEvent, LossOfContainmentEvent, ContainmentEvent,
 )
 from segmind.detectors.atomic_event_detectors_nodes import (
-    DetectorStateChart,
     ContactDetector,
     LossOfContactDetector,
     SegmindContext,

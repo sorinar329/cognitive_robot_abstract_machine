@@ -17,7 +17,6 @@ from giskardpy.motion_statechart.motion_statechart import MotionStatechart
 from pycram.datastructures.pose import PoseStamped
 from semantic_digital_twin.reasoning.predicates import (
     contact,
-    collision_between_bodies,
 )
 from semantic_digital_twin.spatial_types.spatial_types import Pose
 from semantic_digital_twin.world import World

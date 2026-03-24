@@ -18,10 +18,10 @@ from semantic_digital_twin.world_description.world_entity import Agent, Body
 
 from segmind.segmenters.cram_segmenter import CRAMSegmenter
 from segmind.detectors.coarse_event_detectors import GeneralPickUpDetector
-from pycram.datastructures.enums import Arms, Grasp, WorldMode, LoggerLevel
+from pycram.datastructures.enums import Arms, Grasp
 #from pycram.datastructures.pose import Pose
 from pycram.designator import ObjectDesignatorDescription
-from pycram.process_module import simulated_robot, ProcessModule
+
 from pycram.plan import Plan
 
 try:
@@ -37,7 +37,7 @@ class TestCRAMPlayer(unittest.TestCase):
     robot: Agent
     milk: Body
     kitchen: Body
-    render_mode: WorldMode = WorldMode.DIRECT
+#    render_mode: WorldMode = WorldMode.DIRECT
     viz_marker_publisher: VizMarkerPublisher
     world: World
     app: Optional[QApplication] = None

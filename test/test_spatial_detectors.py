@@ -16,7 +16,6 @@ from semantic_digital_twin.adapters.ros.visualization.viz_marker import VizMarke
 from semantic_digital_twin.reasoning.predicates import InsideOf, is_supported_by
 from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
 from semantic_digital_twin.world import World
-from Segmind.test import setup_spatial_world, setup_support_world
 from semantic_digital_twin.world_description.world_entity import Body
 
 set_logger_level(LogLevel.DEBUG)

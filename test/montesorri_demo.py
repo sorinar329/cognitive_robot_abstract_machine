@@ -16,7 +16,7 @@ from segmind.datastructures.events import (
     PlacingEvent,
     InsertionEvent,
     PickUpEvent,
-    LossOfContactEvent,
+    LossOfContactEvent, LossOfSupportEvent,
 )
 from segmind.detectors.atomic_event_detectors import DetectorStateChart
 from segmind.detectors.atomic_event_detectors_nodes import (
@@ -46,6 +46,8 @@ from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.spatial_types import Vector3
 from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.world_entity import Body
+
+from segmind.statecharts.segmind_statechart import SegmindStatechart
 
 
 class TestMultiverseEpisodeSegmenter(TestCase):
@@ -78,70 +80,8 @@ class TestMultiverseEpisodeSegmenter(TestCase):
         )
 
     def test_replay_episode(self):
-        sc = DetectorStateChart()
-
-        self.context = self.episode_executor.context
-
-        contact_detector = ContactDetector(
-            name="contact_detector", context=self.context
-        )
-        loss_of_contact_detector = LossOfContactDetector(
-            name="loss_of_contact_detector",
-            context=self.context,
-        )
-        support_detector = SupportDetector(
-            name="support_detector",
-            context=self.context,
-        )
-        loss_of_support_detector = LossOfSupportDetector(
-            name="los_detector",
-            context=self.context,
-        )
-        containment_detector = ContainmentDetector(
-            name="containment_detector",
-            context=self.context,
-        )
-        translation_detector = TranslationDetector(
-            name="translation_detector", context=self.context
-        )
-
-        stop_translation_detector = StopTranslationDetector(
-            name="stop_translation_detector", context=self.context
-        )
-
-        placing_detector = PlacingDetector(
-            name="placing_detector", context=self.context
-        )
-
-        insertion_detector = InsertionDetector(
-            name="insertion_detector", context=self.context
-        )
-
-        pickup_detector = PickUpDetector(name="pickup_detector", context=self.context)
-
-        sc.add_nodes(
-            [
-                contact_detector,
-                loss_of_contact_detector,
-                support_detector,
-                loss_of_support_detector,
-                translation_detector,
-                containment_detector,
-                stop_translation_detector,
-                placing_detector,
-                insertion_detector,
-                pickup_detector,
-            ]
-        )
-
-        support_detector.start_condition = contact_detector.observation_variable
-        loss_of_support_detector.start_condition = (
-            loss_of_contact_detector.observation_variable
-        )
-        containment_detector.start_condition = support_detector.observation_variable
-        placing_detector.start_condition = support_detector.observation_variable
-        insertion_detector.start_condition = containment_detector.observation_variable
-        pickup_detector.start_condition = loss_of_support_detector.observation_variable
+        statechart = SegmindStatechart()
+        sc = statechart.build_statechart(self.context)
 
         self.episode_executor.compile(sc)
 
@@ -184,44 +124,13 @@ class TestMultiverseEpisodeSegmenter(TestCase):
             i for i in self.logger.get_events() if isinstance(i, PickUpEvent)
         ]
 
+        loss_of_support_events = [
+            i for i in self.logger.get_events() if isinstance(i, LossOfSupportEvent)
+        ]
+
         loss_of_contact_events = [
             i for i in self.logger.get_events() if isinstance(i, LossOfContactEvent)
         ]
-        print(f"Number of pickup events: {len(pickup_events)}")
-        print(f"Number of support events: {len(support_events)}")
-        print(f"Number of translation events: {len(translation_events)}")
-        print(f"Number of stop translation events: {len(stop_translation_events)}")
-        print(f"Number of placing events: {len(placing_events)}")
-        print(f"Number of insertion events: {len(insertion_events)}")
-        print(f"Number of contact events: {len(containment_events)}")
-        print(f"Number of loss_of_contact events: {len(loss_of_contact_events)}")
-
-        # for e in translation_events:
-        #    print(f"Translation Event: {e}")
-
-        # for e in stop_translation_events:
-        #    print(f"Stop Translation Event: {e}")
-
-        for e in placing_events:
-            print(f"Placing Event: {e}")
-
-        for e in support_events:
-            print(f"Support Event: {e}")
-
-        # for e in loss_of_contact_events:
-        #    print(f"Loss of Contact Event: {e}")
-
-        # for e in insertion_events:
-        #    print(f"Insertion Event: {e}")
-
-        # for e in contact_events:
-        #            print(f"Contact Event: {e}")
-
-        # for e in containment_events:
-        #           print(f"Containment Event: {e}")
-
-        # for e in pickup_events:
-        #          print(f"Pickup Event: {e}")
 
         assert len(self.context.holes) > 0
         assert len(contact_events) > 0
@@ -231,7 +140,4 @@ class TestMultiverseEpisodeSegmenter(TestCase):
         assert len(support_events) >= len(placing_events) > 0
         assert len(translation_events) >= len(stop_translation_events) > 0
         assert len(containment_events) >= len(insertion_events) > 0
-
-        self.episode_executor.statechart.draw(
-            "/home/sorin/dev/workspace/Segmind/plots/" + "sony.pdf"
-        )
+        assert len(loss_of_support_events) >= len(pickup_events) >= 0

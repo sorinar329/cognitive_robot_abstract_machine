@@ -9,7 +9,6 @@ from segmind.datastructures.events import (
     StopRotationEvent,
 )
 from segmind.detectors.atomic_event_detectors_nodes import (
-    DetectorStateChart,
     TranslationDetector,
     StopTranslationDetector,
     RotationDetector,
