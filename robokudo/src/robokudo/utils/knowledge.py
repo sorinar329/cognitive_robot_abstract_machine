@@ -30,12 +30,33 @@ from robokudo.utils.transform import (
 
 if TYPE_CHECKING:
     import numpy.typing as npt
-    from robokudo.world_descriptor import ObjectKnowledge, BaseWorldDescriptor
+    from typing_extensions import Protocol, Any, Sequence
+
+    from robokudo.world_descriptor import BaseWorldDescriptor
     from robokudo.annotators.core import BaseAnnotator
+
+    class ObjectKnowledgeLike(Protocol):
+        PoseType: Any
+        pose_type: Any
+        orientation_x: float
+        orientation_y: float
+        orientation_z: float
+        orientation_w: float
+        position_x: float
+        position_y: float
+        position_z: float
+        x_size: float
+        y_size: float
+        z_size: float
+
+    class CompositeObjectKnowledgeLike(ObjectKnowledgeLike, Protocol):
+        name: str
+        components: Sequence["CompositeObjectKnowledgeLike"]
+        features: Sequence["CompositeObjectKnowledgeLike"]
 
 
 def get_quaternion_from_rotation_information(
-    ok: ObjectKnowledge,
+    ok: ObjectKnowledgeLike,
 ) -> Tuple[float, float, float, float]:
     """
     Return a quaternion based on the rotation in ObjectKnowledge, and its type of rotation.
@@ -57,7 +78,7 @@ def get_quaternion_from_rotation_information(
 
 
 def get_transform_matrix_from_object_knowledge(
-    ok: ObjectKnowledge,
+    ok: ObjectKnowledgeLike,
 ) -> npt.NDArray:
     """Extract transform matrix from object knowledge.
 
@@ -74,7 +95,7 @@ def get_transform_matrix_from_object_knowledge(
 
 
 def get_bb_size_from_object_knowledge(
-    ok: ObjectKnowledge,
+    ok: ObjectKnowledgeLike,
 ) -> npt.NDArray:
     """Extract bounding box dimensions from object knowledge.
 
@@ -100,7 +121,7 @@ def load_world_descriptor(
 
 
 def get_obb_for_object_and_transform(
-    object_knowledge: ObjectKnowledge,
+    object_knowledge: ObjectKnowledgeLike,
     transform_matrix: npt.NDArray,
 ) -> o3d.geometry.OrientedBoundingBox:
     """Get an OBB only for THIS object and not any descendants.
@@ -118,7 +139,7 @@ def get_obb_for_object_and_transform(
 
 
 def get_obb_for_child_object_and_transform(
-    object_knowledge: ObjectKnowledge,
+    object_knowledge: ObjectKnowledgeLike,
     parent_transform: npt.NDArray,
 ) -> o3d.geometry.OrientedBoundingBox:
     """Create oriented bounding box for child object.
@@ -140,7 +161,7 @@ def get_obb_for_child_object_and_transform(
 
 
 def get_obbs_for_object_and_childs(
-    object_knowledge: ObjectKnowledge,
+    object_knowledge: CompositeObjectKnowledgeLike,
     transform_matrix: npt.NDArray,
 ) -> Dict[str, o3d.geometry.OrientedBoundingBox]:
     """Create oriented bounding boxes for object and all children.

@@ -1,20 +1,33 @@
 import sys
+from dataclasses import dataclass, field
 
 import numpy as np
 import open3d as o3d
 import pytest
 
 from robokudo.annotators.static_object_detector import StaticObjectDetectorAnnotator
-from robokudo.world_descriptor import ObjectKnowledge, BaseWorldDescriptor, PredefinedObject
+from robokudo.defs import Region3DWithName
 from robokudo.utils.knowledge import get_quaternion_from_rotation_information, \
     get_transform_matrix_from_object_knowledge, get_bb_size_from_object_knowledge, load_world_descriptor, \
     get_obb_for_object_and_transform, get_obb_for_child_object_and_transform, get_obbs_for_object_and_childs
+from robokudo.world_descriptor import BaseWorldDescriptor, PredefinedObject
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
 from semantic_digital_twin.world_description.connections import Connection6DoF
 from semantic_digital_twin.world_description.geometry import Box, Scale, Color
 from semantic_digital_twin.world_description.shape_collection import ShapeCollection
 from semantic_digital_twin.world_description.world_entity import Body
+
+
+@dataclass
+class ObjectKnowledge(Region3DWithName):
+    components: list[object] = field(default_factory=list)
+    features: list[object] = field(default_factory=list)
+    mesh_ros_package: str = ""
+    mesh_relative_path: str = ""
+
+    def is_frame_in_camera_coordinates(self) -> bool:
+        return self.frame is None or self.frame == ""
 
 
 class TestUtilsKnowledge(object):

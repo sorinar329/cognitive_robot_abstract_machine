@@ -22,9 +22,6 @@ from semantic_digital_twin.world_description.world_entity import (
     SemanticAnnotation,
 )
 
-from . import defs
-
-
 @dataclass
 class ObjectSpec:
     """
@@ -53,23 +50,6 @@ class RegionSpec:
     pose: HomogeneousTransformationMatrix
     box_scale: Scale
     color: Color = field(default_factory=Color)
-
-
-@dataclass
-class ObjectKnowledge(defs.Region3DWithName):
-    """
-    Legacy object metadata used by utils/knowledge.py.
-
-    Prefer SDT Bodies and Regions for new functionality.
-    """
-
-    components: List[Any] = field(default_factory=list)
-    features: List[Any] = field(default_factory=list)
-    mesh_ros_package: str = ""
-    mesh_relative_path: str = ""
-
-    def is_frame_in_camera_coordinates(self) -> bool:
-        return self.frame is None or self.frame == ""
 
 
 @dataclass(eq=False)
