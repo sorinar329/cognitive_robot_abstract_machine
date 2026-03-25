@@ -31,15 +31,13 @@ from semantic_digital_twin.world_description.world_entity import Body
 
 # ToDo: there is a lot of duplication with SupportDetector, so we have to make it more robust
 @dataclass(eq=False, repr=False)
-class BaseContactDetector(AbstractDetector):
+class BaseContactDetector(AbstractDetector, ABC):
     """
     Abstract base class for contact-based detectors.
     Provides shared functionality for detecting contacts between
     bodies and generating events when contact relationships change.
     """
 
-    def update_context_and_events(self, tracked_objects: List[Body]) -> List[Event]:
-        pass
 
     def get_contact_bodies(self, tracked_objects: List[Body]) -> Dict[Body, Set[Body]]:
         """
@@ -175,7 +173,7 @@ class MotionDetector(AbstractDetector):
         events = []
         for obj in tracked_objs:
             latest_poses = self.context.latest_poses.setdefault(obj, [])
-            latest_poses.append(obj.global_pose.to_pose())
+            latest_poses.append(obj.global_pose)
             if len(latest_poses) > self.window_size:
                 event = self.check_obj_movement(obj)
                 if event:

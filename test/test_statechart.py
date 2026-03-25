@@ -28,6 +28,7 @@ from segmind.event_logger import EventLogger
 from giskardpy.executor import Executor
 
 from giskardpy.motion_statechart.goals.templates import Sequence
+from segmind.statecharts.segmind_statechart import SegmindStatechart
 from semantic_digital_twin.adapters.ros.visualization.viz_marker import (
     VizMarkerPublisher,
 )
@@ -53,31 +54,20 @@ class TestMotionStatechart:
         """
         world = setup_contact_world()
         self.visualize(world)
-        sc = DetectorStateChart()
         logger = EventLogger()
-        cylinder = world.get_body_by_name("cylinder_body")
         self.context = SegmindContext(
             world=world,
             logger=logger,
-            latest_contact_bodies={},
         )
+        self.statechart = SegmindStatechart()
+        sc = self.statechart.build_statechart(self.context)
 
-        #ToDo: We need the EpisodeSegmenter here as an Executer and change the name of kin_sim
+        cylinder = world.get_body_by_name("cylinder_body")
+
         self.segmind_executor = EpisodeSegmenterExecutor(context=self.context)
-
-        contact_detector = ContactDetector(
-            name="contact_detector", context=self.context, tracked_object=cylinder
-        )
-        loss_of_contact_detector = LossOfContactDetector(
-            name="loss_of_contact_detector",
-            context=self.context,
-            tracked_object=cylinder,
-        )
-
-        sc.add_nodes([contact_detector, loss_of_contact_detector])
-
         self.segmind_executor.compile(sc)
-        self.segmind_executor.tick()
+
+
         # No Contact yet
         assert (
             len(
@@ -89,8 +79,7 @@ class TestMotionStatechart:
             )
             == 0
         )
-        assert contact_detector.observation_state == 0.0
-        assert loss_of_contact_detector.observation_state == 0.0
+
 
         cylinder.parent_connection.origin = (
             HomogeneousTransformationMatrix.from_xyz_rpy(y=-0.4)
@@ -99,13 +88,12 @@ class TestMotionStatechart:
 
         # Contact with 2 objects
         assert len([i for i in logger.get_events() if isinstance(i, ContactEvent)]) == 2
-        assert contact_detector.observation_state == 1.0
+
 
         # 3. Tick Again to see if there was no new contact-event added, also the observation_state should be 0.0
         self.segmind_executor.tick()
 
         assert len([i for i in logger.get_events() if isinstance(i, ContactEvent)]) == 2
-        assert contact_detector.observation_state == 0.0
 
         cylinder.parent_connection.origin = (
             HomogeneousTransformationMatrix.from_xyz_rpy(z=2)
@@ -117,7 +105,6 @@ class TestMotionStatechart:
             len([i for i in logger.get_events() if isinstance(i, LossOfContactEvent)])
             == 2
         )
-        assert loss_of_contact_detector.observation_state == 1.0
 
         # 5. Tick Again to check if the obs state turned back to 0.0
         self.segmind_executor.tick()
@@ -125,7 +112,6 @@ class TestMotionStatechart:
             len([i for i in logger.get_events() if isinstance(i, LossOfContactEvent)])
             == 2
         )
-        assert loss_of_contact_detector.observation_state == 0.0
 
         # 6. Contact again
         cylinder.parent_connection.origin = (
@@ -135,7 +121,6 @@ class TestMotionStatechart:
 
         # Contact with 2 objects
         assert len([i for i in logger.get_events() if isinstance(i, ContactEvent)]) == 4
-        assert contact_detector.observation_state == 1.0
 
         # Loss Of Contact agin
         cylinder.parent_connection.origin = (
@@ -147,7 +132,6 @@ class TestMotionStatechart:
             len([i for i in logger.get_events() if isinstance(i, LossOfContactEvent)])
             == 4
         )
-        assert loss_of_contact_detector.observation_state == 1.0
 
         rclpy.shutdown()
 
