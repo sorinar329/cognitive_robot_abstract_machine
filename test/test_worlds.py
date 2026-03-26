@@ -45,8 +45,7 @@ def setup_contact_world():
     )
 
     with world.modify_world():
-        root_C_box1 = Connection6DoF.create_with_dofs(
-            world=world,
+        root_C_box1 = FixedConnection(
             parent=root,
             child=box_body1,
             parent_T_connection_expression=HomogeneousTransformationMatrix.from_xyz_rpy(
@@ -54,8 +53,8 @@ def setup_contact_world():
             ),
         )
 
-        root_C_box2 = Connection6DoF.create_with_dofs(
-            world=world,
+
+        root_C_box2 = FixedConnection(
             parent=root,
             child=box_body2,
             parent_T_connection_expression=HomogeneousTransformationMatrix.from_xyz_rpy(
@@ -78,6 +77,8 @@ def setup_contact_world():
         world.add_connection(root_C_box1)
 
     return world
+
+
 
 
 def setup_spatial_world():
