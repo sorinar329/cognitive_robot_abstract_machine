@@ -1,6 +1,5 @@
 from dataclasses import dataclass, field
 
-from giskardpy.motion_statechart.motion_statechart import MotionStatechart
 
 from segmind.detectors.atomic_event_detectors import DetectorStateChart
 from segmind.detectors.atomic_event_detectors_nodes import ContactDetector, LossOfContactDetector, TranslationDetector, \
@@ -8,7 +7,7 @@ from segmind.detectors.atomic_event_detectors_nodes import ContactDetector, Loss
 from segmind.detectors.base import SegmindContext
 from segmind.detectors.coarse_event_detector_nodes import PlacingDetector, PickUpDetector
 from segmind.detectors.spatial_relation_detector_nodes import SupportDetector, LossOfSupportDetector, \
-    ContainmentDetector, InsertionDetector
+    ContainmentDetector, InsertionDetector, LossOfContainmentDetector
 
 
 @dataclass
@@ -58,6 +57,7 @@ class SegmindStatechart:
 
         pickup_detector = PickUpDetector(name="pickup_detector", context=self.context)
 
+        loss_of_containment_detector = LossOfContainmentDetector(name="loss_of_containment_detector", context=self.context)
         sc.add_nodes(
             [
                 contact_detector,
@@ -70,16 +70,10 @@ class SegmindStatechart:
                 placing_detector,
                 insertion_detector,
                 pickup_detector,
+                loss_of_containment_detector,
             ]
         )
 
-        support_detector.start_condition = contact_detector.observation_variable
-        loss_of_support_detector.start_condition = (
-            loss_of_contact_detector.observation_variable
-        )
-        containment_detector.start_condition = support_detector.observation_variable
-        placing_detector.start_condition = support_detector.observation_variable
-        insertion_detector.start_condition = containment_detector.observation_variable
-        pickup_detector.start_condition = loss_of_support_detector.observation_variable
+
 
         return sc
