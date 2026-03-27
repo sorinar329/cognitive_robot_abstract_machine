@@ -120,6 +120,15 @@ def setup_support_world():
         name=PrefixedName("table_body"), collision=shape_geometry, visual=shape_geometry
     )
 
+    hole = Box(scale=Scale(0.1, 0.1, 0.1))
+    hole_geometry = ShapeCollection([hole])
+    hole_body = Body(
+        name=PrefixedName("hole_body"),
+        collision=hole_geometry,
+        visual=hole_geometry
+    )
+
+
     table2 = Box(scale=Scale(1, 0.5, 0.5))
     shape_geometry = ShapeCollection([table2])
     table2_body = Body(
@@ -152,12 +161,24 @@ def setup_support_world():
         ),
     )
 
+    root_C_hole = FixedConnection(
+        parent=root,
+        child=hole_body,
+        parent_T_connection_expression=HomogeneousTransformationMatrix.from_xyz_rpy(
+            x=3.245, y=2.426, z=0.75
+        ),
+    )
+
+
     with world.modify_world():
         world.add_kinematic_structure_entity(root)
+
 
     with world.modify_world():
         world.add_connection(root_C_table)
         world.add_connection(root_C_table2)
+        world.add_connection(root_C_hole)
+
         cabinet = Cabinet.create_with_new_body_in_world(
             world=world,
             scale=Scale(0.5, 0.5, 1.0),

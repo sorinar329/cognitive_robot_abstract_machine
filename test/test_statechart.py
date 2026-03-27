@@ -10,7 +10,7 @@ from segmind.datastructures.events import (
     ContactEvent,
     LossOfContactEvent,
     SupportEvent,
-    LossOfSupportEvent, LossOfContainmentEvent, ContainmentEvent,
+    LossOfSupportEvent, LossOfContainmentEvent, ContainmentEvent, InsertionEvent,
 )
 from segmind.detectors.atomic_event_detectors_nodes import (
     ContactDetector,
@@ -117,7 +117,7 @@ class TestMotionStatechart:
 
         rclpy.shutdown()
 
-    def test_new_support_detector(self):
+    def test_support_detector(self):
         world = setup_support_world()
         self.visualize(world)
         logger = EventLogger()
@@ -200,7 +200,6 @@ class TestMotionStatechart:
         )
 
         self.segmind_executor.tick()
-        self.segmind_executor.tick()
 
         assert len([i for i in logger.get_events() if isinstance(i, ContainmentEvent)]) == 1
 
@@ -218,6 +217,69 @@ class TestMotionStatechart:
 
 
         rclpy.shutdown()
+
+
+
+
+    def test_insertion_detector(self):
+        world = setup_support_world()
+        self.visualize(world)
+        logger = EventLogger()
+        self.context = SegmindContext(
+            world=world,
+            logger=logger,
+        )
+        self.statechart = SegmindStatechart()
+        sc = self.statechart.build_statechart(self.context)
+
+        hole = world.get_body_by_name("hole_body")
+        cylinder = world.get_body_by_name("cylinder_body")
+        cabinet = world.get_body_by_name("cabinet")
+
+        self.segmind_executor = EpisodeSegmenterExecutor(context=self.context)
+        self.segmind_executor.compile(sc)
+
+
+        assert len(self.context.holes) == 1
+        assert len([i for i in logger.get_events() if  isinstance(i, InsertionEvent)]) == 0
+        cylinder.parent_connection.origin = (
+            HomogeneousTransformationMatrix.from_xyz_rpy(
+                x=hole.global_pose.x,
+                y=hole.global_pose.y - 0.03,
+                z=hole.global_pose.z,
+            )
+        )
+        self.segmind_executor.tick()
+
+
+        cylinder.parent_connection.origin = (
+            HomogeneousTransformationMatrix.from_xyz_rpy(
+                x=cabinet.global_pose.x,
+                y=cabinet.global_pose.y,
+                z=cabinet.global_pose.z,
+            )
+        )
+
+        self.segmind_executor.tick()
+
+        contact_events = [i for i in self.context.logger.get_events() if isinstance(i, ContactEvent)]
+        contact_events_with_holes = [i for i in contact_events if i.with_object in self.context.holes]
+
+        assert len([i for i in logger.get_events() if isinstance(i, ContainmentEvent)]) == 1
+        assert len(contact_events_with_holes) == 1
+        assert len([i for i in logger.get_events() if isinstance(i, InsertionEvent)]) == 1
+
+    def test_pickup(self):
+        pass
+
+    def test_placing(self):
+        pass
+
+    def test_translation(self):
+        pass
+
+    def test_stop_translation(self):
+        pass
 
     def visualize(self, world):
         rclpy.init()

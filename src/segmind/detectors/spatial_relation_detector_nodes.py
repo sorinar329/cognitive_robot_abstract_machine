@@ -45,7 +45,7 @@ class BaseSupportDetector(AbstractDetector):
             for body in bodies_with_collision:
                 if obj is body:
                     continue
-                if is_supported_by(obj, body, max_intersection_height=0.01):
+                if is_supported_by(obj, body, max_intersection_height=0.06):
                     support_pairs.setdefault(obj, set()).add(body)
         return support_pairs
 
