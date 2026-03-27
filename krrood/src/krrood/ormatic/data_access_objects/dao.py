@@ -678,7 +678,7 @@ class DataAccessObject(HasGeneric[T]):
         """
         mapper: sqlalchemy.orm.Mapper = sqlalchemy.inspection.inspect(type(self))
 
-        # check if self is a subclass of an alternative mapping
+        # check if self is a subclass of an alternative mapping and is not alternatively mapped on its own
         alternatively_mapped_base = self._find_alternative_mapping_base()
         if alternatively_mapped_base is not None and not self.uses_alternative_mapping(
             type(self)
