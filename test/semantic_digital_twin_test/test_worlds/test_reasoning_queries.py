@@ -1,4 +1,4 @@
-from semantic_digital_twin.predetermined_maps.suturo_lab_map import load_environment
+from semantic_digital_twin.predetermined_maps.kitchen_environment import load_environment
 from semantic_digital_twin.reasoning.queries import query_semantic_annotations_on_surfaces, \
     query_get_next_object_euclidean_x_y, query_surface_of_most_similar_obj, query_annotations_by_color, \
     query_class_by_label, query_sort_by_size

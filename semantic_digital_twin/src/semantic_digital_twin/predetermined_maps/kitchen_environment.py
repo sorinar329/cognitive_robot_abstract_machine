@@ -250,7 +250,6 @@ def build_environment_furniture(world: World):
         )
         world.add_connection(cupboard_C_shelf_1)
         world.add_semantic_annotation(shelf_1)
-        #cupboard.add_shelf_layer(shelf_1)
 
         # Shelf 2
         shelf_2_geom = ShapeCollection([Box(scale=shelf_scale, color=Color.WHITE())])
@@ -270,7 +269,7 @@ def build_environment_furniture(world: World):
         )
         world.add_connection(cupboard_C_shelf_2)
         world.add_semantic_annotation(shelf_2)
-        #cupboard.add_shelf_layer(shelf_2)
+
 
         # Creating doors manually and attaching them directly to the cupboard
         # Door height 105.5 cm (1.055 m)
@@ -334,8 +333,7 @@ def build_environment_furniture(world: World):
         )
         world.add_connection(hinge_left_C_door_left)
         world.add_semantic_annotation(door_left)
-        door_left.add_hinge(hinge_left)
-        #cupboard.add_door(door_left)
+
 
         # Right Door (Closed via Hinge)
         hinge_right_body = Body(name=PrefixedName("cupboard_hinge_right_body"))
@@ -374,8 +372,7 @@ def build_environment_furniture(world: World):
         )
         world.add_connection(hinge_right_C_door_right)
         world.add_semantic_annotation(door_right)
-        door_right.add_hinge(hinge_right)
-        #cupboard.add_door(door_right)
+
 
         # Creating handles manually and attaching them directly to the doors
         handle_scale = Scale(0.04, 0.02, 0.02)
@@ -402,7 +399,6 @@ def build_environment_furniture(world: World):
         )
         world.add_connection(door_left_C_handle)
         world.add_semantic_annotation(handle_left)
-        door_left.add_handle(handle_left)
 
         # Right Handle
         handle_right_geom = ShapeCollection([Box(scale=handle_scale, color=Color.WHITE())])
@@ -424,7 +420,6 @@ def build_environment_furniture(world: World):
         )
         world.add_connection(door_right_C_handle)
         world.add_semantic_annotation(handle_right)
-        door_right.add_handle(handle_right)
 
 
 
