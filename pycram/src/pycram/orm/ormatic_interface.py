@@ -2,10 +2,16 @@
 
 from __future__ import annotations
 from sqlalchemy import (
+    Column,
     ForeignKey,
     Integer,
     String,
+    Float,
+    Boolean,
+    DateTime,
+    Enum,
     JSON,
+    Table,
 )
 from sqlalchemy.orm import relationship, Mapped, mapped_column, DeclarativeBase
 
@@ -72,13 +78,13 @@ import pycram.datastructures.execution_data
 import pycram.datastructures.grasp
 import pycram.datastructures.trajectory
 import pycram.exceptions
-import pycram.plans.failures
 import pycram.language
 import pycram.locations.locations
 import pycram.motion_executor
 import pycram.orm.model
 import pycram.perception
 import pycram.plans.designator
+import pycram.plans.failures
 import pycram.plans.plan_callbacks
 import pycram.plans.plan_entity
 import pycram.plans.plan_node
@@ -160,6 +166,7 @@ import semantic_digital_twin.world_description.world_state_trajectory_plotter
 import sqlalchemy.sql.sqltypes
 import trimesh.base
 import typing
+import typing_extensions
 import uuid
 
 
@@ -2569,6 +2576,29 @@ class ContextExtensionDAO(
     }
 
 
+class ContextIsUnavailableDAO(
+    Base, DataAccessObject[pycram.exceptions.ContextIsUnavailable]
+):
+
+    __tablename__ = "ContextIsUnavailableDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    message: Mapped[builtins.str] = mapped_column(String(255), use_existing_column=True)
+
+    instance_id: Mapped[int] = mapped_column(
+        ForeignKey("DesignatorDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+
+    instance: Mapped[DesignatorDAO] = relationship(
+        "DesignatorDAO", uselist=False, foreign_keys=[instance_id], post_update=True
+    )
+
+
 class DatabaseNotAvailableErrorDAO(
     Base,
     DataAccessObject[semantic_digital_twin.orm.exceptions.DatabaseNotAvailableError],
@@ -2791,7 +2821,7 @@ class DesignatorDAO(Base, DataAccessObject[pycram.plans.designator.Designator]):
         String(255), nullable=False, use_existing_column=True
     )
 
-    plan_node_id: Mapped[int] = mapped_column(
+    plan_node_id: Mapped[typing.Optional[builtins.int]] = mapped_column(
         ForeignKey("PlanNodeDAO.database_id", use_alter=True),
         nullable=True,
         use_existing_column=True,
@@ -7201,25 +7231,6 @@ class PlanMappingDAO(Base, DataAccessObject[pycram.orm.model.PlanMapping]):
     )
 
 
-class PlanCallbackDAO(Base, DataAccessObject[pycram.plans.plan_callbacks.PlanCallback]):
-
-    __tablename__ = "PlanCallbackDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        Integer, primary_key=True, use_existing_column=True
-    )
-
-    plan_id: Mapped[int] = mapped_column(
-        ForeignKey("PlanMappingDAO.database_id", use_alter=True),
-        nullable=True,
-        use_existing_column=True,
-    )
-
-    plan: Mapped[PlanMappingDAO] = relationship(
-        "PlanMappingDAO", uselist=False, foreign_keys=[plan_id], post_update=True
-    )
-
-
 class PlanEdgeDAO(Base, DataAccessObject[pycram.orm.model.PlanEdge]):
 
     __tablename__ = "PlanEdgeDAO"
@@ -7307,6 +7318,24 @@ class ContextDAO(
 
     __mapper_args__ = {
         "polymorphic_identity": "ContextDAO",
+        "inherit_condition": database_id == PlanEntityDAO.database_id,
+    }
+
+
+class PlanCallbackDAO(
+    PlanEntityDAO, DataAccessObject[pycram.plans.plan_callbacks.PlanCallback]
+):
+
+    __tablename__ = "PlanCallbackDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(PlanEntityDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "PlanCallbackDAO",
         "inherit_condition": database_id == PlanEntityDAO.database_id,
     }
 
@@ -7703,27 +7732,6 @@ class MonitorNodeDAO(
         "polymorphic_identity": "MonitorNodeDAO",
         "inherit_condition": database_id == ExecutesSequentiallyDAO.database_id,
     }
-
-
-class PlanNodeIsNoneDAO(Base, DataAccessObject[pycram.exceptions.ContextIsUnavailable]):
-
-    __tablename__ = "PlanNodeIsNoneDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        Integer, primary_key=True, use_existing_column=True
-    )
-
-    message: Mapped[builtins.str] = mapped_column(String(255), use_existing_column=True)
-
-    instance_id: Mapped[int] = mapped_column(
-        ForeignKey("DesignatorDAO.database_id", use_alter=True),
-        nullable=True,
-        use_existing_column=True,
-    )
-
-    instance: Mapped[DesignatorDAO] = relationship(
-        "DesignatorDAO", uselist=False, foreign_keys=[instance_id], post_update=True
-    )
 
 
 class PointSpatialRelationDAO(

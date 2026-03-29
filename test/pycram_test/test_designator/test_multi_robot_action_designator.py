@@ -496,10 +496,11 @@ def test_detect(immutable_multiple_robot_apartment):
     )
     plan = execute_single(description, context)
     with simulated_robot:
-        detected_object = plan.perform()
+        plan.perform()
+    detected_objects = plan.result
 
-    assert detected_object[0].name.name == "milk.stl"
-    assert detected_object[0] is milk_body
+    assert detected_objects[0].name.name == "milk.stl"
+    assert detected_objects[0] is milk_body
 
 
 def test_open(immutable_multiple_robot_apartment):
