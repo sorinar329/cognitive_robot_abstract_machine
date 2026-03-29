@@ -50,7 +50,7 @@ from pycram.robot_plans.actions.core.navigation import NavigateAction
 navigate = NavigateAction(Pose.from_xyz_quaternion(1, 1, 0, reference_frame=world.root))
 park = ParkArmsAction(Arms.BOTH)
 
-plan = sequantial([navigate, park], context=context).plan
+plan = sequential([navigate, park], context=context).plan
 ```
 
 This will create a simple plan which has a SequentialNode as its root and two DesignatorNodes as its children. You can 
