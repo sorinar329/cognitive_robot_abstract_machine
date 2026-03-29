@@ -158,6 +158,6 @@ spawned it in a previous example. Furthermore, we need a robot, so we also spawn
 ```python
 from pycram.locations.locations import AccessingLocation
 
-access_location = AccessingLocation(world.get_body_by_name("handle_cab10_t").global_pose, arm=Arms.LEFT, context=context)
+access_location = AccessingLocation(world.get_body_by_name("handle_cab10_t"), arm=Arms.LEFT, context=context)
 print(next(iter(access_location)))
 ```
