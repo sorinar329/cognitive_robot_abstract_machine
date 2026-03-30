@@ -16,6 +16,7 @@ from typing_extensions import Optional, List, Union, Tuple
 
 MAX_ACCEPTABLE_RADIUS_GROWTH_WITHOUT_STRONG_INLIER_GAIN = 1.35
 MIN_INLIER_GAIN_TO_ACCEPT_LARGER_RADIUS = 0.03
+MIN_ACCEPTABLE_CYLINDER_SCORE = 0.0
 
 
 @dataclass
@@ -416,6 +417,8 @@ def _build_cylinder_fit_from_parameters(
         distance_threshold=constraints.distance_threshold,
         complexity_penalty=0.02,
     )
+    if score <= MIN_ACCEPTABLE_CYLINDER_SCORE:
+        return None
 
     return CylinderFit(
         axis_center=axis_center.astype(np.float64),
@@ -442,6 +445,10 @@ def _generate_cylinder_initial_parameter_sets(
     for principal_axis in _principal_axes(points):
         _append_axis_if_distinct(axis_candidates, principal_axis)
 
+    _append_axis_if_distinct(axis_candidates, np.asarray([1.0, 0.0, 0.0]))
+    _append_axis_if_distinct(axis_candidates, np.asarray([0.0, 1.0, 0.0]))
+    _append_axis_if_distinct(axis_candidates, np.asarray([0.0, 0.0, 1.0]))
+
     consensus_axis_candidates = _consensus_axis_candidates(
         points=points,
         axis_point=centroid,
@@ -452,11 +459,7 @@ def _generate_cylinder_initial_parameter_sets(
     for consensus_axis, _, _ in consensus_axis_candidates:
         _append_axis_if_distinct(axis_candidates, consensus_axis)
 
-    _append_axis_if_distinct(axis_candidates, np.asarray([1.0, 0.0, 0.0]))
-    _append_axis_if_distinct(axis_candidates, np.asarray([0.0, 1.0, 0.0]))
-    _append_axis_if_distinct(axis_candidates, np.asarray([0.0, 0.0, 1.0]))
-
-    ranked_initial_parameter_sets: List[Tuple[float, float, np.ndarray]] = []
+    initial_parameter_sets: List[np.ndarray] = []
     axis_points = [centroid, median_point]
     for axis_direction in axis_candidates:
         for axis_point in axis_points:
@@ -468,44 +471,26 @@ def _generate_cylinder_initial_parameter_sets(
             )
             if initial_radius is None:
                 continue
-
-            inlier_ratio, inlier_error = _provisional_cylinder_axis_quality(
-                points=points,
-                axis_point=axis_point,
-                axis_direction=axis_direction,
-                radius=initial_radius,
-                distance_threshold=constraints.distance_threshold,
+            initial_parameter_sets.append(
+                np.asarray(
+                    [
+                        axis_point[0],
+                        axis_point[1],
+                        axis_point[2],
+                        axis_direction[0],
+                        axis_direction[1],
+                        axis_direction[2],
+                        initial_radius,
+                    ],
+                    dtype=np.float64,
+                )
             )
-            if inlier_ratio <= 0.0:
-                continue
-            initial_parameters = np.asarray(
-                [
-                    axis_point[0],
-                    axis_point[1],
-                    axis_point[2],
-                    axis_direction[0],
-                    axis_direction[1],
-                    axis_direction[2],
-                    initial_radius,
-                ],
-                dtype=np.float64,
-            )
-            ranked_initial_parameter_sets.append(
-                (inlier_ratio, inlier_error, initial_parameters)
-            )
-
-    ranked_initial_parameter_sets.sort(
-        key=lambda initialization_entry: (
-            -initialization_entry[0],
-            initialization_entry[1],
-        )
-    )
-    return [
-        initial_parameters
-        for _, _, initial_parameters in ranked_initial_parameter_sets[
-            : initialization_settings.max_initializations
-        ]
-    ]
+            if (
+                len(initial_parameter_sets)
+                >= initialization_settings.max_initializations
+            ):
+                return initial_parameter_sets
+    return initial_parameter_sets
 
 
 def _consensus_axis_candidates(
