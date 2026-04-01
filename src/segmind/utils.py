@@ -18,7 +18,6 @@ from typing_extensions import List, Optional, Tuple
 
 from pycram.datastructures.enums import Arms, Grasp, AxisIdentifier
 from pycram.datastructures.grasp import GraspDescription
-from pycram.datastructures.pose import Transform
 
 
 from pycram.tf_transformations import quaternion_inverse, quaternion_multiply

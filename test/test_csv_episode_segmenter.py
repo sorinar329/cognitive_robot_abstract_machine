@@ -9,44 +9,25 @@ from unittest import TestCase
 from segmind import logger, set_logger_level, LogLevel
 import rclpy
 
-from segmind.detectors.atomic_event_detectors import ContactDetector
+from segmind.episode_segmenter import EpisodeSegmenterExecutor
 from semantic_digital_twin.adapters.ros.visualization.viz_marker import (
     VizMarkerPublisher,
 )
 from semantic_digital_twin.adapters.urdf import URDFParser
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.spatial_types import Vector3
-from semantic_digital_twin.spatial_types.spatial_types import (
-    Pose,
-    HomogeneousTransformationMatrix,
-)
+
 from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.connections import (
     FixedConnection,
-    Connection6DoF,
-)
 
-
-from segmind.datastructures.events import ContainmentEvent, InsertionEvent
-from segmind.detectors.coarse_event_detectors import (
-    GeneralPickUpDetector,
-    PlacingDetector,
 )
-from segmind.detectors.spatial_relation_detector import (
-    InsertionDetector,
-    SupportDetector,
-    ContainmentDetector,
-)
-from segmind.episode_segmenter import NoAgentEpisodeSegmenter
 from segmind.players.csv_player import CSVEpisodePlayer
 from semantic_digital_twin.world_description.world_entity import (
-    Agent,
-    Region,
     Body,
-    Connection,
 )
 
-# from segmind.orm.ormatic_interface import *
+
 try:
     from pycram.worlds.multiverse2 import Multiverse
 except ImportError:
@@ -58,18 +39,19 @@ set_logger_level(LogLevel.DEBUG)
 class TestMultiverseEpisodeSegmenter(TestCase):
     world: World
     file_player: CSVEpisodePlayer
-    episode_segmenter: NoAgentEpisodeSegmenter
+    episode_segmenter: EpisodeSegmenterExecutor
     viz_marker_publisher: VizMarkerPublisher
 
     @classmethod
     def setUpClass(cls):
         logger.debug("lets go")
         multiverse_episodes_dir = (
-            f"{dirname(__file__)}/../resources/multiverse_episodes"
+            "/home/sorin/dev/Segmind/resources/multiverse_episodes"
         )
         selected_episode = "icub_montessori_no_hands"
         episode_dir = os.path.join(multiverse_episodes_dir, selected_episode)
         csv_file = os.path.join(episode_dir, f"data.csv")
+        print(csv_file)
         models_dir = os.path.join(episode_dir, "models")
         cls.world = World()
         root = Body(name=PrefixedName(name="root", prefix="world"))
@@ -79,11 +61,11 @@ class TestMultiverseEpisodeSegmenter(TestCase):
         rclpy.init()
         cls.node = rclpy.create_node("test_node")
         logger.debug("Node created")
-        cls.viz_marker_publisher = VizMarkerPublisher(world=cls.world, node=cls.node)
+        cls.viz_marker_publisher = VizMarkerPublisher(node=cls.node, _world=cls.world)
         cls.viz_marker_publisher.with_tf_publisher()
         logger.debug("Viz marker publisher created")
         cls.file_player = CSVEpisodePlayer(
-            csv_file,
+            file_path=csv_file,
             world=cls.world,
             time_between_frames=datetime.timedelta(milliseconds=4),
             position_shift=Vector3(0, 0, 0),
@@ -92,8 +74,8 @@ class TestMultiverseEpisodeSegmenter(TestCase):
         cls.episode_segmenter = NoAgentEpisodeSegmenter(
             episode_player=cls.file_player,
             annotate_events=True,
-            detectors_to_start=[PlacingDetector],
-            initial_detectors=[SupportDetector],
+            detectors_to_start=[],
+            initial_detectors=[],
         )
         logger.debug("Episode segmenter created")
 
@@ -105,7 +87,7 @@ class TestMultiverseEpisodeSegmenter(TestCase):
         urdf_files = [f.name for f in directory.glob("*.urdf")]
         for file in urdf_files:
             file_path = (
-                "/home/sorin/dev/workspace/Segmind/resources/multiverse_episodes/icub_montessori_no_hands/models/"
+                "/home/sorin/dev/Segmind/resources/multiverse_episodes/icub_montessori_no_hands/models/"
                 + file
             )
             obj_name = Path(file).stem

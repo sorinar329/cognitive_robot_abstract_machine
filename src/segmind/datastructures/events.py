@@ -2,11 +2,11 @@ import time
 from abc import abstractmethod, ABC
 from dataclasses import dataclass, field
 
+from geometry_msgs.msg import PoseStamped
 
 from pycram.datastructures.partial_designator import PartialDesignator
 from typing_extensions import Optional, List, Union, Type
 
-from pycram.datastructures.pose import PoseStamped
 from pycram.robot_plans import ActionDescription, PickUpActionDescription, PickUpAction, PlaceActionDescription, \
     PlaceAction
 from segmind.datastructures.mixins import HasPrimaryTrackedObject, HasPrimaryAndSecondaryTrackedObjects
@@ -261,8 +261,8 @@ class StopRotationEvent(StopMotionEvent):
 
 @dataclass(init=False, unsafe_hash=True)
 class AbstractContactEvent(EventWithTwoTrackedObjects, ABC):
-    close_bodies: list[Body] = field(init=False, default_factory=list[Body])
-    latest_close_bodies: list[Body] = field(init=False, default_factory=list[Body])
+    close_bodies: list[Body] = field(init=False, default_factory=list)
+    latest_close_bodies: list[Body] = field(init=False, default_factory=list)
     bounding_box: BoundingBox = field(init=False)
     pose: PoseStamped = field(init=False)
     with_object_bounding_box: Optional[BoundingBox] = field(init=False, default=None)
@@ -284,7 +284,7 @@ class AbstractContactEvent(EventWithTwoTrackedObjects, ABC):
             of_object.collision.combined_mesh,
             origin=of_object.global_pose
         )
-        self.pose: Pose = of_object.global_pose.to_pose()
+        self.pose: Pose = of_object.global_pose
         self.with_object_bounding_box: Optional[BoundingBox] = (
             BoundingBox.from_mesh(
                 with_object.collision.combined_mesh,
@@ -293,7 +293,7 @@ class AbstractContactEvent(EventWithTwoTrackedObjects, ABC):
             if with_object is not None
             else None
         )
-        self.with_object_pose: Optional[Pose] = with_object.global_pose.to_pose() if with_object is not None else None
+        self.with_object_pose: Optional[Pose] = with_object.global_pose if with_object is not None else None
 
     @property
     def involved_bodies(self) -> List[Body]:

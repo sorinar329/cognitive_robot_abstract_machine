@@ -39,7 +39,9 @@ class AbstractInteractionDetector(AbstractDetector):
 
 @dataclass
 class PlacingDetector(AbstractInteractionDetector):
+    """
 
+    """
 
     def update_context_and_events(self, obj: List[Body]) -> List[Event]:
         """

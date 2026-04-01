@@ -167,6 +167,7 @@ class DataPlayer(EpisodePlayer, ABC):
                             x=objects_poses[obj].x,
                             y=objects_poses[obj].y,
                             z=objects_poses[obj].z,
+
                         )
                     )
 

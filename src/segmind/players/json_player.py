@@ -7,16 +7,19 @@ import time
 import numpy as np
 import scipy
 import trimesh
+from geometry_msgs.msg import PoseStamped, TransformStamped
+
 from pycram.tf_transformations import euler_matrix, quaternion_from_matrix, quaternion_matrix, quaternion_from_euler, \
     euler_from_quaternion
-from semantic_digital_twin.spatial_types.spatial_types import Pose
+from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
+from semantic_digital_twin.spatial_types.spatial_types import Pose, Quaternion, Vector3, Point3
 from semantic_digital_twin.world import World
+from semantic_digital_twin.world_description.geometry import FileMesh
+from semantic_digital_twin.world_description.shape_collection import ShapeCollection
 from semantic_digital_twin.world_description.world_entity import Body
 from trimesh import Geometry, Trimesh
 from typing_extensions import Type, List, Tuple, Union, Dict, Optional
 
-from pycram.datastructures.pose import Header, PoseStamped, Transform
-from ..episode_player import EpisodePlayer
 from .data_player import FilePlayer, FrameData
 from ..utils import calculate_quaternion_difference
 
@@ -46,10 +49,10 @@ class JSONPlayer(FilePlayer):
         
         self.mesh_scale = mesh_scale
         self.obj_id_to_name: Optional[Dict[int, str]] = obj_id_to_name
-        self.obj_id_to_type: Optional[Dict[int, Type[PhysicalObject]]] = obj_id_to_type
-        self.object_meshes: Dict[Object, Geometry] = {}
-        self.correction_quaternions: Dict[Object, np.ndarray] = {}
-        self.base_origin_of_objects: Dict[Object, np.ndarray] = {}
+        self.obj_id_to_type: Optional[Dict[int, Type[Body]]] = obj_id_to_type
+        self.object_meshes: Dict[Body, Geometry] = {}
+        self.correction_quaternions: Dict[Body, np.ndarray] = {}
+        self.base_origin_of_objects: Dict[Body, np.ndarray] = {}
         self.average_rotation_correction_matrix: Optional[np.ndarray] = None
 
     def get_frame_data_generator(self):
@@ -78,6 +81,23 @@ class JSONPlayer(FilePlayer):
     def _resume(self):
         ...
 
+    def transform_to_stl(self, path: str):
+        for filename in os.listdir(path):
+            if filename.lower().endswith(".ply"):
+                ply_path = os.path.join(path, filename)
+                stl_path = os.path.join(
+                    path,
+                    os.path.splitext(filename)[0] + ".stl"
+                )
+
+                try:
+                    mesh = trimesh.load(ply_path)
+                    mesh.export(stl_path)
+                    print(f"Converted: {filename} → {os.path.basename(stl_path)}")
+                except Exception as e:
+                    print(f"Failed: {filename} ({e})")
+
+
     def get_objects_poses(self, frame_data: FrameData) -> Dict[Body, Pose]:
         objects_poses: Dict[Body, Pose] = {}
         objects_data = frame_data.objects_data
@@ -92,19 +112,18 @@ class JSONPlayer(FilePlayer):
             mesh_name = self.get_mesh_name(object_id)
 
             # Create the object if it does not exist in the world and set its pose
-            if obj_name not in self.world.get_object_names():
-                obj = Object(obj_name, obj_type, mesh_name,
-                             pose=PoseStamped(Pose(pose.position)), scale_mesh=self.mesh_scale)
-                quat_diff = calculate_quaternion_difference(pose.orientation.to_list(), [0, 0, 0, 1])
+            if not self.world.get_body_by_name(obj_name):
+                obj = obj_type(name=PrefixedName(obj_name), visual=ShapeCollection([FileMesh.from_file(mesh_name)]), collision=ShapeCollection([FileMesh.from_file(mesh_name)]))
+                quat_diff = calculate_quaternion_difference(pose.to_quaternion().to_list(), [0, 0, 0, 1])
                 euler_diff = euler_from_quaternion(quat_diff)
                 quat_diff = quaternion_from_euler(euler_diff[0], euler_diff[1], 0)
                 self.correction_quaternions[obj] = quat_diff
             else:
-                obj = self.world.get_object_by_name(obj_name)
-                objects_poses[obj] = self.apply_orientation_correction_to_object_pose(obj, pose)
+                obj = self.world.get_body_by_name(obj_name)
+                objects_poses[obj] = pose
         return objects_poses
 
-    def apply_orientation_correction_to_object_pose(self, obj: Body, obj_pose: PoseStamped) -> Pose:
+    def apply_orientation_correction_to_object_pose(self, obj: Body, obj_pose: Pose) -> Pose:
         """
         Correct the orientation of an object based on the orientation of the mesh, and return the corrected pose.
 
@@ -113,10 +132,11 @@ class JSONPlayer(FilePlayer):
         """
         if self.average_rotation_correction_matrix is None:
             self.average_rotation_correction_matrix = self.calculate_average_rotation()
-        homogeneous_pose = obj_pose.to_transform_stamped(obj.tf_frame).transform.to_matrix()
+        homogeneous_pose = obj_pose.to_homogeneous_matrix()
         new_pose_transform = np.dot(self.average_rotation_correction_matrix, homogeneous_pose)
         new_quaternion = quaternion_from_matrix(new_pose_transform)
         new_translation = new_pose_transform[:3, 3].tolist()
+
         return PoseStamped(Pose(Vector3(*new_translation)), Quaternion(*new_quaternion))
 
     def calculate_average_rotation(self):
@@ -253,7 +273,7 @@ W
 
         return rotation_matrix
 
-    def get_pose_and_transform_to_map_frame(self, object_pose: dict) -> Optional[PoseStamped]:
+    def get_pose_and_transform_to_map_frame(self, object_pose: dict) -> Optional[Pose]:
         """
         Get the pose of an object and transform it to the map frame.
 
@@ -261,8 +281,8 @@ W
         :return: The pose of the object in the map frame.
         """
         position, quaternion = self.get_pose_from_frame_object_data(object_pose)
-        return self.transform_pose_to_map_frame(position, quaternion)
-
+        #return self.transform_pose_to_map_frame(position, quaternion)
+        return Pose(Point3.from_iterable(position), Quaternion.from_iterable(quaternion))
     @staticmethod
     def get_pose_from_frame_object_data(object_data: dict) -> Tuple[List[float], List[float]]:
         """
@@ -279,7 +299,7 @@ W
         quaternion = quaternion_from_matrix(homogeneous_matrix)
         return position, quaternion
 
-    def transform_pose_to_map_frame(self, position: List[float], quaternion: List[float]) -> Optional[PoseStamped]:
+    def transform_pose_to_map_frame(self, position: List[float], quaternion: List[float]) -> Optional[Pose]:
         """
         Transform the pose of an object to the map frame.
 
@@ -311,7 +331,7 @@ W
 
     @staticmethod
     def get_mesh_name(object_id: str) -> str:
-        return f"obj_{object_id:0>6}.ply"
+        return f"obj_{object_id:0>6}.stl"
 
     def _join(self, timeout=None):
         pass

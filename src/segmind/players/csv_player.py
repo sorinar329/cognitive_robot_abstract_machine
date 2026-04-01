@@ -7,7 +7,6 @@ from semantic_digital_twin.spatial_types.spatial_types import Pose, Vector3, Qua
 from semantic_digital_twin.world_description.world_entity import Body
 from typing_extensions import Dict, Set
 from segmind import logger, set_logger_level, LogLevel
-from pycram.datastructures.pose import PoseStamped, Header
 from .data_player import FilePlayer, FrameData
 
 set_logger_level(LogLevel.DEBUG)

@@ -1,10 +1,9 @@
 from dataclasses import dataclass, field
 
 
-from segmind.detectors.atomic_event_detectors import DetectorStateChart
 from segmind.detectors.atomic_event_detectors_nodes import ContactDetector, LossOfContactDetector, TranslationDetector, \
     StopTranslationDetector
-from segmind.detectors.base import SegmindContext
+from segmind.detectors.base import SegmindContext, DetectorStateChart
 from segmind.detectors.coarse_event_detector_nodes import PlacingDetector, PickUpDetector
 from segmind.detectors.spatial_relation_detector_nodes import SupportDetector, LossOfSupportDetector, \
     ContainmentDetector, InsertionDetector, LossOfContainmentDetector
