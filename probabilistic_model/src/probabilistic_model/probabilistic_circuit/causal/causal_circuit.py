@@ -3,7 +3,7 @@ from __future__ import annotations
 import copy
 import itertools
 import math
-from dataclasses import dataclass, field, InitVar
+from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
 from tabulate import tabulate
 
@@ -46,54 +46,29 @@ class MarginalDeterminismTreeNode(NodeMixin):
     :param variables: All Variables in this node's subtree.
     :param query_set: Variables for which SumUnits at this level must be
         support-deterministic. Defaults to an empty set.
-    :param parent: Parent node in the tree. None for the root.
+    :param parent_node: Parent node in the tree. None for the root.
     """
 
-    variables: InitVar[Set[Variable]]
+    variables: Set[Variable]
     """All Variables in this node's subtree."""
 
-    query_set: InitVar[Optional[Set[Variable]]] = None
+    query_set: Set[Variable] = field(default=None)
     """Variables for which SumUnits at this level must be support-deterministic.
     Defaults to an empty set."""
 
-    parent: InitVar[Optional[MarginalDeterminismTreeNode]] = None
-    """Parent node in the tree. None for the root."""
+    parent_node: Optional[MarginalDeterminismTreeNode] = field(default=None)
+    """Parent node supplied at construction. Consumed by __post_init__ to wire
+    the tree. Named parent_node so it does not shadow NodeMixin's parent descriptor."""
 
-    _variables: Set[Variable] = field(init=False, repr=False)
-    _query_set: Set[Variable] = field(init=False, repr=False)
+    def __post_init__(self) -> None:
+        if self.query_set is None:
+            self.query_set = set()
+        self.parent = self.parent_node
 
-    def __post_init__(
-        self,
-        variables: Set[Variable],
-        query_set: Optional[Set[Variable]],
-        parent: Optional[MarginalDeterminismTreeNode],
-    ) -> None:
-        cls = type(self)
-        if "parent" in cls.__dict__ and not isinstance(cls.__dict__["parent"], property):
-            delattr(cls, "parent")
-
-        super().__init__()
-        self._variables = variables
-        self._query_set = query_set if query_set is not None else set()
-        self.parent = parent
-
-    @property
-    def variables(self) -> Set[Variable]:
-        """All Variables in this node's subtree."""
-        return self._variables
-
-    @variables.setter
-    def variables(self, value: Set[Variable]) -> None:
-        self._variables = value
-
-    @property
-    def query_set(self) -> Set[Variable]:
-        """Variables for which SumUnits at this level must be support-deterministic."""
-        return self._query_set
-
-    @query_set.setter
-    def query_set(self, value: Set[Variable]) -> None:
-        self._query_set = value
+    def __new__(cls, *args, **kwargs):
+        instance = super().__new__(cls)
+        NodeMixin.__init__(instance)
+        return instance
 
     def find_node_for_variable(
         self, variable: Variable
@@ -162,9 +137,9 @@ class MarginalDeterminismTreeNode(NodeMixin):
         :returns: The root node of the constructed subtree.
         """
         if len(ordered) == 0:
-            return cls(variables=set(), query_set=set(), parent=parent)
+            return cls(variables=set(), query_set=set(), parent_node=parent)
         if len(ordered) == 1:
-            return cls(variables={ordered[0]}, query_set={ordered[0]}, parent=parent)
+            return cls(variables={ordered[0]}, query_set={ordered[0]}, parent_node=parent)
 
         primary = ordered[0]
         remaining = ordered[1:]
@@ -172,7 +147,7 @@ class MarginalDeterminismTreeNode(NodeMixin):
         left_vars = [primary] + remaining[:split]
         right_vars = remaining[split:]
 
-        node = cls(variables=set(ordered), query_set={primary}, parent=parent)
+        node = cls(variables=set(ordered), query_set={primary}, parent_node=parent)
         cls._build_subtree(left_vars, parent=node)
         if right_vars:
             cls._build_subtree(right_vars, parent=node)
@@ -326,22 +301,35 @@ class FailureDiagnosisResult:
     """P(cause in training support at observed value) from the interventional circuit.
     Zero indicates the observed value lies entirely outside the training distribution."""
 
-    recommended_value: Any
-    """Midpoint of the cause region with the highest interventional probability."""
+    recommended_region: Any
+    """The cause support region with the highest interventional probability,
+    as a composite set event. None if no regions were found. The caller can
+    derive a point recommendation from region.simple_sets[0][cause_variable]."""
 
     interventional_probability_at_recommendation: float
-    """Interventional probability at the recommended value."""
+    """Interventional probability of the recommended region."""
 
     all_variable_results: Dict[Variable, Dict[str, Any]]
     """Per-variable diagnosis results keyed by Variable. Each entry contains
-    actual_value, interventional_probability, and recommended_value."""
+    actual_value, interventional_probability, and recommended_region."""
 
     def __str__(self) -> str:
+        if self.recommended_region is not None:
+            simple_set = self.recommended_region.simple_sets[0]
+            interval_set = simple_set[self.primary_cause_variable]
+            interval = (
+                interval_set.simple_sets[0]
+                if hasattr(interval_set, "simple_sets")
+                else interval_set
+            )
+            region_str = f"[{interval.lower:.4f}, {interval.upper:.4f}]"
+        else:
+            region_str = "None"
         header = [
             ["Primary cause",    self.primary_cause_variable.name],
             ["Actual value",     f"{self.actual_value:.4f}"],
             ["P(outcome | do)",  f"{self.interventional_probability_at_failure:.4f}"],
-            ["Recommended",      self.recommended_value],
+            ["Recommended region", region_str],
             ["P(outcome | rec)", f"{self.interventional_probability_at_recommendation:.4f}"],
         ]
 
@@ -928,21 +916,24 @@ class CausalCircuit:
             )
         )
 
-    def _best_region_midpoint(
+    def _best_region(
         self,
         cause_variable: Variable,
         interventional_circuit: ProbabilisticCircuit,
-    ) -> Optional[float]:
+    ) -> Optional[Any]:
         """
-        Return the midpoint of the cause support region with the highest
-        interventional probability, or None if no regions are found.
+        Return the cause support region with the highest interventional probability,
+        or None if no regions are found.
+
+        The full composite set event is returned so callers retain the interval
+        bounds rather than a lossy midpoint summary.
 
         :param cause_variable: The Variable whose support regions to search.
         :param interventional_circuit: Joint circuit used to score each region.
-        :returns: Midpoint of the highest-probability region, or None.
+        :returns: Composite set event of the highest-probability region, or None.
         """
         best_probability = -1.0
-        best_midpoint: Optional[float] = None
+        best_region: Optional[Any] = None
         for region_event, _ in self._extract_leaf_regions_for_variable(cause_variable):
             region_probability = float(
                 interventional_circuit.probability(
@@ -951,14 +942,8 @@ class CausalCircuit:
             )
             if region_probability > best_probability:
                 best_probability = region_probability
-                interval_set = region_event.simple_sets[0][cause_variable]
-                interval = (
-                    interval_set.simple_sets[0]
-                    if hasattr(interval_set, "simple_sets")
-                    else interval_set
-                )
-                best_midpoint = (float(interval.lower) + float(interval.upper)) / 2.0
-        return best_midpoint
+                best_region = region_event
+        return best_region
 
     def _diagnose_single_cause_variable(
         self,
@@ -984,11 +969,11 @@ class CausalCircuit:
         probability_at_observed = self._query_probability_at_value(
             interventional_circuit, cause_variable, observed_value, query_resolution,
         )
-        recommended_value = self._best_region_midpoint(cause_variable, interventional_circuit)
+        recommended_region = self._best_region(cause_variable, interventional_circuit)
         result = {
             "actual_value": observed_value,
             "interventional_probability": round(probability_at_observed, 6),
-            "recommended_value": recommended_value,
+            "recommended_region": recommended_region,
         }
         return result, interventional_circuit
 
@@ -1006,8 +991,8 @@ class CausalCircuit:
         For each cause Variable, queries the interventional circuit at the
         observed value. The Variable with the lowest interventional probability
         at its observed value is identified as the primary cause. The
-        recommendation is the cause region midpoint with the highest
-        interventional probability.
+        recommendation is the cause region with the highest interventional
+        probability, returned as a full composite set event.
 
         The interventional_probability recorded per Variable is
         P(cause in [observed-eps, observed+eps]) in the joint (cause, effect)
@@ -1021,7 +1006,7 @@ class CausalCircuit:
         :param adjustment_variables: Variables to adjust for. Defaults to None,
             treated as empty.
         :returns: FailureDiagnosisResult identifying the primary cause and
-            recommended corrective value.
+            recommended corrective region.
         """
         if adjustment_variables is None:
             adjustment_variables = []
@@ -1053,24 +1038,30 @@ class CausalCircuit:
             key=lambda v: all_variable_results[v]["interventional_probability"],
         )
         primary_result = all_variable_results[primary_cause_variable]
-        recommended_value = primary_result["recommended_value"]
+        recommended_region = primary_result["recommended_region"]
 
-        probability_at_recommendation = (
-            self._query_probability_at_value(
+        if recommended_region is not None:
+            interval_set = recommended_region.simple_sets[0][primary_cause_variable]
+            interval = (
+                interval_set.simple_sets[0]
+                if hasattr(interval_set, "simple_sets")
+                else interval_set
+            )
+            region_midpoint = (float(interval.lower) + float(interval.upper)) / 2.0
+            probability_at_recommendation = self._query_probability_at_value(
                 interventional_circuits_by_cause[primary_cause_variable],
                 primary_cause_variable,
-                float(recommended_value),
+                region_midpoint,
                 query_resolution,
             )
-            if recommended_value is not None
-            else 0.0
-        )
+        else:
+            probability_at_recommendation = 0.0
 
         return FailureDiagnosisResult(
             primary_cause_variable=primary_cause_variable,
             actual_value=primary_result["actual_value"],
             interventional_probability_at_failure=primary_result["interventional_probability"],
-            recommended_value=recommended_value,
+            recommended_region=recommended_region,
             interventional_probability_at_recommendation=round(probability_at_recommendation, 6),
             all_variable_results=all_variable_results,
         )

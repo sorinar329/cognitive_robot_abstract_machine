@@ -189,8 +189,8 @@ class MarginalDeterminismTreeNodeLeafTestCase(unittest.TestCase):
     def test_node_with_children_is_not_leaf(self):
         x, y = Continuous("x"), Continuous("y")
         parent = MarginalDeterminismTreeNode(variables={x, y}, query_set={x})
-        MarginalDeterminismTreeNode(variables={x}, query_set={x}, parent=parent)
-        MarginalDeterminismTreeNode(variables={y}, query_set={y}, parent=parent)
+        MarginalDeterminismTreeNode(variables={x}, query_set={x}, parent_node=parent)
+        MarginalDeterminismTreeNode(variables={y}, query_set={y}, parent_node=parent)
         self.assertFalse(parent.is_leaf)
 
     def test_node_with_empty_query_set_is_leaf(self):
@@ -203,8 +203,8 @@ class MarginalDeterminismTreeNodeFindVariableTestCase(unittest.TestCase):
     def setUp(self):
         self.x, self.y = Continuous("x"), Continuous("y")
         self.root = MarginalDeterminismTreeNode(variables={self.x, self.y}, query_set={self.x})
-        MarginalDeterminismTreeNode(variables={self.x}, query_set={self.x}, parent=self.root)
-        MarginalDeterminismTreeNode(variables={self.y}, query_set={self.y}, parent=self.root)
+        MarginalDeterminismTreeNode(variables={self.x}, query_set={self.x}, parent_node=self.root)
+        MarginalDeterminismTreeNode(variables={self.y}, query_set={self.y}, parent_node=self.root)
 
     def test_finds_variable_in_root_query_set(self):
         found = self.root.find_node_for_variable(self.x)
@@ -236,8 +236,8 @@ class MarginalDeterminismTreeNodeAllQuerySetsTestCase(unittest.TestCase):
     def test_three_node_tree_returns_three_query_sets(self):
         x, y = Continuous("x"), Continuous("y")
         root = MarginalDeterminismTreeNode(variables={x, y}, query_set={x})
-        MarginalDeterminismTreeNode(variables={x}, query_set={x}, parent=root)
-        MarginalDeterminismTreeNode(variables={y}, query_set={y}, parent=root)
+        MarginalDeterminismTreeNode(variables={x}, query_set={x}, parent_node=root)
+        MarginalDeterminismTreeNode(variables={y}, query_set={y}, parent_node=root)
         self.assertEqual(len(root.all_query_sets()), 3)
 
     def test_empty_query_set_not_included(self):
@@ -247,8 +247,8 @@ class MarginalDeterminismTreeNodeAllQuerySetsTestCase(unittest.TestCase):
     def test_query_sets_returned_in_preorder(self):
         x, y, z = Continuous("x"), Continuous("y"), Continuous("z")
         root = MarginalDeterminismTreeNode(variables={x, y, z}, query_set={x})
-        MarginalDeterminismTreeNode(variables={y}, query_set={y}, parent=root)
-        MarginalDeterminismTreeNode(variables={z}, query_set={z}, parent=root)
+        MarginalDeterminismTreeNode(variables={y}, query_set={y}, parent_node=root)
+        MarginalDeterminismTreeNode(variables={z}, query_set={z}, parent_node=root)
         self.assertIn(x, root.all_query_sets()[0])
 
 
@@ -331,19 +331,19 @@ class FailureDiagnosisResultTestCase(unittest.TestCase):
             primary_cause_variable=self.x,
             actual_value=1.3,
             interventional_probability_at_failure=0.0,
-            recommended_value=1.65,
+            recommended_region=None,
             interventional_probability_at_recommendation=0.149,
             all_variable_results={
-                self.x: {"actual_value": 1.3, "interventional_probability": 0.0, "recommended_value": 1.65},
-                self.y: {"actual_value": 0.1, "interventional_probability": 0.089, "recommended_value": 0.0},
+                self.x: {"actual_value": 1.3, "interventional_probability": 0.0, "recommended_region": None},
+                self.y: {"actual_value": 0.1, "interventional_probability": 0.089, "recommended_region": None},
             },
         )
 
     def test_string_contains_primary_cause_marker(self):
         self.assertIn("PRIMARY", str(self.result))
 
-    def test_string_contains_recommended_value(self):
-        self.assertIn("1.65", str(self.result))
+    def test_string_contains_recommended_region(self):
+        self.assertIn("Recommended region", str(self.result))
 
     def test_primary_cause_has_lowest_interventional_probability(self):
         lowest_probability = min(
@@ -666,7 +666,7 @@ class DiagnoseFailureStructuralTestCase(unittest.TestCase):
     def test_all_variable_results_contain_required_fields(self):
         result = self.cc.diagnose_failure({self.x: 0.5}, self.y)
         for variable_result in result.all_variable_results.values():
-            for field in ("actual_value", "interventional_probability", "recommended_value"):
+            for field in ("actual_value", "interventional_probability", "recommended_region"):
                 self.assertIn(field, variable_result)
 
     def test_empty_observed_values_raises_value_error(self):
@@ -741,11 +741,10 @@ class DiagnoseFailureCorrectnessTestCase(unittest.TestCase):
         result = self.cc.diagnose_failure({self.x: 5.0, self.w: 0.5}, self.y)
         self.assertGreater(result.interventional_probability_at_recommendation, 0.0)
 
-    def test_recommended_value_is_numeric(self):
-        self.assertIsInstance(
-            self.cc.diagnose_failure({self.x: 5.0, self.w: 0.5}, self.y).recommended_value,
-            (int, float),
-        )
+    def test_recommended_region_has_simple_sets(self):
+        result = self.cc.diagnose_failure({self.x: 5.0, self.w: 0.5}, self.y)
+        self.assertIsNotNone(result.recommended_region)
+        self.assertTrue(hasattr(result.recommended_region, "simple_sets"))
 
     def test_string_output_identifies_primary_cause(self):
         result = self.cc.diagnose_failure({self.x: 5.0, self.w: 0.5}, self.y)
