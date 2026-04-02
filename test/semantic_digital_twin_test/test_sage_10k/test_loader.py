@@ -23,9 +23,7 @@ def verify_scene(world: World, scene: Sage10kScene):
 
 def test_loader(rclpy_node):
     loader = Sage10kDatasetLoader()
-
     scene = loader.create_scene(scene_url=Sage10kDatasetLoader.available_scenes()[0])
-
     world = scene.create_world()
     # pub = VizMarkerPublisher(
     #     _world=world,

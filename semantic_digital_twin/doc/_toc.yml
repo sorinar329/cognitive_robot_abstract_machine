@@ -21,6 +21,7 @@ parts:
         - file: examples/graph_of_convex_sets
         - file: examples/multiverse
         - file: examples/adding_robots
+        - file: examples/datasets
 - caption: Developer Guide
   chapters:
     - file: developer_guide
