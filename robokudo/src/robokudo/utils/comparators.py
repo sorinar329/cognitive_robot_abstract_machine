@@ -5,7 +5,10 @@ import numpy as np
 from scipy.spatial.distance import euclidean
 from typing_extensions import TYPE_CHECKING, List, Any, Tuple
 
+from robokudo.utils.non_maxima_suppression import _iou
+
 if TYPE_CHECKING:
+    import numpy.typing as npt
     from robokudo.types.annotation import (
         BoundingBox3DAnnotation,
         Classification,
@@ -144,6 +147,30 @@ class SemanticColorComparator(FeatureComparator):
         return 1.0 - abs(query_value.ratio - obj_value.ratio)
 
 
+class ClassificationComparator(FeatureComparator):
+    """Extended `FeatureComparator` that computes similarity based on type, classname and confidence."""
+
+    def compute_similarity(
+        self, query_value: Classification, obj_value: Classification
+    ) -> float:
+        """Computes similarity between SemanticColor objects based on the cv2.HISTCMP_CORREL metric.
+
+        :param query_value: The semantic color annotation to use as a baseline for comparison.
+        :param obj_value: The semantic color annotation to compare against `query_value`.
+        :returns: A similarity score between 0.0 (completely different colors or color ratio) and 1.0 (identical color and color ratio).
+        """
+
+        # Classification type is not comparable at all
+        if query_value.classification_type != obj_value.classification_type:
+            return 0.0
+
+        # Class names are completely different
+        if query_value.classname != obj_value.classname:
+            return 0.0
+
+        return 1.0 - abs(query_value.confidence - obj_value.confidence)
+
+
 class AdditionalDataComparator(FeatureComparator):
     """Extended `FeatureComparator` that computes similarity based on numerical difference or simple value comparison between query and object values."""
 
@@ -171,42 +198,31 @@ class RoiComparator(FeatureComparator):
     """Extended `FeatureComparator` that computes similarity based on overlap percentage between query and object values."""
 
     def compute_similarity(self, query_value: Rect, obj_value: Rect) -> float:
-        """Computes the similarity of two Region of Interests by calculating their area overlap and returning it as a percentage.
+        """Computes the similarity of two Region of Interests by calculating their IoU.
 
         :param query_value: The rectangle to use as a baseline for comparison.
         :param obj_value: The rectangle to compare against `query_value`.
         :returns: A similarity score between 0.0 (no overlap) and 1.0 (100% overlap).
         """
-        rect1 = query_value
-        rect1_xyxy = (
-            rect1.pos.x,
-            rect1.pos.y,
-            rect1.pos.x + rect1.width,
-            rect1.pos.y + rect1.height,
-        )
+        return _iou(query_value.get_corner_points(), obj_value.get_corner_points())
 
-        rect2 = obj_value
-        rect2_xyxy = (
-            rect2.pos.x,
-            rect2.pos.y,
-            rect2.pos.x + rect2.width,
-            rect2.pos.y + rect2.height,
-        )
 
-        overlap_width = min(rect1_xyxy[2], rect2_xyxy[2]) - max(
-            rect1_xyxy[0], rect2_xyxy[0]
-        )
-        overlap_height = min(rect1_xyxy[3], rect2_xyxy[3]) - max(
-            rect1_xyxy[1], rect2_xyxy[1]
-        )
+class MaskComparator(FeatureComparator):
+    """Extended `FeatureComparator` that computes the IoU of two masks."""
 
-        if overlap_width <= 0.0 or overlap_height <= 0.0:
+    def compute_similarity(
+        self, query_value: npt.NDArray, obj_value: npt.NDArray
+    ) -> float:
+        """Computes the similarity of two masks by calculating their IoU.
+
+        :param query_value: The mask to use as a baseline for comparison.
+        :param obj_value: The mask to compare against `query_value`.
+        :returns: A similarity score between 0.0 (no overlap) and 1.0 (100% overlap).
+        """
+        intersection = np.logical_and(query_value, obj_value)
+        if np.any(intersection):
+            union = np.logical_or(query_value, obj_value)
+            mask_iou = np.sum(intersection) / np.sum(union)
+            return mask_iou
+        else:
             return 0.0
-
-        overlap_area = overlap_width * overlap_height
-
-        rect1_area = query_value.width * query_value.height
-        rect2_area = obj_value.width * obj_value.height
-
-        total_area = (rect1_area + rect2_area) - overlap_area
-        return float(overlap_area / total_area)
