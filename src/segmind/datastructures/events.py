@@ -58,13 +58,7 @@ class EventWithTrackedObjects(Event, ABC):
         """
         pass
 
-    @property
-    @abstractmethod
-    def involved_bodies(self) -> List[Body]:
-        """
-        The bodies involved in the event.
-        """
-        pass
+
 
     @abstractmethod
     def update_object_trackers_with_event(self) -> None:
@@ -138,10 +132,6 @@ class DefaultEventWithTwoTrackedObjects(EventWithTwoTrackedObjects):
     This is useful for events that only involve one tracked object.
     """
 
-    @property
-    def involved_bodies(self) -> List[Body]:
-        return self.tracked_objects
-
 
 @dataclass(unsafe_hash=True)
 class SupportEvent(DefaultEventWithTwoTrackedObjects):
@@ -175,13 +165,6 @@ class MotionEvent(EventWithOneTrackedObject, ABC):
                                            timestamp=timestamp if timestamp is not None else time.time())
         self.start_pose: Pose = start_pose
         self.current_pose: Pose = current_pose
-
-    @property
-    def involved_bodies(self) -> List[Body]:
-        return self.tracked_objects
-
-    def set_color(self, color: Color):
-        self.tracked_object.set_color(color)
 
 
 @dataclass(init=False, unsafe_hash=True)
@@ -251,9 +234,6 @@ class AbstractContactEvent(EventWithTwoTrackedObjects, ABC):
         )
         self.with_object_pose: Optional[Pose] = with_object.global_pose if with_object is not None else None
 
-    def involved_bodies(self) -> List[Body]:
-        return [self.tracked_object, self.with_object] if self.with_object is not None else [self.tracked_object]
-
 
 
 @dataclass(init=False, unsafe_hash=True)
@@ -270,20 +250,12 @@ class LossOfContactEvent(AbstractContactEvent):
 
 @dataclass(unsafe_hash=True)
 class PickUpEvent(EventWithOneTrackedObject):
-
-    @property
-    def involved_bodies(self) -> List[Body]:
-        return self.tracked_objects
-
     ...
 
 
 @dataclass(unsafe_hash=True)
 class PlacingEvent(EventWithTwoTrackedObjects):
-
-    @property
-    def involved_bodies(self) -> List[Body]:
-        return [self.tracked_objects, self.with_object]
+    ...
 
 
 
@@ -309,10 +281,6 @@ class InsertionEvent(EventWithTwoTrackedObjects):
     def __str__(self):
         with_object_name = " - " + f" - ".join([obj.name.name for obj in self.inserted_into_objects])
         return f"{self.__class__.__name__}: {self.tracked_object.name.name}{with_object_name} - {self.timestamp}"
-
-    @property
-    def involved_bodies(self) -> List[Body]:
-        return [self.tracked_object, self.with_object]
 
 @dataclass(unsafe_hash=True)
 class ContainmentEvent(DefaultEventWithTwoTrackedObjects):
