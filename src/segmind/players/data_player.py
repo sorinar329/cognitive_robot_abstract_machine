@@ -158,7 +158,7 @@ class DataPlayer(EpisodePlayer, ABC):
         :param frame_data: The frame data.
         """
         objects_poses = self.get_objects_poses(frame_data)
-        joint_states = self.get_joint_states(frame_data)
+        # Todo: discuss the rotation thing.
         if len(objects_poses):
             for obj in self.world.bodies_with_collision:
                 if obj in objects_poses:
@@ -167,7 +167,9 @@ class DataPlayer(EpisodePlayer, ABC):
                             x=objects_poses[obj].x,
                             y=objects_poses[obj].y,
                             z=objects_poses[obj].z,
-
+                            roll=objects_poses[obj].to_quaternion()[0],
+                            pitch=objects_poses[obj].to_quaternion()[1],
+                            #yaw=objects_poses[obj].to_quaternion()[2],
                         )
                     )
 

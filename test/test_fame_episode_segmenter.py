@@ -61,9 +61,6 @@ class TestFileEpisodeSegmenter(TestCase):
         cls.episode_segmenter.spawn_scene(models_dir="/home/sorin/dev/Segmind/resources/fame_episodes/alessandro_sliding_bueno/models/")
 
 
-    # def tearDown(self):
-    #     rclpy.shutdown()
-
     def test_replay_episode(self):
         self.episode_segmenter.start()
 
