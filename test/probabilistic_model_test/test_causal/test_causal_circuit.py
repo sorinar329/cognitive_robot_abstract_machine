@@ -18,6 +18,9 @@ from probabilistic_model.probabilistic_circuit.causal.causal_circuit import (
     CausalCircuit,
     FailureDiagnosisResult,
     MarginalDeterminismTreeNode,
+)
+
+from probabilistic_model.probabilistic_circuit.causal.exceptions import (
     MissingQueryVariableViolation,
     OverlappingChildSupportsViolation,
     SupportDeterminismVerificationResult,
@@ -401,12 +404,14 @@ class VerifySupportDeterminismVariableExistenceTestCase(unittest.TestCase):
         self.assertTrue(result.passed)
         self.assertEqual(len(result.violations), 0)
 
+
     def test_query_variable_absent_from_circuit_fails_with_named_violation(self):
         ghost = Continuous("ghost")
         tree = MarginalDeterminismTreeNode(variables={self.x, ghost}, query_set={ghost})
-        result = self._make_causal_circuit(tree).verify_support_determinism()
-        self.assertFalse(result.passed)
-        self.assertTrue(any("ghost" in str(violation) for violation in result.violations))
+        with self.assertRaises(SupportDeterminismVerificationResult) as ctx:
+            self._make_causal_circuit(tree).verify_support_determinism()
+        self.assertFalse(ctx.exception.passed)
+        self.assertTrue(any("ghost" in str(v) for v in ctx.exception.violations))
 
     def test_result_lists_all_circuit_variables(self):
         tree = MarginalDeterminismTreeNode.from_causal_graph([self.x], [self.y])
@@ -427,9 +432,10 @@ class VerifySupportDeterminismNormalizationTestCase(unittest.TestCase):
         circuit, x, y = _build_unnormalized_circuit()
         tree = MarginalDeterminismTreeNode.from_causal_graph([x], [y])
         cc = CausalCircuit.from_probabilistic_circuit(circuit, tree, [x], [y])
-        result = cc.verify_support_determinism()
-        self.assertFalse(result.passed)
-        self.assertTrue(any("log-weights" in str(violation) for violation in result.violations))
+        with self.assertRaises(SupportDeterminismVerificationResult) as ctx:
+            cc.verify_support_determinism()
+        self.assertFalse(ctx.exception.passed)
+        self.assertTrue(any("log-weights" in str(v) for v in ctx.exception.violations))
 
 
 # verify_support_determinism — Check 3: SumUnit children are support-disjoint
