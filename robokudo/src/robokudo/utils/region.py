@@ -6,6 +6,7 @@ This module provides utilities to:
 - Compute region poses and OBBs
 - Convert regions to annotations/markers
 """
+
 from __future__ import annotations
 
 from typing import Iterable, Optional, Tuple, Union
@@ -19,7 +20,6 @@ from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
 from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.geometry import Box
 from semantic_digital_twin.world_description.world_entity import Region
-
 
 
 def _box_obb_from_shape(
@@ -51,7 +51,9 @@ def _box_obb_from_shape(
     return obb
 
 
-def region_obb(region: Region, world: Optional[World] = None) -> o3d.geometry.OrientedBoundingBox:
+def region_obb(
+    region: Region, world: Optional[World] = None
+) -> o3d.geometry.OrientedBoundingBox:
     """
     Return an OBB for the region in world coordinates.
 
@@ -59,8 +61,8 @@ def region_obb(region: Region, world: Optional[World] = None) -> o3d.geometry.Or
     - If a single Box shape exists, build directly from its scale and pose.
     - Otherwise, fall back to combined mesh or bounding boxes.
     """
-    # Get world_T_region
-    world_T_region = region.global_pose
+    # Get world_T_region as homogeneous matrix (global_pose is Pose in current SDT API)
+    world_T_region = region.global_transform
 
     # Fast path: single Box
     if len(region.area) == 1 and isinstance(region.area[0], Box):
