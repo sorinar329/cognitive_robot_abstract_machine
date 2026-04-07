@@ -72,62 +72,6 @@ def text_to_speech(text: str):
             print("Audio not available, running in silent mode.")
 
 
-def is_object_supported_by_container_body(
-    obj: Body, distance: float = 0.07, bodies_to_check: Optional[List[Body]] = None
-) -> bool:
-    if bodies_to_check is None:
-        bodies_to_check = obj.contact_points.get_all_bodies()
-    if hasattr(obj.world, "views") and obj.world.views is not None:
-        containers = [v for v in obj.world.views["views"] if isinstance(v, Container)]
-        container_bodies = [c.body for c in containers]
-        container_body_names = [c.name.name for c in container_bodies]
-        return any(body.name in container_body_names for body in bodies_to_check)
-    else:
-        if any(
-            "drawer" in body.name and "handle" not in body.name
-            for body in bodies_to_check
-        ):
-            return True
-        else:
-            possible_containers = obj.update_containment(
-                axis_to_use=[AxisIdentifier.X, AxisIdentifier.Y]
-            )
-            possible_containers = [
-                b
-                for b in possible_containers
-                if "drawer" in b.name and "handle" not in b.name
-            ]
-            for b in bodies_to_check:
-                b_contact_bodies = b.contact_points.get_all_bodies()
-                if any(
-                    contact_body in possible_containers
-                    for contact_body in b_contact_bodies
-                ):
-                    return True
-            return False
-
-
-def get_arm_and_grasp_description_for_object(
-    obj: Body,
-) -> Tuple[Arms, GraspDescription]:
-    obj_pose = obj.pose
-    left_arm_pose = World.current_world.robot.get_link_pose("l_gripper_tool_frame")
-    right_arm_pose = World.current_world.robot.get_link_pose("r_gripper_tool_frame")
-    obj_distance_from_left_arm = left_arm_pose.position.euclidean_distance(
-        obj_pose.position
-    )
-    obj_distance_from_right_arm = right_arm_pose.position.euclidean_distance(
-        obj_pose.position
-    )
-    if obj_distance_from_left_arm < obj_distance_from_right_arm:
-        arm = Arms.LEFT
-        grasp = GraspDescription(Grasp.LEFT, Grasp.TOP)
-    else:
-        arm = Arms.RIGHT
-        grasp = GraspDescription(Grasp.RIGHT, Grasp.TOP)
-    return arm, grasp
-
-
 class PropagatingThread(threading.Thread, ABC):
     exc: Optional[Exception] = None
 
@@ -160,36 +104,6 @@ class PropagatingThread(threading.Thread, ABC):
     @abstractmethod
     def _join(self, timeout=None):
         pass
-
-
-def check_if_object_is_supported(obj: Body, distance: Optional[float] = 0.03) -> bool:
-    """
-    Check if the object is supported by any other object.
-
-    :param obj: The object to check if it is supported.
-    :param distance: The distance to check if the object is supported.
-    :return: True if the object is supported, False otherwise.
-    """
-    for i in obj._world.bodies_with_enabled_collision:
-        if is_supported_by(i, obj, distance):
-            return True
-
-    return False
-
-
-def get_support(obj: Body) -> Optional[Body]:
-    """
-    Check if the object is in contact with a supporting surface and returns it.
-
-    :param obj: The object to check if it is in contact with a supporting surface.
-    :return: The supporting surface if it exists, None otherwise.
-    """
-    if obj in obj._world.bodies_with_collision:
-        for b in obj._world.bodies_with_collision:
-            if is_supported_by(obj, b):
-                return b
-
-    return None
 
 
 class Imaginator:

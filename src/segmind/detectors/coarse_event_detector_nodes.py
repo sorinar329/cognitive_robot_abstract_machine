@@ -1,20 +1,12 @@
-from abc import abstractmethod, ABC
-from dataclasses import dataclass, field
-from typing import Optional, List
+from dataclasses import dataclass
+from typing import List
 
-from giskardpy.motion_statechart.data_types import ObservationStateValues
 from segmind.datastructures.events import (
     StopMotionEvent,
     SupportEvent,
-    ContainmentEvent,
     Event,
     PlacingEvent, TranslationEvent, LossOfSupportEvent, PickUpEvent,
 )
-from segmind.detectors.atomic_event_detectors_nodes import (
-    SegmindContext,
-    DetectorStateChartNode,
-)
-from semantic_digital_twin.world_description.connections import Connection6DoF
 from semantic_digital_twin.world_description.world_entity import Body
 
 from segmind.detectors.base import AbstractDetector
@@ -78,7 +70,6 @@ class PlacingDetector(AbstractInteractionDetector):
                         key = (
                             i.tracked_object.id,
                             i.with_object.id,
-                            #int(i.timestamp * 1000),
                         )
 
                         if key in self.context.placing_pairs:
@@ -143,7 +134,6 @@ class PickUpDetector(AbstractInteractionDetector):
                         self.context.placing_pairs.add(key)
                         e = PickUpEvent(
                             tracked_object=j.tracked_object,
-                            with_object=i.with_object,
                             timestamp=i.timestamp,
                         )
                         events.append(e)

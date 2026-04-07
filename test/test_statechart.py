@@ -1,46 +1,24 @@
-import time
-from collections import defaultdict
-from typing import Dict, DefaultDict, Set
-
 import rclpy
-
-
-from krrood.symbolic_math.symbolic_math import trinary_logic_or
 from segmind.datastructures.events import (
     ContactEvent,
     LossOfContactEvent,
     SupportEvent,
     LossOfSupportEvent, LossOfContainmentEvent, ContainmentEvent, InsertionEvent,
 )
-from segmind.detectors.atomic_event_detectors_nodes import (
-    ContactDetector,
-    LossOfContactDetector,
-    SegmindContext,
-)
-
-from segmind.detectors.spatial_relation_detector_nodes import (
-    SupportDetector,
-    LossOfSupportDetector, ContainmentDetector, LossOfContainmentDetector
-)
+from segmind.detectors.base import SegmindContext
 from segmind.episode_segmenter import EpisodeSegmenterExecutor
 from segmind.event_logger import EventLogger
-
-from giskardpy.executor import Executor
-
-from giskardpy.motion_statechart.goals.templates import Sequence
 from segmind.statecharts.segmind_statechart import SegmindStatechart
 from semantic_digital_twin.adapters.ros.visualization.viz_marker import (
     VizMarkerPublisher,
 )
 from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
-from semantic_digital_twin.world_description.world_entity import Body
 from test import setup_contact_world, setup_support_world
 
 
 class TestMotionStatechart:
 
 
-    #ToDo: We need to add some constraints on ticking, how many time do we tick per update?
     def test_contact_detector(self):
 
         world = setup_contact_world()
@@ -218,9 +196,6 @@ class TestMotionStatechart:
 
         rclpy.shutdown()
 
-
-
-
     def test_insertion_detector(self):
         world = setup_support_world()
         self.visualize(world)
@@ -280,6 +255,14 @@ class TestMotionStatechart:
 
     def test_stop_translation(self):
         pass
+
+    def test_rotation(self):
+        pass
+
+    def test_stop_rotation(self):
+        pass
+
+
 
     def visualize(self, world):
         rclpy.init()

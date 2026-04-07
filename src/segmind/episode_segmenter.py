@@ -18,13 +18,9 @@ from semantic_digital_twin.world_description.connections import (
 )
 from semantic_digital_twin.world_description.geometry import FileMesh
 from semantic_digital_twin.world_description.shape_collection import ShapeCollection
-from semantic_digital_twin.world_description.world_entity import Body, Agent
-from .datastructures.events import EventUnion, ContactEvent, Event, CloseContactEvent
-from .datastructures.object_tracker import ObjectTracker
-from .detectors.atomic_event_detectors_nodes import SegmindContext
-from .detectors.base import DetectorStateChart
+from semantic_digital_twin.world_description.world_entity import Body
+from .detectors.base import DetectorStateChart, SegmindContext
 from .episode_player import EpisodePlayer
-from .event_logger import EventLogger
 
 set_logger_level(LogLevel.DEBUG)
 

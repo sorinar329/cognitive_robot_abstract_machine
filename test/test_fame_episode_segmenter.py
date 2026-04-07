@@ -18,7 +18,7 @@ from semantic_digital_twin.world import World
 
 
 from segmind.episode_segmenter import EpisodeSegmenterExecutor
-from segmind.players.json_player2 import JSONPlayer
+from segmind.players.json_player import JSONPlayer
 
 
 from semantic_digital_twin.world_description.world_entity import Body

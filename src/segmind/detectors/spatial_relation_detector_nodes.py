@@ -1,9 +1,7 @@
-from dataclasses import dataclass, field
-from typing import Optional, List, Dict, Set
+from dataclasses import dataclass
+from typing import List, Dict, Set
 
-from giskardpy.motion_statechart.context import MotionStatechartContext
-from giskardpy.motion_statechart.data_types import ObservationStateValues
-from giskardpy.motion_statechart.graph_node import MotionStatechartNode
+
 from segmind.datastructures.events import (
     Event,
     SupportEvent,
@@ -11,14 +9,9 @@ from segmind.datastructures.events import (
     ContainmentEvent,
     LossOfContainmentEvent, ContactEvent, InsertionEvent,
 )
-from segmind.detectors.atomic_event_detectors_nodes import (
-    SegmindContext,
-    DetectorStateChartNode,
-)
+
 from semantic_digital_twin.reasoning.predicates import is_supported_by, InsideOf
-from semantic_digital_twin.world_description.connections import Connection6DoF
 from semantic_digital_twin.world_description.world_entity import Body
-from abc import ABC, abstractmethod
 
 from segmind.detectors.base import AbstractDetector
 
