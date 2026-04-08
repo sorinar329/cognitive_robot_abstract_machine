@@ -17,6 +17,7 @@ from segmind.detectors.base import (
     AbstractDetector,
 )
 from semantic_digital_twin.reasoning.predicates import contact
+from semantic_digital_twin.spatial_types.spatial_types import Pose
 from semantic_digital_twin.world_description.world_entity import Body
 
 
@@ -178,6 +179,26 @@ class MotionDetector(AbstractDetector):
                 return True
         return False
 
+    def _is_stationary(self, poses: List[Pose]) -> bool:
+        """
+        Determines if the object is stationary based on average movement.
+
+        :param poses: List of recent poses.
+        :return: True if stationary, False otherwise.
+        """
+        p_last = np.array(poses[-1].to_position().to_list())
+
+        distances = [
+            np.linalg.norm(p_last - np.array(p.to_position().to_list()))
+            for p in poses[:-1]
+        ]
+
+        if not distances:
+            return True
+
+        avg_distance = np.mean(distances)
+
+        return avg_distance < self.distance_threshold
 
 @dataclass(eq=False, repr=False)
 class TranslationDetector(MotionDetector):
@@ -240,26 +261,25 @@ class StopTranslationDetector(MotionDetector):
         latest_poses = self.context.latest_poses[obj]
         is_moving = self.context.object_moving_status.get(obj)
 
-        if not is_moving:
-            if latest_motion_event is None:
-                return None
+        if is_moving:
+            return None
 
-            p_last = np.array(latest_poses[-1].to_position().to_list())
-            all_poses_same = all(
-                np.linalg.norm(np.array(p.to_position().to_list()) - p_last)
-                < self.distance_threshold
-                for p in latest_poses
-            )
-            if all_poses_same:
-                stop_event = StopTranslationEvent(
-                    tracked_object=obj,
-                    start_pose=latest_motion_event.start_pose,
-                    current_pose=latest_poses[-1],
-                )
-                del self.context.latest_motion_events[obj]
-                return stop_event
+        if latest_motion_event is None:
+            return None
 
-        return None
+        if not self._is_stationary(latest_poses):
+            return None
+
+        stop_event = StopTranslationEvent(
+            tracked_object=obj,
+            start_pose=latest_motion_event.start_pose,
+            current_pose=latest_poses[-1],
+        )
+
+        self.context.latest_motion_events.pop(obj, None)
+
+        return stop_event
+
 
 
 #Todo: Refactor the Rotationdetector
@@ -349,24 +369,25 @@ class StopRotationDetector(MotionDetector):
         latest_poses = self.context.latest_poses[obj]
         is_moving = self.context.object_moving_status.get(obj)
 
-        if not is_moving:
-            if latest_motion_event is None:
-                return None
+        if is_moving:
+            return None
 
-            all_poses_same = all(
-                np.allclose(
-                    p.to_quaternion().to_list(),
-                    latest_poses[0].to_quaternion().to_list(),
-                )
-                for p in latest_poses
+        if latest_motion_event is None:
+            return None
+
+        all_poses_same = all(
+            np.allclose(
+                p.to_quaternion().to_list(),
+                latest_poses[0].to_quaternion().to_list(),
             )
-            if all_poses_same:
-                stop_event = StopRotationEvent(
-                    tracked_object=obj,
-                    start_pose=latest_motion_event.start_pose,
-                    current_pose=latest_poses[-1],
-                )
-                del self.context.latest_motion_events[obj]
-                return stop_event
+            for p in latest_poses
+        )
+        if all_poses_same:
+            stop_event = StopRotationEvent(
+                tracked_object=obj,
+                start_pose=latest_motion_event.start_pose,
+                current_pose=latest_poses[-1],
+            )
+            del self.context.latest_motion_events[obj]
+            return stop_event
 
-        return None
