@@ -6,6 +6,7 @@ from segmind.detectors.base import DetectorStateChart, SegmindContext
 from segmind.episode_segmenter import EpisodeSegmenterExecutor
 from segmind.event_logger import EventLogger
 from segmind.players.csv_player import CSVEpisodePlayer
+from semantic_digital_twin.adapters.package_resolver import FileUriResolver
 from semantic_digital_twin.adapters.ros.visualization.viz_marker import (
     VizMarkerPublisher,
 )
@@ -41,10 +42,10 @@ class TestMultiverseEpisodeSegmenter(TestCase):
             position_shift=Vector3(0, 0, 0),
         )
         cls.episode_executor = EpisodeSegmenterExecutor(
-            context=cls.context, player=cls.file_player, ignored_objects=["iCub"]
+            context=cls.context, player=cls.file_player, ignored_objects=["iCub"], fixed_objects=["scene"]
         )
         cls.episode_executor.spawn_scene(
-            models_dir=f"{multiverse_episodes_dir}/icub_montessori_no_hands/models/"
+            models_dir=f"{multiverse_episodes_dir}/icub_montessori_no_hands/models/", file_resolver=FileUriResolver()
         )
 
     def test_replay_episode(self):

@@ -1,4 +1,5 @@
 import datetime
+import os
 import threading
 from abc import ABC
 from dataclasses import field, dataclass
@@ -9,6 +10,7 @@ from typing import Optional, List, Dict, Type
 from giskardpy.executor import Pacer, SimulationPacer
 from krrood.symbolic_math.symbolic_math import FloatVariable
 from segmind import logger, set_logger_level, LogLevel
+from semantic_digital_twin.adapters.package_resolver import FileUriResolver
 from semantic_digital_twin.adapters.urdf import URDFParser
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.world import World
@@ -62,6 +64,11 @@ class EpisodeSegmenterExecutor:
     ignored_objects: Optional[List[str]] = field(default_factory=list)
     """
     A list of objects that should be ignored during the episode.
+    """
+
+    fixed_objects: Optional[List[str]] = field(default_factory=list)
+    """
+    A list of objects that should be fixed during the episode.
     """
 
     _control_cycle_index: int = field(init=False)
@@ -125,7 +132,7 @@ class EpisodeSegmenterExecutor:
             self.statechart.cleanup_nodes(context=self.context)
             self.context.cleanup()
 
-    def spawn_scene(self, models_dir):
+    def spawn_scene(self, models_dir, file_resolver: Optional[FileUriResolver] = None):
         """
         Spawns a scene by loading URDF and STL files from a specified directory and integrating them
         into the world context. The function processes all URDF and STL files for integration,
@@ -150,15 +157,24 @@ class EpisodeSegmenterExecutor:
                 if obj_name in self.ignored_objects:
                     continue
                 try:
-                    if obj_name == "scene":
-                        obj_world = URDFParser.from_file(file_path).parse()
+                    resolver_kwargs = {}
+                    if file_resolver is not None:
+                        resolver_kwargs["path_resolver"] = FileUriResolver(
+                            base_dir=os.path.dirname(file_path)
+                        )
+
+                    obj_world = URDFParser.from_file(
+                        file_path,
+                        **resolver_kwargs
+                    ).parse()
+
+                    if obj_name in self.fixed_objects:
                         world_C_scene = FixedConnection(
                             parent=self.context.world.root, child=obj_world.root
                         )
                         with self.context.world.modify_world():
                             self.context.world.merge_world(obj_world, world_C_scene)
                     else:
-                        obj_world = URDFParser.from_file(file_path).parse()
                         with self.context.world.modify_world():
                             self.context.world.merge_world(obj_world)
 
