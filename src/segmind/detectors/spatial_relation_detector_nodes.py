@@ -113,6 +113,8 @@ class BaseContainmentDetector(AbstractDetector):
     bodies and generating events when containment relationships change.
     """
 
+    containment_threshold: float = 0.9
+
     def get_containment_pairs(
         self, tracked_objects: List[Body]
     ) -> Dict[Body, Set[Body]]:
@@ -128,7 +130,7 @@ class BaseContainmentDetector(AbstractDetector):
             for body in bodies_with_collision:
                 if obj is body:
                     continue
-                if InsideOf(obj, body).compute_containment_ratio() > 0.9:
+                if InsideOf(obj, body).compute_containment_ratio() > self.containment_threshold:
                     containment_pairs.setdefault(obj, set()).add(body)
         return containment_pairs
 

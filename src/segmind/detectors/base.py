@@ -115,6 +115,8 @@ class AbstractDetector(ABC, DetectorStateChartNode):
     contact history and logging utilities.
     """
 
+
+
     def on_tick(self, context: SegmindContext) -> Optional[ObservationStateValues]:
         """
         Executes one update cycle of the detector.

@@ -45,60 +45,20 @@ class SegmindStatechart:
 
         self.context = context
 
-        contact_detector = ContactDetector(
-            name="contact_detector", context=self.context
-        )
-        loss_of_contact_detector = LossOfContactDetector(
-            name="loss_of_contact_detector",
-            context=self.context,
-        )
-        support_detector = SupportDetector(
-            name="support_detector",
-            context=self.context,
-        )
-        loss_of_support_detector = LossOfSupportDetector(
-            name="los_detector",
-            context=self.context,
-        )
-        containment_detector = ContainmentDetector(
-            name="containment_detector",
-            context=self.context,
-        )
-        translation_detector = TranslationDetector(
-            name="translation_detector", context=self.context
-        )
+        detectors = [
+            ContactDetector(context=self.context),
+            LossOfContactDetector(context=self.context),
+            SupportDetector(context=self.context),
+            LossOfSupportDetector(context=self.context),
+            ContainmentDetector(context=self.context),
+            TranslationDetector(context=self.context),
+            StopTranslationDetector(context=self.context),
+            PlacingDetector(context=self.context),
+            InsertionDetector(context=self.context),
+            PickUpDetector(context=self.context),
+            LossOfContainmentDetector(context=self.context),
+        ]
 
-        stop_translation_detector = StopTranslationDetector(
-            name="stop_translation_detector", context=self.context
-        )
-
-        placing_detector = PlacingDetector(
-            name="placing_detector", context=self.context
-        )
-
-        insertion_detector = InsertionDetector(
-            name="insertion_detector", context=self.context
-        )
-
-        pickup_detector = PickUpDetector(name="pickup_detector", context=self.context)
-
-        loss_of_containment_detector = LossOfContainmentDetector(name="loss_of_containment_detector", context=self.context)
-        sc.add_nodes(
-            [
-                contact_detector,
-                loss_of_contact_detector,
-                support_detector,
-                loss_of_support_detector,
-                translation_detector,
-                containment_detector,
-                stop_translation_detector,
-                placing_detector,
-                insertion_detector,
-                pickup_detector,
-                loss_of_containment_detector,
-            ]
-        )
-
-
+        sc.add_nodes(detectors)
 
         return sc
