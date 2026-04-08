@@ -52,13 +52,13 @@ class TestFileEpisodeSegmenter(TestCase):
                                             obj_id_to_name=obj_id_to_name)
 
         cls.episode_segmenter = EpisodeSegmenterExecutor(player=cls.file_player, context=cls.context)
-        cls.file_player.transform_to_stl("/home/sorin/dev/Segmind/resources/fame_episodes/alessandro_sliding_bueno/models")
+        cls.file_player.transform_to_stl(f"{dirname(__file__)}/../resources/fame_episodes/alessandro_sliding_bueno/models")
         rclpy.init()
         cls.node = rclpy.create_node("test_node")
         cls.viz_marker_publisher = VizMarkerPublisher(node=cls.node, _world=cls.world)
 
         cls.viz_marker_publisher.with_tf_publisher()
-        cls.episode_segmenter.spawn_scene(models_dir="/home/sorin/dev/Segmind/resources/fame_episodes/alessandro_sliding_bueno/models/")
+        cls.episode_segmenter.spawn_scene(models_dir=f"{dirname(__file__)}/../resources/fame_episodes/alessandro_sliding_bueno/models/")
 
 
     def test_replay_episode(self):

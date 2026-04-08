@@ -4,7 +4,8 @@ from dataclasses import dataclass, field
 from functools import cached_property
 
 import semantic_digital_twin
-from krrood.ormatic.dao import to_dao, DataAccessObjectState, DataAccessObject
+from krrood.ormatic.data_access_objects.dao import DataAccessObject
+from krrood.ormatic.data_access_objects.helper import to_dao
 from semantic_digital_twin.orm.ormatic_interface import BodyDAO
 from semantic_digital_twin.world_description.world_entity import Body
 from typing_extensions import List, Optional, TYPE_CHECKING

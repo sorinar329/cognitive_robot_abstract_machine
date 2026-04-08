@@ -1,4 +1,5 @@
 import datetime
+from os.path import dirname
 from unittest import TestCase
 import rclpy
 from segmind.detectors.base import DetectorStateChart, SegmindContext
@@ -26,13 +27,15 @@ class TestMultiverseEpisodeSegmenter(TestCase):
         rclpy.init()
         cls.node = rclpy.create_node("test_node")
         cls.viz_marker_publisher = VizMarkerPublisher(node=cls.node, _world=cls.world)
-
+        multiverse_episodes_dir = (
+            f"{dirname(__file__)}/../resources/multiverse_episodes"
+        )
         cls.viz_marker_publisher.with_tf_publisher()
         cls.logger = EventLogger()
         cls.sc = DetectorStateChart()
         cls.context = SegmindContext(world=cls.world, logger=cls.logger)
         cls.file_player = CSVEpisodePlayer(
-            file_path="/home/sorin/dev/Segmind/resources/multiverse_episodes/icub_montessori_no_hands/data.csv",
+            file_path=f"{multiverse_episodes_dir}/icub_montessori_no_hands/data.csv",
             world=cls.world,
             time_between_frames=datetime.timedelta(milliseconds=4),
             position_shift=Vector3(0, 0, 0),
@@ -41,7 +44,7 @@ class TestMultiverseEpisodeSegmenter(TestCase):
             context=cls.context, player=cls.file_player, ignored_objects=["iCub"]
         )
         cls.episode_executor.spawn_scene(
-            models_dir="/home/sorin/dev/Segmind/resources/multiverse_episodes/icub_montessori_no_hands/models/"
+            models_dir=f"{multiverse_episodes_dir}/icub_montessori_no_hands/models/"
         )
 
     def test_replay_episode(self):
@@ -49,4 +52,17 @@ class TestMultiverseEpisodeSegmenter(TestCase):
         sc = statechart.build_statechart(self.context)
 
         self.episode_executor.compile(sc)
+        assert self.episode_executor.player.is_alive()
+
+        self.episode_executor.tick_until_end()
+
+        try:
+            while self.episode_executor.player.is_alive():
+                continue
+
+
+
+        finally:
+            assert len(self.logger.get_events()) > 0
+
 

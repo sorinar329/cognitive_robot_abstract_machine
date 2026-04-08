@@ -16,7 +16,7 @@ from semantic_digital_twin.world_description.connections import (
     Connection6DoF,
     FixedConnection,
 )
-from semantic_digital_twin.world_description.geometry import FileMesh
+from semantic_digital_twin.world_description.geometry import Mesh
 from semantic_digital_twin.world_description.shape_collection import ShapeCollection
 from semantic_digital_twin.world_description.world_entity import Body
 from .detectors.base import DetectorStateChart, SegmindContext
@@ -173,7 +173,7 @@ class EpisodeSegmenterExecutor:
                 obj_name = Path(file).stem
 
 
-                new_body = Body(name=PrefixedName(obj_name), visual=ShapeCollection([FileMesh.from_file(file_path)]), collision=ShapeCollection([FileMesh.from_file(file_path)]))
+                new_body = Body(name=PrefixedName(obj_name), visual=ShapeCollection([Mesh.from_file(file_path)]), collision=ShapeCollection([Mesh.from_file(file_path)]))
                 with self.context.world.modify_world():
                     new_body_C_root = Connection6DoF.create_with_dofs(world=self.context.world,
                                                                   parent=self.context.world.root, child=new_body)

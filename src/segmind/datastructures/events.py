@@ -4,11 +4,8 @@ from dataclasses import dataclass, field
 
 from geometry_msgs.msg import PoseStamped
 
-from pycram.datastructures.partial_designator import PartialDesignator
 from typing_extensions import Optional, List, Union, Type
 
-from pycram.robot_plans import ActionDescription, PickUpActionDescription, PickUpAction, PlaceActionDescription, \
-    PlaceAction
 from segmind.datastructures.mixins import HasPrimaryTrackedObject, HasPrimaryAndSecondaryTrackedObjects
 from segmind.datastructures.object_tracker import ObjectTrackerFactory
 from semantic_digital_twin.orm.ormatic_interface import BodyDAO
