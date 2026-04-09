@@ -10,6 +10,7 @@ from trimesh import Geometry
 
 from segmind import logger, set_logger_level, LogLevel
 from segmind.players.data_player import FilePlayer, FrameData, FrameDataGenerator
+from semantic_digital_twin.spatial_types import RotationMatrix
 from semantic_digital_twin.spatial_types.spatial_types import Pose
 from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.world_entity import Body
@@ -72,16 +73,16 @@ class JSONPlayer(FilePlayer):
                 R = det["R"]
                 t = det["t"]
                 r = np.array(R).reshape(3, 3)
-                q = self.rotation_matrix_to_quaternion(r)
-                q = q / np.linalg.norm(q)
+                R_mat = RotationMatrix(data=r)
+                orientation = R_mat.to_quaternion().to_np()  # [x, y, z, w]
                 obj_pose = Pose.from_xyz_quaternion(
                     pos_x=t[0],
                     pos_y=t[1],
                     pos_z=t[2],
-                    quat_x=q[0],
-                    quat_y=q[1],
-                    quat_z=q[2],
-                    quat_w=q[3],
+                    quat_x=orientation[0],
+                    quat_y=orientation[1],
+                    quat_z=orientation[2],
+                    quat_w=orientation[3],
                 )
                 obj_pose.timestamp = det["time"]
                 body_name = self.obj_id_to_name[int(obj_name)]
@@ -90,44 +91,6 @@ class JSONPlayer(FilePlayer):
 
         return objects_poses
 
-    def rotation_matrix_to_quaternion(self, R):
-        """
-        Transformation of a rotation matrix into a quaternion.
-
-        :param R: rotation matrix
-        :return: quaternion
-        """
-        q = np.zeros(4)
-        trace = np.trace(R)
-
-        if trace > 0:
-            s = 0.5 / np.sqrt(trace + 1.0)
-            q[0] = 0.25 / s
-            q[1] = (R[2, 1] - R[1, 2]) * s
-            q[2] = (R[0, 2] - R[2, 0]) * s
-            q[3] = (R[1, 0] - R[0, 1]) * s
-        else:
-            if R[0, 0] > R[1, 1] and R[0, 0] > R[2, 2]:
-                s = 2.0 * np.sqrt(1.0 + R[0, 0] - R[1, 1] - R[2, 2])
-                q[0] = (R[2, 1] - R[1, 2]) / s
-                q[1] = 0.25 * s
-                q[2] = (R[0, 1] + R[1, 0]) / s
-                q[3] = (R[0, 2] + R[2, 0]) / s
-            elif R[1, 1] > R[2, 2]:
-                s = 2.0 * np.sqrt(1.0 + R[1, 1] - R[0, 0] - R[2, 2])
-                q[0] = (R[0, 2] - R[2, 0]) / s
-                q[1] = (R[0, 1] + R[1, 0]) / s
-                q[2] = 0.25 * s
-                q[3] = (R[1, 2] + R[2, 1]) / s
-            else:
-                s = 2.0 * np.sqrt(1.0 + R[2, 2] - R[0, 0] - R[1, 1])
-                q[0] = (R[1, 0] - R[0, 1]) / s
-                q[1] = (R[0, 2] + R[2, 0]) / s
-                q[2] = (R[1, 2] + R[2, 1]) / s
-                q[3] = 0.25 * s
-
-        q_xyzw=[q[1], q[2], q[3], q[0]]
-        return q_xyzw
 
 
     def get_name_from_id(self, obj_id: int) -> str:
