@@ -169,7 +169,7 @@ def query_class_by_label(label: str) -> Optional[type]:
     """
     semantic_class = variable_from(recursive_subclasses(IsPerceivable))
     matching_class = an(entity(semantic_class).where(contains(label.lower(), semantic_class.__name__.lower())))
-    return None if matching_class.tolist() == [] else matching_class.first()
+    return next(matching_class.evaluate(), None)
 
 
 def query_sort_by_volume(annotations: List[HasRootBody], order: Optional[bool]=True) -> List[HasRootBody]:
@@ -181,11 +181,9 @@ def query_sort_by_volume(annotations: List[HasRootBody], order: Optional[bool]=T
     :param order: Whether to sort in ascending or descending order (default is True).
     :return: List of SemanticAnnotation objects sorted by volume (largest to smallest).
     """
-    newList = []
-    for annotation in annotations:
-        if annotation.bodies:
-            newList.append(annotation)
+    annotaion_var = entity(a := variable_from(annotations)).where(a.bodies)
 
+    @symbolic_function
     def get_volume(annotation: SemanticAnnotation) -> float:
         """Calculate volume from the annotation's body scale."""
         body = annotation.bodies[0]
@@ -195,4 +193,5 @@ def query_sort_by_volume(annotations: List[HasRootBody], order: Optional[bool]=T
             return body.collision.scale.x * body.collision.scale.y * body.collision.scale.z
         else:
             return 0.0
-    return sorted(newList, key=get_volume, reverse=order)
+
+    return entity(annotaion_var).ordered_by(get_volume(annotaion_var), descending=not order)
