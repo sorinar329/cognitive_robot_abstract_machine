@@ -1,4 +1,5 @@
 import json
+from copy import deepcopy
 
 import numpy as np
 import pytest
@@ -33,6 +34,7 @@ from giskardpy.motion_statechart.motion_statechart import (
 )
 from giskardpy.motion_statechart.tasks.cartesian_tasks import (
     CartesianPose,
+    CartesianPosition,
 )
 from giskardpy.motion_statechart.tasks.joint_tasks import JointState
 from giskardpy.qp.qp_controller_config import QPControllerConfig
@@ -51,15 +53,18 @@ from semantic_digital_twin.collision_checking.collision_rules import (
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.robots.abstract_robot import AbstractRobot
 from semantic_digital_twin.robots.minimal_robot import MinimalRobot
+from semantic_digital_twin.robots.tracy import Tracy
 from semantic_digital_twin.spatial_types import (
     HomogeneousTransformationMatrix,
     Vector3,
+    Point3,
 )
 from semantic_digital_twin.spatial_types.spatial_types import Pose
 from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.connections import (
     FixedConnection,
     OmniDrive,
+    Connection6DoF,
 )
 from semantic_digital_twin.world_description.geometry import (
     Cylinder,
@@ -803,3 +808,63 @@ def test_hard_constraints_violated(cylinder_bot_world: World, rclpy_node):
     with pytest.raises(CollisionViolatedError) as exc_info:
         kin_sim.tick_until_end()
     assert len(exc_info.value.violated_collisions) == 2
+
+
+def test_collision_for_robot_with_static_base(tracy_world):
+    world = deepcopy(tracy_world)
+    robot = Tracy.from_world(world)
+
+    tool_frame = world.get_body_by_name("r_gripper_tool_frame")
+    with world.modify_world():
+        obstacle = Body(
+            name=PrefixedName("obstacle"),
+            collision=ShapeCollection([Box(scale=Scale(0.4, 0.4, 0.4))]),
+        )
+        world.add_connection(
+            Connection6DoF.create_with_dofs(
+                world,
+                world.root,
+                obstacle,
+                PrefixedName("obstacle_conn"),
+                HomogeneousTransformationMatrix.from_xyz_rpy(
+                    0.5, 0.5, 1, reference_frame=world.root
+                ),
+            )
+        )
+
+    msc = MotionStatechart()
+    msc.add_node(
+        goal := Parallel(
+            [
+                CartesianPosition(
+                    root_link=world.root,
+                    tip_link=tool_frame,
+                    goal_point=Point3(0.5, 0.5, 1, reference_frame=world.root),
+                ),
+                ExternalCollisionAvoidance(robot=robot),
+                SelfCollisionAvoidance(robot=robot),
+            ],
+            minimum_success=1,
+        )
+    )
+    msc.add_node(local_min := LocalMinimumReached())
+    msc.add_node(CancelMotion.when_true(local_min))
+    msc.add_node(EndMotion.when_true(goal))
+
+    kin_sim = Executor(
+        MotionStatechartContext(world=world),
+        pacer=SimulationPacer(real_time_factor=2),
+    )
+    kin_sim.compile(motion_statechart=msc)
+    with pytest.raises(Exception):
+        # Either Timeout or CancelMotion Execption
+        kin_sim.tick_until_end(500)
+
+    # Verify no contact between the gripper and the obstacle
+    collisions = kin_sim.context.world.collision_manager.compute_collisions()
+    for contact in collisions.contacts:
+        if obstacle in (contact.body_a, contact.body_b):
+            assert contact.distance >= 0, (
+                f"Gripper penetrated the obstacle (distance={contact.distance:.4f}m)."
+                "ExternalCollisionAvoidance is not avoiding the obstacle."
+            )
