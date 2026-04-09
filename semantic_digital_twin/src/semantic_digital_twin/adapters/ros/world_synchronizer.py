@@ -1,24 +1,20 @@
 import json
 import os
+import threading
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from functools import cached_property
-import threading
-from time import sleep
 from typing import ClassVar, Optional, Set, Type, List, Dict
 from uuid import UUID
 
 import numpy as np
 import rclpy  # type: ignore
 import std_msgs.msg
-from krrood.ormatic.data_access_objects.helper import to_dao
 from krrood.adapters.json_serializer import from_json, to_json
+from krrood.ormatic.data_access_objects.helper import to_dao
 from rclpy.node import Node as RosNode
 from rclpy.publisher import Publisher
 from rclpy.subscription import Subscription
-from sqlalchemy import select
-from sqlalchemy.orm import Session
-
 from semantic_digital_twin.adapters.ros.messages import (
     MetaData,
     WorldStateUpdate,
@@ -41,6 +37,8 @@ from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.world_entity import (
     WorldEntityWithID,
 )
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 
 @dataclass
@@ -140,7 +138,6 @@ class Synchronizer(WorldEntityWithID):
             callback=self.acknowledge_callback,
             qos_profile=10,
         )
-        sleep(3)
         self.publisher = self.node.create_publisher(
             std_msgs.msg.String, topic=self.topic_name, qos_profile=10
         )
