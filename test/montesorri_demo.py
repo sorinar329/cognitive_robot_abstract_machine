@@ -1,6 +1,8 @@
 import datetime
 from os.path import dirname
 from unittest import TestCase
+
+import pytest
 import rclpy
 from segmind.detectors.base import DetectorStateChart, SegmindContext
 from segmind.episode_segmenter import EpisodeSegmenterExecutor
@@ -17,53 +19,74 @@ from semantic_digital_twin.world_description.world_entity import Body
 from segmind.statecharts.segmind_statechart import SegmindStatechart
 
 
-class TestMultiverseEpisodeSegmenter(TestCase):
+@pytest.fixture(scope="session")
+def test_context():
+    world = World()
+    root = Body(name=PrefixedName(name="root", prefix="world"))
 
-    @classmethod
-    def setUpClass(cls):
-        cls.world = World()
-        root = Body(name=PrefixedName(name="root", prefix="world"))
-        with cls.world.modify_world():
-            cls.world.add_kinematic_structure_entity(root)
-        rclpy.init()
-        cls.node = rclpy.create_node("test_node")
-        cls.viz_marker_publisher = VizMarkerPublisher(node=cls.node, _world=cls.world)
-        multiverse_episodes_dir = (
-            f"{dirname(__file__)}/../resources/multiverse_episodes"
-        )
-        cls.viz_marker_publisher.with_tf_publisher()
-        cls.logger = EventLogger()
-        cls.sc = DetectorStateChart()
-        cls.context = SegmindContext(world=cls.world, logger=cls.logger)
-        cls.file_player = CSVEpisodePlayer(
-            file_path=f"{multiverse_episodes_dir}/icub_montessori_no_hands/data.csv",
-            world=cls.world,
-            time_between_frames=datetime.timedelta(milliseconds=4),
-            position_shift=Vector3(0, 0, 0),
-        )
-        cls.episode_executor = EpisodeSegmenterExecutor(
-            context=cls.context, player=cls.file_player, ignored_objects=["iCub"], fixed_objects=["scene"]
-        )
-        cls.episode_executor.spawn_scene(
-            models_dir=f"{multiverse_episodes_dir}/icub_montessori_no_hands/models/", file_resolver=FileUriResolver()
-        )
+    with world.modify_world():
+        world.add_kinematic_structure_entity(root)
 
-    def test_replay_episode(self):
-        statechart = SegmindStatechart()
-        sc = statechart.build_statechart(self.context)
+    rclpy.init()
+    node = rclpy.create_node("test_node")
 
-        self.episode_executor.compile(sc)
-        assert self.episode_executor.player.is_alive()
+    viz_marker_publisher = VizMarkerPublisher(node=node, _world=world)
+    viz_marker_publisher.with_tf_publisher()
 
-        self.episode_executor.tick_until_end()
+    logger = EventLogger()
+    sc = DetectorStateChart()
+    context = SegmindContext(world=world, logger=logger)
 
-        try:
-            while self.episode_executor.player.is_alive():
-                continue
+    multiverse_episodes_dir = (
+        f"{dirname(__file__)}/../resources/multiverse_episodes"
+    )
+
+    file_player = CSVEpisodePlayer(
+        file_path=f"{multiverse_episodes_dir}/icub_montessori_no_hands/data.csv",
+        world=world,
+        time_between_frames=datetime.timedelta(milliseconds=4),
+        position_shift=Vector3(0, 0, 0),
+    )
+
+    episode_executor = EpisodeSegmenterExecutor(
+        context=context,
+        player=file_player,
+        ignored_objects=["iCub"],
+        fixed_objects=["scene"],
+    )
+
+    episode_executor.spawn_scene(
+        models_dir=f"{multiverse_episodes_dir}/icub_montessori_no_hands/models/",
+        file_resolver=FileUriResolver(),
+    )
+
+    return {
+        "world": world,
+        "node": node,
+        "logger": logger,
+        "context": context,
+        "file_player": file_player,
+        "episode_executor": episode_executor,
+    }
 
 
+def test_replay_episode(test_context):
+    context = test_context["context"]
+    logger = test_context["logger"]
+    executor = test_context["episode_executor"]
 
-        finally:
-            assert len(self.logger.get_events()) > 0
+    statechart = SegmindStatechart()
+    sc = statechart.build_statechart(context)
 
+    executor.compile(sc)
+
+    assert executor.player.is_alive()
+
+    executor.tick_until_end()
+
+    try:
+        while executor.player.is_alive():
+            pass
+    finally:
+        assert len(logger.get_events()) > 0
 

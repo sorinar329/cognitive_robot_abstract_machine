@@ -35,8 +35,7 @@ IndexedBodyPairs = Dict[Body, Set[Body]]
 Type hint for dictionaries mapping bodies to sets of bodies
 """
 
-#ToDo: Make SegmindContext aware of the detectors,
-# so the parameters will be added when the detector is added to the context.
+
 @dataclass
 class SegmindContext(MotionStatechartContext):
     """

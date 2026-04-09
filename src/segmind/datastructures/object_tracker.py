@@ -51,22 +51,16 @@ class ObjectTracker:
     threading.RLock object used for thread-safe access to the object's event history.
     """
 
-    @property
-    def current_state(self) -> bool:
+    def get_all_events_of_type(self, type_: Type[Event], latest_first: bool = True):
         """
-        Returns the current state of the object's movement status.
-
-        This property provides a way to check whether the associated object
-        is currently moving without directly interacting with the internal
-        status storage. It uses the object's context and body information
-        to retrieve this status.
-
-        :return: Indicates True if the object is moving, otherwise False.
-        :rtype: bool
+        :param type_: Type of event to retrieve.
+        :param latest_first: If True, returns events in chronological order (latest first). Otherwise, returns events in reverse chronological order (oldest first).
+        :return: List of events of the specified type in chronological order.
         """
-        with self._lock:
-            return self.context.object_moving_status[self.body]
-
+        filtered_events = self.get_event_where(lambda e: isinstance(e, type_))
+        if latest_first:
+            return reversed(filtered_events)
+        return filtered_events
 
     def add_event(self, event: Event):
         """

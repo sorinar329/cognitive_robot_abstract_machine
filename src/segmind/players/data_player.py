@@ -160,12 +160,14 @@ class DataPlayer(EpisodePlayer, ABC):
             for obj in self.world.bodies_with_collision:
                 if obj in objects_poses:
                     obj.parent_connection.origin = (
-                        HomogeneousTransformationMatrix.from_xyz_rpy(
-                            x=objects_poses[obj].x,
-                            y=objects_poses[obj].y,
-                            z=objects_poses[obj].z,
-                            roll=objects_poses[obj].to_quaternion()[0],
-                            pitch=objects_poses[obj].to_quaternion()[1],
+                        HomogeneousTransformationMatrix.from_xyz_quaternion(
+                            pos_x=objects_poses[obj].x,
+                            pos_y=objects_poses[obj].y,
+                            pos_z=objects_poses[obj].z,
+                            quat_x=objects_poses[obj].to_quaternion()[0],
+                            quat_y=objects_poses[obj].to_quaternion()[1],
+                            quat_z=objects_poses[obj].to_quaternion()[2],
+                            quat_w=objects_poses[obj].to_quaternion()[3],
                         )
                     )
 

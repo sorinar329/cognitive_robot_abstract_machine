@@ -49,13 +49,15 @@ class CSVEpisodePlayer(FilePlayer):
                 obj_orientation[3],
                 obj_orientation[0],
             )
-            obj_pose = Pose.from_xyz_rpy(
-                x=obj_position[0],
-                y=obj_position[1],
-                z=obj_position[2],
-                roll=obj_orientation[1],
-                pitch=obj_orientation[2],
-                yaw=obj_orientation[3],
+            # Transform object quaternion to euler
+            obj_pose = Pose.from_xyz_quaternion(
+                pos_x=obj_position[0],
+                pos_y=obj_position[1],
+                pos_z=obj_position[2],
+                quat_x=obj_orientation[0],
+                quat_y=obj_orientation[1],
+                quat_z=obj_orientation[2],
+                quat_w=obj_orientation[3],
             )
             obj_pose.timestamp = current_time
 

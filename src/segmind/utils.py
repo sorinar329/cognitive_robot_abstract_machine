@@ -6,11 +6,7 @@ from abc import ABC, abstractmethod
 
 import numpy as np
 from segmind import set_logger_level, LogLevel, logger
-from semantic_digital_twin.semantic_annotations.semantic_annotations import Floor
-from semantic_digital_twin.spatial_types import Vector3
-from semantic_digital_twin.world import World
-from semantic_digital_twin.world_description.geometry import BoundingBox, Color
-from semantic_digital_twin.world_description.world_entity import Body
+from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
 from typing_extensions import List, Optional
 from pycram.tf_transformations import quaternion_inverse, quaternion_multiply
 
@@ -88,95 +84,6 @@ class PropagatingThread(threading.Thread, ABC):
         pass
 
 
-class Imaginator:
-    """
-    A class that provides methods for imagining objects.
-    """
-
-    surfaces_created: List[Body] = []
-    latest_surface_idx: int = 0
-
-    @classmethod
-    def imagine_support_from_aabb(cls, aabb: BoundingBox) -> Body:
-        """
-        Imagine a support with the size of the axis-aligned bounding box.
-
-        :param aabb: The axis-aligned bounding box for which the support of same size should be imagined.
-        :return: The support object.
-        """
-        return cls._imagine_support(aabb=aabb)
-
-    @classmethod
-    def imagine_support_for_object(
-        cls, obj: Body, support_thickness: Optional[float] = 0.005
-    ) -> Body:
-        """
-        Imagine a support that supports the object and has a specified thickness.
-
-        :param obj: The object for which the support should be imagined.
-        :param support_thickness: The thickness of the support.
-        :return: The support object
-        """
-        return cls._imagine_support(obj=obj, support_thickness=support_thickness)
-
-    @classmethod
-    def _imagine_support(
-        cls,
-        obj: Optional[Body] = None,
-        aabb: Optional[BoundingBox] = None,
-        support_thickness: Optional[float] = None,
-    ) -> Body:
-        """
-        Imagine a support for the object or with the size of the axis-aligned bounding box.
-
-        :param obj: The object for which the support should be imagined.
-        :param aabb: The axis-aligned bounding box for which the support of same size should be imagined.
-        :param support_thickness: The thickness of the support.
-        :return: The support object.
-        """
-        if aabb is not None:
-            obj_aabb = aabb
-        elif obj is not None:
-            obj_aabb = obj.get_axis_aligned_bounding_box()
-        else:
-            raise ValueError(
-                "Either object or axis-aligned bounding box should be provided."
-            )
-        print(f"support index: {cls.latest_surface_idx}")
-        support_name = f"imagined_support_{cls.latest_surface_idx}"
-        support_thickness = (
-            obj_aabb.depth if support_thickness is None else support_thickness
-        )
-        box_vis_shape = BoundingBox(
-            Color(1, 1, 0, 1),
-            Vector3(0, 0, 0),
-            Vector3(obj_aabb.width, obj_aabb.depth, support_thickness * 0.5),
-        )
-        support = ObjectDesignatorDescription(list(support_name))
-        support_obj = Body(support_name, Supporter, None, support, color=support.color)
-        support_position = obj_aabb.base_origin
-        support_obj.set_position(support_position)
-
-        from .detectors.atomic_event_detectors import AbstractContactDetector
-
-        contact_points, _ = AbstractContactDetector.get_contact_points_for_body(
-            support_obj, 0.05
-        )
-        contacted_objects = AbstractContactDetector.get_bodies_in_contact(
-            contact_points
-        )
-        contacted_surfaces = [
-            obj
-            for obj in contacted_objects
-            if obj in cls.surfaces_created and obj != support_obj
-        ]
-        for obj in contacted_surfaces:
-            support_obj = support_obj.merge(obj)
-            cls.surfaces_created.remove(obj)
-        World.current_world.get_object_by_type(Floor)[0].attach(support_obj)
-        cls.surfaces_created.append(support_obj)
-        cls.latest_surface_idx += 1
-        return support_obj
 
 
 def get_angle_between_vectors(vector_1: List[float], vector_2: List[float]) -> float:
@@ -197,8 +104,8 @@ def get_angle_between_vectors(vector_1: List[float], vector_2: List[float]) -> f
 
 
 def calculate_transform_difference_and_check_if_small(
-    transform_1: Transform,
-    transform_2: Transform,
+    transform_1: HomogeneousTransformationMatrix,
+    transform_2: HomogeneousTransformationMatrix,
     translation_threshold: float,
     angle_threshold: float,
 ) -> bool:
@@ -213,13 +120,13 @@ def calculate_transform_difference_and_check_if_small(
     :return: A tuple of two boolean values that represent the conditions for the translation and rotation of the
     object to be considered as picked up.
     """
-    trans_1, quat_1 = transform_1.translation_as_list(), transform_1.rotation_as_list()
-    trans_2, quat_2 = transform_2.translation_as_list(), transform_2.rotation_as_list()
+    trans_1, quat_1 = transform_1.to_position(), transform_1.to_quaternion()
+    trans_2, quat_2 = transform_2.to_position(), transform_2.to_quaternion()
     trans_diff_cond = calculate_translation_difference_and_check(
-        trans_1, trans_2, translation_threshold
+        trans_1.to_list(), trans_2.to_list(), translation_threshold
     )
     rot_diff_cond = calculate_angle_between_quaternions_and_check(
-        quat_1, quat_2, angle_threshold
+        quat_1.to_list(), quat_2.to_list(), angle_threshold
     )
     return trans_diff_cond and rot_diff_cond
 
