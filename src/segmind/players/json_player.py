@@ -51,6 +51,9 @@ class JSONPlayer(FilePlayer):
         self.average_rotation_correction_matrix: Optional[np.ndarray] = None
 
     def get_frame_data_generator(self):
+        """
+        Generates the frame data from the json file.
+        """
         with open(self.file_path, 'r') as f:
             self.data_frames = json.load(f)[str(self.scene_id)]
         self.data_frames = {int(frame_id): objects_data for frame_id, objects_data in self.data_frames.items()}
@@ -64,6 +67,13 @@ class JSONPlayer(FilePlayer):
     def _resume(self): ...
 
     def get_objects_poses(self, frame_data: FrameData) -> Dict[Body, Pose]:
+        """
+        Extracts the poses of the objects from the frame data.
+
+        :param frame_data: The frame data.
+        :return: A dictionary mapping bodies to poses.
+        """
+
         objects_data = frame_data.objects_data
         objects_poses: Dict[Body, Pose] = {}
         for obj_name, obj_data in objects_data.items():
