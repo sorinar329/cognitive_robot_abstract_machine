@@ -26,7 +26,7 @@ from geometry_msgs.msg import (
 
 @dataclass
 class PosePublisher(ModelChangeCallback):
-    pose: HomogeneousTransformationMatrix = field(kw_only=True)
+    pose: Pose = field(kw_only=True)
     """
     The pose to publish.
     """
@@ -62,7 +62,7 @@ class PosePublisher(ModelChangeCallback):
     )
     """QoS profile for the publisher."""
 
-    def _notify(self):
+    def _notify(self, *args, **kwargs):
         if self.lifetime > 0 and time.time() >= self.end_time:
             self.pause()
         marker_array = self._create_marker_array()

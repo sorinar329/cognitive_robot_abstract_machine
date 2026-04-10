@@ -4,6 +4,7 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 
 import numpy as np
+import rclpy
 from typing_extensions import List, Optional, Iterator
 
 from giskardpy.executor import Executor
@@ -41,6 +42,12 @@ from pycram.pose_validator import (
 )
 from pycram.utils import link_pose_for_joint_config
 from pycram.view_manager import ViewManager
+from semantic_digital_twin.adapters.ros.visualization.pose_publisher import (
+    PosePublisher,
+)
+from semantic_digital_twin.adapters.ros.visualization.viz_marker import (
+    VizMarkerPublisher,
+)
 from semantic_digital_twin.collision_checking.collision_rules import (
     AvoidExternalCollisions,
 )
@@ -185,6 +192,11 @@ class CostmapLocation(Location):
 
         test_world.name = "Test World"
 
+        if self.context.debug:
+            VizMarkerPublisher(
+                _world=test_world, node=self.context.ros_node
+            ).with_tf_publisher()
+
         robot = self.robot
 
         test_robot = robot.from_world(test_world)
@@ -252,6 +264,14 @@ class CostmapLocation(Location):
                 target_sequence = grasp_description._pose_sequence(
                     self.target, object_in_hand
                 )
+
+                if self.context.debug:
+                    PosePublisher(
+                        pose=target_sequence[1],
+                        node=self.context.ros_node,
+                        _world=self.world,
+                        lifetime=10,
+                    )
 
                 ee = ViewManager.get_arm_view(self.reachable_arm, test_robot)
                 is_reachable = pose_sequence_reachability_validator(

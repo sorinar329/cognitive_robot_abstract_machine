@@ -56,6 +56,11 @@ class TransportAction(ActionDescription):
     Arm that should be used
     """
 
+    grasp_description: Optional[GraspDescription] = None
+    """
+    Grasp Description that should be used for picking up the object
+    """
+
     def inside_container(self) -> List[Body]:
         bodies = []
         for body in self.world.bodies:
@@ -104,6 +109,7 @@ class TransportAction(ActionDescription):
             reachable_arm=self.arm,
             reachable=True,
             context=self.plan_node.plan.context,
+            grasp_description=self.grasp_description,
         )
         # Tries to find a pick-up position for the robot that uses the given arm
 

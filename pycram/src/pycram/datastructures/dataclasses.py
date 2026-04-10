@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 
 from typing_extensions import (
     Optional,
-    Any,
+    Any, TYPE_CHECKING,
 )
 
 from krrood.entity_query_language.backends import QueryBackend, EntityQueryLanguageBackend
@@ -13,6 +13,9 @@ from pycram.plans.plan_entity import PlanEntity
 from semantic_digital_twin.robots.abstract_robot import AbstractRobot
 from semantic_digital_twin.spatial_types.spatial_types import Pose, Vector3
 from semantic_digital_twin.world import World
+
+if TYPE_CHECKING:
+    import rclpy
 
 
 @dataclass
@@ -31,7 +34,7 @@ class Context(PlanEntity):
     The semantic robot annotation which should execute the plan
     """
 
-    ros_node: Optional[Any] = field(default=None)
+    ros_node: Optional[rclpy.node.Node] = field(default=None)
     """
     A ROS node that should be used for communication in this plan
     """
@@ -45,6 +48,15 @@ class Context(PlanEntity):
     """
     The backend used to answer queries about underspecified statements.
     """
+
+    debug: bool = field(default=False)
+    """
+    Should debug information be printed or visualized
+    """
+
+    def __post_init__(self):
+        if self.debug and not self.ros_node:
+            raise ValueError("Debug mode requires a ROS node")
 
     @classmethod
     def from_world(cls, world: World, plan: Plan = None, query_backend: Optional[QueryBackend] = None):

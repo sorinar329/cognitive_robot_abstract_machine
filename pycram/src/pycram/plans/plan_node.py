@@ -186,6 +186,21 @@ class PlanNode(PlanEntity):
             if sibling.layer_index > self.layer_index
         ][0]
 
+    @property
+    def previous_nodes(self) -> List[PlanNode]:
+        """
+        Gets the previous nodes to the given node. Previous meaning the nodes that are before the given one in
+        depth first order of nodes.
+
+        :return: The previous nodes as a list of nodes
+        """
+        previous_nodes = []
+        for search_node in self.plan.nodes:
+            if search_node == self:
+                break
+            previous_nodes.append(search_node)
+        return previous_nodes
+
     def get_previous_node_by_designator_type(
         self, *type_: Type[Designator]
     ) -> Optional[DesignatorNode]:
@@ -193,7 +208,7 @@ class PlanNode(PlanEntity):
         :param type_: The types of the designator to search for.
         :return: The previous node with a designator of the specified type, or None if not found.
         """
-        for sibling in self.left_siblings[::-1]:
+        for sibling in reversed(self.previous_nodes):
             if isinstance(sibling, DesignatorNode) and isinstance(
                 sibling.designator, type_
             ):

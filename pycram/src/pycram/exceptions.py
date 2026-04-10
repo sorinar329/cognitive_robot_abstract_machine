@@ -30,6 +30,7 @@ class ContextIsUnavailable(DataclassException):
             f"{self.instance} has no plan node. Did you forget to call `add_subplan` when creating"
             f"plans inside actions?"
         )
+        super().__post_init__()
 
 
 @dataclass
@@ -41,10 +42,11 @@ class ConditionNotSatisfied(DataclassException):
 
     def __post_init__(self):
         if isinstance(self.condition, bool):
-            self.message = f"{"Pre" if self.pre_condition else "Post"}-Condition for Action is not satisfied"
+            self.message = f"{"Pre" if self.pre_condition else "Post"}-Condition for Action '{self.action.__name__}' is not satisfied"
         else:
             false_statements = get_false_statements(self.condition)
             self.message = f"{"Pre" if self.pre_condition else "Post"}-Condition for Action '{self.action.__name__}' is not satisfied, following statements are false: {[s._name_ for s in false_statements]}"
+        super().__post_init__()
 
 
 @dataclass
