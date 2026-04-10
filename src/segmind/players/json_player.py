@@ -102,17 +102,12 @@ class JSONPlayer(FilePlayer):
         return objects_poses
 
 
-
-    def get_name_from_id(self, obj_id: int) -> str:
-        if self.obj_id_to_name and obj_id in self.obj_id_to_name:
-            return self.obj_id_to_name[obj_id]
-        return str(obj_id)
-
-    def get_body_from_name(self, obj_name):
-        return self.world.get_body_by_name(obj_name)
-
-
     def transform_to_stl(self, path: str):
+        """
+        Transform ply files to stl files
+
+        :param path: Path to ply files
+        """
         for filename in os.listdir(path):
             if filename.lower().endswith(".ply"):
                 ply_path = os.path.join(path, filename)
@@ -120,10 +115,8 @@ class JSONPlayer(FilePlayer):
                     path,
                     os.path.splitext(filename)[0] + ".stl"
                 )
-
                 try:
                     mesh = trimesh.load(ply_path)
                     mesh.export(stl_path)
-                    print(f"Converted: {filename} → {os.path.basename(stl_path)}")
                 except Exception as e:
-                    print(f"Failed: {filename} ({e})")
+                    logger.debug(f"Failed: {filename} ({e})")

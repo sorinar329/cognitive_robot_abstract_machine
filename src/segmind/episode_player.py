@@ -32,16 +32,17 @@ class EpisodePlayer(PropagatingThread, ABC):
     A class that represents the thread that steps the world.
     """
 
-    _instance: Optional[EpisodePlayer] = None
+    _instances: dict[type, 'EpisodePlayer'] = {}
     pause_resume_lock: RLock = RLock()
 
     def __new__(cls, *args, **kwargs):
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-            EpisodePlayer._instance = cls._instance
-            # Initialize only once when instance is first created
-            cls._instance._initialized = False
-        return cls._instance
+        if cls not in cls._instances:
+            # Create the instance and store it under its specific class key
+            instance = super().__new__(cls)
+            cls._instances[cls] = instance
+            instance._initialized = False
+
+        return cls._instances[cls]
 
     def __init__(
         self,
