@@ -13,7 +13,7 @@ from typing_extensions import get_args, get_origin, Any
 
 import rustworkx as rx
 
-from krrood.utils import module_and_class_name
+from krrood.utils import module_and_class_name, memoize
 
 try:
     from krrood.rustworkx_utils import RWXNode
@@ -270,7 +270,7 @@ class ClassDiagram:
         wrapped_cls = self.get_wrapped_class(clazz)
         yield from self.get_out_edges(wrapped_cls)
 
-    @lru_cache(maxsize=None)
+    @memoize
     def get_common_role_taker_associations(
         self, cls1: Union[Type, WrappedClass], cls2: Union[Type, WrappedClass]
     ) -> Tuple[Optional[HasRoleTaker], Optional[HasRoleTaker]]:
@@ -294,7 +294,7 @@ class ClassDiagram:
                 return assoc1, assoc2
         return None, None
 
-    @lru_cache(maxsize=None)
+    @memoize
     def get_role_taker_associations_of_cls(
         self, cls: Union[Type, WrappedClass]
     ) -> Optional[HasRoleTaker]:
@@ -308,7 +308,7 @@ class ClassDiagram:
                 return assoc
         return None
 
-    @lru_cache(maxsize=None)
+    @memoize
     def get_neighbors_with_relation_type(
         self,
         cls: Union[Type, WrappedClass],
@@ -329,7 +329,7 @@ class ClassDiagram:
         ]
         return tuple(filtered_neighbors)
 
-    @lru_cache(maxsize=None)
+    @memoize
     def get_outgoing_neighbors_with_relation_type(
         self,
         cls: Union[Type, WrappedClass],
@@ -349,7 +349,7 @@ class ClassDiagram:
         find_successors_by_edge = self._dependency_graph.find_successors_by_edge
         return tuple(find_successors_by_edge(wrapped_cls.index, edge_filter_func))
 
-    @lru_cache(maxsize=None)
+    @memoize
     def get_incoming_neighbors_with_relation_type(
         self,
         cls: Union[Type, WrappedClass],
@@ -360,7 +360,7 @@ class ClassDiagram:
         find_predecessors_by_edge = self._dependency_graph.find_predecessors_by_edge
         return tuple(find_predecessors_by_edge(wrapped_cls.index, edge_filter_func))
 
-    @lru_cache(maxsize=None)
+    @memoize
     def get_out_edges(
         self, cls: Union[Type, WrappedClass]
     ) -> Tuple[ClassRelation, ...]:
@@ -802,7 +802,7 @@ class ClassDiagram:
                         to_process.add(wrapped_field.type_endpoint)
 
 
-@lru_cache
+@memoize
 def make_specialized_dataclass(alias: _GenericAlias) -> Type:
     """
     Build a concrete dataclass for a fully specialized generic alias, e.g., GenericClass[float].

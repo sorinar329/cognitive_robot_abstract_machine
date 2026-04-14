@@ -9,8 +9,10 @@ import subprocess
 import sys
 import types
 from collections import defaultdict
-from dataclasses import dataclass, field, fields, Field, MISSING
-from functools import lru_cache
+from copy import deepcopy
+from dataclasses import Field
+from dataclasses import dataclass, field, fields, MISSING
+from functools import lru_cache, wraps
 from importlib.util import resolve_name
 from inspect import isclass
 from os import PathLike
@@ -18,11 +20,8 @@ from os.path import dirname
 from pathlib import Path
 from typing import Union, Callable, Tuple, Any
 
+from typing_extensions import TypeVar, Type, List, Optional, Callable
 from typing_extensions import (
-    TypeVar,
-    Type,
-    List,
-    Optional,
     _SpecialForm,
     Iterable,
     Dict,
@@ -887,3 +886,58 @@ def _handle_import_from_node(
             )
 
     return package_name
+
+
+T = TypeVar("T", bound=Callable[..., Any])
+
+
+def memoize(function: T) -> T:
+    """
+    Caches the return value of a function call at the instance level.
+    """
+
+    @wraps(function)
+    def wrapper(self, *args: Any, **kwargs: Any) -> T:
+        if not hasattr(self, "__memo__"):
+            self.__memo__ = {}
+        memo = self.__memo__
+
+        key = (function, self, args, frozenset(kwargs.items()))
+        try:
+            return memo[key]
+        except KeyError:
+            rv = function(self, *args, **kwargs)
+            memo[key] = rv
+            return rv
+
+    return wrapper  # type: ignore
+
+
+def copy_memoize(function: T) -> T:
+    """
+    Caches the return value of a function call at the instance level but returns a deepcopy of the value.
+    """
+
+    @wraps(function)
+    def wrapper(self, *args, **kwargs):
+        if not hasattr(self, "__memo__"):
+            self.__memo__ = {}
+        memo = self.__memo__
+
+        key = (function, self, args, frozenset(kwargs.items()))
+        try:
+            return deepcopy(memo[key])
+        except KeyError:
+            rv = function(self, *args, **kwargs)
+            memo[key] = rv
+            return deepcopy(rv)
+
+    return wrapper
+
+
+def clear_memoization_cache(instance):
+    """
+    Clears the memoization cache of an instance.
+    """
+    if hasattr(instance, "__memo__"):
+        instance.__memo__.clear()
