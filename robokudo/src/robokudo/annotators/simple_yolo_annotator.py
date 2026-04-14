@@ -5,15 +5,14 @@ import copy
 import cv2
 import torch
 from py_trees.common import Status
-from typing_extensions import TYPE_CHECKING, List
-from ultralytics import YOLO
-
 from robokudo.annotators.core import BaseAnnotator
 from robokudo.cas import CASViews
 from robokudo.types.annotation import Classification
 from robokudo.types.cv import ImageROI
 from robokudo.types.scene import ObjectHypothesis
 from robokudo.utils.comparators import RoiComparator
+from typing_extensions import TYPE_CHECKING, List
+from ultralytics import YOLO
 
 if TYPE_CHECKING:
     import numpy as np
@@ -53,7 +52,7 @@ class SimpleYoloAnnotator(BaseAnnotator):
         result_np = result_tensor.boxes.cpu().numpy()
         object_hypotheses = []
         for obj_id, result in enumerate(result_np):
-            bbox = result.get_corner_points[0]
+            bbox = result.xyxy[0]
 
             cls = result.cls[0]
             name = self.id2name[cls]
