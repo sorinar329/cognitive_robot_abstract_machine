@@ -1,8 +1,25 @@
 import os
 
+import pytest
+
 from krrood.rustworkx_utils.rxnode import RWXNode
 from krrood.rustworkx_utils.utils import ColorLegend
 import rustworkx as rx
+
+
+
+def test_raising_module_not_found_error_on_missing_libraries():
+    # monkey patch matplotlib, and numpy to None for rustworkx_utils.graph_visualizer
+    import krrood.rustworkx_utils.graph_visualizer as gv
+    original_mpl = gv.mpl
+    original_np = gv.np
+    gv.mpl = None
+    gv.np = None
+    with pytest.raises(ModuleNotFoundError):
+        gv.GraphVisualizer(RWXNode("Root", rx.PyDAG())).render()
+    # restore original values
+    gv.mpl = original_mpl
+    gv.np = original_np
 
 
 def test_create_and_visualize_graph(tmp_path):
