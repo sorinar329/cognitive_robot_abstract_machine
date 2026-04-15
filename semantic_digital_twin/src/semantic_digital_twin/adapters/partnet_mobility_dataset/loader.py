@@ -3,6 +3,8 @@ from dataclasses import dataclass, field
 
 import logging
 from pathlib import Path
+import mujoco
+from xml.etree import ElementTree as ET
 
 from semantic_digital_twin.adapters.package_resolver import FileUriResolver
 from semantic_digital_twin.adapters.urdf import URDFParser
@@ -56,5 +58,15 @@ class PartnetMobilityDatasetLoader:
         urdf_file = sapien.asset.download_partnet_mobility(
             model_id=model_id, token=self.token, directory=self.directory
         )
+        mj_root = ET.parse(urdf_file).getroot()
+        # mujoco_element = ET.SubElement(mj_root, "mujoco")
+        # compiler_element = ET.SubElement(mujoco_element, "compiler")
+        # compiler_element.set("angle", "radian")
+        # compiler_element.set("meshdir", "textured_objs")
+        mj_string = ET.tostring(mj_root, encoding="unicode")
+        mj_spec = mujoco.MjSpec.from_string(mj_string)
+        print(mj_spec.to_xml())
         world = URDFParser.from_file(file_path=urdf_file).parse()
         return world
+
+    def _add_effort_to_limit_tags(self, file_path: str, effort: float = 100.0):
