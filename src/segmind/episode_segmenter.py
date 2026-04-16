@@ -160,7 +160,7 @@ class EpisodeSegmenterExecutor:
                     resolver_kwargs = {}
                     if file_resolver is not None:
                         resolver_kwargs["path_resolver"] = FileUriResolver(
-                            base_dir=os.path.dirname(file_path)
+                            base_directory=os.path.dirname(file_path)
                         )
 
                     obj_world = URDFParser.from_file(
