@@ -223,19 +223,17 @@ class TranslationDetector(MotionDetector):
         latest_poses = self.context.latest_poses[obj]
         is_moving = self.context.object_moving_status.get(obj)
 
-        if is_moving:
-            if latest_motion_event is None:
-                new_event = TranslationEvent(
-                    tracked_object=obj,
-                    start_pose=latest_poses[0],
-                    current_pose=latest_poses[-1],
-                )
-                self.context.latest_motion_events[obj] = new_event
-                return new_event
-            else:
-                return None
+        if not is_moving or latest_motion_event is not None:
+            return None
 
-        return None
+        new_event = TranslationEvent(
+            tracked_object=obj,
+            start_pose=latest_poses[0],
+            current_pose=latest_poses[-1],
+        )
+
+        self.context.latest_motion_events[obj] = new_event
+        return new_event
 
 
 @dataclass(eq=False, repr=False)
