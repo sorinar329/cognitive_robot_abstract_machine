@@ -430,7 +430,7 @@ class ObjectTracker:
                 events = [self._event_history[i] for i in indices]
                 return events
             except IndexError:
-                logger.error(f"No events between timestamps {timestamp1}, {timestamp2}")
+                logger.debug(f"No events between timestamps {timestamp1}, {timestamp2}")
                 return []
 
     def get_event_where(self, conditions: Callable[[Event], bool], events: Optional[List[Event]] = None) -> List[Event]:

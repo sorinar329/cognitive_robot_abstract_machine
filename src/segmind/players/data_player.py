@@ -155,7 +155,6 @@ class DataPlayer(EpisodePlayer, ABC):
         :param frame_data: The frame data.
         """
         objects_poses = self.get_objects_poses(frame_data)
-        # Todo: discuss the rotation thing.
         if len(objects_poses):
             for obj in self.world.bodies_with_collision:
                 if obj in objects_poses:
