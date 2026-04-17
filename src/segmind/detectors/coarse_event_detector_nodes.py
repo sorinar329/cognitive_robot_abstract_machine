@@ -1,3 +1,4 @@
+from collections import defaultdict
 from dataclasses import dataclass
 from typing import List
 
@@ -63,27 +64,30 @@ class PlacingDetector(AbstractInteractionDetector):
 
         events = []
 
+        by_object = defaultdict(list)
+        for j in stop_translation_event:
+            by_object[j.tracked_object].append(j)
+
         for i in support_event:
-            for j in stop_translation_event:
+            for j in by_object.get(i.tracked_object, []):
+                if abs(i.timestamp - j.timestamp) >= self.shift_threshold:
+                    continue
 
-                if i.tracked_object == j.tracked_object:
-                    if abs(i.timestamp - j.timestamp) < self.shift_threshold:
+                key = (i.tracked_object.id, i.with_object.id)
+                if key in self.context.placing_pairs:
+                    continue
 
-                        key = (
-                            i.tracked_object.id,
-                            i.with_object.id,
-                        )
+                self.context.placing_pairs.add(key)
 
-                        if key in self.context.placing_pairs:
-                            continue
-                        self.context.placing_pairs.add(key)
-                        e = PlacingEvent(
-                            tracked_object=j.tracked_object,
-                            with_object=i.with_object,
-                            timestamp=i.timestamp,
-                        )
-                        events.append(e)
-                        break
+                events.append(
+                    PlacingEvent(
+                        tracked_object=j.tracked_object,
+                        with_object=i.with_object,
+                        timestamp=i.timestamp,
+                    )
+                )
+                break
+
         return events
 
 
@@ -119,21 +123,27 @@ class PickUpDetector(AbstractInteractionDetector):
             i for i in self.context.logger.get_events() if isinstance(i, LossOfSupportEvent)
         ]
         events = []
+        by_object = defaultdict(list)
+        for j in translation_event:
+            by_object[j.tracked_object].append(j)
+
         for i in loss_of_support_event:
-            for j in translation_event:
-                if i.tracked_object == j.tracked_object:
-                    if abs(i.timestamp - j.timestamp) < self.shift_threshold:
-                        key = (
-                            i.tracked_object.id,
-                            i.with_object.id,
-                        )
-                        if key in self.context.placing_pairs:
-                            continue
-                        self.context.placing_pairs.add(key)
-                        e = PickUpEvent(
-                            tracked_object=j.tracked_object,
-                            timestamp=i.timestamp,
-                        )
-                        events.append(e)
-                        break
+            for j in by_object.get(i.tracked_object, []):
+                if abs(i.timestamp - j.timestamp) >= self.shift_threshold:
+                    continue
+
+                key = (i.tracked_object.id, i.with_object.id)
+                if key in self.context.placing_pairs:
+                    continue
+
+                self.context.placing_pairs.add(key)
+
+                events.append(
+                    PickUpEvent(
+                        tracked_object=j.tracked_object,
+                        timestamp=i.timestamp,
+                    )
+                )
+                break
+
         return events

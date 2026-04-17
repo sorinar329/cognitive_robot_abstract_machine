@@ -1,3 +1,4 @@
+from collections import defaultdict
 from dataclasses import dataclass
 from typing import List, Dict, Set
 
@@ -275,18 +276,29 @@ class InsertionDetector(AbstractDetector):
         contact_events_with_holes = [i for i in contact_events if i.with_object in self.context.holes]
         containment_event = [i for i in self.context.logger.get_events() if isinstance(i, ContainmentEvent)]
 
+        by_object = defaultdict(list)
+        for i in contact_events_with_holes:
+            by_object[i.tracked_object].append(i)
+
         for j in containment_event:
-            for i in contact_events_with_holes:
-                if i.tracked_object == j.tracked_object:
-                    if abs(i.timestamp - j.timestamp) < self.shift_threshold:
-                        key = (
-                            i.tracked_object.id,
-                            i.with_object.id,
-                        )
-                        if key in self.context.insertion_pairs:
-                            continue
-                        self.context.insertion_pairs.add(key)
-                        e = InsertionEvent(i.tracked_object, [j.with_object], i.with_object, timestamp=i.timestamp)
-                        events.append(e)
-                        break
+            for i in by_object.get(j.tracked_object, []):
+                if abs(i.timestamp - j.timestamp) >= self.shift_threshold:
+                    continue
+
+                key = (i.tracked_object.id, i.with_object.id)
+                if key in self.context.insertion_pairs:
+                    continue
+
+                self.context.insertion_pairs.add(key)
+
+                events.append(
+                    InsertionEvent(
+                        i.tracked_object,
+                        [j.with_object],
+                        i.with_object,
+                        timestamp=i.timestamp,
+                    )
+                )
+                break
+
         return events
