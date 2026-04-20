@@ -1,40 +1,73 @@
 # Segmind
 
-A python library for segmenting simulation episodes of activities. This is done by detecting physical interactions,
-and events in the simulation.
-This library also integrates with [NEEMPycramInterface](https://github.com/AbdelrhmanBassiouny/NEEMPyCRAMInterface) to segment NEEM episodes as a use case.
-## Installation
+Segmind is a Python library for segmenting simulation episodes of robotic activities by detecting physical interactions and spatial events. It uses a statechart-based approach to monitor simulation data and trigger events like pick-ups, placings, and containment.
 
-```bash
-pip install segmind
-```
+## Core Concepts
+
+Segmind revolves around three main components: **Events**, **Detectors**, and **StateCharts**.
+
+### Events
+
+Events represent significant occurrences in the simulation. They are categorized into several types:
+
+- **Atomic Events**: Basic physical changes.
+    - `ContactEvent` / `LossOfContactEvent`: Changes in physical contact between bodies.
+    - `TranslationEvent` / `StopTranslationEvent`: Start and end of linear motion.
+    - `RotationEvent` / `StopRotationEvent`: Start and end of rotational motion.
+- **Spatial Relation Events**: Changes in semantic spatial relations.
+    - `SupportEvent` / `LossOfSupportEvent`: When an object starts/stops being supported by another.
+    - `ContainmentEvent` / `LossOfContainmentEvent`: When an object enters/leaves a container.
+- **Coarse (Interaction) Events**: Higher-level activities composed of atomic events.
+    - `PickUpEvent`: Combination of a `TranslationEvent` and a `LossOfSupportEvent`.
+    - `PlacingEvent`: Combination of a `StopMotionEvent` and a `SupportEvent`.
+    - `InsertionEvent`: Detected when an object passes through a "hole" and becomes contained.
+
+### Detectors
+
+Detectors are the logic units responsible for identifying events. They process the simulation state (poses, contacts) at each tick.
+
+- **Atomic Detectors**: `ContactDetector`, `MotionDetector` (Translation/Rotation).
+- **Spatial Detectors**: `SupportDetector`, `ContainmentDetector`, `InsertionDetector`.
+- **Coarse Detectors**: `PickUpDetector`, `PlacingDetector`.
+
+### StateCharts
+
+The `SegmindStatechart` orchestrates multiple detectors. It acts as a container that ticks all registered detectors against a shared `SegmindContext`.
+
+
 
 ## Example Usage
 
-All below examples assume the neems are located in a 'test' database at 'localhost' which can be accessed by 'newuser'
-using password 'password'.
+The following example demonstrates how to set up a `SegmindStatechart` to detect events in a simulation world.
 
-### Replaying the motions of a NEEM and segmenting it:
+```python
+from segmind.detectors.base import SegmindContext
+from segmind.event_logger import EventLogger
+from segmind.statecharts.segmind_statechart import SegmindStatechart
+from segmind.episode_segmenter import EpisodeSegmenterExecutor
 
-This is done by using the PyCRAMNEEMInterface class which provides an easy way to replay the motions of a NEEM,
-then using the NEEMSegmenter class which implements EpisodeSegmenter to segment the motions into activities, actions,
-and events.
+# 1. Setup Context and Logger
+logger = EventLogger()
+context = SegmindContext(world=your_simulation_world, logger=logger)
 
-```Python
-from neem_pycram_interface import PyCRAMNEEMInterface
-from segmind.neem_segmenter import NEEMSegmenter
+# 2. Build Statechart
+statechart_factory = SegmindStatechart()
+statechart = statechart_factory.build_statechart(context)
 
-from pycram.datastructures.enums import WorldMode
-from pycram.worlds.bullet_world import BulletWorld
+# 3. Initialize Executor
+executor = EpisodeSegmenterExecutor(context=context)
+executor.compile(statechart)
 
-BulletWorld(WorldMode.GUI)
-pni = PyCRAMNEEMInterface('mysql+pymysql://newuser:password@localhost/test')
-ns = NEEMSegmenter(pni, annotate_events=True)
-ns.start([15])
+# 4. Simulation Loop
+while simulation_running:
+    # Update your world state here
+    # ...
+    executor.tick()
+
+# 5. Retrieve detected events
+for event in logger.get_events():
+    print(f"Detected {type(event).__name__} at {event.timestamp}")
 ```
 
-https://github.com/AbdelrhmanBassiouny/EpisodeSegmenter/assets/36744004/186bfd79-f30b-4b4f-ae84-03d2bcce821a
-
-
-https://github.com/AbdelrhmanBassiouny/EpisodeSegmenter/assets/36744004/bb2e7c65-93cc-4f83-becb-1cb06fcf73ad
+Enjoy segmenting!
 

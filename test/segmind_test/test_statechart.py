@@ -10,9 +10,7 @@ from segmind.episode_segmenter import EpisodeSegmenterExecutor
 from segmind.event_logger import EventLogger
 from segmind.statecharts.segmind_statechart import SegmindStatechart
 from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
-from test import setup_contact_world, setup_support_world
-
-
+from test.segmind_test import setup_contact_world, setup_support_world
 
 
 def test_contact_detector():
