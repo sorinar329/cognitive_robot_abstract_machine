@@ -1,6 +1,7 @@
 import time
 from abc import abstractmethod, ABC
 from dataclasses import dataclass, field
+from datetime import datetime
 
 from geometry_msgs.msg import PoseStamped
 
@@ -16,11 +17,11 @@ from semantic_digital_twin.world_description.world_entity import Body, Agent
 
 @dataclass
 class DetectionEvent(ABC):
-    timestamp: float = field(default_factory=time.time)
+    timestamp: datetime = field(default_factory=datetime.now)
     """
     The time at which the event occurred, defaults to current time.
     """
-    detector_thread_id: Optional[str] = None
+    detector_thread_id: Optional[int] = field(default=None)
     """
     The id of the detector that detected the event.
     """
@@ -150,11 +151,11 @@ class LossOfSupportEvent(DefaultEventWithTwoTrackedObjects):
 @dataclass(init=False, unsafe_hash=True)
 class MotionEvent(EventWithOneTrackedObject, ABC):
     """
-    The MotionEvent class is used to represent an event that involves an object that was stationary and then moved or
+    Used to represent an event that involves an object that was stationary and then moved or
     vice versa.
     """
-    start_pose: Pose = field(init=False)
-    current_pose: Pose = field(init=False)
+    start_pose: Pose = field(default_factory=Pose)
+    current_pose: Pose = field(default_factory=Pose)
 
     def __init__(self, tracked_object: Body, start_pose: Pose, current_pose: Pose,
                  timestamp: Optional[float] = None):
@@ -166,43 +167,71 @@ class MotionEvent(EventWithOneTrackedObject, ABC):
 
 @dataclass(init=False, unsafe_hash=True)
 class TranslationEvent(MotionEvent):
-    @property
-    def color(self) -> Color:
-        return Color(0, 1, 1, 1)
+    """
+    Represents an event where an object moves from one location to another.
+    """
+    ...
 
 
 @dataclass(init=False, unsafe_hash=True)
 class RotationEvent(MotionEvent):
-    @property
-    def color(self) -> Color:
-        return Color(0, 1, 1, 1)
+    """
+    Represents an event where an object rotates around a center point.
+    """
+    ...
 
 
 @dataclass(init=False, unsafe_hash=True)
 class StopMotionEvent(MotionEvent):
-    @property
-    def color(self) -> Color:
-        return Color(1, 0, 0, 1)
-
-
-@dataclass(init=False, unsafe_hash=True)
-class StopTranslationEvent(StopMotionEvent):
+    """
+    Represents an event where an object stops moving.
+    """
     ...
 
 
 @dataclass(init=False, unsafe_hash=True)
 class StopRotationEvent(StopMotionEvent):
+    """
+    Represents an event where an object stops rotating.
+    """
     ...
 
 
 @dataclass(init=False, unsafe_hash=True)
 class AbstractContactEvent(EventWithTwoTrackedObjects, ABC):
+    """
+    Represents an event where two objects are in contact with each other.
+    """
+
     contact_bodies: list[Body] = field(init=False, default_factory=list)
+    """
+    The bodies that are in contact with each other.
+    """
+
     latest_contact_bodies: list[Body] = field(init=False, default_factory=list)
+    """
+    The bodies that were in contact with each other in the previous time step.
+    """
+
     bounding_box: BoundingBox = field(init=False)
+    """
+    Bounding box of the object.
+    """
+
     pose: Pose = field(init=False)
+    """
+    Pose of the object.
+    """
+
     with_object_bounding_box: Optional[BoundingBox] = field(init=False, default=None)
+    """
+    Bounding box of the second object in contact.
+    """
+
     with_object_pose: Optional[PoseStamped] = field(init=False, default=None)
+    """
+    Pose of the second object in contact.
+    """
 
     def __init__(self,
                  of_object: Body,
