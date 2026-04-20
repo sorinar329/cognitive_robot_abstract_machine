@@ -109,7 +109,7 @@ class AbstractDetector(MotionStatechartNode, ABC):
         Executes one update cycle of the detector.
 
         Determines the objects that should be checked for contacts,
-        computes new contact relationships and triggers events if
+        computes new contact relationships, and triggers events if
         contact changes are detected.
 
         :return: ObservationStateValues.TRUE if events were triggered,
@@ -156,14 +156,24 @@ class AbstractDetector(MotionStatechartNode, ABC):
     @abstractmethod
     def update_context_and_events(self, context:SegmindContext, tracked_objects: List[Body]) -> List[DetectionEvent]:
         """
-        Updates the stored contact relationships and generates events
-        when changes are detected.
+        Core detection logic that updates the internal state and identifies new events.
 
-        Implementations define how contact changes are interpreted
-        (e.g. new contact or loss of contact).
+        This method is called during every tick of the detector. Implementations should
+        examine the current state of the world (via the context) for the given
+        `tracked_objects`, update the relevant fields in `context` (e.g.,
+        `latest_contact_bodies`, `latest_support`), and return a list of any
+        `DetectionEvent`s that occurred since the last update.
 
-        :param context: The context containing world information.
-        :param tracked_objects: List of bodies to check for contact changes.
-        :return: List of events generated during the update.
+        Specific implementations may detect:
+        * State changes: e.g., a new contact (ContactEvent) or loss of contact.
+        * Continuous processes: e.g., ongoing motion or containment.
+        * Complex interactions: e.g., insertion or picking up objects.
+
+        :param context: The shared SegmindContext containing the world state,
+                        history of relationships, and the event logger.
+        :param tracked_objects: A list of bodies that this detector should focus on
+                                during this update cycle.
+        :return: A list of DetectionEvent objects representing the events detected
+                 in this cycle. Returns an empty list if no events were found.
         """
         pass
