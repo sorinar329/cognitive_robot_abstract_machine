@@ -12,7 +12,7 @@ import re
 
 from semantic_digital_twin.world_description.world_entity import Body
 from typing_extensions import List, Optional, Dict, Type, TYPE_CHECKING, Callable, Tuple
-from .datastructures.events import Event, EventUnion, EventWithTrackedObjects, EventWithTwoTrackedObjects, PickUpEvent, \
+from .datastructures.events import DetectionEvent, EventUnion, EventWithTrackedObjects, EventWithTwoTrackedObjects, PickUpEvent, \
     InsertionEvent
 from .datastructures.mixins import HasPrimaryTrackedObject
 from .datastructures.object_tracker import ObjectTrackerFactory
@@ -33,7 +33,7 @@ class EventCallbacks(UserDict):
     This modifies the setitem such that if a class or its subclass is added, the callback is also added to the subclass.
     """
 
-    def __setitem__(self, key: Type[Event], value: List[Tuple[ConditionFunction, CallbackFunction]]):
+    def __setitem__(self, key: Type[DetectionEvent], value: List[Tuple[ConditionFunction, CallbackFunction]]):
         if key not in self:
             super().__setitem__(key, value)
         else:
@@ -56,7 +56,7 @@ class EventLogger:
     A dictionary that maps event types to a list of callbacks that should be called when the event occurs.
     """
 
-    def __init__(self, annotate_events: bool = False, events_to_annotate: List[Type[Event]] = None):
+    def __init__(self, annotate_events: bool = False, events_to_annotate: List[Type[DetectionEvent]] = None):
         """
         Initialize the EventLogger.
 
@@ -84,7 +84,7 @@ class EventLogger:
         for obj_tracker in ObjectTrackerFactory.get_all_trackers():
             obj_tracker.reset()
 
-    def add_callback(self, event_type: Type[Event], callback: CallbackFunction, condition: Optional[ConditionFunction] = None) -> None:
+    def add_callback(self, event_type: Type[DetectionEvent], callback: CallbackFunction, condition: Optional[ConditionFunction] = None) -> None:
         """
         Add a callback for an event type.
 
@@ -95,7 +95,7 @@ class EventLogger:
         with self.event_callbacks_lock:
             self.event_callbacks[event_type] = [(condition, callback)]
 
-    def log_event(self, event: Event):
+    def log_event(self, event: DetectionEvent):
         if self.is_event_in_timeline(event):
             return
         self.update_object_trackers_with_event(event)
@@ -103,7 +103,7 @@ class EventLogger:
         self.annotate_scene_with_event(event)
         self.call_event_callbacks(event)
 
-    def call_event_callbacks(self, event: Event) -> None:
+    def call_event_callbacks(self, event: DetectionEvent) -> None:
         """
         Call the callbacks that are registered for the event type.
 
@@ -115,7 +115,7 @@ class EventLogger:
                     if condition(event):
                         callback(event)
 
-    def annotate_scene_with_event(self, event: Event) -> None:
+    def annotate_scene_with_event(self, event: DetectionEvent) -> None:
         """
         Annotate the scene with the event.
 
@@ -129,7 +129,7 @@ class EventLogger:
                 
 
     @staticmethod
-    def update_object_trackers_with_event(event: Event) -> None:
+    def update_object_trackers_with_event(event: DetectionEvent) -> None:
         """
         Update the event object trackers with the event.
 
@@ -138,7 +138,7 @@ class EventLogger:
         if isinstance(event, EventWithTrackedObjects):
             event.update_object_trackers_with_event()
 
-    def add_event_to_timeline_of_thread(self, event: Event) -> None:
+    def add_event_to_timeline_of_thread(self, event: DetectionEvent) -> None:
         """
         Add an event to the timeline of the detector thread.
         :param event: The event to add.
@@ -150,7 +150,7 @@ class EventLogger:
             self.timeline_per_thread[thread_id].append(event)
             self.timeline.append(event)
 
-    def is_event_in_timeline(self, event: Event) -> bool:
+    def is_event_in_timeline(self, event: DetectionEvent) -> bool:
         """
         Check if an event is already in the timeline.
 
@@ -266,7 +266,7 @@ class EventLogger:
         logger.debug("Events:")
         logger.debug(self.__str__())
 
-    def get_events_per_thread(self) -> Dict[str, List[Event]]:
+    def get_events_per_thread(self) -> Dict[str, List[DetectionEvent]]:
         """
         Get all events that have been logged.
         """
@@ -274,7 +274,7 @@ class EventLogger:
             events = self.timeline_per_thread.copy()
         return events
 
-    def get_events(self) -> List[Event]:
+    def get_events(self) -> List[DetectionEvent]:
         """
         Get all events that have been logged.
         """
@@ -282,7 +282,7 @@ class EventLogger:
             events = self.timeline.copy()
         return events
 
-    def get_latest_event_of_detector_for_object(self, detector_prefix: str, obj: Body) -> Optional[Event]:
+    def get_latest_event_of_detector_for_object(self, detector_prefix: str, obj: Body) -> Optional[DetectionEvent]:
         """
         Get the latest of event of the thread that has the given prefix and object name in its id.
 
@@ -331,7 +331,7 @@ class EventLogger:
             all_event_timestamps = [(event, event.timestamp) for event in self.timeline_per_thread[thread_id]]
             return min(all_event_timestamps, key=lambda x: abs(x[1] - timestamp))[0]
 
-    def get_latest_event_of_thread(self, thread_id: str) -> Optional[Event]:
+    def get_latest_event_of_thread(self, thread_id: str) -> Optional[DetectionEvent]:
         """
         Get the latest event of the thread with the given id.
 

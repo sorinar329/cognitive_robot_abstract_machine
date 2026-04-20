@@ -15,7 +15,7 @@ from semantic_digital_twin.world_description.world_entity import Body, Agent
 
 
 @dataclass
-class Event(ABC):
+class DetectionEvent(ABC):
     timestamp: float = field(default_factory=time.time)
     """
     The time at which the event occurred, defaults to current time.
@@ -42,7 +42,7 @@ class Event(ABC):
 
 
 @dataclass
-class EventWithTrackedObjects(Event, ABC):
+class EventWithTrackedObjects(DetectionEvent, ABC):
     """
     An abstract class that represents an event that involves one or more tracked objects.
     """
