@@ -11,8 +11,8 @@ from os.path import dirname, abspath
 import re
 
 from semantic_digital_twin.world_description.world_entity import Body
-from typing_extensions import List, Optional, Dict, Type, TYPE_CHECKING, Callable, Tuple
-from .datastructures.events import DetectionEvent, EventUnion, EventWithTrackedObjects, EventWithTwoTrackedObjects, PickUpEvent, \
+from typing_extensions import List, Optional, Dict, Type, Callable, Tuple
+from .datastructures.events import DetectionEvent, EventWithTrackedObjects, EventWithTwoTrackedObjects, PickUpEvent, \
     InsertionEvent
 from .datastructures.mixins import HasPrimaryTrackedObject
 from .datastructures.object_tracker import ObjectTrackerFactory
@@ -23,8 +23,8 @@ from segmind import set_logger_level, LogLevel, logger
 
 set_logger_level(LogLevel.DEBUG)
 
-ConditionFunction = Callable[[EventUnion], bool]
-CallbackFunction = Callable[[EventUnion], None]
+ConditionFunction = Callable[[DetectionEvent], bool]
+CallbackFunction = Callable[[DetectionEvent], None]
 
 
 class EventCallbacks(UserDict):
@@ -293,7 +293,7 @@ class EventLogger:
         return self.get_latest_event_of_thread(thread_id)
 
     def get_nearest_event_of_detector_for_object(self, detector_prefix: str, obj: Body,
-                                                 timestamp: float) -> Optional[EventUnion]:
+                                                 timestamp: float) -> Optional[DetectionEvent]:
         """
         Get the nearest event of the thread that has the given prefix and object name in its id.
 
@@ -317,7 +317,7 @@ class EventLogger:
                          object_name in thread_id]
         return None if len(thread_id) == 0 else thread_id[0]
 
-    def get_nearest_event_of_thread(self, thread_id: str, timestamp: float) -> Optional[EventUnion]:
+    def get_nearest_event_of_thread(self, thread_id: str, timestamp: float) -> Optional[DetectionEvent]:
         """
         Get the nearest event of the thread with the given id.
 

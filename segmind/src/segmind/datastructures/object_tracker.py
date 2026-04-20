@@ -14,7 +14,7 @@ import numpy as np
 
 
 if TYPE_CHECKING:
-    from .events import DetectionEvent, EventUnion
+    from .events import DetectionEvent
     from ..detectors.base import SegmindContext
 
 set_logger_level(LogLevel.DEBUG)
@@ -167,7 +167,7 @@ class ObjectTracker:
             return self._event_history[first_event_index] if first_event_index is not None else None
 
     def get_nearest_event_of_type_to_event(self, event: DetectionEvent, event_type: Type[DetectionEvent],
-                                           tolerance: Optional[timedelta] = None) -> Optional[EventUnion]:
+                                           tolerance: Optional[timedelta] = None) -> Optional[DetectionEvent]:
         """
         Returns the nearest event of a specified type to a given event.
 
@@ -294,7 +294,7 @@ class ObjectTracker:
             events_with_time_diff.sort(key=lambda e: e[1])
         return events_with_time_diff
 
-    def get_first_event_of_type_after_event(self, event_type: Type[DetectionEvent], event: DetectionEvent) -> Optional[EventUnion]:
+    def get_first_event_of_type_after_event(self, event_type: Type[DetectionEvent], event: DetectionEvent) -> Optional[DetectionEvent]:
         """
         Gets the first event of a type after an event.
 
@@ -327,7 +327,7 @@ class ObjectTracker:
                     if isinstance(event, event_type):
                         return event
 
-    def get_first_event_of_type_before_event(self, event_type: Type[DetectionEvent], event: DetectionEvent) -> Optional[EventUnion]:
+    def get_first_event_of_type_before_event(self, event_type: Type[DetectionEvent], event: DetectionEvent) -> Optional[DetectionEvent]:
         """
         Gets first event of a type before an event.
 

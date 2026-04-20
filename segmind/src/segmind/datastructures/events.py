@@ -264,6 +264,9 @@ class AbstractContactEvent(EventWithTwoTrackedObjects, ABC):
 
 @dataclass(init=False, unsafe_hash=True)
 class ContactEvent(AbstractContactEvent):
+    """
+    Represents an event where two objects are in contact with each other.
+    """
     ...
 
 
@@ -271,23 +274,40 @@ class ContactEvent(AbstractContactEvent):
 
 @dataclass(init=False, unsafe_hash=True)
 class LossOfContactEvent(AbstractContactEvent):
+    """
+    Represents an event where two objects are no longer in contact with each other.
+    """
     ...
 
 
 @dataclass(unsafe_hash=True)
 class PickUpEvent(EventWithOneTrackedObject):
+    """
+    Represents an event where an object is picked up by another object.
+    """
     ...
 
 
 @dataclass(unsafe_hash=True)
 class PlacingEvent(EventWithTwoTrackedObjects):
+    """
+    Represents an event where an object is placed on another object.
+    """
     ...
 
 
 
 @dataclass(init=False, unsafe_hash=True)
 class InsertionEvent(EventWithTwoTrackedObjects):
+    """
+    Represents an event where an object is inserted into another object.
+    """
+
     inserted_into_objects: List[Body] = field(init=False, default_factory=list, repr=False, hash=False)
+    """
+    List of objects into which the object was inserted.
+    """
+
     inserted_into_objects_frozen_cp: List[BodyDAO] = field(init=False, default_factory=list, repr=False, hash=False)
 
     def __init__(self, inserted_object: Body,
@@ -310,17 +330,15 @@ class InsertionEvent(EventWithTwoTrackedObjects):
 
 @dataclass(unsafe_hash=True)
 class ContainmentEvent(DefaultEventWithTwoTrackedObjects):
+    """
+    Represents an event where an object is contained in another object.
+    """
     ...
 
 @dataclass(unsafe_hash=True)
 class LossOfContainmentEvent(DefaultEventWithTwoTrackedObjects):
+    """
+    Represents an event where an object is no longer contained in another object.
+    """
     ...
 
-# Create a type that is the union of all event types
-EventUnion = Union[
-MotionEvent,
-StopTranslationEvent,
-PickUpEvent,
-PlacingEvent,
-ContainmentEvent,
-InsertionEvent]
