@@ -1,14 +1,13 @@
 from collections import defaultdict
 from dataclasses import dataclass
 from typing import List
-
+from giskardpy.motion_statechart.context import MotionStatechartContext
 from segmind.datastructures.events import (
     SupportEvent,
     DetectionEvent,
     PlacingEvent, TranslationEvent, LossOfSupportEvent, PickUpEvent, StopTranslationEvent,
 )
 from semantic_digital_twin.world_description.world_entity import Body
-
 from segmind.detectors.base import AbstractDetector, SegmindContext
 
 
@@ -26,8 +25,6 @@ class AbstractInteractionDetector(AbstractDetector):
     The threshold for the time difference between two events to be considered an interaction.
     """
 
-    def update_context_and_events(self, context:SegmindContext, tracked_objects: List[Body]) -> List[DetectionEvent]:
-        pass
 
 @dataclass
 class PlacingDetector(AbstractInteractionDetector):
@@ -41,24 +38,25 @@ class PlacingDetector(AbstractInteractionDetector):
     the class helps maintain consistency and prevent duplication of events.
     """
 
-    def update_context_and_events(self, context:SegmindContext, obj: List[Body]) -> List[DetectionEvent]:
+    def update_context_and_events(self, context:MotionStatechartContext, segmind_context:SegmindContext, obj: List[Body]) -> List[DetectionEvent]:
         """
         Updates the system context with new placing event instances based on past
         actions logged in the system. It analyzes and filters specific event types
         to detect new events that can be generated. This function ensures distinct
         events are created by maintaining exclusivity through a pairing mechanism.
 
-
+        :param context: The current motion statechart context.
+        :param segmind_context: The shared SegmindContext containing the information required to track events.
         :param obj: List of bodies to analyze for potential placing events.
         :return: List of generated placing events based on observed interactions.
         """
         stop_translation_event = [
             i
-            for i in context.logger.get_events()
+            for i in segmind_context.logger.get_events()
             if isinstance(i, StopTranslationEvent)
         ]
         support_event = [
-            i for i in context.logger.get_events() if isinstance(i, SupportEvent)
+            i for i in segmind_context.logger.get_events() if isinstance(i, SupportEvent)
         ]
 
         events = []
@@ -73,11 +71,10 @@ class PlacingDetector(AbstractInteractionDetector):
                     continue
 
                 key = (i.tracked_object.id, i.with_object.id)
-                if key in context.placing_pairs:
+                if key in segmind_context.placing_pairs:
                     continue
 
-                context.placing_pairs.add(key)
-
+                segmind_context.placing_pairs.add(key)
                 events.append(
                     PlacingEvent(
                         tracked_object=j.tracked_object,
@@ -103,23 +100,25 @@ class PickUpDetector(AbstractInteractionDetector):
     data and uses a context to manage event pairs and thresholds.
     """
 
-    def update_context_and_events(self, context:SegmindContext, obj: List[Body]) -> List[DetectionEvent]:
+    def update_context_and_events(self, context:MotionStatechartContext, segmind_context: SegmindContext,obj: List[Body]) -> List[DetectionEvent]:
         """
         Updates the context and generates a list of events based on translation events and loss
         of support events. The method identifies pairs of related events that are close in
         timestamp, determines if they are exclusive, and creates a new event when conditions
         are met.
 
+        :param context: The current motion statechart context.
+        :param segmind_context: The shared SegmindContext containing the information required to track events.
         :param obj: List of bodies to analyze for potential pickup events.
         :return: List of generated pickup events based on observed interactions.
         """
         translation_event = [
             i
-            for i in context.logger.get_events()
+            for i in segmind_context.logger.get_events()
             if isinstance(i, TranslationEvent)
         ]
         loss_of_support_event = [
-            i for i in context.logger.get_events() if isinstance(i, LossOfSupportEvent)
+            i for i in segmind_context.logger.get_events() if isinstance(i, LossOfSupportEvent)
         ]
         events = []
         by_object = defaultdict(list)
@@ -132,10 +131,10 @@ class PickUpDetector(AbstractInteractionDetector):
                     continue
 
                 key = (i.tracked_object.id, i.with_object.id)
-                if key in context.placing_pairs:
+                if key in segmind_context.placing_pairs:
                     continue
 
-                context.placing_pairs.add(key)
+                segmind_context.placing_pairs.add(key)
 
                 events.append(
                     PickUpEvent(

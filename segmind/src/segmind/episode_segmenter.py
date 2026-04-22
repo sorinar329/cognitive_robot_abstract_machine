@@ -1,4 +1,3 @@
-
 import os
 from dataclasses import field, dataclass
 from pathlib import Path
@@ -20,7 +19,6 @@ from .episode_player import EpisodePlayer
 
 set_logger_level(LogLevel.DEBUG)
 
-
 @dataclass
 class EpisodeSegmenterExecutor(Executor):
     """
@@ -31,12 +29,6 @@ class EpisodeSegmenterExecutor(Executor):
     the simulation player, and the context, enabling episode segmentation
     and tick-based interactions. It allows for spawning scenes, managing
     holes, and ensuring state model updates during execution.
-    """
-
-    context: SegmindContext
-    """
-    The shared context for the episode segmenter, providing access to world information and 
-    maintaining state across the execution of the detector statechart.
     """
 
     player: EpisodePlayer | None = None
@@ -58,6 +50,15 @@ class EpisodeSegmenterExecutor(Executor):
     """
     A list of objects that should be fixed during the episode.
     """
+
+
+    def __post_init__(self):
+        """
+        Adds the SegmindContext extension to the context.
+        """
+        super().__post_init__()
+        self.context.add_extension(SegmindContext())
+
 
     def start(self):
         """
@@ -82,9 +83,12 @@ class EpisodeSegmenterExecutor(Executor):
         Iterates through objects in the world's context and appends objects with
         "hole" in their name to the list of holes.
         """
+        segmind_context = self.context.require_extension(SegmindContext)
+        segmind_context.holes.clear()
         for o in self.context.world.bodies:
             if "hole" in o.name.name:
-                self.context.holes.append(o)
+                segmind_context.holes.append(o)
+
 
     def spawn_scene(self, models_dir, file_resolver: Optional[FileUriResolver] = None):
         """

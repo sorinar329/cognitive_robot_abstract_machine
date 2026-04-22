@@ -159,15 +159,7 @@ class DataPlayer(EpisodePlayer, ABC):
             for obj in self.world.bodies_with_collision:
                 if obj in objects_poses:
                     obj.parent_connection.origin = (
-                        HomogeneousTransformationMatrix.from_xyz_quaternion(
-                            pos_x=objects_poses[obj].x,
-                            pos_y=objects_poses[obj].y,
-                            pos_z=objects_poses[obj].z,
-                            quat_x=objects_poses[obj].to_quaternion()[0],
-                            quat_y=objects_poses[obj].to_quaternion()[1],
-                            quat_z=objects_poses[obj].to_quaternion()[2],
-                            quat_w=objects_poses[obj].to_quaternion()[3],
-                        )
+                        objects_poses[obj].to_homogeneous_matrix()
                     )
 
 
@@ -181,7 +173,9 @@ class DataPlayer(EpisodePlayer, ABC):
         """
         pass
 
+    @abstractmethod
     def get_joint_states(self, frame_data: FrameData) -> Dict[str, float]:
+        # Not implemented
         pass
 
 

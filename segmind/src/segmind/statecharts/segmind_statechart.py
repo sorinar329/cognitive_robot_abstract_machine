@@ -1,33 +1,24 @@
-from dataclasses import dataclass, field
-
-
+from dataclasses import dataclass
+from giskardpy.motion_statechart.motion_statechart import MotionStatechart
 from segmind.detectors.atomic_event_detectors_nodes import ContactDetector, LossOfContactDetector, TranslationDetector, \
-    StopTranslationDetector
-from segmind.detectors.base import SegmindContext, DetectorStateChart
+    StopTranslationDetector, RotationDetector, StopRotationDetector
+from segmind.detectors.base import DetectorStateChart
 from segmind.detectors.coarse_event_detector_nodes import PlacingDetector, PickUpDetector
 from segmind.detectors.spatial_relation_detector_nodes import SupportDetector, LossOfSupportDetector, \
     ContainmentDetector, InsertionDetector, LossOfContainmentDetector
 
 
 @dataclass
-class SegmindStatechart:
+class SegmindStatechart(MotionStatechart):
     """
     Represents the statechart for Segmind, encapsulating its construction and management.
 
     This class is used to build a statechart for Segmind by establishing various detectors
     that act as nodes within the statechart. Each detector is instantiated with a unique
     name and a shared context. These detectors are then added as nodes to the statechart.
-    A `SegmindContext` instance is required to initialize and use the statechart effectively.
-
     """
 
-    context: SegmindContext = field(init=False)
-    """
-    The shared context for the statechart, providing access to world information,
-    relation history, and logging utilities.
-    """
-
-    def build_statechart(self, context: SegmindContext) -> DetectorStateChart:
+    def build_statechart(self) -> DetectorStateChart:
         """
         Build a statechart with various detector nodes.
 
@@ -37,14 +28,10 @@ class SegmindStatechart:
         containment detection. Once initialized, the statechart is populated with these
         nodes for future state management.
 
-        :param context: The shared context for the statechart.
         :return: A statechart instance with detector nodes.
         """
 
         sc = DetectorStateChart()
-
-        self.context = context
-
         detectors = [
             ContactDetector(),
             LossOfContactDetector(),

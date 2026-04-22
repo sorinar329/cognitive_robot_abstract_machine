@@ -3,6 +3,7 @@ from dataclasses import dataclass, field
 from typing import Optional, List, Dict, Set, Any
 import numpy as np
 
+from giskardpy.motion_statechart.context import MotionStatechartContext
 from segmind.datastructures.events import (
     DetectionEvent,
     ContactEvent,
@@ -27,7 +28,8 @@ class ContactDetector(AbstractDetector):
 
     def update_context_and_events(
         self,
-        context: SegmindContext,
+        context: MotionStatechartContext,
+        segmind_context: SegmindContext,
         tracked_objects: List[Body],
     ) -> List[DetectionEvent]:
         """
@@ -36,21 +38,22 @@ class ContactDetector(AbstractDetector):
         Generates a ContactEvent whenever a new contact between two bodies
         is detected.
 
+        :param context: The current motion statechart context.
+        :param segmind_context: The shared SegmindContext containing the information required to track events.
         :param tracked_objects: List of bodies to check for new contacts.
         :return: List of ContactEvent instances generated during this update.
         """
+        new_contact_pairs = self.get_relation(context, tracked_objects, contact)
 
-        new_contact_pairs = self.get_relation(context,tracked_objects, contact)
-        latest_contact_bodies = context.latest_contact_bodies
         events = []
         for obj, contact_list in new_contact_pairs.items():
             new_contacts = (
                 contact_list
-                if obj not in latest_contact_bodies
-                else contact_list - latest_contact_bodies[obj]
+                if obj not in segmind_context.latest_contact_bodies
+                else contact_list - segmind_context.latest_contact_bodies[obj]
             )
             if new_contacts:
-                latest_contact_bodies.setdefault(obj, set()).update(new_contacts)
+                segmind_context.latest_contact_bodies.setdefault(obj, set()).update(new_contacts)
                 events.extend(
                     [ContactEvent(of_object=obj, with_object=c) for c in new_contacts]
                 )
@@ -67,7 +70,8 @@ class LossOfContactDetector(AbstractDetector):
 
     def update_context_and_events(
         self,
-        context: SegmindContext,
+        context: MotionStatechartContext,
+        segmind_context: SegmindContext,
         tracked_objects: List[Body],
     ) -> List[DetectionEvent]:
         """
@@ -77,21 +81,23 @@ class LossOfContactDetector(AbstractDetector):
         Generates a LossOfContactEvent whenever a previously detected
         contact no longer exists.
 
+        :param context: The current motion statechart context.
+        :param segmind_context: The shared SegmindContext containing the information required to track events.
         :param tracked_objects: List of bodies to check for lost contacts.
         :return: List of LossOfContactEvent instances generated during this update.
         """
 
         new_contact_pairs = self.get_relation(context, tracked_objects, contact)
-        latest_contact_bodies = context.latest_contact_bodies
+
         events = []
-        for obj, contact_list in list(latest_contact_bodies.items()):
+        for obj, contact_list in list(segmind_context.latest_contact_bodies.items()):
             loss_contacts = (
                 contact_list
                 if obj not in new_contact_pairs
                 else contact_list - new_contact_pairs[obj]
             )
             if loss_contacts:
-                latest_contact_bodies.pop(obj)
+                segmind_context.latest_contact_bodies.pop(obj)
                 events.extend(
                     [
                         LossOfContactEvent(of_object=obj, with_object=s)
@@ -121,19 +127,21 @@ class MotionDetector(AbstractDetector):
     Threshold for the distance between two poses to be considered movement.
     """
 
-    def update_context_and_events(self, context: SegmindContext, tracked_objs: List[Body]) -> List[DetectionEvent]:
+    def update_context_and_events(self, context: MotionStatechartContext, segmind_context:SegmindContext, tracked_objs: List[Body]) -> List[DetectionEvent]:
         """
         Updates the pose history for each tracked object and checks for motion events.
 
+        :param context: The current motion statechart context.
+        :param segmind_context: The shared SegmindContext containing the information required to track events.
         :param tracked_objs: List of bodies to update and check.
         :return: A list of events triggered during this update.
         """
         events = []
         for obj in tracked_objs:
-            latest_poses = context.latest_poses.setdefault(obj, [])
+            latest_poses = segmind_context.latest_poses.setdefault(obj, [])
             latest_poses.append(obj.global_pose)
             if len(latest_poses) >= self.window_size:
-                event = self.check_obj_movement(context, obj)
+                event = self.check_obj_movement(segmind_context, obj)
                 if event:
                     events.append(event)
                 latest_poses.pop(0)
@@ -143,6 +151,7 @@ class MotionDetector(AbstractDetector):
         """
         Determines if an object is moving based on its pose history and delegates event creation.
 
+        :param context: The shared SegmindContext containing the information required to track events.
         :param obj: The body to check.
         :return: An DetectionEvent if movement/stop is detected, otherwise None.
         """
@@ -155,6 +164,7 @@ class MotionDetector(AbstractDetector):
         """
         Subclass-specific logic to trigger Motion or StopMotion events.
 
+        :param context: The shared SegmindContext containing the information required to track events.
         :param obj: The body to check.
         :return: A MotionEvent, StopMotionEvent or None.
         """
@@ -165,6 +175,7 @@ class MotionDetector(AbstractDetector):
         Determines whether an object is moving by evaluating the distance between its
         recorded positions within the window.
 
+        :param context: The shared SegmindContext containing the information required to track events.
         :param obj: The body to check.
         :return: True if the object is moving, False otherwise.
         """
@@ -215,6 +226,7 @@ class TranslationDetector(MotionDetector):
         motion event is found, the current pose is updated in the motion event. When
         the object is not moving, no event is triggered or updated.
 
+        :param context: The shared SegmindContext containing the information required to track events.
         :param obj: The object being monitored for movement.
         :return: A TranslationEvent if the object is moving, otherwise None.
         """
@@ -251,6 +263,7 @@ class StopTranslationDetector(MotionDetector):
         triggered. The stop event indicates that the object has stopped translation
         based on a configured distance threshold.
 
+        :param context: The shared SegmindContext containing the information required to track events.
         :param obj: The object to check for movement.
         :return: A StopTranslationEvent if the object stops moving, otherwise None.
         """
@@ -279,7 +292,7 @@ class StopTranslationDetector(MotionDetector):
 
 
 
-#Todo: Refactor the Rotationdetector
+#Rotation Detector is a bit buggy and will be refactored
 @dataclass(eq=False, repr=False)
 class RotationDetector(MotionDetector):
     """
@@ -291,6 +304,7 @@ class RotationDetector(MotionDetector):
         """
         Checks if an object is rotating based on its pose history.
 
+        :param context: The shared SegmindContext containing the information required to track events.
         :param obj: The object to check.
         :return: A RotationEvent if the object is rotating, otherwise None.
         """
@@ -308,6 +322,7 @@ class RotationDetector(MotionDetector):
         """
         Checks if an object is rotating and triggers a RotationEvent if necessary.
 
+        :param context: The shared SegmindContext containing the information required to track events.
         :param obj: The object to check.
         :return: The RotationEvent if the object is rotating, otherwise None.
         """
@@ -341,6 +356,7 @@ class StopRotationDetector(MotionDetector):
         """
         Check if an object is rotating based on its pose history.
 
+        :param context: The shared SegmindContext containing the information required to track events.
         :param obj: The object to check.
         :return: A StopRotationEvent if the object is rotating, otherwise None.
         """
@@ -359,6 +375,7 @@ class StopRotationDetector(MotionDetector):
         """
         Checks if an object is rotating and triggers a StopRotationEvent if necessary.
 
+        :param context: The shared SegmindContext containing the information required to track events.
         :param obj: The object to check for movement.
         :return: The StopRotationEvent if the object stops rotating, otherwise None.
         """

@@ -2,17 +2,17 @@ from abc import abstractmethod, ABC
 from dataclasses import dataclass, field
 from typing import Optional, Dict, Set, List, Any
 
-from giskardpy.motion_statechart.context import MotionStatechartContext
+from giskardpy.motion_statechart.context import MotionStatechartContext, ContextExtension
 from giskardpy.motion_statechart.data_types import ObservationStateValues
-from giskardpy.motion_statechart.graph_node import MotionStatechartNode
+from giskardpy.motion_statechart.graph_node import MotionStatechartNode, NodeArtifacts
 from giskardpy.motion_statechart.motion_statechart import MotionStatechart
-from segmind.datastructures.events import MotionEvent, DetectionEvent
+from segmind.datastructures.events import MotionEvent, DetectionEvent, RotationEvent
+from segmind.event_logger import EventLogger
 from semantic_digital_twin.spatial_types.spatial_types import Pose
 from semantic_digital_twin.world_description.connections import Connection6DoF
 from semantic_digital_twin.world_description.world_entity import Body
 
 
-# ToDo: See if we can create our own MotionStatechartNode or change its name (talk to simon)
 @dataclass
 class DetectorStateChart(MotionStatechart):
     """
@@ -32,7 +32,7 @@ Type hint for dictionaries mapping bodies to sets of bodies
 
 
 @dataclass
-class SegmindContext(MotionStatechartContext):
+class SegmindContext(ContextExtension):
     """
     Context object shared across the motion statechart detectors.
 
@@ -70,7 +70,7 @@ class SegmindContext(MotionStatechartContext):
     Dictionary mapping each body to its currently active motion event, if any.
     """
 
-    logger: Any = None
+    logger: EventLogger = field(default_factory=EventLogger)
     """
     The event logger used to record detected events.
     """
@@ -90,7 +90,6 @@ class SegmindContext(MotionStatechartContext):
     List of insertion pairs, to avoid duplicate events
     """
 
-
 @dataclass(repr=False, eq=False)
 class AbstractDetector(MotionStatechartNode, ABC):
     """
@@ -103,8 +102,7 @@ class AbstractDetector(MotionStatechartNode, ABC):
     If None, all trackable objects in the world are checked.
     """
 
-
-    def on_tick(self, context: SegmindContext) -> Optional[ObservationStateValues]:
+    def on_tick(self, context: MotionStatechartContext) -> Optional[ObservationStateValues]:
         """
         Executes one update cycle of the detector.
 
@@ -112,9 +110,11 @@ class AbstractDetector(MotionStatechartNode, ABC):
         computes new contact relationships, and triggers events if
         contact changes are detected.
 
+        :param context: The current motion statechart context.
         :return: ObservationStateValues.TRUE if events were triggered,
         otherwise ObservationStateValues.FALSE.
         """
+        segmind_context_extension = context.require_extension(SegmindContext)
 
         objects_to_check = (
             [self.tracked_object]
@@ -125,13 +125,13 @@ class AbstractDetector(MotionStatechartNode, ABC):
                 if type(body.parent_connection) is Connection6DoF
             ]
         )
-        events = self.update_context_and_events(context, objects_to_check)
+        events = self.update_context_and_events(context, segmind_context_extension, objects_to_check)
         for e in events:
-            context.logger.log_event(e)
+            segmind_context_extension.logger.log_event(e)
         return ObservationStateValues.TRUE if events else ObservationStateValues.FALSE
 
 
-    def get_relation(self, context: SegmindContext, tracked_objects: List[Body], predicate) -> Dict[Body, Set[Body]]:
+    def get_relation(self, context: MotionStatechartContext, tracked_objects: List[Body], predicate) -> Dict[Body, Set[Body]]:
         """
         Get the relation between tracked objects.
 
@@ -151,10 +151,8 @@ class AbstractDetector(MotionStatechartNode, ABC):
                     related_bodies.setdefault(obj, set()).add(body)
         return related_bodies
 
-
-
     @abstractmethod
-    def update_context_and_events(self, context:SegmindContext, tracked_objects: List[Body]) -> List[DetectionEvent]:
+    def update_context_and_events(self, context:MotionStatechartContext, segmind_context:SegmindContext, tracked_objects: List[Body]) -> List[DetectionEvent]:
         """
         Core detection logic that updates the internal state and identifies new events.
 
@@ -171,6 +169,7 @@ class AbstractDetector(MotionStatechartNode, ABC):
 
         :param context: The shared SegmindContext containing the world state,
                         history of relationships, and the event logger.
+        :param segmind_context: The SegmindContext extension containing additional states.
         :param tracked_objects: A list of bodies that this detector should focus on
                                 during this update cycle.
         :return: A list of DetectionEvent objects representing the events detected
