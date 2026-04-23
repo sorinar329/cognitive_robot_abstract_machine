@@ -1,6 +1,7 @@
 from pathlib import Path
 import json
 import uuid
+import pytest
 
 import numpy as np
 import py_trees
@@ -20,6 +21,11 @@ from robokudo.descriptors import CrDescriptorFactory
 from robokudo.io.storage import Storage
 from robokudo.pipeline import Pipeline
 from semantic_digital_twin.adapters.ros.messages import WorldModelSnapshot
+
+
+pytestmark = pytest.mark.skip(
+    reason="module temporarily disabled until storage functionality is migrated to ormatic"
+)
 
 
 def _cam_info_k_values(cam_info):

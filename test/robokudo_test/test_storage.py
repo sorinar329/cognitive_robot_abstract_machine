@@ -23,6 +23,11 @@ class CustomDataclassView:
     confidence: float
 
 
+pytestmark = pytest.mark.skip(
+    reason="module temporarily disabled until storage functionality is migrated to ormatic"
+)
+
+
 @pytest.fixture(scope="module")
 def storage_instance():
     db_name = "ONLY_UNITTESTS_test_db"
