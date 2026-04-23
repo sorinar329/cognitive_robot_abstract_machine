@@ -1,4 +1,5 @@
 import pytest
+import rclpy
 
 from giskardpy.motion_statechart.context import MotionStatechartContext
 from segmind.datastructures.events import (
@@ -16,12 +17,13 @@ from segmind.datastructures.events import (
     RotationEvent,
     StopRotationEvent,
 )
-from segmind.detectors.atomic_event_detectors_nodes import RotationDetector, StopRotationDetector
+from segmind.detectors.atomic_event_detectors_nodes import RotationDetector, StopRotationDetector, ContactDetector, \
+    LossOfContactDetector
 from segmind.detectors.base import SegmindContext
 from segmind.episode_segmenter import EpisodeSegmenterExecutor
 from segmind.statecharts.segmind_statechart import SegmindStatechart
+from semantic_digital_twin.adapters.ros.visualization.viz_marker import VizMarkerPublisher
 from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
-from test.segmind_test import setup_contact_world, setup_support_world
 
 
 # ---------------------------------------------------------------------------
@@ -30,70 +32,50 @@ from test.segmind_test import setup_contact_world, setup_support_world
 
 def _build_executor(world):
     context = MotionStatechartContext(world=world)
+    milk = world.get_body_by_name("milk.stl")
+    box1 = world.get_body_by_name("box")
+    box2 = world.get_body_by_name("box_2")
     segmind_executor = EpisodeSegmenterExecutor(context=context)
-    sc = SegmindStatechart().build_statechart()
-    segmind_executor.compile(sc)
     segmind_context = segmind_executor.context.require_extension(SegmindContext)
-    return segmind_executor, segmind_context, sc
+    return segmind_executor, segmind_context, milk, box1, box2
 
 
 def events_of(segmind_context, event_type):
     return [e for e in segmind_context.logger.get_events() if isinstance(e, event_type)]
 
-
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
-
-@pytest.fixture
-def contact_setup():
-    executor, segmind_context, sc = _build_executor(setup_contact_world())
-    cylinder = executor.context.world.get_body_by_name("cylinder_body")
-    return executor, segmind_context, sc, cylinder
-
-
-@pytest.fixture
-def support_setup():
-    executor, segmind_context, sc = _build_executor(setup_support_world())
-    world = executor.context.world
-    cylinder = world.get_body_by_name("cylinder_body")
-    table = world.get_body_by_name("table_body")
-    cabinet = world.get_body_by_name("cabinet")
-    hole = world.get_body_by_name("hole_body")
-    return executor, segmind_context, sc, cylinder, table, cabinet, hole
-
-
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
 
-def test_contact_detector(contact_setup):
-    executor, segmind_context, _, cylinder = contact_setup
+def test_contact_detector(simple_apartment_setup):
+    segmind_executor, segmind_context, milk, box1, box2 = _build_executor(simple_apartment_setup)
+    statechart = SegmindStatechart().build_statechart([ContactDetector(),LossOfContactDetector()])
+    segmind_executor.compile(statechart)
+    rclpy.init()
+    node = rclpy.create_node("segmind_test")
+    publisher = VizMarkerPublisher(_world=segmind_executor.context.world, node=node)
+    publisher.with_tf_publisher()
+    segmind_executor.tick()
+    assert len(events_of(segmind_context, ContactEvent)) == 1
 
-    assert len(events_of(segmind_context, ContactEvent)) == 0
+    milk.parent_connection.origin = HomogeneousTransformationMatrix.from_xyz_rpy(z=1)
+    segmind_executor.tick()
+    assert len(events_of(segmind_context, LossOfContactEvent)) == 1
 
-    cylinder.parent_connection.origin = HomogeneousTransformationMatrix.from_xyz_rpy(y=-0.4)
-    executor.tick()
+    milk.parent_connection.origin = HomogeneousTransformationMatrix.from_xyz_rpy(box1.global_pose.x, box1.global_pose.y, box1.global_pose.z)
+    segmind_executor.tick()
     assert len(events_of(segmind_context, ContactEvent)) == 2
+    assert len(events_of(segmind_context, LossOfContactEvent)) == 1
 
-    executor.tick()
-    assert len(events_of(segmind_context, ContactEvent)) == 2
-
-    cylinder.parent_connection.origin = HomogeneousTransformationMatrix.from_xyz_rpy(z=2)
-    executor.tick()
+    milk.parent_connection.origin = HomogeneousTransformationMatrix.from_xyz_rpy(box2.global_pose.x, box2.global_pose.y, box2.global_pose.z)
+    segmind_executor.tick()
+    assert len(events_of(segmind_context, ContactEvent)) == 3
     assert len(events_of(segmind_context, LossOfContactEvent)) == 2
 
-    executor.tick()
-    assert len(events_of(segmind_context, LossOfContactEvent)) == 2
-
-    cylinder.parent_connection.origin = HomogeneousTransformationMatrix.from_xyz_rpy(y=-0.4)
-    executor.tick()
-    assert len(events_of(segmind_context, ContactEvent)) == 4
-
-    cylinder.parent_connection.origin = HomogeneousTransformationMatrix.from_xyz_rpy(z=2)
-    executor.tick()
-    assert len(events_of(segmind_context, LossOfContactEvent)) == 4
-
+    milk.parent_connection.origin = HomogeneousTransformationMatrix.from_xyz_rpy(z=1)
+    segmind_executor.tick()
+    print("a")
+    assert len(events_of(segmind_context, LossOfContactEvent)) == 3
 
 def test_support_detector(support_setup):
     executor, segmind_context, _, cylinder, table, cabinet, _ = support_setup
@@ -307,4 +289,25 @@ def test_stop_rotation():
     for _ in range(5):
         segmind_executor.tick()
     assert len([i for i in segmind_context.logger.get_events() if isinstance(i, StopRotationEvent)]) >= 1
+
+
+def test_contact_kitchen_world(simple_apartment_setup):
+    world = simple_apartment_setup
+    context = MotionStatechartContext(world=world)
+    segmind_executor = EpisodeSegmenterExecutor(context=context)
+    statechart = SegmindStatechart()
+    sc = statechart.build_statechart()
+    segmind_executor.compile(sc)
+    segmind_context = segmind_executor.context.require_extension(SegmindContext)
+    rclpy.init()
+    node = rclpy.create_node("segmind_test")
+    publisher = VizMarkerPublisher(_world=world, node=node)
+    publisher.with_tf_publisher()
+
+    milk = world.get_body_by_name("milk.stl")
+    segmind_executor.tick()
+    assert len(events_of(segmind_context, ContactEvent)) == 1
+    milk.parent_connection.origin = HomogeneousTransformationMatrix.from_xyz_rpy(z=1)
+    segmind_executor.tick()
+    assert len(events_of(segmind_context, LossOfContactEvent)) == 1
 

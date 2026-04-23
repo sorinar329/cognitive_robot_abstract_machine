@@ -92,12 +92,16 @@ class LossOfContactDetector(AbstractDetector):
         events = []
         for obj, contact_list in list(segmind_context.latest_contact_bodies.items()):
             loss_contacts = (
-                contact_list
+                contact_list.copy()
                 if obj not in new_contact_pairs
                 else contact_list - new_contact_pairs[obj]
             )
             if loss_contacts:
-                segmind_context.latest_contact_bodies.pop(obj)
+
+                segmind_context.latest_contact_bodies[obj] -= loss_contacts
+                if not segmind_context.latest_contact_bodies[obj]:
+                    segmind_context.latest_contact_bodies.pop(obj)
+
                 events.extend(
                     [
                         LossOfContactEvent(of_object=obj, with_object=s)

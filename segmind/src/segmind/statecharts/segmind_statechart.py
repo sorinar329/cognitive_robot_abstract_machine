@@ -1,8 +1,10 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import List
+
 from giskardpy.motion_statechart.motion_statechart import MotionStatechart
 from segmind.detectors.atomic_event_detectors_nodes import ContactDetector, LossOfContactDetector, TranslationDetector, \
     StopTranslationDetector, RotationDetector, StopRotationDetector
-from segmind.detectors.base import DetectorStateChart
+from segmind.detectors.base import DetectorStateChart, AbstractDetector
 from segmind.detectors.coarse_event_detector_nodes import PlacingDetector, PickUpDetector
 from segmind.detectors.spatial_relation_detector_nodes import SupportDetector, LossOfSupportDetector, \
     ContainmentDetector, InsertionDetector, LossOfContainmentDetector
@@ -18,7 +20,8 @@ class SegmindStatechart(MotionStatechart):
     name and a shared context. These detectors are then added as nodes to the statechart.
     """
 
-    def build_statechart(self) -> DetectorStateChart:
+
+    def build_statechart(self, detectors:List[AbstractDetector]=None) -> DetectorStateChart:
         """
         Build a statechart with various detector nodes.
 
@@ -32,7 +35,7 @@ class SegmindStatechart(MotionStatechart):
         """
 
         sc = DetectorStateChart()
-        detectors = [
+        default_detectors = [
             ContactDetector(),
             LossOfContactDetector(),
             SupportDetector(),
@@ -46,6 +49,9 @@ class SegmindStatechart(MotionStatechart):
             LossOfContainmentDetector(),
         ]
 
+        detectors = detectors if detectors else default_detectors
+
         sc.add_nodes(detectors)
+
 
         return sc
