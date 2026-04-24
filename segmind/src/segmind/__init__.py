@@ -1,6 +1,5 @@
 __version__ = "1.0.32"
 import logging
-from colorlog import ColoredFormatter
 
 from enum import Enum
 
@@ -10,18 +9,6 @@ logger.setLevel(logging.DEBUG)
 
 # Handler
 handler = logging.StreamHandler()
-formatter = ColoredFormatter(
-    "%(log_color)s%(asctime)s %(name)s %(levelname)s: %(message)s",
-    datefmt=None,
-    log_colors={
-        "DEBUG": "blue",
-        "INFO": "reset",
-        "WARNING": "yellow",
-        "ERROR": "red",
-        "CRITICAL": "bold_red",
-    }
-)
-handler.setFormatter(formatter)
 handler.setLevel(logging.INFO)  # <-- this filters out DEBUG messages
 logger.addHandler(handler)
 

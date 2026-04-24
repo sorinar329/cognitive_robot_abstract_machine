@@ -18,9 +18,12 @@ except ImportError:
     logger.debug(
         "Container view is not available. Some functionalities may not work as expected."
     )
+try:
+    from gtts import gTTS
+    import pygame
+except:
+    pass
 
-from gtts import gTTS
-import pygame
 
 speech_lock = threading.RLock()
 
@@ -36,25 +39,28 @@ def text_to_speech(text: str):
     # here we have marked slow=False. Which tells
     # the module that the converted audio should
     # have a high speed
-    myobj = gTTS(text=text, lang=language, slow=False)
+    try:
+        myobj = gTTS(text=text, lang=language, slow=False)
 
-    with speech_lock:
-        myobj.save("welcome.mp3")
+        with speech_lock:
+            myobj.save("welcome.mp3")
 
-        # Initialize the mixer module
-        try:
-            pygame.mixer.init()
+            # Initialize the mixer module
             try:
-                pygame.mixer.music.load("welcome.mp3")
-            except pygame.error:
-                pass
+                pygame.mixer.init()
+                try:
+                    pygame.mixer.music.load("welcome.mp3")
+                except pygame.error:
+                    pass
 
-            pygame.mixer.music.play()
-            while pygame.mixer.music.get_busy():
-                time.sleep(0.1)
-                continue
-        except pygame.error:
-            print("Audio not available, running in silent mode.")
+                pygame.mixer.music.play()
+                while pygame.mixer.music.get_busy():
+                    time.sleep(0.1)
+                    continue
+            except pygame.error:
+                print("Audio not available, running in silent mode.")
+    except:
+        pass
 
 
 class PropagatingThread(threading.Thread, ABC):
