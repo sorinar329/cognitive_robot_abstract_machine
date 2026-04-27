@@ -1,6 +1,7 @@
 import datetime
 import json
 import os
+from dataclasses import dataclass, field
 from typing import Dict, Optional, Set
 
 import numpy as np
@@ -17,9 +18,17 @@ from semantic_digital_twin.world_description.world_entity import Body
 
 set_logger_level(LogLevel.DEBUG)
 
-class JSONPlayer(FilePlayer):
-    data_object_names: Set[str]
 
+@dataclass(unsafe_hash=True, init=False)
+class JSONPlayer(FilePlayer):
+    """
+    Plays the episode from a JSON file.
+    """
+
+    data_object_names: Set[str] = field(default=None)
+    """
+    contains the names of the objects in the episode.
+    """
 
     def __init__(self, file_path: str, scene_id: int = 1, world: Optional[World] = None,
                  mesh_scale: float = 0.001,

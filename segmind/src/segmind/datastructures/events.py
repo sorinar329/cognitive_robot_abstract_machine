@@ -18,7 +18,7 @@ from semantic_digital_twin.world_description.world_entity import Body, Agent
 
 @dataclass
 class DetectionEvent(ABC):
-    timestamp: datetime = field(default_factory=datetime.now().timestamp)
+    timestamp: datetime = field(default=datetime.now())
     """
     The time at which the event occurred, defaults to current time.
     """
@@ -161,7 +161,7 @@ class MotionEvent(EventWithOneTrackedObject, ABC):
     def __init__(self, tracked_object: Body, start_pose: Pose, current_pose: Pose,
                  timestamp: Optional[float] = None):
         EventWithOneTrackedObject.__init__(self, tracked_object=tracked_object,
-                                           timestamp=timestamp if timestamp is not None else time.time())
+                                           timestamp=timestamp if timestamp is not None else datetime.now())
         self.start_pose: Pose = start_pose
         self.current_pose: Pose = current_pose
 
@@ -302,7 +302,7 @@ class InsertionEvent(EventWithTwoTrackedObjects):
     def __init__(self, inserted_object: Body,
                  inserted_into_objects: List[Body],
                  through_hole: Body,
-                 timestamp: Optional[float] = None,
+                 timestamp: datetime = datetime.now(),
                  ):
         super().__init__(tracked_object=inserted_object,
                          timestamp=timestamp, with_object=through_hole)

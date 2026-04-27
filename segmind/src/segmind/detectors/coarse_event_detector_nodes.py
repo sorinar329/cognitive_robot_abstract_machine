@@ -1,5 +1,6 @@
 from collections import defaultdict
 from dataclasses import dataclass
+from datetime import timedelta
 from typing import List
 from giskardpy.motion_statechart.context import MotionStatechartContext
 from segmind.datastructures.events import (
@@ -20,7 +21,7 @@ class AbstractInteractionDetector(AbstractDetector):
     bodies and generating events when detected.
     """
 
-    shift_threshold: float = 15
+    shift_threshold: timedelta = timedelta(seconds=15)
     """
     The threshold for the time difference between two events to be considered an interaction.
     """
@@ -79,7 +80,6 @@ class PlacingDetector(AbstractInteractionDetector):
                     PlacingEvent(
                         tracked_object=j.tracked_object,
                         with_object=i.with_object,
-                        timestamp=i.timestamp,
                     )
                 )
                 break
@@ -139,7 +139,6 @@ class PickUpDetector(AbstractInteractionDetector):
                 events.append(
                     PickUpEvent(
                         tracked_object=j.tracked_object,
-                        timestamp=i.timestamp,
                     )
                 )
                 break

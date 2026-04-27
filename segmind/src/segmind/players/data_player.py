@@ -2,17 +2,19 @@ from __future__ import annotations
 
 from datetime import timedelta
 import os
-import shutil
+
 import time
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from threading import RLock
 from segmind import set_logger_level, LogLevel, logger
 from typing_extensions import Callable, Optional, Dict, Generator, List
+
+from segmind.datastructures.enums import PlayerStatus
+from segmind.episode_player import EpisodePlayer
 from semantic_digital_twin.spatial_types import Vector3
 from semantic_digital_twin.spatial_types.spatial_types import (
     Pose,
-    HomogeneousTransformationMatrix,
 )
 from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.world_entity import Body
@@ -23,8 +25,6 @@ try:
 except ImportError:
     Multiverse = None
 
-from ..datastructures.enums import PlayerStatus
-from ..episode_player import EpisodePlayer
 
 
 @dataclass
@@ -50,12 +50,11 @@ class FrameData:
 FrameDataGenerator = Generator[FrameData, None, None]
 
 
+@dataclass(unsafe_hash=True, init=False)
 class DataPlayer(EpisodePlayer, ABC):
     """
     A class that represents the thread that steps the world from a data generator.
     """
-
-    frame_callback_lock: RLock = RLock()
 
     def __init__(
         self,
@@ -91,26 +90,6 @@ class DataPlayer(EpisodePlayer, ABC):
         """
         pass
 
-    def add_frame_callback(self, callback: Callable):
-        """
-        Add a callback that is called when a frame is processed.
-
-        :param callback: The callback.
-        """
-        with self.frame_callback_lock:
-            logger.debug(f"Adding frame callback: {callback}")
-            self.frame_callbacks.append(callback)
-
-    def remove_frame_callback(self, callback: Callable):
-        """
-        Remove a callback that is called when a frame is processed.
-
-        :param callback: The callback.
-        """
-        logger.debug(f"Removing frame callback: {callback}")
-        with self.frame_callback_lock:
-            if callback in self.frame_callbacks:
-                self.frame_callbacks.remove(callback)
 
     def _run(self):
         is_first_frame = True
@@ -133,10 +112,6 @@ class DataPlayer(EpisodePlayer, ABC):
             self.process_objects_data(frame_data)
 
             self.ready = True
-
-            with self.frame_callback_lock:
-                for cb in self.frame_callbacks:
-                    cb(dt)
 
             if self._status == PlayerStatus.STOPPED:
                 break
@@ -179,9 +154,21 @@ class DataPlayer(EpisodePlayer, ABC):
         pass
 
 
+@dataclass(unsafe_hash=True, init=False)
 class FilePlayer(DataPlayer, ABC):
-    file_path: str
-    models_dir: Optional[str]
+    """
+    Plays the episode from a file.
+    """
+
+    file_path: str = field(default="")
+    """
+    file path to the episode.
+    """
+
+    models_dir: Optional[str] = field(default=None)
+    """
+    models directory.
+    """
 
     def __init__(
         self,
@@ -194,7 +181,7 @@ class FilePlayer(DataPlayer, ABC):
         position_shift: Optional[Vector3] = None,
     ):
         """
-        Initializes the FAMEEpisodePlayer with the specified file.
+        Initializes the FilePlayer with the specified file.
 
         :param file_path: The file that contains the data frames.
         :param world: The world that is used to replay the episode.

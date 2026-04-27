@@ -1,5 +1,6 @@
 from collections import defaultdict
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from typing import List, Dict, Set
 
 from giskardpy.motion_statechart.context import MotionStatechartContext
@@ -254,7 +255,7 @@ class InsertionDetector(AbstractDetector):
     event logs and tracked objects.
     """
 
-    shift_threshold: float = 15.0
+    shift_threshold: timedelta = timedelta(seconds=15.0)
     """
     The threshold for the time difference between two events to be considered an insertion.
     """
@@ -299,7 +300,6 @@ class InsertionDetector(AbstractDetector):
                         i.tracked_object,
                         [j.with_object],
                         i.with_object,
-                        timestamp=i.timestamp,
                     )
                 )
                 break

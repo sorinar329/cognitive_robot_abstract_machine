@@ -1,3 +1,4 @@
+from dataclasses import dataclass, field
 from datetime import datetime
 
 import pandas as pd
@@ -11,12 +12,26 @@ from .data_player import FilePlayer, FrameData
 
 set_logger_level(LogLevel.DEBUG)
 
-
+@dataclass(unsafe_hash=True, init=False)
 class CSVEpisodePlayer(FilePlayer):
-    data_frames: pd.DataFrame
-    data_object_names: Set[str]
+    """
+    This class is used to play a CSV file containing the data of an episode.
+    """
+
+    data_frames: pd.DataFrame = field(default=None)
+    """
+    The data frames of the episode.
+    """
+
+    data_object_names: Set[str] = field(default=None)
+    """
+    The name of the objects in the episode.
+    """
 
     def get_frame_data_generator(self):
+        """
+        Reads the CSV file and generates the frame data.
+        """
         logger.debug(f"Reading CSV file {self.file_path}")
         self.data_frames = pd.read_csv(self.file_path)
         self.data_object_names = {
@@ -37,6 +52,12 @@ class CSVEpisodePlayer(FilePlayer):
     def _resume(self): ...
 
     def get_objects_poses(self, frame_data: FrameData) -> Dict[Body, Pose]:
+        """
+        Extracts the poses of the objects from the frame data.
+
+        :param frame_data: The frame data.
+        :return: A dictionary mapping bodies to poses.
+        """
         objects_poses: Dict[Body, Pose] = {}
         objects_data = frame_data.objects_data
         current_time = frame_data.time

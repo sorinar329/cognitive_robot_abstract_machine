@@ -29,7 +29,9 @@ import segmind.detectors.base
 import segmind.detectors.coarse_event_detector_nodes
 import segmind.detectors.spatial_relation_detector_nodes
 import segmind.episode_segmenter
+import segmind.players.csv_player
 import segmind.players.data_player
+import segmind.players.json_player
 import segmind.statecharts.segmind_statechart
 import semantic_digital_twin.semantic_annotations.semantic_annotations
 import sqlalchemy.sql.sqltypes
@@ -102,8 +104,6 @@ class AbstractInteractionDetectorDAO(
         use_existing_column=True,
     )
 
-    shift_threshold: Mapped[builtins.float] = mapped_column(use_existing_column=True)
-
     __mapper_args__ = {
         "polymorphic_identity": "AbstractInteractionDetectorDAO",
         "inherit_condition": database_id == AbstractDetectorDAO.database_id,
@@ -175,6 +175,24 @@ class ContainmentDetectorDAO(
     }
 
 
+class DataPlayerDAO(Base, DataAccessObject[segmind.players.data_player.DataPlayer]):
+
+    __tablename__ = "DataPlayerDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    polymorphic_type: Mapped[str] = mapped_column(
+        String(255), nullable=False, use_existing_column=True
+    )
+
+    __mapper_args__ = {
+        "polymorphic_on": "polymorphic_type",
+        "polymorphic_identity": "DataPlayerDAO",
+    }
+
+
 class DetectionEventDAO(
     Base, DataAccessObject[segmind.datastructures.events.DetectionEvent]
 ):
@@ -242,6 +260,53 @@ class EventWithTrackedObjectsDAO(
     __mapper_args__ = {
         "polymorphic_identity": "EventWithTrackedObjectsDAO",
         "inherit_condition": database_id == DetectionEventDAO.database_id,
+    }
+
+
+class FilePlayerDAO(
+    DataPlayerDAO, DataAccessObject[segmind.players.data_player.FilePlayer]
+):
+
+    __tablename__ = "FilePlayerDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(DataPlayerDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    file_path: Mapped[builtins.str] = mapped_column(
+        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
+    )
+    models_dir: Mapped[typing.Optional[builtins.str]] = mapped_column(
+        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "FilePlayerDAO",
+        "inherit_condition": database_id == DataPlayerDAO.database_id,
+    }
+
+
+class CSVEpisodePlayerDAO(
+    FilePlayerDAO, DataAccessObject[segmind.players.csv_player.CSVEpisodePlayer]
+):
+
+    __tablename__ = "CSVEpisodePlayerDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(FilePlayerDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    data_object_names: Mapped[typing.Set[builtins.str]] = mapped_column(
+        JSON, nullable=False, use_existing_column=True
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "CSVEpisodePlayerDAO",
+        "inherit_condition": database_id == FilePlayerDAO.database_id,
     }
 
 
@@ -492,8 +557,6 @@ class InsertionDetectorDAO(
         use_existing_column=True,
     )
 
-    shift_threshold: Mapped[builtins.float] = mapped_column(use_existing_column=True)
-
     __mapper_args__ = {
         "polymorphic_identity": "InsertionDetectorDAO",
         "inherit_condition": database_id == AbstractDetectorDAO.database_id,
@@ -516,6 +579,24 @@ class InsertionEventDAO(
     __mapper_args__ = {
         "polymorphic_identity": "InsertionEventDAO",
         "inherit_condition": database_id == EventWithTwoTrackedObjectsDAO.database_id,
+    }
+
+
+class JSONPlayerDAO(
+    FilePlayerDAO, DataAccessObject[segmind.players.json_player.JSONPlayer]
+):
+
+    __tablename__ = "JSONPlayerDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(FilePlayerDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "JSONPlayerDAO",
+        "inherit_condition": database_id == FilePlayerDAO.database_id,
     }
 
 
