@@ -31,7 +31,7 @@ import segmind.detectors.spatial_relation_detector_nodes
 import segmind.episode_segmenter
 import segmind.players.data_player
 import segmind.statecharts.segmind_statechart
-import semantic_digital_twin.world_description.world_entity
+import semantic_digital_twin.semantic_annotations.semantic_annotations
 import sqlalchemy.sql.sqltypes
 import typing
 import typing_extensions
@@ -842,7 +842,9 @@ class SegmindContextDAO(Base, DataAccessObject[segmind.detectors.base.SegmindCon
     )
 
     holes: Mapped[
-        typing.List[semantic_digital_twin.world_description.world_entity.Body]
+        typing.List[
+            semantic_digital_twin.semantic_annotations.semantic_annotations.Aperture
+        ]
     ] = mapped_column(JSON, nullable=False, use_existing_column=True)
 
 

@@ -8,6 +8,7 @@ from giskardpy.motion_statechart.graph_node import MotionStatechartNode, NodeArt
 from giskardpy.motion_statechart.motion_statechart import MotionStatechart
 from segmind.datastructures.events import MotionEvent, DetectionEvent, RotationEvent
 from segmind.event_logger import EventLogger
+from semantic_digital_twin.semantic_annotations.semantic_annotations import Aperture
 from semantic_digital_twin.spatial_types.spatial_types import Pose
 from semantic_digital_twin.world_description.connections import Connection6DoF
 from semantic_digital_twin.world_description.world_entity import Body
@@ -80,7 +81,7 @@ class SegmindContext(ContextExtension):
     Set of placing pairs, to avoid duplicate events
     """
 
-    holes: List[Body] = field(default_factory=list)
+    holes: List[Aperture] = field(default_factory=list)
     """
     List of bodies that can be considered holes
     """

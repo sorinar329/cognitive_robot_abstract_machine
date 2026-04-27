@@ -10,6 +10,7 @@ from typing_extensions import Optional, List, Union, Type
 from segmind.datastructures.mixins import HasPrimaryTrackedObject, HasPrimaryAndSecondaryTrackedObjects
 from segmind.datastructures.object_tracker import ObjectTrackerFactory
 from semantic_digital_twin.orm.ormatic_interface import BodyDAO
+from semantic_digital_twin.semantic_annotations.semantic_annotations import Aperture
 from semantic_digital_twin.spatial_types.spatial_types import Pose
 from semantic_digital_twin.world_description.geometry import BoundingBox, Color
 from semantic_digital_twin.world_description.world_entity import Body, Agent
@@ -309,8 +310,8 @@ class InsertionEvent(EventWithTwoTrackedObjects):
         self.inserted_into_objects_frozen_cp: List[BodyDAO] = [obj for obj in inserted_into_objects]
 
     @property
-    def through_hole(self) -> Body:
-        return self.with_object
+    def through_hole(self) -> Aperture:
+        return self.with_object.get_semantic_annotations_by_type(type_=Aperture)[0]
 
     def __str__(self):
         with_object_name = " - " + f" - ".join([obj.name.name for obj in self.inserted_into_objects])
