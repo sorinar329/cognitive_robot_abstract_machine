@@ -7,6 +7,7 @@ from segmind import logger, set_logger_level, LogLevel
 from semantic_digital_twin.adapters.package_resolver import FileUriResolver
 from semantic_digital_twin.adapters.urdf import URDFParser
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
+from semantic_digital_twin.semantic_annotations.semantic_annotations import Aperture
 from semantic_digital_twin.world_description.connections import (
     Connection6DoF,
     FixedConnection,
@@ -73,12 +74,12 @@ class EpisodeSegmenterExecutor(Executor):
         Compiles the provided statechart and initializes the episode segmenter for execution.
         """
         super().compile(motion_statechart)
-        self.fill_holes()
+        self.detect_holes()
         if self.player:
             self.player.start()
 
 
-    def fill_holes(self):
+    def detect_holes(self):
         """
         Iterates through objects in the world's context and appends objects with
         "hole" in their name to the list of holes.

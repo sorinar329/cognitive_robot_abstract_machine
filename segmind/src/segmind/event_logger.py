@@ -4,22 +4,17 @@ import os
 import queue
 import threading
 from collections import UserDict, defaultdict
-from threading import RLock
-import time
-from datetime import timedelta
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta
 from os.path import dirname, abspath
-import re
+from threading import RLock
 
+from segmind.datastructures.events import DetectionEvent, EventWithTrackedObjects
+from segmind.datastructures.object_tracker import ObjectTrackerFactory
 from semantic_digital_twin.world_description.world_entity import Body
 from typing_extensions import List, Optional, Dict, Type, Callable, Tuple
-from .datastructures.events import DetectionEvent, EventWithTrackedObjects, EventWithTwoTrackedObjects, PickUpEvent, \
-    InsertionEvent
-from .datastructures.mixins import HasPrimaryTrackedObject
-from .datastructures.object_tracker import ObjectTrackerFactory
-from .utils import text_to_speech
-
+from typing import ClassVar
 from segmind import set_logger_level, LogLevel, logger
-
 
 set_logger_level(LogLevel.DEBUG)
 
@@ -42,35 +37,62 @@ class EventCallbacks(UserDict):
             self.__setitem__(subclass, value)
 
 
+@dataclass
 class EventLogger:
     """
     A class that logs events that are happening in the simulation.
     """
 
-    current_logger: Optional[EventLogger] = None
+    annotate_events: bool = field(default=False)
+    """
+    A boolean indicating whether events should be annotated.
+    """
+    events_to_annotate: List[Type[DetectionEvent]] = field(default=None)
+    """
+    A list of event types that should be annotated if annotation is enabled.
+    """
+    current_logger: ClassVar[Optional[EventLogger]] = None
     """
     A singleton instance of the event logger.
     """
-    event_callbacks: EventCallbacks = EventCallbacks()
+    event_callbacks: EventCallbacks = field(default_factory=EventCallbacks)
     """
     A dictionary that maps event types to a list of callbacks that should be called when the event occurs.
     """
+    timeline_per_thread: Dict[str, List[DetectionEvent]] = field(default_factory=dict, init=False)
+    """
+    A dictionary that maps thread names to a list of events.
+    """
+    timeline: List[DetectionEvent] = field(default_factory=list, init=False)
+    """
+    A list of all events.
+    """
+    event_queue: queue.Queue = field(default_factory=queue.Queue, init=False)
+    """
+    A queue of events that should be processed.
+    """
+    timeline_lock: RLock = field(default_factory=RLock, init=False)
+    """
+    A lock for the timeline.
+    """
+    event_callbacks_lock: RLock = field(default_factory=RLock, init=False)
+    """
+    A lock for the event callbacks.
+    """
+    annotation_queue: Optional[queue.Queue] = field(default=None, init=False)
+    """
+    A queue for annotation events.
+    """
+    annotation_thread: Optional[EventAnnotationThread] = field(default=None, init=False)
+    """
+    A thread for annotating events.
+    """
 
-    def __init__(self, annotate_events: bool = False, events_to_annotate: List[Type[DetectionEvent]] = None):
+    def __post_init__(self):
         """
         Initialize the EventLogger.
-
-        :param annotate_events: A boolean indicating whether events should be annotated.
-        :param events_to_annotate: A list of event types that should be annotated if annotation is enabled.
         """
-        self.timeline_per_thread = {}
-        self.timeline = []
-        self.event_queue = queue.Queue()
-        self.timeline_lock: RLock = RLock()
-        self.event_callbacks_lock: RLock = RLock()
-        self.annotate_events = annotate_events
-        self.events_to_annotate = events_to_annotate
-        if annotate_events:
+        if self.annotate_events:
             self.annotation_queue = queue.Queue()
             self.annotation_thread = EventAnnotationThread(self)
             self.annotation_thread.start()
@@ -138,12 +160,13 @@ class EventLogger:
         if isinstance(event, EventWithTrackedObjects):
             event.update_object_trackers_with_event()
 
-    def add_event_to_timeline_of_thread(self, event: DetectionEvent) -> None:
+    def add_event_to_timeline_of_thread(self, event: DetectionEvent):
         """
         Add an event to the timeline of the detector thread.
+
         :param event: The event to add.
         """
-        thread_id = event.detector_thread_id
+        thread_id = str(event.detector_thread_id)
         with self.timeline_lock:
             if thread_id not in self.timeline_per_thread:
                 self.timeline_per_thread[thread_id] = []
@@ -163,6 +186,8 @@ class EventLogger:
             else:
                 self.add_event_to_timeline_of_thread(event)
 
+
+    #refactor further and create a new EventPlotter class
     def plot_events(self, show: bool = True, save_path: Optional[str] = None):
         """
         Plot all events that have been logged in a timeline.
@@ -175,68 +200,56 @@ class EventLogger:
         # construct a dataframe with the events
         import pandas as pd
         import plotly.express as px
-        import plotly.graph_objects as go
 
         data_dict = defaultdict(list)
-        for tracker in ObjectTrackerFactory.get_all_trackers():
-            for event in tracker.get_event_history():
-                end_timestamp = event.timestamp + timedelta(seconds=0.1).total_seconds()
-                if hasattr(event, 'end_timestamp') and event.end_timestamp is not None:
-                    end_timestamp = max(event.end_timestamp, end_timestamp)
-                data_dict['end'].append(end_timestamp)
-                data_dict['start'].append(event.timestamp)
-                data_dict['event'].append(event.__class__.__name__)
-                obj = event.tracked_object if isinstance(event, HasPrimaryTrackedObject) else tracker.obj
-                data_dict['object'].append(obj.name)
-                if isinstance(obj, Body):
-                    data_dict['obj_type'].append(obj.obj_type.name)
-                elif isinstance(obj, Body):
-                    data_dict['obj_type'].append(f'Link of {obj.parent_entity.obj_type}')
-                if isinstance(event, EventWithTwoTrackedObjects) and event.with_object is not None:
-                    with_object = event.with_object
-                    data_dict['with_object'].append(with_object.name)
-                    if isinstance(with_object, Body):
-                        data_dict['with_obj_type'].append(with_object.obj_type.name)
-                    elif isinstance(with_object, Body):
-                        data_dict['with_obj_type'].append(f'Link of {with_object.parent_entity.obj_type}')
-                else:
-                    data_dict['with_object'].append(None)
-                    data_dict['with_obj_type'].append(None)
-        if len(data_dict['start']) == 0:
+        for event in self.timeline:
+            start_timestamp = event.timestamp
+            if isinstance(start_timestamp, datetime):
+                start_timestamp = start_timestamp.timestamp()
+            
+            end_timestamp = getattr(event, 'end_timestamp', None)
+            if end_timestamp is None:
+                end_timestamp = start_timestamp + 0.1
+            elif isinstance(end_timestamp, datetime):
+                end_timestamp = end_timestamp.timestamp()
+
+            data_dict['start'].append(start_timestamp)
+            data_dict['end'].append(end_timestamp)
+            data_dict['event'].append(event.__class__.__name__)
+
+            tracked_objects = getattr(event, 'tracked_objects', [])
+            object_name = ", ".join([obj.name for obj in tracked_objects]) if tracked_objects else "None"
+            data_dict['object'].append(object_name)
+
+            obj_type = ", ".join([obj.obj_type.name for obj in tracked_objects if isinstance(obj, Body)]) if tracked_objects else "None"
+            data_dict['obj_type'].append(obj_type)
+
+            with_object = getattr(event, 'with_object', None)
+            data_dict['with_object'].append(with_object.name if with_object else None)
+            data_dict['with_obj_type'].append(with_object.obj_type.name if isinstance(with_object, Body) else None)
+
+        if not data_dict['start']:
             logger.debug("No events to plot.")
             return
+
         # subtract the start time from all timestamps
         min_start = min(data_dict['start'])
         data_dict['start'] = [x - min_start for x in data_dict['start']]
         data_dict['end'] = [x - min_start for x in data_dict['end']]
-        tickvals = []
-        prev_val = None
-        range_val = max(data_dict['end']) - min(data_dict['start'])
-        per_tick_range = range_val / 10
-        for val in sorted(data_dict['start']):
-            if prev_val is None:
-                tickvals.append(val)
-                prev_val = val
-                continue
-            if abs(val - prev_val) > per_tick_range:
-                tickvals.append(val)
-                prev_val = val
-            else:
-                tickvals.append("")
+
         df = pd.DataFrame(data_dict)
 
-        fig = go.Figure()
+        fig = px.timeline(
+            df,
+            x_start=pd.to_datetime(df['start'], unit='s'),
+            x_end=pd.to_datetime(df['end'], unit='s'),
+            y='event',
+            color='event',
+            hover_data={'object': True, 'obj_type': True, 'with_object': True, 'with_obj_type': True},
+            title="Events Timeline"
+        )
 
-        fig = px.timeline(df, x_start=pd.to_datetime(df[f'start'], unit='s'),
-                          x_end=pd.to_datetime(df[f'end'], unit='s'),
-                          y=f'event',
-                          color=f'event',
-                          hover_data={'object': True, 'obj_type': True, 'with_object': True, 'with_obj_type': True},
-                          # text=f'object',
-                          title=f"Events Timeline")
-        tick_vals = [pd.to_datetime(x, unit='s') if x != "" else x for x in tickvals]
-        fig.update_xaxes(tickvals=tick_vals, tickformat='%S')
-        # fig.update_xaxes(tickvals=pd.to_datetime(df[f'start'], unit='s'), tickformat='%S')
+        fig.update_xaxes(tickformat='%S')
         fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor='LightPink')
         fig.update_layout(
             font_family="Courier New",
@@ -248,6 +261,7 @@ class EventLogger:
             legend_title_font_color="black",
             legend_title_font_size=24,
         )
+
         if show:
             fig.show()
         if save_path:
@@ -378,30 +392,6 @@ class EventAnnotationThread(threading.Thread):
         self.logger = logger
         #self.current_annotations: List[TextAnnotation] = []
         self.kill_event = threading.Event()
-
-    def run(self):
-        while not self.kill_event.is_set() or not self.logger.annotation_queue.empty():
-            try:
-                event = self.logger.annotation_queue.get_nowait()
-                self.logger.annotation_queue.task_done()
-            except queue.Empty:
-                time.sleep(0.1)
-                continue
-            obj_name_map = {"montessori_object_6": "Cylinder",
-                            "montessori_object_3": "Cube",
-                            "montessori_object_5": "Cuboid",
-                            "montessori_object_2": "Triangle", }
-            try:
-                if isinstance(event, PickUpEvent) and event.tracked_object.name in obj_name_map:
-                    text_to_speech(f"The {obj_name_map[event.tracked_object.name]} was picked")
-                elif isinstance(event, InsertionEvent) and event.tracked_object.name in obj_name_map:
-                    hole_name = event.through_hole.name.replace('_', ' ').strip()
-                    hole_name = re.sub(r'\d+', '', hole_name).strip()
-                    text_to_speech(f"The {obj_name_map[event.tracked_object.name]} was inserted into the {hole_name}")
-                event.annotate()
-            except Exception as e:
-                logger.debug(f"Error annotating event {event}: {e}")
-                continue
 
     def stop(self):
         self.kill_event.set()

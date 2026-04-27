@@ -28,7 +28,9 @@ import segmind.detectors.atomic_event_detectors_nodes
 import segmind.detectors.base
 import segmind.detectors.coarse_event_detector_nodes
 import segmind.detectors.spatial_relation_detector_nodes
+import segmind.episode_player
 import segmind.episode_segmenter
+import segmind.event_logger
 import segmind.players.csv_player
 import segmind.players.data_player
 import segmind.players.json_player
@@ -175,24 +177,6 @@ class ContainmentDetectorDAO(
     }
 
 
-class DataPlayerDAO(Base, DataAccessObject[segmind.players.data_player.DataPlayer]):
-
-    __tablename__ = "DataPlayerDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        Integer, primary_key=True, use_existing_column=True
-    )
-
-    polymorphic_type: Mapped[str] = mapped_column(
-        String(255), nullable=False, use_existing_column=True
-    )
-
-    __mapper_args__ = {
-        "polymorphic_on": "polymorphic_type",
-        "polymorphic_identity": "DataPlayerDAO",
-    }
-
-
 class DetectionEventDAO(
     Base, DataAccessObject[segmind.datastructures.events.DetectionEvent]
 ):
@@ -229,6 +213,42 @@ class DetectorStateChartDAO(
     )
 
 
+class EpisodePlayerDAO(Base, DataAccessObject[segmind.episode_player.EpisodePlayer]):
+
+    __tablename__ = "EpisodePlayerDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    polymorphic_type: Mapped[str] = mapped_column(
+        String(255), nullable=False, use_existing_column=True
+    )
+
+    __mapper_args__ = {
+        "polymorphic_on": "polymorphic_type",
+        "polymorphic_identity": "EpisodePlayerDAO",
+    }
+
+
+class DataPlayerDAO(
+    EpisodePlayerDAO, DataAccessObject[segmind.players.data_player.DataPlayer]
+):
+
+    __tablename__ = "DataPlayerDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(EpisodePlayerDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "DataPlayerDAO",
+        "inherit_condition": database_id == EpisodePlayerDAO.database_id,
+    }
+
+
 class EpisodeSegmenterExecutorDAO(
     Base, DataAccessObject[segmind.episode_segmenter.EpisodeSegmenterExecutor]
 ):
@@ -242,6 +262,17 @@ class EpisodeSegmenterExecutorDAO(
     tmp_folder: Mapped[builtins.str] = mapped_column(
         sqlalchemy.sql.sqltypes.Text, use_existing_column=True
     )
+
+
+class EventLoggerDAO(Base, DataAccessObject[segmind.event_logger.EventLogger]):
+
+    __tablename__ = "EventLoggerDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    annotate_events: Mapped[builtins.bool] = mapped_column(use_existing_column=True)
 
 
 class EventWithTrackedObjectsDAO(
@@ -594,6 +625,10 @@ class JSONPlayerDAO(
         use_existing_column=True,
     )
 
+    data_object_names: Mapped[typing.Set[builtins.str]] = mapped_column(
+        JSON, nullable=False, use_existing_column=True
+    )
+
     __mapper_args__ = {
         "polymorphic_identity": "JSONPlayerDAO",
         "inherit_condition": database_id == FilePlayerDAO.database_id,
@@ -927,6 +962,16 @@ class SegmindContextDAO(Base, DataAccessObject[segmind.detectors.base.SegmindCon
             semantic_digital_twin.semantic_annotations.semantic_annotations.Aperture
         ]
     ] = mapped_column(JSON, nullable=False, use_existing_column=True)
+
+    logger_id: Mapped[int] = mapped_column(
+        ForeignKey("EventLoggerDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+
+    logger: Mapped[EventLoggerDAO] = relationship(
+        "EventLoggerDAO", uselist=False, foreign_keys=[logger_id], post_update=True
+    )
 
 
 class SegmindStatechartDAO(

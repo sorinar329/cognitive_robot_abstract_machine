@@ -1,48 +1,50 @@
 from __future__ import annotations
 
 import datetime
-from threading import RLock
 import time
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
+from threading import RLock
+from typing import Any, Callable, ClassVar, Optional
 
+from segmind import LogLevel, logger, set_logger_level
+from segmind.datastructures.enums import PlayerStatus
+from segmind.utils import PropagatingThread
 from semantic_digital_twin.world import World
-from typing_extensions import Callable, Any, Optional, Dict, Generator
-
-from segmind import set_logger_level, LogLevel, logger
 
 
 set_logger_level(LogLevel.DEBUG)
-
-try:
-    from pycram.worlds.multiverse import Multiverse
-except ImportError:
-    Multiverse = None
 
 try:
     from ripple_down_rules.user_interface.gui import RDRCaseViewer
 except ImportError:
     RDRCaseViewer = None
 
-from .utils import PropagatingThread
-from .datastructures.enums import PlayerStatus
 
-
+@dataclass(unsafe_hash=True)
 class EpisodePlayer(PropagatingThread, ABC):
     """
     A class that represents the thread that steps the world.
     """
 
-    _instances: dict[type, 'EpisodePlayer'] = {}
-    pause_resume_lock: RLock = RLock()
+    _instances: ClassVar[dict[type, EpisodePlayer]] = {}
+    """
+    The singleton dictionary that stores the instances of the player.
+    """
+
+    pause_resume_lock: ClassVar[RLock] = RLock()
+    """
+    The lock for pausing and resuming the player.
+    """
 
     def __new__(cls, *args, **kwargs):
-        if cls not in cls._instances:
+        if cls not in EpisodePlayer._instances:
             # Create the instance and store it under its specific class key
             instance = super().__new__(cls)
-            cls._instances[cls] = instance
+            EpisodePlayer._instances[cls] = instance
             instance._initialized = False
 
-        return cls._instances[cls]
+        return EpisodePlayer._instances[cls]
 
     def __init__(
         self,
@@ -52,11 +54,20 @@ class EpisodePlayer(PropagatingThread, ABC):
         world: Optional[World] = None,
         rdr_viewer: Optional[RDRCaseViewer] = None,
     ):
+        """
+        Initializes the episode player.
+
+        :param time_between_frames: The time between frames.
+        :param use_realtime: Whether to use realtime.
+        :param stop_after_ready: Whether to stop after ready.
+        :param world: The world.
+        :param rdr_viewer: The RDR case viewer.
+        """
         if not self._initialized:
             super().__init__()
             self.rdr_viewer: Optional[RDRCaseViewer] = rdr_viewer
             self.stop_after_ready: bool = stop_after_ready
-            self.world: World
+            self.world: World = world
             self._ready: bool = False
             self._status = PlayerStatus.CREATED
             self.time_between_frames: datetime.timedelta = (
@@ -68,24 +79,38 @@ class EpisodePlayer(PropagatingThread, ABC):
             self._initialized = True
 
     @property
-    def status(self):
+    def status(self) -> PlayerStatus:
         """
-        :return: The current status of the episode player.
-        :rtype: PlayerStatus
+        Retrieves the current status of the episode player.
+
+        :return: The current status.
         """
         return self._status
 
     @property
-    def ready(self):
+    def ready(self) -> bool:
+        """
+        Retrieves the ready status of the episode player.
+
+        :return: The ready status.
+        """
         return self._ready
 
     @ready.setter
     def ready(self, value: bool):
+        """
+        Sets the ready status of the episode player.
+
+        :param value: The ready status.
+        """
         self._ready = value
         if value and self.stop_after_ready:
             self._status = PlayerStatus.STOPPED
 
     def run(self):
+        """
+        Starts the episode player.
+        """
         self._status = PlayerStatus.PLAYING
         super().run()
 
@@ -99,7 +124,7 @@ class EpisodePlayer(PropagatingThread, ABC):
     @abstractmethod
     def _pause(self):
         """
-        Perform extra functionalities when the episode player is paused
+        Perform extra functionalities when the episode player is paused.
         """
         pass
 
@@ -113,7 +138,7 @@ class EpisodePlayer(PropagatingThread, ABC):
     @abstractmethod
     def _resume(self):
         """
-        Perform extra functionalities when the episode player is resumed
+        Perform extra functionalities when the episode player is resumed.
         """
         pass
 
@@ -133,6 +158,7 @@ class EpisodePlayer(PropagatingThread, ABC):
         Wait to maintain the frame rate of the episode player.
 
         :param last_processing_time: The time of the last processing.
+        :param delta_time: The delta time.
         """
         if delta_time is None:
             delta_time = self.time_between_frames
@@ -141,13 +167,24 @@ class EpisodePlayer(PropagatingThread, ABC):
             time.sleep((time_to_wait - delta_time).total_seconds())
 
     @classmethod
+    def get_instance(cls) -> EpisodePlayer:
+        """
+        Retrieves the singleton instance of the player.
+
+        :return: The singleton instance.
+        """
+        if cls not in EpisodePlayer._instances:
+            raise RuntimeError(f"{cls.__name__} has not been initialized.")
+        return EpisodePlayer._instances[cls]
+
+    @classmethod
     def pause_resume_with_condition(cls, condition: Callable[[Any], bool]) -> Callable:
         """
         A decorator for pausing the player before a function call given a condition and then resuming it after the call
          ends.
 
         :param condition: The condition to check before pausing the player.
-        :return: The wrapped callable
+        :return: The wrapped callable.
         """
 
         def condition_wrapper(func: Callable) -> Callable:
@@ -155,22 +192,25 @@ class EpisodePlayer(PropagatingThread, ABC):
             A decorator for pausing the player before a function call and then resuming it after the call ends.
 
             :param func: The callable to wrap with the decorator.
-            :return: The wrapped callable
+            :return: The wrapped callable.
             """
 
             def wrapper(*args, **kwargs) -> Any:
                 if not condition(*args, **kwargs):
                     return func(*args, **kwargs)
                 with cls.pause_resume_lock:
-                    if cls._instance.status == PlayerStatus.PLAYING:
-                        print("Pausing player")
-                        cls._instance.pause()
+                    instance = cls.get_instance()
+                    if instance.status == PlayerStatus.PLAYING:
+                        logger.debug("Pausing player")
+                        instance.pause()
                         result = func(*args, **kwargs)
-                        cls._instance.resume()
-                        print("Resuming player")
+                        instance.resume()
+                        logger.debug("Resuming player")
                         return result
                     else:
                         return func(*args, **kwargs)
+
+            return wrapper
 
         return condition_wrapper
 
@@ -180,22 +220,16 @@ class EpisodePlayer(PropagatingThread, ABC):
         A decorator for pausing the player before a function call and then resuming it after the call ends.
 
         :param func: The callable to wrap with the decorator.
-        :return: The wrapped callable
+        :return: The wrapped callable.
         """
-
-        def wrapper(*args, **kwargs) -> Any:
-            with cls.pause_resume_lock:
-                if cls._instance.status == PlayerStatus.PLAYING:
-                    logger.debug("Pausing player")
-                    cls._instance.pause()
-                    result = func(*args, **kwargs)
-                    cls._instance.resume()
-                    logger.debug("Resuming player")
-                    return result
-                else:
-                    return func(*args, **kwargs)
-
-        return wrapper
+        return cls.pause_resume_with_condition(lambda *args, **kwargs: True)(func)
 
     def _join(self, timeout=None):
-        self._instance = None
+        """
+        Joins the episode player thread and removes the instance from the singleton dictionary.
+
+        :param timeout: The timeout.
+        """
+        if self.__class__ in EpisodePlayer._instances:
+            del EpisodePlayer._instances[self.__class__]
+        super()._join(timeout)
