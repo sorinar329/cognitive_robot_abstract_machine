@@ -9,6 +9,8 @@ from typing_extensions import Dict, Set
 
 logger = logging.getLogger(__name__)
 
+EXCLUDED_KEYWORDS = {"joint", "velocity", "actuator"}
+
 @dataclass(eq=False)
 class CSVEpisodePlayer(FilePlayer):
     """
@@ -28,16 +30,31 @@ class CSVEpisodePlayer(FilePlayer):
     def __post_init__(self):
         super().__post_init__()
 
+
+
     def get_frame_data_generator(self):
         """
         Reads the CSV file and generates the frame data.
         """
         logger.debug(f"Reading CSV file {self.file_path}")
         self.data_frames = pd.read_csv(self.file_path)
+
+        def _is_excluded(name: str) -> bool:
+            lower = name.lower()
+            return any(keyword in lower for keyword in EXCLUDED_KEYWORDS)
+
         self.data_object_names = {
-            v.split(":")[0] for v in self.data_frames.columns if ":" in v
+            v.split(":")[0] for v in self.data_frames.columns
+            if ":" in v and not _is_excluded(v.split(":")[0])
         }
-        for i, (frame_id, objects_data) in enumerate(self.data_frames.iterrows()):
+
+        excluded_cols = {
+            col for col in self.data_frames.columns
+            if ":" in col and _is_excluded(col.split(":")[0])
+        }
+        filtered_frames = self.data_frames.drop(columns=excluded_cols)
+
+        for i, (frame_id, objects_data) in enumerate(filtered_frames.iterrows()):
             yield FrameData(
                 time=float(objects_data["time"]),
                 objects_data=objects_data.to_dict(),
@@ -77,10 +94,10 @@ class CSVEpisodePlayer(FilePlayer):
                 pos_x=obj_position[0],
                 pos_y=obj_position[1],
                 pos_z=obj_position[2],
-                quat_x=obj_orientation[0],
-                quat_y=obj_orientation[1],
-                quat_z=obj_orientation[2],
-                quat_w=obj_orientation[3],
+                # quat_x=obj_orientation[0],
+                # quat_y=obj_orientation[1],
+                # quat_z=obj_orientation[2],
+                # quat_w=obj_orientation[3],
             )
             obj_pose.timestamp = current_time
 

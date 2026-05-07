@@ -11,12 +11,14 @@ from typing_extensions import Callable, Optional, Dict, Generator, List
 
 from segmind.datastructures.enums import PlayerStatus
 from segmind.episode_player import EpisodePlayer
-from semantic_digital_twin.spatial_types import Vector3
+from semantic_digital_twin.spatial_types import Vector3, HomogeneousTransformationMatrix
 from semantic_digital_twin.spatial_types.spatial_types import (
     Pose,
 )
 from semantic_digital_twin.world import World
+from semantic_digital_twin.world_description.connections import Connection6DoF
 from semantic_digital_twin.world_description.world_entity import Body
+from test.krrood_test.dataset.semantic_world_like_classes import FixedConnection
 
 logger = logging.getLogger(__name__)
 
@@ -129,7 +131,9 @@ class DataPlayer(EpisodePlayer, ABC):
             return
         for obj in self.world.bodies_with_collision:
             if obj in objects_poses:
-                obj.parent_connection.origin = objects_poses[obj].to_homogeneous_matrix()
+                if obj.parent_connection.__class__.__name__ == "Connection6DoF":
+                    # Bug hier gefunden, wir addieren die Matrix zu der schon vorhandenen, da die Objekte nicht bei 0.0 anfangen, stellt das ein problem dar.
+                    obj.parent_connection.origin = objects_poses[obj].to_homogeneous_matrix()
 
 
     @abstractmethod

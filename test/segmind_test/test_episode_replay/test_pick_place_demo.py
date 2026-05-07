@@ -20,23 +20,17 @@ from semantic_digital_twin.world_description.world_entity import Body
 
 @pytest.fixture(scope="function")
 def test_csv_player_context():
-    scene_path = "/home/sorin/dev/cognitive_robot_abstract_machine/segmind/resources/tiago_episodes/models/assets/mjcf/iai_tiago_velocity_in_apartment_with_multiverse.xml"
+    scene_path = "/home/sorin/dev/workspace/cognitive_robot_abstract_machine/segmind/resources/tiago_episodes/models/assets/mjcf/iai_tiago_velocity_in_apartment_with_multiverse.xml"
     world = MJCFParser(scene_path).parse()
-
-    # root = Body(name=PrefixedName(name="root", prefix="world"))
-    # with world.modify_world():
-    #     world.add_kinematic_structure_entity(root)
 
     #multiverse_episodes_dir = (
     #    f"{Path(segmind.__file__).parent.parent.parent}/resources/multiverse_episodes"
     #)
     #
-    # file_player = CSVEpisodePlayer(
-    #     file_path=f"{multiverse_episodes_dir}/icub_montessori_no_hands/data.csv",
-    #     world=world,
-    #     time_between_frames=datetime.timedelta(milliseconds=0.01),
-    #     position_shift=Vector3(0, 0, 0),
-    # )
+    file_player = CSVEpisodePlayer(
+        file_path="/home/sorin/dev/workspace/cognitive_robot_abstract_machine/segmind/resources/tiago_episodes/data/data.csv",
+        world=world,
+    )
     # context = MotionStatechartContext(world=world)
     # episode_executor = EpisodeSegmenterExecutor(
     #     context=context,
@@ -51,13 +45,18 @@ def test_csv_player_context():
     return {
         "world": world,
     #    "context": context,
-    #    "file_player": file_player,
+        "file_player": file_player,
     #    "episode_executor": episode_executor,
     }
 
 def test_segmind_demo(test_csv_player_context):
     world = test_csv_player_context["world"]
+    file_player = test_csv_player_context["file_player"]
+
     rclpy.init()
     node = rclpy.create_node("test_csv_player")
     viz_marker_publisher = VizMarkerPublisher(_world=world, node=node)
     viz_marker_publisher.with_tf_publisher()
+
+    file_player.start()
+
