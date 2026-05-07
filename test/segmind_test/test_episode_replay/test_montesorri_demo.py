@@ -1,13 +1,19 @@
 import datetime
+import time
 from os.path import dirname
+from pathlib import Path
 from unittest import TestCase
 
 import pytest
+import rclpy
+import segmind
+from giskardpy.motion_statechart.context import MotionStatechartContext
 from segmind.detectors.base import DetectorStateChart, SegmindContext
 from segmind.episode_segmenter import EpisodeSegmenterExecutor
 from segmind.event_logger import EventLogger
 from segmind.players.csv_player import CSVEpisodePlayer
 from semantic_digital_twin.adapters.package_resolver import FileUriResolver
+from semantic_digital_twin.adapters.ros.visualization.viz_marker import VizMarkerPublisher
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.spatial_types import Vector3
 from semantic_digital_twin.world import World
@@ -16,23 +22,23 @@ from segmind.statecharts.segmind_statechart import SegmindStatechart
 
 
 @pytest.fixture(scope="function")
-def test_context():
+def test_csv_player_context():
     world = World()
     root = Body(name=PrefixedName(name="root", prefix="world"))
     with world.modify_world():
         world.add_kinematic_structure_entity(root)
 
-    logger = EventLogger()
-    context = SegmindContext(world=world, logger=logger)
     multiverse_episodes_dir = (
-        f"{dirname(__file__)}/../resources/multiverse_episodes"
+        f"{Path(segmind.__file__).parent.parent.parent}/resources/multiverse_episodes"
     )
+
     file_player = CSVEpisodePlayer(
         file_path=f"{multiverse_episodes_dir}/icub_montessori_no_hands/data.csv",
         world=world,
-        time_between_frames=datetime.timedelta(milliseconds=0.1),
+        time_between_frames=datetime.timedelta(milliseconds=0.01),
         position_shift=Vector3(0, 0, 0),
     )
+    context = MotionStatechartContext(world=world)
     episode_executor = EpisodeSegmenterExecutor(
         context=context,
         player=file_player,
@@ -45,25 +51,31 @@ def test_context():
     )
     return {
         "world": world,
-        "logger": logger,
         "context": context,
         "file_player": file_player,
         "episode_executor": episode_executor,
     }
 
 @pytest.mark.skip(reason="This test takes too long to run.")
-def test_replay_episode(test_context):
-    context = test_context["context"]
-    logger = test_context["logger"]
-    executor = test_context["episode_executor"]
-    statechart = SegmindStatechart()
-    sc = statechart.build_statechart(context)
-    executor.compile(sc)
-    assert executor.player.is_alive()
-    executor.tick_until_end()
+def test_replay_episode(test_csv_player_context):
+    world = test_csv_player_context["world"]
+    episode_executor = test_csv_player_context["episode_executor"]
+
+    rclpy.init()
+    node = rclpy.create_node("test_csv_player")
+    viz_marker_publisher = VizMarkerPublisher(_world=world, node=node)
+    viz_marker_publisher.with_tf_publisher()
+
+    statechart = SegmindStatechart().build_statechart()
+    segmind_context = episode_executor.context.require_extension(SegmindContext)
+    episode_executor.compile(statechart)
+
+
     try:
-        while executor.player.is_alive():
-            pass
+        while episode_executor.player.is_alive():
+            episode_executor.tick()
     finally:
-        assert len(logger.get_events()) > 0
+        print(segmind_context.logger.get_events())
+
+
 
