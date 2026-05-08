@@ -16,7 +16,7 @@ from semantic_digital_twin.spatial_types.spatial_types import (
     Pose,
 )
 from semantic_digital_twin.world import World
-from semantic_digital_twin.world_description.connections import Connection6DoF
+from semantic_digital_twin.world_description.connections import Connection6DoF, RevoluteConnection, PrismaticConnection
 from semantic_digital_twin.world_description.world_entity import Body
 from test.krrood_test.dataset.semantic_world_like_classes import FixedConnection
 
@@ -127,13 +127,26 @@ class DataPlayer(EpisodePlayer, ABC):
         :param frame_data: The frame data.
         """
         objects_poses = self.get_objects_poses(frame_data)
+        connection_states = self.get_joint_states(frame_data)
         if not objects_poses:
             return
         for obj in self.world.bodies_with_collision:
             if obj in objects_poses:
-                if obj.parent_connection.__class__.__name__ == "Connection6DoF":
-                    # Bug hier gefunden, wir addieren die Matrix zu der schon vorhandenen, da die Objekte nicht bei 0.0 anfangen, stellt das ein problem dar.
-                    obj.parent_connection.origin = objects_poses[obj].to_homogeneous_matrix()
+                match obj.parent_connection:
+                    case Connection6DoF():
+                        obj.parent_connection.origin = objects_poses[obj].to_homogeneous_matrix()
+                    case _:
+                        pass
+
+        for connection in self.world.connections:
+            if connection.name.name in connection_states:
+                match connection:
+                    case RevoluteConnection():
+                        connection.position = connection_states[connection.name.name]
+                    case PrismaticConnection():
+                        connection.position = connection_states[connection.name.name]
+                    case _:
+                        pass
 
 
     @abstractmethod
@@ -145,6 +158,13 @@ class DataPlayer(EpisodePlayer, ABC):
         :return: The poses of the objects.
         """
         pass
+
+
+    @abstractmethod
+    def get_joint_states(self, frame_data: FrameData):
+        """
+        G
+        """
 
 @dataclass(eq=False)
 class FilePlayer(DataPlayer, ABC):

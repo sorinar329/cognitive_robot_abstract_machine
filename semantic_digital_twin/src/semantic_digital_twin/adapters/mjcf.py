@@ -396,8 +396,9 @@ class MJCFParser:
                     world=self.world,
                     parent=parent_body,
                     child=child_body,
-                    parent_T_connection_expression=parent_body_to_joint_transform,
                 )
+                # self.world.update_forward_kinematics()
+                # connection.origin = parent_body_to_joint_transform
             else:
                 joint_to_child_body_transform = child_body_to_joint_transform.inverse()
                 joint_axis = Vector3(

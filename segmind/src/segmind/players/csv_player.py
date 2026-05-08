@@ -9,7 +9,7 @@ from typing_extensions import Dict, Set
 
 logger = logging.getLogger(__name__)
 
-EXCLUDED_KEYWORDS = {"joint", "velocity", "actuator"}
+EXCLUDED_KEYWORDS = {"velocity", "actuator"}
 
 @dataclass(eq=False)
 class CSVEpisodePlayer(FilePlayer):
@@ -82,6 +82,8 @@ class CSVEpisodePlayer(FilePlayer):
         objects_data = frame_data.objects_data
         current_time = frame_data.time
         for obj_name in self.data_object_names:
+            if "joint" in obj_name:
+                continue
             obj_position = [objects_data[f"{obj_name}:position_{i}"] for i in range(3)]
             obj_orientation = [
                 objects_data[f"{obj_name}:quaternion_{i}"] for i in range(4)
@@ -109,3 +111,19 @@ class CSVEpisodePlayer(FilePlayer):
             obj = self.world.get_body_by_name(obj_name)
             objects_poses[obj] = obj_pose
         return objects_poses
+
+
+    def get_joint_states(self, frame_data: FrameData) -> Dict[str, float]:
+        """
+        Extracts the joint states from the frame data.
+
+        :param frame_data: The frame data.
+        :return: A dictionary mapping joint names to their positions.
+        """
+        joint_states = {}
+        for col in self.data_frames.columns:
+            if ":" in col and "joint_angular_position" in col.lower() and "cmd" not in col.lower():
+                joint_name = col.split(":")[0]
+                joint_position = frame_data.objects_data[col]
+                joint_states[joint_name] = joint_position
+        return joint_states
