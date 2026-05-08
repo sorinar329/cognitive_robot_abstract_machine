@@ -1,3 +1,4 @@
+import threading
 from abc import abstractmethod, ABC
 from dataclasses import dataclass, field
 from typing import Optional, Dict, Set, List, Any
@@ -30,6 +31,7 @@ IndexedBodyPairs = Dict[Body, Set[Body]]
 Type hint for dictionaries mapping bodies to sets of bodies
 """
 
+_casadi_lock = threading.Lock()
 
 @dataclass
 class SegmindContext(ContextExtension):
@@ -130,20 +132,20 @@ class AbstractDetector(MotionStatechartNode, ABC):
         otherwise ObservationStateValues.FALSE.
         """
         segmind_context_extension = context.require_extension(SegmindContext)
-
-        objects_to_check = (
-            [self.tracked_object]
-            if self.tracked_object
-            else [
-                body
-                for body in context.world.bodies
-                if type(body.parent_connection) is Connection6DoF
-            ]
-        )
-        events = self.update_context_and_events(context, segmind_context_extension, objects_to_check)
-        for e in events:
-            segmind_context_extension.logger.log_event(e, segmind_context_extension.tracker_registry)
-        return ObservationStateValues.TRUE if events else ObservationStateValues.FALSE
+        with _casadi_lock:
+            objects_to_check = (
+                [self.tracked_object]
+                if self.tracked_object
+                else [
+                    body
+                    for body in context.world.bodies
+                    if type(body.parent_connection) is Connection6DoF
+                ]
+            )
+            events = self.update_context_and_events(context, segmind_context_extension, objects_to_check)
+            for e in events:
+                segmind_context_extension.logger.log_event(e, segmind_context_extension.tracker_registry)
+            return ObservationStateValues.TRUE if events else ObservationStateValues.FALSE
 
 
     def get_relation(self, context: MotionStatechartContext, tracked_objects: List[Body], predicate) -> Dict[Body, Set[Body]]:
