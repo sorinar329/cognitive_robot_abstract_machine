@@ -52,19 +52,21 @@ def test_csv_player_context():
 def test_segmind_demo(test_csv_player_context):
     world = test_csv_player_context["world"]
     episode_executor = test_csv_player_context["episode_executor"]
+    file_player = test_csv_player_context["file_player"]
 
     rclpy.init()
     node = rclpy.create_node("test_csv_player")
     viz_marker_publisher = VizMarkerPublisher(_world=world, node=node)
     viz_marker_publisher.with_tf_publisher()
 
-    statechart = SegmindStatechart().build_statechart()
-    segmind_context = episode_executor.context.require_extension(SegmindContext)
-    episode_executor.compile(statechart)
-
-
-    try:
-        while episode_executor.player.is_alive():
-            episode_executor.tick()
-    finally:
-        print(segmind_context.logger.get_events())
+    file_player.start()
+    # statechart = SegmindStatechart().build_statechart()
+    # segmind_context = episode_executor.context.require_extension(SegmindContext)
+    # episode_executor.compile(statechart)
+    #
+    #
+    # try:
+    #     while episode_executor.player.is_alive():
+    #         episode_executor.tick()
+    # finally:
+    #     print(segmind_context.logger.get_events())

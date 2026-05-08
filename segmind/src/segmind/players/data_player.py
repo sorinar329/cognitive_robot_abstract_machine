@@ -23,7 +23,7 @@ from test.krrood_test.dataset.semantic_world_like_classes import FixedConnection
 
 logger = logging.getLogger(__name__)
 
-_casadi_lock = threading.Lock()
+from segmind.casadi_lock import casadi_lock
 
 @dataclass
 class FrameData:
@@ -132,24 +132,24 @@ class DataPlayer(EpisodePlayer, ABC):
         if not objects_poses:
             return
 
-        with _casadi_lock:
-            for obj in self.world.bodies_with_collision:
-                if obj in objects_poses:
-                    match obj.parent_connection:
-                        case Connection6DoF():
-                            obj.parent_connection.origin = objects_poses[obj].to_homogeneous_matrix()
-                        case _:
-                            pass
 
-            for connection in self.world.connections:
-                if connection.name.name in connection_states:
-                    match connection:
-                        case RevoluteConnection():
-                            connection.position = connection_states[connection.name.name]
-                        case PrismaticConnection():
-                            connection.position = connection_states[connection.name.name]
-                        case _:
-                            pass
+        for obj in self.world.bodies_with_collision:
+            if obj in objects_poses:
+                match obj.parent_connection:
+                    case Connection6DoF():
+                        obj.parent_connection.origin = objects_poses[obj].to_homogeneous_matrix()
+                    case _:
+                        pass
+
+        for connection in self.world.connections:
+            if connection.name.name in connection_states:
+                match connection:
+                    case RevoluteConnection():
+                        connection.position = connection_states[connection.name.name]
+                    case PrismaticConnection():
+                        connection.position = connection_states[connection.name.name]
+                    case _:
+                        pass
 
 
     @abstractmethod

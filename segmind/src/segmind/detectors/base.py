@@ -132,20 +132,20 @@ class AbstractDetector(MotionStatechartNode, ABC):
         otherwise ObservationStateValues.FALSE.
         """
         segmind_context_extension = context.require_extension(SegmindContext)
-        with _casadi_lock:
-            objects_to_check = (
-                [self.tracked_object]
-                if self.tracked_object
-                else [
-                    body
-                    for body in context.world.bodies
-                    if type(body.parent_connection) is Connection6DoF
-                ]
-            )
-            events = self.update_context_and_events(context, segmind_context_extension, objects_to_check)
-            for e in events:
-                segmind_context_extension.logger.log_event(e, segmind_context_extension.tracker_registry)
-            return ObservationStateValues.TRUE if events else ObservationStateValues.FALSE
+
+        objects_to_check = (
+            [self.tracked_object]
+            if self.tracked_object
+            else [
+                body
+                for body in context.world.bodies
+                if type(body.parent_connection) is Connection6DoF
+            ]
+        )
+        events = self.update_context_and_events(context, segmind_context_extension, objects_to_check)
+        for e in events:
+            segmind_context_extension.logger.log_event(e, segmind_context_extension.tracker_registry)
+        return ObservationStateValues.TRUE if events else ObservationStateValues.FALSE
 
 
     def get_relation(self, context: MotionStatechartContext, tracked_objects: List[Body], predicate) -> Dict[Body, Set[Body]]:

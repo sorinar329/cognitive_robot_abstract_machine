@@ -12,7 +12,6 @@ logger = logging.getLogger(__name__)
 
 EXCLUDED_KEYWORDS = {"velocity", "actuator"}
 
-_casadi_lock = threading.Lock()
 
 @dataclass(eq=False)
 class CSVEpisodePlayer(FilePlayer):
@@ -91,20 +90,17 @@ class CSVEpisodePlayer(FilePlayer):
             obj_orientation = [
                 objects_data[f"{obj_name}:quaternion_{i}"] for i in range(4)
             ]
-            # obj_orientation[0], obj_orientation[3] = (
-            #     obj_orientation[3],
-            #     obj_orientation[0],
-            # )
-            with _casadi_lock:
-                obj_pose = Pose.from_xyz_quaternion(
-                    pos_x=obj_position[0],
-                    pos_y=obj_position[1],
-                    pos_z=obj_position[2],
-                    quat_x=obj_orientation[1],
-                    quat_y=obj_orientation[2],
-                    quat_z=obj_orientation[3],
-                    quat_w=obj_orientation[0],
-                )
+
+
+            obj_pose = Pose.from_xyz_quaternion(
+                pos_x=obj_position[0],
+                pos_y=obj_position[1],
+                pos_z=obj_position[2],
+                quat_x=obj_orientation[1],
+                quat_y=obj_orientation[2],
+                quat_z=obj_orientation[3],
+                quat_w=obj_orientation[0],
+            )
             obj_pose.timestamp = current_time
 
             if self.position_shift:
