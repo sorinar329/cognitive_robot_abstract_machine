@@ -122,7 +122,7 @@ class CSVEpisodePlayer(FilePlayer):
         """
         joint_states = {}
         for col in self.data_frames.columns:
-            if ":" in col and "joint_angular_position" in col.lower() and "cmd" not in col.lower():
+            if ":" in col and ("joint_angular_position" in col.lower() or "joint_linear_position" in col.lower()) and "cmd" not in col.lower():
                 joint_name = col.split(":")[0]
                 joint_position = frame_data.objects_data[col]
                 joint_states[joint_name] = joint_position

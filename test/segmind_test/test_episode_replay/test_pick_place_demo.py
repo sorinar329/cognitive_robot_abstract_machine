@@ -5,17 +5,11 @@ from pathlib import Path
 import pytest
 import rclpy
 
-import segmind
-from giskardpy.motion_statechart.context import MotionStatechartContext
-from segmind.episode_segmenter import EpisodeSegmenterExecutor
+
 from segmind.players.csv_player import CSVEpisodePlayer
 from semantic_digital_twin.adapters.mjcf import MJCFParser
-from semantic_digital_twin.adapters.package_resolver import FileUriResolver
 from semantic_digital_twin.adapters.ros.visualization.viz_marker import VizMarkerPublisher
-from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
-from semantic_digital_twin.spatial_types import Vector3
-from semantic_digital_twin.world import World
-from semantic_digital_twin.world_description.world_entity import Body
+
 
 
 @pytest.fixture(scope="function")
