@@ -36,6 +36,7 @@ import segmind.players.csv_player
 import segmind.players.data_player
 import segmind.players.json_player
 import segmind.statecharts.segmind_statechart
+import segmind.utils
 import semantic_digital_twin.semantic_annotations.semantic_annotations
 import semantic_digital_twin.world_description.world_entity
 import sqlalchemy.sql.sqltypes
@@ -212,42 +213,6 @@ class DetectorStateChartDAO(
     )
 
 
-class EpisodePlayerDAO(Base, DataAccessObject[segmind.episode_player.EpisodePlayer]):
-
-    __tablename__ = "EpisodePlayerDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        Integer, primary_key=True, use_existing_column=True
-    )
-
-    polymorphic_type: Mapped[str] = mapped_column(
-        String(255), nullable=False, use_existing_column=True
-    )
-
-    __mapper_args__ = {
-        "polymorphic_on": "polymorphic_type",
-        "polymorphic_identity": "EpisodePlayerDAO",
-    }
-
-
-class DataPlayerDAO(
-    EpisodePlayerDAO, DataAccessObject[segmind.players.data_player.DataPlayer]
-):
-
-    __tablename__ = "DataPlayerDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        ForeignKey(EpisodePlayerDAO.database_id),
-        primary_key=True,
-        use_existing_column=True,
-    )
-
-    __mapper_args__ = {
-        "polymorphic_identity": "DataPlayerDAO",
-        "inherit_condition": database_id == EpisodePlayerDAO.database_id,
-    }
-
-
 class EpisodeSegmenterExecutorDAO(
     Base, DataAccessObject[segmind.episode_segmenter.EpisodeSegmenterExecutor]
 ):
@@ -301,53 +266,6 @@ class EventWithTrackedObjectsDAO(
     __mapper_args__ = {
         "polymorphic_identity": "EventWithTrackedObjectsDAO",
         "inherit_condition": database_id == DetectionEventDAO.database_id,
-    }
-
-
-class FilePlayerDAO(
-    DataPlayerDAO, DataAccessObject[segmind.players.data_player.FilePlayer]
-):
-
-    __tablename__ = "FilePlayerDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        ForeignKey(DataPlayerDAO.database_id),
-        primary_key=True,
-        use_existing_column=True,
-    )
-
-    file_path: Mapped[builtins.str] = mapped_column(
-        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
-    )
-    models_dir: Mapped[typing.Optional[builtins.str]] = mapped_column(
-        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
-    )
-
-    __mapper_args__ = {
-        "polymorphic_identity": "FilePlayerDAO",
-        "inherit_condition": database_id == DataPlayerDAO.database_id,
-    }
-
-
-class CSVEpisodePlayerDAO(
-    FilePlayerDAO, DataAccessObject[segmind.players.csv_player.CSVEpisodePlayer]
-):
-
-    __tablename__ = "CSVEpisodePlayerDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        ForeignKey(FilePlayerDAO.database_id),
-        primary_key=True,
-        use_existing_column=True,
-    )
-
-    data_object_names: Mapped[typing.Set[builtins.str]] = mapped_column(
-        JSON, nullable=False, use_existing_column=True
-    )
-
-    __mapper_args__ = {
-        "polymorphic_identity": "CSVEpisodePlayerDAO",
-        "inherit_condition": database_id == FilePlayerDAO.database_id,
     }
 
 
@@ -607,28 +525,6 @@ class InsertionEventDAO(
     }
 
 
-class JSONPlayerDAO(
-    FilePlayerDAO, DataAccessObject[segmind.players.json_player.JSONPlayer]
-):
-
-    __tablename__ = "JSONPlayerDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        ForeignKey(FilePlayerDAO.database_id),
-        primary_key=True,
-        use_existing_column=True,
-    )
-
-    data_object_names: Mapped[typing.Set[builtins.str]] = mapped_column(
-        JSON, nullable=False, use_existing_column=True
-    )
-
-    __mapper_args__ = {
-        "polymorphic_identity": "JSONPlayerDAO",
-        "inherit_condition": database_id == FilePlayerDAO.database_id,
-    }
-
-
 class LossOfContactDetectorDAO(
     AbstractDetectorDAO,
     DataAccessObject[
@@ -747,6 +643,28 @@ class LossOfSupportEventDAO(
         "polymorphic_identity": "LossOfSupportEventDAO",
         "inherit_condition": database_id == EventWithTwoTrackedObjectsDAO.database_id,
     }
+
+
+class MockPoseStampedDAO(
+    Base, DataAccessObject[segmind.datastructures.events.MockPoseStamped]
+):
+
+    __tablename__ = "MockPoseStampedDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+
+class MockRDRCaseViewerDAO(
+    Base, DataAccessObject[segmind.episode_player.MockRDRCaseViewer]
+):
+
+    __tablename__ = "MockRDRCaseViewerDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
 
 
 class MotionDetectorDAO(
@@ -912,6 +830,148 @@ class PlacingEventDAO(
     __mapper_args__ = {
         "polymorphic_identity": "PlacingEventDAO",
         "inherit_condition": database_id == EventWithTwoTrackedObjectsDAO.database_id,
+    }
+
+
+class PropagatingThreadDAO(Base, DataAccessObject[segmind.utils.PropagatingThread]):
+
+    __tablename__ = "PropagatingThreadDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    polymorphic_type: Mapped[str] = mapped_column(
+        String(255), nullable=False, use_existing_column=True
+    )
+
+    __mapper_args__ = {
+        "polymorphic_on": "polymorphic_type",
+        "polymorphic_identity": "PropagatingThreadDAO",
+    }
+
+
+class EpisodePlayerDAO(
+    PropagatingThreadDAO, DataAccessObject[segmind.episode_player.EpisodePlayer]
+):
+
+    __tablename__ = "EpisodePlayerDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(PropagatingThreadDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    use_realtime: Mapped[builtins.bool] = mapped_column(use_existing_column=True)
+    stop_after_ready: Mapped[builtins.bool] = mapped_column(use_existing_column=True)
+
+    rdr_viewer_id: Mapped[typing.Optional[builtins.int]] = mapped_column(
+        ForeignKey("MockRDRCaseViewerDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+
+    rdr_viewer: Mapped[MockRDRCaseViewerDAO] = relationship(
+        "MockRDRCaseViewerDAO",
+        uselist=False,
+        foreign_keys=[rdr_viewer_id],
+        post_update=True,
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "EpisodePlayerDAO",
+        "inherit_condition": database_id == PropagatingThreadDAO.database_id,
+    }
+
+
+class DataPlayerDAO(
+    EpisodePlayerDAO, DataAccessObject[segmind.players.data_player.DataPlayer]
+):
+
+    __tablename__ = "DataPlayerDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(EpisodePlayerDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    sync_robot_only: Mapped[builtins.bool] = mapped_column(use_existing_column=True)
+
+    __mapper_args__ = {
+        "polymorphic_identity": "DataPlayerDAO",
+        "inherit_condition": database_id == EpisodePlayerDAO.database_id,
+    }
+
+
+class FilePlayerDAO(
+    DataPlayerDAO, DataAccessObject[segmind.players.data_player.FilePlayer]
+):
+
+    __tablename__ = "FilePlayerDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(DataPlayerDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    file_path: Mapped[builtins.str] = mapped_column(
+        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
+    )
+    models_dir: Mapped[typing.Optional[builtins.str]] = mapped_column(
+        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
+    )
+
+    position_shift: Mapped[
+        typing.Optional[semantic_digital_twin.spatial_types.spatial_types.Vector3]
+    ] = mapped_column(
+        sqlalchemy.sql.sqltypes.JSON, nullable=True, use_existing_column=True
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "FilePlayerDAO",
+        "inherit_condition": database_id == DataPlayerDAO.database_id,
+    }
+
+
+class CSVEpisodePlayerDAO(
+    FilePlayerDAO, DataAccessObject[segmind.players.csv_player.CSVEpisodePlayer]
+):
+
+    __tablename__ = "CSVEpisodePlayerDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(FilePlayerDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "CSVEpisodePlayerDAO",
+        "inherit_condition": database_id == FilePlayerDAO.database_id,
+    }
+
+
+class JSONPlayerDAO(
+    FilePlayerDAO, DataAccessObject[segmind.players.json_player.JSONPlayer]
+):
+
+    __tablename__ = "JSONPlayerDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(FilePlayerDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    scene_id: Mapped[builtins.int] = mapped_column(use_existing_column=True)
+    mesh_scale: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+
+    __mapper_args__ = {
+        "polymorphic_identity": "JSONPlayerDAO",
+        "inherit_condition": database_id == FilePlayerDAO.database_id,
     }
 
 

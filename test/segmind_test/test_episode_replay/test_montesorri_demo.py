@@ -5,7 +5,11 @@ from pathlib import Path
 from unittest import TestCase
 
 import pytest
-import rclpy
+try:
+    import rclpy
+except ImportError:
+    rclpy = None
+
 import segmind
 from giskardpy.motion_statechart.context import MotionStatechartContext
 from segmind.detectors.base import DetectorStateChart, SegmindContext
@@ -13,7 +17,10 @@ from segmind.episode_segmenter import EpisodeSegmenterExecutor
 from segmind.event_logger import EventLogger
 from segmind.players.csv_player import CSVEpisodePlayer
 from semantic_digital_twin.adapters.package_resolver import FileUriResolver
-from semantic_digital_twin.adapters.ros.visualization.viz_marker import VizMarkerPublisher
+try:
+    from semantic_digital_twin.adapters.ros.visualization.viz_marker import VizMarkerPublisher
+except ImportError:
+    VizMarkerPublisher = None
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.spatial_types import Vector3
 from semantic_digital_twin.world import World
@@ -56,15 +63,16 @@ def test_csv_player_context():
         "episode_executor": episode_executor,
     }
 
-@pytest.mark.skip(reason="This test takes too long to run.")
+# @pytest.mark.skip(reason="This test takes too long to run.")
 def test_replay_episode(test_csv_player_context):
     world = test_csv_player_context["world"]
     episode_executor = test_csv_player_context["episode_executor"]
 
-    rclpy.init()
-    node = rclpy.create_node("test_csv_player")
-    viz_marker_publisher = VizMarkerPublisher(_world=world, node=node)
-    viz_marker_publisher.with_tf_publisher()
+    if rclpy is not None and VizMarkerPublisher is not None:
+        rclpy.init()
+        node = rclpy.create_node("test_csv_player")
+        viz_marker_publisher = VizMarkerPublisher(_world=world, node=node)
+        viz_marker_publisher.with_tf_publisher()
 
     statechart = SegmindStatechart().build_statechart()
     segmind_context = episode_executor.context.require_extension(SegmindContext)

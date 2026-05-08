@@ -19,7 +19,10 @@ logger = logging.getLogger(__name__)
 try:
     from ripple_down_rules.user_interface.gui import RDRCaseViewer
 except ImportError:
-    RDRCaseViewer = None
+    @dataclass
+    class MockRDRCaseViewer:
+        pass
+    RDRCaseViewer = MockRDRCaseViewer
 
 
 @dataclass(eq=False)

@@ -2,7 +2,13 @@ from abc import abstractmethod, ABC
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from geometry_msgs.msg import PoseStamped
+try:
+    from geometry_msgs.msg import PoseStamped
+except ImportError:
+    @dataclass
+    class MockPoseStamped:
+        pass
+    PoseStamped = MockPoseStamped
 
 from typing_extensions import Optional, List
 
