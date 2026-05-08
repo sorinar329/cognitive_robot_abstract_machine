@@ -7,6 +7,7 @@ from nltk.corpus import wordnet
 from requests import HTTPError
 
 from krrood.entity_query_language.factories import *
+from krrood.utils import recursive_subclasses
 from probabilistic_model.bayesian_network.bayesian_network import Node
 from pycram.datastructures.dataclasses import Context
 from pycram.datastructures.enums import Arms, ApproachDirection, VerticalAlignment
@@ -20,6 +21,7 @@ from pycram.robot_plans.actions.composite.transporting import (
 from pycram.robot_plans.actions.core.navigation import NavigateAction
 from pycram.robot_plans.actions.core.pick_up import PickUpAction
 from pycram.robot_plans.actions.core.robot_body import ParkArmsAction, MoveTorsoAction
+from pycram.sage_10k.demos import Sage10kAbstractDemo
 from pycram.view_manager import ViewManager
 from semantic_digital_twin.adapters.mesh import STLParser
 from semantic_digital_twin.adapters.ros.visualization.viz_marker import (
@@ -31,8 +33,6 @@ from semantic_digital_twin.adapters.sage_10k_dataset.loader import (
 )
 from semantic_digital_twin.adapters.sage_10k_dataset.schema import Sage10kScene
 from semantic_digital_twin.adapters.sage_10k_dataset.utils import (
-    Sage10kTypeNameCleaner,
-    sage_10k_non_shitty_scenes_demo_configs,
     create_hsrb_in_world,
 )
 from semantic_digital_twin.datastructures.definitions import TorsoState
@@ -40,11 +40,7 @@ from semantic_digital_twin.pipeline.mesh_decomposition.box_decomposer import (
     BoxDecomposer,
 )
 from semantic_digital_twin.pipeline.pipeline import Pipeline
-from semantic_digital_twin.robots.abstract_robot import AbstractRobot
-from semantic_digital_twin.robots.hsrb import HSRB
-from semantic_digital_twin.robots.pr2 import PR2
 from semantic_digital_twin.semantic_annotations.natural_language import (
-    most_similar_synonym,
     NaturalLanguageWithTypeDescription,
 )
 from semantic_digital_twin.spatial_types.spatial_types import (
@@ -85,64 +81,6 @@ def has_book_in_prefix(body) -> bool:
     return body.name.prefix is not None and "_book_" in body.name.prefix.lower()
 
 
-def get_book_body_by_height(world: World, target_height: float, atol: float = 1e-5):
-
-    book = wordnet.synsets("Book")[1]
-
-    natural_language_annotations = world.get_semantic_annotations_by_type(
-        NaturalLanguageWithTypeDescription
-    )
-    types_of_world = {a.type_description for a in natural_language_annotations}
-
-    object_type_description = variable_from(types_of_world)
-    book_type_description = max(
-        object_type_description, key=lambda t: most_similar_synonym(t, book)[0]
-    ).tolist()[0]
-    candidates = [
-        a
-        for a in natural_language_annotations
-        if a.type_description == book_type_description
-    ]
-    if not candidates:
-        candidates = [body for body in world.bodies if has_book_in_prefix(body)]
-
-    if not candidates:
-        preview = [
-            f"{str(body.name)} ({get_body_height(body):.5f})"
-            for body in world.bodies[:20]
-        ]
-        raise ValueError(
-            "No Book semantic annotations and no bodies with 'book' in the name were found. "
-            f"First bodies: {preview}"
-        )
-
-    exact_matches = [
-        candidate.root
-        for candidate in candidates
-        if np.isclose(get_body_height(candidate.root), target_height, atol=atol)
-    ]
-
-    if len(exact_matches) == 1:
-        return exact_matches[0]
-
-    if len(exact_matches) > 1:
-        raise ValueError(
-            f"Expected a single Book body with height {target_height}, but found "
-            f"{[str(body.name) for body in exact_matches]}."
-        )
-
-    closest_body = min(
-        candidates, key=lambda body: abs(get_body_height(body) - target_height)
-    )
-    closest_height = get_body_height(closest_body)
-
-    print(
-        f"No exact Book body height match for {target_height}. "
-        f"Using closest candidate {closest_body.name} with height {closest_height}."
-    )
-    return closest_body
-
-
 def get_sage10k_scene():
     try:
         loader = Sage10kDatasetLoader()
@@ -161,7 +99,7 @@ def test_loader(rclpy_node, sage10k_scene):
     scene = sage10k_scene
     if scene is None:
         return
-    world = scene.create_world(Sage10kTypeNameCleaner())
+    world = scene.create_world()
     pub = VizMarkerPublisher(
         _world=world,
         node=rclpy_node,
@@ -204,7 +142,9 @@ def test_loader_with_robot(rclpy_node, sage10k_scene, pr2_world_copy):
         VerticalAlignment.NoAlignment,
         manipulator,
     )
-    target_body = get_book_body_by_height(pr2_world, 1.22921)
+    target_body = world.get_semantic_annotations_by_type(
+        NaturalLanguageWithTypeDescription
+    )[0].root
     root = sequential(
         [
             ParkArmsAction(arm=Arms.BOTH),
@@ -233,7 +173,7 @@ def test_loader_with_robot(rclpy_node, sage10k_scene, pr2_world_copy):
 @pytest.mark.skipif(get_sage10k_scene() is None, reason="Sage10k dataset not available")
 def test_non_shitty_scenes_demo(rclpy_node):
 
-    for config in sage_10k_non_shitty_scenes_demo_configs:
+    for config in recursive_subclasses(Sage10kAbstractDemo):
         try:
             loader = Sage10kDatasetLoader()
             scene = loader.create_scene(scene_url=config.scene_url)
