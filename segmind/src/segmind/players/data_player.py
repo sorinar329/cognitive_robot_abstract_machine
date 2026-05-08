@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 from datetime import timedelta
 import os
 
@@ -22,7 +23,7 @@ from test.krrood_test.dataset.semantic_world_like_classes import FixedConnection
 
 logger = logging.getLogger(__name__)
 
-
+from segmind.casadi_lock import casadi_lock
 
 @dataclass
 class FrameData:
@@ -130,6 +131,8 @@ class DataPlayer(EpisodePlayer, ABC):
         connection_states = self.get_joint_states(frame_data)
         if not objects_poses:
             return
+
+
         for obj in self.world.bodies_with_collision:
             if obj in objects_poses:
                 match obj.parent_connection:
