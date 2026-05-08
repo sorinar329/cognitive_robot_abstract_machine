@@ -12,18 +12,16 @@ from typing_extensions import Callable, Optional, Dict, Generator, List
 
 from segmind.datastructures.enums import PlayerStatus
 from segmind.episode_player import EpisodePlayer
-from semantic_digital_twin.spatial_types import Vector3, HomogeneousTransformationMatrix
+from semantic_digital_twin.spatial_types import Vector3
 from semantic_digital_twin.spatial_types.spatial_types import (
     Pose,
 )
-from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.connections import Connection6DoF, RevoluteConnection, PrismaticConnection
 from semantic_digital_twin.world_description.world_entity import Body
-from test.krrood_test.dataset.semantic_world_like_classes import FixedConnection
 
 logger = logging.getLogger(__name__)
 
-from segmind.casadi_lock import casadi_lock
+
 
 @dataclass
 class FrameData:

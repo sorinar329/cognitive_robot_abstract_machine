@@ -90,8 +90,6 @@ class CSVEpisodePlayer(FilePlayer):
             obj_orientation = [
                 objects_data[f"{obj_name}:quaternion_{i}"] for i in range(4)
             ]
-
-
             obj_pose = Pose.from_xyz_quaternion(
                 pos_x=obj_position[0],
                 pos_y=obj_position[1],
