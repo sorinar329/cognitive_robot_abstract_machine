@@ -75,8 +75,8 @@ class EpisodeSegmenterExecutor(Executor):
         """
         super().compile(motion_statechart)
         self.detect_holes()
-        if self.player:
-            self.player.start()
+        #if self.player:
+        #    self.player.start()
 
 
     def detect_holes(self):

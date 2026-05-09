@@ -83,31 +83,21 @@ class CSVEpisodePlayer(FilePlayer):
         objects_poses: Dict[Body, Pose] = {}
         objects_data = frame_data.objects_data
         current_time = frame_data.time
+
         for obj_name in self.data_object_names:
             if "joint" in obj_name:
                 continue
-            obj_position = [objects_data[f"{obj_name}:position_{i}"] for i in range(3)]
-            obj_orientation = [
-                objects_data[f"{obj_name}:quaternion_{i}"] for i in range(4)
-            ]
-            obj_pose = Pose.from_xyz_quaternion(
-                pos_x=obj_position[0],
-                pos_y=obj_position[1],
-                pos_z=obj_position[2],
-                quat_x=obj_orientation[1],
-                quat_y=obj_orientation[2],
-                quat_z=obj_orientation[3],
-                quat_w=obj_orientation[0],
+
+            # Store raw floats, no Pose object created
+            objects_poses[obj_name] = (
+                objects_data[f"{obj_name}:position_0"],
+                objects_data[f"{obj_name}:position_1"],
+                objects_data[f"{obj_name}:position_2"],
+                objects_data[f"{obj_name}:quaternion_0"],  # w
+                objects_data[f"{obj_name}:quaternion_1"],  # x
+                objects_data[f"{obj_name}:quaternion_2"],  # y
+                objects_data[f"{obj_name}:quaternion_3"],  # z
             )
-            obj_pose.timestamp = current_time
-
-            if self.position_shift:
-                obj_pose.x += self.position_shift.x
-                obj_pose.y += self.position_shift.y
-                obj_pose.z += self.position_shift.z
-
-            obj = self.world.get_body_by_name(obj_name)
-            objects_poses[obj] = obj_pose
         return objects_poses
 
 

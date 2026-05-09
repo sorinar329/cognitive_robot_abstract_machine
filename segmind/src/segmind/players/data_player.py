@@ -12,9 +12,10 @@ from typing_extensions import Callable, Optional, Dict, Generator, List
 
 from segmind.datastructures.enums import PlayerStatus
 from segmind.episode_player import EpisodePlayer
+from semantic_digital_twin.orm.model import HomogeneousTransformationMatrixMapping
 from semantic_digital_twin.spatial_types import Vector3
 from semantic_digital_twin.spatial_types.spatial_types import (
-    Pose,
+    Pose, HomogeneousTransformationMatrix,
 )
 from semantic_digital_twin.world_description.connections import Connection6DoF, RevoluteConnection, PrismaticConnection
 from semantic_digital_twin.world_description.world_entity import Body
@@ -130,14 +131,14 @@ class DataPlayer(EpisodePlayer, ABC):
         if not objects_poses:
             return
 
+        for obj_name, (px, py, pz, qw, qx, qy, qz) in objects_poses.items():
+            obj = self.world.get_body_by_name(obj_name)
+            if obj is None or not isinstance(obj.parent_connection, Connection6DoF):
+                continue
 
-        for obj in self.world.bodies_with_collision:
-            if obj in objects_poses:
-                match obj.parent_connection:
-                    case Connection6DoF():
-                        obj.parent_connection.origin = objects_poses[obj].to_homogeneous_matrix()
-                    case _:
-                        pass
+
+            # Build matrix directly from floats — no Pose, no Point3, no Quaternion
+            obj.parent_connection.origin = HomogeneousTransformationMatrix.from_xyz_quaternion(px, py, pz, qx, qy, qz, qw)
 
         for connection in self.world.connections:
             if connection.name.name in connection_states:
