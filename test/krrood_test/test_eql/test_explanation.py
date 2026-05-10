@@ -1,12 +1,23 @@
 import pytest
 from dataclasses import dataclass
-from krrood.entity_query_language.factories import inference, entity, variable_from, and_, or_, not_
+from krrood.entity_query_language.factories import (
+    inference,
+    entity,
+    variable_from,
+    and_,
+    or_,
+    not_,
+)
 from krrood.entity_query_language.explanation import (
     explain_inference,
-    format_inference_explanation, register_inference,
+    format_inference_explanation,
+    register_inference,
 )
 from krrood.entity_query_language.query.query import Query
 from krrood.rustworkx_utils import GraphVisualizer
+from krrood.entity_query_language.query_graph import QueryGraph
+from krrood.entity_query_language.core.base_expressions import _is_condition_participant
+from krrood.entity_query_language.operators.comparator import Comparator
 
 
 @dataclass(frozen=True)
@@ -18,9 +29,6 @@ class Person:
 class Item:
     value: int
 
-@dataclass(frozen=True)
-class Person:
-    name: str
 
 def test_explain_inference_basic():
     """
@@ -30,12 +38,12 @@ def test_explain_inference_basic():
     # The stack captured should point here
     person_factory = inference(Person)
     query = entity(person_factory(name="John"))
-    
+
     # 2. Evaluate the query to trigger instance creation
     results = list(query.evaluate())
     assert len(results) == 1
     john = results[0]
-    
+
     # 3. Check explanation
     explanation_obj = explain_inference(john)
     assert explanation_obj is not None
@@ -43,12 +51,14 @@ def test_explain_inference_basic():
 
     assert "Person" in explanation
     assert "test_explain_inference_basic" in explanation
-    assert "person_factory(name=\"John\")" in explanation
+    assert 'person_factory(name="John")' in explanation
+
 
 def test_explain_inference_nested():
     """
     Test that explain_inference correctly records and retrieves the stack through nested function calls.
     """
+
     def create_person_query(name):
         return person_factory_helper(name)
 
@@ -74,38 +84,41 @@ def test_explain_inference_nested():
     assert "person_factory_helper" in explanation
     assert "person_inf(name=name)" in explanation
 
+
 def test_explain_inference_multiple_instances():
     """
     Test that different instances from the same inference variable have the same stack in their explanation.
     """
     from krrood.entity_query_language.factories import variable_from
-    
+
     names = variable_from(["Bob", "Charlie"])
     person_inf = inference(Person)
     query = entity(person_inf(name=names))
-    
+
     results = list(query.evaluate())
     assert len(results) == 2
-    
+
     bob = next(r for r in results if r.name == "Bob")
     charlie = next(r for r in results if r.name == "Charlie")
-    
+
     expl_bob_obj = explain_inference(bob)
     expl_charlie_obj = explain_inference(charlie)
     assert expl_bob_obj is not None
     assert expl_charlie_obj is not None
     expl_bob = format_inference_explanation(expl_bob_obj)
     expl_charlie = format_inference_explanation(expl_charlie_obj)
-    
+
     assert "test_explain_inference_multiple_instances" in expl_bob
     assert "test_explain_inference_multiple_instances" in expl_charlie
     assert "person_inf(name=names)" in expl_bob
     assert "person_inf(name=names)" in expl_charlie
 
+
 def test_explain_inference_deeply_nested():
     """
     Test that explain_inference correctly records and retrieves the stack through deeply nested function calls.
     """
+
     def level_4(name):
         person_inf = inference(Person)
         return person_inf(name=name)
@@ -178,7 +191,7 @@ def test_explain_inference_focus_package():
     )
 
     assert "test_explanation.py" in explanation_filtered
-    # If there were other packages, they would be filtered out. 
+    # If there were other packages, they would be filtered out.
     # Since our filter_stack already excludes site-packages, the diff might be subtle in this simple test.
 
 
@@ -187,6 +200,7 @@ def test_variable_stack_tracking():
     Test that Variable objects automatically record their creation stack.
     """
     from krrood.entity_query_language.factories import variable_from
+
     v = variable_from([1, 2, 3])
 
     assert hasattr(v, "_creation_stack")
@@ -199,6 +213,7 @@ def test_robust_monitoring_check():
     """
     Test that register_inference safely ignores non-monitored variables.
     """
+
     # Create a dummy non-monitored variable-like object
     class NonMonitoredVariable:
         def __init__(self):
@@ -207,7 +222,7 @@ def test_robust_monitoring_check():
 
     dummy_var = NonMonitoredVariable()
     dummy_instance = "dummy-instance"
-    
+
     # Should NOT raise AttributeError or any other error
     register_inference(dummy_instance, dummy_var)
 
@@ -222,6 +237,7 @@ def test_robust_monitoring_check():
 
 def _get_true_results(query: Query):
     """Build, evaluate a query and return only the true raw OperationResults."""
+    query.build()
     raw_results = list(query._evaluate_())
     return [r for r in raw_results if r.is_true]
 
@@ -371,49 +387,25 @@ def test_satisfied_conditions_no_where():
         assert result.satisfied_condition_ids is None
 
 
-def test_condition_graph_simple():
-    """condition_graph() returns a PyDAG with correct structure for a simple condition."""
+# ============================================================
+# Tests for condition_graph via explain_inference pipeline
+# ============================================================
+
+
+def test_condition_graph_pipeline_simple():
+    """explain_inference → condition_graph() for a simple satisfied condition."""
     val = variable_from([6])
-    query = entity(val).where(val > 5)
+    query = entity(inference(Item)(value=val)).where(val > 5)
+    results = list(query.evaluate())
+    assert len(results) == 1
 
-    true_results = _get_true_results(query)
-    assert len(true_results) == 1
-    result = true_results[0]
+    explanation = explain_inference(results[0])
+    assert explanation is not None
 
-    ids = result.satisfied_condition_ids
-    assert ids is not None
-
-    # Build graph manually (without going through InferenceExplanation)
-    from krrood.entity_query_language.core.base_expressions import Filter
-    import rustworkx as rx
-
-    condition_root = val._conditions_root_
-    assert condition_root is not val._root_  # There is a Filter
-
-    # Quick inline graph construction to verify the data is correct
-    graph = rx.PyDAG()
-    expr_to_idx = {}
-
-    def add_node(expr, parent_idx=None):
-        if expr._id_ in expr_to_idx:
-            return expr_to_idx[expr._id_]
-        is_sat = expr._id_ in ids
-        idx = graph.add_node({
-            "name": expr._name_,
-            "is_satisfied": is_sat,
-            "expression": expr,
-        })
-        expr_to_idx[expr._id_] = idx
-        if parent_idx is not None:
-            graph.add_edge(idx, parent_idx, None)
-        for child in expr._children_:
-            add_node(child, idx)
-        return idx
-
-    add_node(condition_root)
-    # Verify graph structure
+    graph = explanation.condition_graph()
+    assert graph is not None
     assert graph.num_nodes() > 0
-    # Find the Comparator node
+
     comp_nodes = [
         graph.get_node_data(i)
         for i in graph.node_indices()
@@ -423,43 +415,21 @@ def test_condition_graph_simple():
     assert comp_nodes[0]["is_satisfied"] is True
 
 
-def test_condition_graph_nested():
-    """condition_graph() preserves nested AND/OR tree structure."""
+def test_condition_graph_pipeline_nested_and_or():
+    """explain_inference → condition_graph() with nested AND/OR tree."""
     val = variable_from([6])
-    query = entity(val).where(and_(val > 5, or_(val < 10, val == -1)))
+    query = entity(inference(Item)(value=val)).where(
+        and_(val > 5, or_(val < 10, val == -1))
+    )
+    results = list(query.evaluate())
+    assert len(results) == 1
 
-    true_results = _get_true_results(query)
-    assert len(true_results) == 1
-    result = true_results[0]
+    explanation = explain_inference(results[0])
+    assert explanation is not None
 
-    ids = result.satisfied_condition_ids
-    assert ids is not None
+    graph = explanation.condition_graph()
+    assert graph is not None
 
-    import rustworkx as rx
-    condition_root = val._conditions_root_
-
-    graph = rx.PyDAG()
-    expr_to_idx = {}
-
-    def add_node(expr, parent_idx=None):
-        if expr._id_ in expr_to_idx:
-            return expr_to_idx[expr._id_]
-        is_sat = expr._id_ in ids
-        idx = graph.add_node({
-            "name": expr._name_,
-            "is_satisfied": is_sat,
-            "expression": expr,
-        })
-        expr_to_idx[expr._id_] = idx
-        if parent_idx is not None:
-            graph.add_edge(idx, parent_idx, None)
-        for child in expr._children_:
-            add_node(child, idx)
-        return idx
-
-    add_node(condition_root)
-
-    # Verify structure
     nodes_by_name = {
         graph.get_node_data(i)["name"]: graph.get_node_data(i)
         for i in graph.node_indices()
@@ -470,45 +440,21 @@ def test_condition_graph_nested():
     assert nodes_by_name["OR"]["is_satisfied"] is True
     assert nodes_by_name[">"]["is_satisfied"] is True
     assert nodes_by_name["<"]["is_satisfied"] is True
-    # == was short-circuited
     assert nodes_by_name["=="]["is_satisfied"] is False
 
 
-def test_condition_graph_not():
-    """condition_graph() correctly represents a Not condition."""
+def test_condition_graph_pipeline_not():
+    """explain_inference → condition_graph() with Not condition."""
     val = variable_from([3])
-    query = entity(val).where(not_(val > 5))
+    query = entity(inference(Item)(value=val)).where(not_(val > 5))
+    results = list(query.evaluate())
+    assert len(results) == 1
 
-    true_results = _get_true_results(query)
-    assert len(true_results) == 1
-    result = true_results[0]
+    explanation = explain_inference(results[0])
+    assert explanation is not None
 
-    ids = result.satisfied_condition_ids
-    assert ids is not None
-
-    import rustworkx as rx
-    condition_root = val._conditions_root_
-
-    graph = rx.PyDAG()
-    expr_to_idx = {}
-
-    def add_node(expr, parent_idx=None):
-        if expr._id_ in expr_to_idx:
-            return expr_to_idx[expr._id_]
-        is_sat = expr._id_ in ids
-        idx = graph.add_node({
-            "name": expr._name_,
-            "is_satisfied": is_sat,
-            "expression": expr,
-        })
-        expr_to_idx[expr._id_] = idx
-        if parent_idx is not None:
-            graph.add_edge(idx, parent_idx, None)
-        for child in expr._children_:
-            add_node(child, idx)
-        return idx
-
-    add_node(condition_root)
+    graph = explanation.condition_graph()
+    assert graph is not None
 
     nodes_by_name = {
         graph.get_node_data(i)["name"]: graph.get_node_data(i)
@@ -519,12 +465,240 @@ def test_condition_graph_not():
     assert nodes_by_name[">"]["is_satisfied"] is False
 
 
-def test_condition_graph_no_conditions():
-    """condition_graph() returns None when there are no conditions."""
+def test_condition_graph_pipeline_no_conditions():
+    """explain_inference → condition_graph() returns None when no conditions exist."""
     val = variable_from([1, 2])
-    query = entity(val)
+    query = entity(inference(Item)(value=val))
+    results = list(query.evaluate())
+    assert len(results) == 2
 
-    true_results = _get_true_results(query)
-    assert len(true_results) == 2
-    for result in true_results:
-        assert result.satisfied_condition_ids is None
+    for item in results:
+        explanation = explain_inference(item)
+        assert explanation is not None
+        assert explanation.condition_graph() is None
+        assert explanation.build_condition_query_graph() is None
+
+
+def test_condition_graph_pipeline_or_short_circuit():
+    """OR short-circuits: satisfied comparator recorded, short-circuited one is not."""
+    val = variable_from([6])
+    query = entity(inference(Item)(value=val)).where(or_(val > 5, val < 10))
+    results = list(query.evaluate())
+    assert len(results) == 1
+
+    explanation = explain_inference(results[0])
+    assert explanation is not None
+
+    graph = explanation.condition_graph()
+    assert graph is not None
+
+    nodes_by_name = {
+        graph.get_node_data(i)["name"]: graph.get_node_data(i)
+        for i in graph.node_indices()
+    }
+    assert "OR" in nodes_by_name
+    assert nodes_by_name["OR"]["is_satisfied"] is True
+    assert nodes_by_name[">"]["is_satisfied"] is True
+    assert nodes_by_name["<"]["is_satisfied"] is False
+
+
+def test_condition_graph_pipeline_complex():
+    """Deeply nested AND/OR/NOT with val=5: all paths evaluated."""
+    val = variable_from([5])
+    query = entity(inference(Item)(value=val)).where(
+        and_(val > 0, or_(not_(val == 2), and_(val < 10, val > 1)))
+    )
+    results = list(query.evaluate())
+    assert len(results) == 1
+
+    explanation = explain_inference(results[0])
+    assert explanation is not None
+
+    graph = explanation.condition_graph()
+    assert graph is not None
+
+    nodes_by_name = {
+        graph.get_node_data(i)["name"]: graph.get_node_data(i)
+        for i in graph.node_indices()
+    }
+    # val=5: 5>0=True, Not(5==2)=Not(False)=True → OR short-circuits, AND satisfied
+    assert nodes_by_name["AND"]["is_satisfied"] is True
+    assert nodes_by_name["OR"]["is_satisfied"] is True
+    assert nodes_by_name["Not"]["is_satisfied"] is True
+    assert nodes_by_name["=="]["is_satisfied"] is False
+    # Two ">" nodes: val > 0 (satisfied) and val > 1 (short-circuited, not satisfied)
+    gt_nodes = [
+        n
+        for n in (graph.get_node_data(i) for i in graph.node_indices())
+        if n["name"] == ">"
+    ]
+    assert len(gt_nodes) == 2
+    assert sum(1 for n in gt_nodes if n["is_satisfied"]) == 1
+
+
+def test_condition_graph_pipeline_multiple_results():
+    """Each result from val=[1,6,11] with val>5 has correct satisfaction."""
+    val = variable_from([1, 6, 11])
+    query = entity(inference(Item)(value=val)).where(val > 5)
+    results = list(query.evaluate())
+    assert len(results) == 2  # 6 and 11
+
+    items_by_value = {r.value: r for r in results}
+    assert 6 in items_by_value
+    assert 11 in items_by_value
+
+    for item in results:
+        explanation = explain_inference(item)
+        assert explanation is not None
+        graph = explanation.condition_graph()
+        assert graph is not None
+        comp_nodes = [
+            graph.get_node_data(i)
+            for i in graph.node_indices()
+            if graph.get_node_data(i)["name"] == ">"
+        ]
+        assert len(comp_nodes) == 1
+        assert comp_nodes[0]["is_satisfied"] is True
+
+
+def test_condition_graph_pipeline_non_weakly_referenceable():
+    """explain_inference returns None for non-weakly-referenceable values (e.g. int)."""
+    val = variable_from([6])
+    query = entity(val).where(val > 5)
+    results = list(query.evaluate())
+    assert len(results) == 1
+    # Plain integers cannot be weak-referenced, so register_inference silently fails
+    assert explain_inference(results[0]) is None
+
+
+# ============================================================
+# Tests for QueryGraph satisfaction color overlay
+# ============================================================
+
+
+def test_query_graph_satisfaction_colors():
+    """Unsatisfied nodes and edges are faded; satisfied keep full color."""
+    from krrood.entity_query_language.query_graph import ColorLegend
+
+    val = variable_from([6])
+    query = entity(inference(Item)(value=val)).where(or_(val > 5, val < 10))
+    results = list(query.evaluate())
+    assert len(results) == 1
+
+    explanation = explain_inference(results[0])
+    assert explanation is not None
+
+    qg = QueryGraph(
+        explanation.query_root,
+        satisfied_condition_ids=explanation.satisfied_condition_ids,
+    )
+
+    original_colors = {
+        id(node.data): ColorLegend.from_expression(node.data).color
+        for node in qg.expression_node_map.values()
+    }
+
+    for node in qg.expression_node_map.values():
+        if isinstance(node.data, Comparator) and node.data._name_ == ">":
+            # val > 5 is satisfied: full color, not faded
+            assert node.color.color == original_colors[id(node.data)]
+            assert not node.faded
+            assert "not satisfied" not in node.color.name.lower()
+        if isinstance(node.data, Comparator) and node.data._name_ == "<":
+            # val < 10 is short-circuited (unsatisfied): faded fill, border, and flag
+            assert node.color.color != original_colors[id(node.data)]
+            assert node.faded
+            assert "not satisfied" in node.color.name.lower()
+
+    for node in qg.expression_node_map.values():
+        if not _is_condition_participant(node.data):
+            # Non-condition nodes may be faded if they are exclusive
+            # descendants of an unsatisfied node (e.g. Literal(10) under <).
+            # They may also be shared (same Variable used in both > and <).
+            if not node.faded:
+                assert "not satisfied" not in node.color.name.lower()
+
+
+def test_query_graph_faded_subtree_propagation():
+    """Descendants only reachable through an unsatisfied node are also faded."""
+    val = variable_from([6])
+    # or_(val > 5, val < 10): val > 5 satisfied, val < 10 short-circuited
+    query = entity(inference(Item)(value=val)).where(or_(val > 5, val < 10))
+    results = list(query.evaluate())
+    explanation = explain_inference(results[0])
+
+    qg = QueryGraph(
+        explanation.query_root,
+        satisfied_condition_ids=explanation.satisfied_condition_ids,
+    )
+
+    # The unsatisfied "<" Comparator should be faded
+    unsatisfied_lt = next(
+        n
+        for n in qg.expression_node_map.values()
+        if isinstance(n.data, Comparator) and n.data._name_ == "<"
+    )
+    assert unsatisfied_lt.faded
+
+    # Literal(10) is only reachable through the unsatisfied "<" → faded
+    # (Variable(val) is shared with the satisfied ">" path → not faded)
+    faded_children = [c for c in unsatisfied_lt.children if c.faded]
+    assert len(faded_children) >= 1, "At least one exclusive child should be faded"
+    # The Literal specifically should be faded
+    literal_10 = next((c for c in unsatisfied_lt.children if "Literal" in c.name), None)
+    if literal_10:
+        assert literal_10.faded
+
+
+def test_query_graph_satisfaction_colors_all_satisfied():
+    """When all condition nodes are satisfied, none should be faded."""
+    from krrood.entity_query_language.query_graph import ColorLegend
+
+    val = variable_from([6])
+    query = entity(inference(Item)(value=val)).where(and_(val > 5, val < 10))
+    results = list(query.evaluate())
+    assert len(results) == 1
+
+    explanation = explain_inference(results[0])
+    assert explanation is not None
+
+    qg = QueryGraph(
+        explanation.query_root,
+        satisfied_condition_ids=explanation.satisfied_condition_ids,
+    )
+
+    original_colors = {
+        id(node.data): ColorLegend.from_expression(node.data).color
+        for node in qg.expression_node_map.values()
+    }
+
+    for node in qg.expression_node_map.values():
+        assert not node.faded
+        if _is_condition_participant(node.data):
+            assert node.color.color == original_colors[id(node.data)]
+
+
+def test_explanation_build_and_visualize_condition_graph():
+    """InferenceExplanation.build_condition_query_graph() creates correct QueryGraph."""
+    val = variable_from([6])
+    query = entity(inference(Item)(value=val)).where(
+        or_(and_(val > 5, val < 10), val == 11)
+    )
+    results = list(query.evaluate())
+    assert len(results) == 1
+
+    explanation = explain_inference(results[0])
+    assert explanation is not None
+
+    qg = explanation.build_condition_query_graph()
+    qg.visualize()
+    assert qg is not None
+    assert qg.satisfied_condition_ids == explanation.satisfied_condition_ids
+
+    for node in qg.expression_node_map.values():
+        if node.data._name_ == "AND":
+            assert "not satisfied" not in node.color.name.lower()
+
+    fig, ax = explanation.visualize_condition_graph()
+    assert fig is not None
+    assert ax is not None

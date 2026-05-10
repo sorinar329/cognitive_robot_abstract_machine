@@ -113,9 +113,7 @@ class InferenceExplanation:
         # If condition_root is the overall root, there are no Filter conditions
         from krrood.entity_query_language.core.base_expressions import Filter
 
-        if not any(
-            isinstance(e, Filter) for e in self.query_root._all_expressions_
-        ):
+        if not any(isinstance(e, Filter) for e in self.query_root._all_expressions_):
             return None
 
         import rustworkx as rx
@@ -147,6 +145,40 @@ class InferenceExplanation:
 
         add_node(condition_root)
         return graph
+
+    def build_condition_query_graph(self):
+        """
+        Build a QueryGraph of the full query tree with satisfaction data overlaid.
+
+        Condition nodes that were NOT satisfied are colored grey; satisfied condition
+        nodes keep their type-based color. Non-condition nodes are unaffected.
+
+        :return: A ``QueryGraph`` instance, or None if no query root or no satisfaction
+            data is available.
+        """
+        if self.query_root is None or not self.satisfied_condition_ids:
+            return None
+        from krrood.entity_query_language.query_graph import QueryGraph
+
+        return QueryGraph(
+            self.query_root,
+            satisfied_condition_ids=self.satisfied_condition_ids,
+        )
+
+    def visualize_condition_graph(self, **visualize_kwargs):
+        """
+        Build and render a query graph with condition satisfaction overlaid.
+
+        Keyword arguments are forwarded to ``QueryGraph.visualize()`` (e.g.
+        ``figsize``, ``node_size``, ``font_size``, ``edge_style``).
+
+        :return: The (fig, ax) tuple from matplotlib, or None if no condition
+            data is available.
+        """
+        qg = self.build_condition_query_graph()
+        if qg is None:
+            return None
+        return qg.visualize(**visualize_kwargs)
 
 
 # Dictionary to store inference explanations for instances.

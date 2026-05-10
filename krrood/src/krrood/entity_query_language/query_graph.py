@@ -19,6 +19,7 @@ from krrood.entity_query_language.operators.core_logical_operators import (
 from krrood.entity_query_language.core.base_expressions import (
     SymbolicExpression,
     Filter,
+    _is_condition_participant,
 )
 from krrood.entity_query_language.core.variable import (
     Variable,
@@ -42,6 +43,41 @@ from krrood.rustworkx_utils import (
 
 import rustworkx as rx
 
+UNSATISFIED_CONDITION_ALPHA = 0.25
+
+
+def _fade_color(color: str, alpha: float) -> str:
+    """Blend a color with white to create a faded/washed-out hex version.
+
+    Uses matplotlib's ``to_rgb`` to handle both hex and named colors,
+    then blends with white at the given alpha ratio.
+
+    :param color: A hex string (``\"#ff7f0e\"``) or named color (``\"cornflowerblue\"``).
+    :param alpha: How much of the original color to keep (0.0–1.0).
+    :return: A hex color string.
+    """
+    from matplotlib.colors import to_rgb
+
+    r, g, b = to_rgb(color)
+    r = r * alpha + (1 - alpha)
+    g = g * alpha + (1 - alpha)
+    b = b * alpha + (1 - alpha)
+    return f"#{int(r * 255):02x}{int(g * 255):02x}{int(b * 255):02x}"
+
+
+def _is_faded_gate(node, satisfied_condition_ids: frozenset) -> bool:
+    """Return True if *node* is an unsatisfied condition participant.
+
+    Such nodes act as "gates" that the BFS in
+    :meth:`QueryGraph._propagate_faded_subtrees` refuses to traverse through.
+    """
+    expr = node.data
+    if expr is None:
+        return False
+    if not _is_condition_participant(expr):
+        return False
+    return expr._id_ not in satisfied_condition_ids
+
 
 @dataclass
 class QueryGraph:
@@ -52,6 +88,12 @@ class QueryGraph:
     query: SymbolicExpression
     """
     An expression representing the query.
+    """
+    satisfied_condition_ids: Optional[frozenset] = None
+    """
+    Optional frozenset of satisfied condition UUIDs for coloring condition nodes.
+    When provided, unsatisfied condition nodes are colored grey, while satisfied
+    condition nodes keep their type-based color.
     """
     graph: rx.PyDAG = field(init=False, default_factory=rx.PyDAG)
     """
@@ -72,6 +114,39 @@ class QueryGraph:
         if isinstance(self.query, Query):
             self.query.build()
         self.construct_graph()
+        if self.satisfied_condition_ids is not None:
+            self._propagate_faded_subtrees()
+
+    def _propagate_faded_subtrees(self):
+        """Mark unsatisfied condition nodes and their exclusive descendants as faded.
+
+        A node is faded when every path from the root to that node passes through
+        at least one unsatisfied condition node.  We compute this by BFS from the
+        root, refusing to traverse *through* unsatisfied condition nodes, then
+        marking every node the BFS did **not** reach as faded.
+        """
+        root_node = self.expression_node_map.get(self.query._root_)
+        if root_node is None:
+            return
+
+        # BFS from root; refuse to enter unsatisfied condition nodes AND their
+        # exclusive descendants.  Nodes the BFS never reaches are faded.
+        reachable = set()
+        queue = [root_node]
+        while queue:
+            node = queue.pop(0)
+            if node.id in reachable:
+                continue
+            if _is_faded_gate(node, self.satisfied_condition_ids):
+                continue  # unsatisfied node is NOT reachable, children skipped
+            reachable.add(node.id)
+            for child in node.children:
+                if child.id not in reachable:
+                    queue.append(child)
+
+        for node in self.expression_node_map.values():
+            if node.id not in reachable:
+                node.faded = True
 
     def visualize(
         self,
@@ -155,7 +230,7 @@ class QueryGraph:
         node = QueryNode(
             self.get_expression_name(expression),
             self.graph,
-            color=ColorLegend.from_expression(expression),
+            color=ColorLegend.from_expression(expression, self.satisfied_condition_ids),
             data=expression,
         )
         self.expression_node_map[expression] = node
@@ -196,7 +271,11 @@ class ColorLegend(RXUtilsColorLegend):
     """
 
     @classmethod
-    def from_expression(cls, expression: SymbolicExpression) -> ColorLegend:
+    def from_expression(
+        cls,
+        expression: SymbolicExpression,
+        satisfied_condition_ids: Optional[frozenset] = None,
+    ) -> ColorLegend:
         name = expression.__class__.__name__
         color = "white"
         match expression:
@@ -233,6 +312,18 @@ class ColorLegend(RXUtilsColorLegend):
             case Conclusion():
                 name = "Conclusion"
                 color = "#8cf2ff"
+
+        if satisfied_condition_ids is not None:
+            if (
+                expression._id_ not in satisfied_condition_ids
+                and _is_condition_participant(expression)
+            ):
+                faded_color = _fade_color(color, UNSATISFIED_CONDITION_ALPHA)
+                return cls(
+                    name="Condition (not satisfied)",
+                    color=faded_color,
+                )
+
         return cls(name=name, color=color)
 
 

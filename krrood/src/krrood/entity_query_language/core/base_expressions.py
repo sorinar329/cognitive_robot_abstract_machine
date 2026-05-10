@@ -45,6 +45,28 @@ A dictionary for expressions' bindings in EQL that maps the expression's unique 
 """
 
 
+def _is_condition_participant(expr) -> bool:
+    """
+    Return True if the expression participates in condition evaluation.
+
+    An expression is a condition participant if:
+    - It is a known condition type (Comparator, Predicate, LogicalOperator), or
+    - Its structural parent is a TruthValueOperator.
+    """
+    from krrood.entity_query_language.operators.comparator import Comparator
+    from krrood.entity_query_language.predicate import Predicate
+    from krrood.entity_query_language.operators.core_logical_operators import (
+        LogicalOperator,
+    )
+
+    _condition_types = (Comparator, Predicate, LogicalOperator)
+    if isinstance(expr, _condition_types):
+        return True
+    if isinstance(expr._parent__, TruthValueOperator):
+        return True
+    return False
+
+
 def _collect_satisfied_condition_ids(condition_root, bindings: Bindings) -> frozenset:
     """
     Collect the UUIDs of condition expressions in the condition tree that were satisfied.
@@ -67,20 +89,9 @@ def _collect_satisfied_condition_ids(condition_root, bindings: Bindings) -> froz
     :param bindings: The bindings from the current evaluation result.
     :return: A frozenset of UUIDs of condition expressions that were satisfied.
     """
-    from krrood.entity_query_language.operators.comparator import Comparator
-    from krrood.entity_query_language.predicate import Predicate
     from krrood.entity_query_language.operators.core_logical_operators import (
         LogicalOperator,
     )
-
-    _condition_types = (Comparator, Predicate, LogicalOperator)
-
-    def _is_condition_participant(expr) -> bool:
-        if isinstance(expr, _condition_types):
-            return True
-        if isinstance(expr._parent__, TruthValueOperator):
-            return True
-        return False
 
     satisfied = set()
     for expr in condition_root._descendants_:
@@ -102,7 +113,10 @@ def _collect_satisfied_condition_ids(condition_root, bindings: Bindings) -> froz
         if condition_root._id_ in bindings:
             if bindings[condition_root._id_]:
                 satisfied.add(condition_root._id_)
-        elif isinstance(condition_root, LogicalOperator) and not condition_root._is_false_:
+        elif (
+            isinstance(condition_root, LogicalOperator)
+            and not condition_root._is_false_
+        ):
             satisfied.add(condition_root._id_)
 
     return frozenset(satisfied)
@@ -358,18 +372,33 @@ class SymbolicExpression(ABC):
         previous_parent = self._eval_parent_
         self._eval_parent_ = parent
         try:
+            satisfied_ids = None
             if isinstance(sources, OperationResult):
+                satisfied_ids = sources.satisfied_condition_ids
                 sources = sources.bindings
+            # Carry satisfied IDs through the evaluation so they are available
+            # when @record_inferences captures the result inside _evaluate__.
+            self._carried_satisfied_ids_ = satisfied_ids
             sources = copy(sources) if sources is not None else {}
             if self._id_ in sources:
-                yield OperationResult(sources, self._is_false_, self)
+                result = OperationResult(sources, self._is_false_, self)
+                if satisfied_ids is not None:
+                    result.satisfied_condition_ids = satisfied_ids
+                yield result
             else:
-                yield from map(
+                for result in map(
                     self._evaluate_conclusions_and_update_bindings_,
                     self._evaluate__(sources),
-                )
+                ):
+                    if (
+                        satisfied_ids is not None
+                        and result.satisfied_condition_ids is None
+                    ):
+                        result.satisfied_condition_ids = satisfied_ids
+                    yield result
         finally:
             self._eval_parent_ = previous_parent
+            self._carried_satisfied_ids_ = None
 
     @captures_satisfied_conditions
     def _evaluate_conclusions_and_update_bindings_(
@@ -732,7 +761,10 @@ class OperationResult:
     """
 
     def __post_init__(self):
-        if self.satisfied_condition_ids is None and self.previous_operation_result is not None:
+        if (
+            self.satisfied_condition_ids is None
+            and self.previous_operation_result is not None
+        ):
             prev = self.previous_operation_result.satisfied_condition_ids
             if prev is not None:
                 self.satisfied_condition_ids = prev
@@ -840,7 +872,11 @@ class Selectable(SymbolicExpression, Generic[T], ABC):
         :return: The OperationResult instance with an updated truth value.
         """
         self._update_truth_value_(bindings[self._id_])
-        return OperationResult(bindings, self._is_false_, self, child_result)
+        result = OperationResult(bindings, self._is_false_, self, child_result)
+        carried = getattr(self, "_carried_satisfied_ids_", None)
+        if carried is not None and result.satisfied_condition_ids is None:
+            result.satisfied_condition_ids = carried
+        return result
 
     def _update_truth_value_(self, current_value: Any) -> None:
         """
