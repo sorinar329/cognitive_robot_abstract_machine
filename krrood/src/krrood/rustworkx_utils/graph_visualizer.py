@@ -1173,6 +1173,17 @@ class GraphVisualizer:
                 markeredgewidth=2.5,
             )
             handles.append(enclosed_handle)
+        # Add faded-edge legend entry when any node is faded
+        any_faded = any(getattr(n, "faded", False) for n in ordered_nodes)
+        if any_faded:
+            faded_edge_handle = Line2D(
+                [0],
+                [0],
+                color="#cccccc",
+                linewidth=2.5,
+                label="Unaccessed (faded)",
+            )
+            handles.append(faded_edge_handle)
         fw, fh = fig.get_size_inches()
         scale = 0.7 * (max(0.5, fw / 12.0) + max(0.5, fh / 9.0))
         legend_fs = float(np.clip(10.0 * scale, 8.0, 28.0))
