@@ -123,12 +123,12 @@ class MotionDetector(AbstractDetector):
     bodies and generating events when movement is detected.
     """
 
-    window_size: int = 4
+    window_size: int = 20
     """
     The window size indicates how many poses to consider for movement.
     """
 
-    distance_threshold: Scalar = 0.005
+    distance_threshold: Scalar = 0.01
     """
     Threshold for the distance between two poses to be considered movement.
     """

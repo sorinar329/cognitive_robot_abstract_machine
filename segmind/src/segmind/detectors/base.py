@@ -107,39 +107,41 @@ class SegmindContext(ContextExtension):
     The object tracker registry.    
     """
 
-@dataclass(repr=False, eq=False)
-class AbstractDetector(MotionStatechartNode, ABC):
+    latest_holding: Dict[Body, Set[Body]] = field(default_factory=dict)
     """
-    Abstract base class for all detectors.
+    Dictionary mapping each held body to the set of gripper bodies currently holding it.
     """
 
-    tracked_object: Optional[Body] = field(kw_only=True, default=None)
+    lifting_baselines: Dict[Body, tuple] = field(default_factory=dict)
     """
-    :param tracked_object: Optional body that should be monitored.
-    If None, all trackable objects in the world are checked.
+    Maps each held object to (baseline_z, baseline_pose) recorded at the moment holding started.
+    """
+
+    latest_lifting: set = field(default_factory=set)
+    """
+    Set of objects for which a LiftingEvent has already been fired in the current hold.
+    Cleared when holding is lost.
+    """
+
+@dataclass(repr=False, eq=False)
+class AbstractDetector(MotionStatechartNode, ABC):
+    tracked_object: Optional[List[Body]] = field(kw_only=True, default=None)
+    excluded_objects: list[str] = field(kw_only=True, default_factory=list)
+    """
+    :param excluded_objects: List of body names to exclude from tracking.
     """
 
     def on_tick(self, context: MotionStatechartContext) -> Optional[ObservationStateValues]:
-        """
-        Executes one update cycle of the detector.
-
-        Determines the objects that should be checked for contacts,
-        computes new contact relationships, and triggers events if
-        contact changes are detected.
-
-        :param context: The current motion statechart context.
-        :return: ObservationStateValues.TRUE if events were triggered,
-        otherwise ObservationStateValues.FALSE.
-        """
         segmind_context_extension = context.require_extension(SegmindContext)
 
         objects_to_check = (
-            [self.tracked_object]
+            self.tracked_object
             if self.tracked_object
             else [
                 body
                 for body in context.world.bodies
                 if type(body.parent_connection) is Connection6DoF
+                and body.name.name not in self.excluded_objects
             ]
         )
         events = self.update_context_and_events(context, segmind_context_extension, objects_to_check)
@@ -159,7 +161,10 @@ class AbstractDetector(MotionStatechartNode, ABC):
         """
 
         related_bodies: Dict[Body, Set[Body]] = {}
-        bodies_with_collision = context.world.bodies_with_collision
+        bodies_with_collision = [
+            b for b in context.world.bodies_with_collision
+            if b.name.name not in self.excluded_objects
+        ]
         for obj in tracked_objects:
             for body in bodies_with_collision:
                 if body is obj:

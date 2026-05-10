@@ -320,3 +320,62 @@ class LossOfContainmentEvent(EventWithTwoTrackedObjects):
     """
     ...
 
+
+@dataclass(unsafe_hash=True)
+class HoldingEvent(EventWithTwoTrackedObjects):
+    """
+    Represents an event where an object is being held by a gripper or set of grippers.
+    """
+    grippers: List[Body] = field(default_factory=list)
+    """
+    The gripper bodies that are in contact with the tracked object.
+    """
+
+    def __str__(self):
+        gripper_names = ", ".join(g.name.name for g in self.grippers)
+        return f"{self.__class__.__name__}: {self.tracked_object.name} held by [{gripper_names}] - {self.timestamp}"
+
+    def __eq__(self, other):
+        return (other.__class__ == self.__class__
+                and self.tracked_object == other.tracked_object
+                and self.with_object == other.with_object
+                and round(self.timestamp, 1) == round(other.timestamp, 1))
+
+
+
+
+@dataclass(unsafe_hash=True)
+class LossOfHoldingEvent(EventWithTwoTrackedObjects):
+    """
+    Represents an event where an object is no longer being held by a gripper or set of grippers.
+    """
+    grippers: List[Body] = field(default_factory=list)
+
+    def __str__(self):
+        gripper_names = ", ".join(g.name.name for g in self.grippers)
+        return f"{self.__class__.__name__}: {self.tracked_object.name} released by [{gripper_names}] - {self.timestamp}"
+
+    def __eq__(self, other):
+        return (other.__class__ == self.__class__
+                and self.tracked_object == other.tracked_object
+                and self.with_object == other.with_object
+                and round(self.timestamp, 1) == round(other.timestamp, 1))
+
+
+@dataclass(unsafe_hash=True)
+class LiftingEvent(EventWithTwoTrackedObjects):
+    """
+    Represents an event where a held object is lifted upward in the z-direction.
+    """
+    grippers: List[Body] = field(default_factory=list)
+    start_pose: Pose = field(default_factory=Pose)
+    current_pose: Pose = field(default_factory=Pose)
+
+    def __str__(self):
+        gripper_names = ", ".join(g.name.name for g in self.grippers)
+        return f"{self.__class__.__name__}: {self.tracked_object.name} lifted by [{gripper_names}] - {self.timestamp}"
+
+    def __eq__(self, other):
+        return (other.__class__ == self.__class__
+                and self.tracked_object == other.tracked_object
+                and round(self.timestamp, 1) == round(other.timestamp, 1))
