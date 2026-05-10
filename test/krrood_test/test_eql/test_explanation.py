@@ -16,7 +16,7 @@ from krrood.entity_query_language.explanation import (
 from krrood.entity_query_language.query.query import Query
 from krrood.rustworkx_utils import GraphVisualizer
 from krrood.entity_query_language.query_graph import QueryGraph
-from krrood.entity_query_language.core.base_expressions import _is_condition_participant
+from krrood.entity_query_language.evaluation import _is_condition_participant
 from krrood.entity_query_language.operators.comparator import Comparator
 
 

@@ -12,7 +12,7 @@ from abc import ABC, abstractmethod
 from collections import UserDict
 from copy import copy
 from dataclasses import dataclass, field
-from functools import cached_property, wraps
+from functools import cached_property
 
 from typing_extensions import (
     Dict,
@@ -34,6 +34,13 @@ from krrood.entity_query_language.exceptions import NoExpressionFoundForGivenID
 from krrood.entity_query_language.utils import make_list, T, make_set, is_iterable
 from krrood.symbol_graph.symbol_graph import SymbolGraph
 from krrood.utils import memoize
+from krrood.entity_query_language.evaluation import (
+    EvaluationContext,
+    SatisfiedConditionTracker,
+    InferenceRecorder,
+    get_evaluation_context,
+    set_evaluation_context,
+)
 
 if TYPE_CHECKING:
     from krrood.entity_query_language.rules.conclusion import Conclusion
@@ -43,110 +50,6 @@ Bindings = Dict[uuid.UUID, Any]
 """
 A dictionary for expressions' bindings in EQL that maps the expression's unique identifier to its value.
 """
-
-
-def _is_condition_participant(expr) -> bool:
-    """
-    Return True if the expression participates in condition evaluation.
-
-    An expression is a condition participant if:
-    - It is a known condition type (Comparator, Predicate, LogicalOperator), or
-    - Its structural parent is a TruthValueOperator.
-    """
-    from krrood.entity_query_language.operators.comparator import Comparator
-    from krrood.entity_query_language.predicate import Predicate
-    from krrood.entity_query_language.operators.core_logical_operators import (
-        LogicalOperator,
-    )
-
-    _condition_types = (Comparator, Predicate, LogicalOperator)
-    if isinstance(expr, _condition_types):
-        return True
-    if isinstance(expr._parent__, TruthValueOperator):
-        return True
-    return False
-
-
-def _collect_satisfied_condition_ids(condition_root, bindings: Bindings) -> frozenset:
-    """
-    Collect the UUIDs of condition expressions in the condition tree that were satisfied.
-
-    An expression participates in condition evaluation (is a "condition participant") if:
-    - It is a known condition type (Comparator, Predicate, LogicalOperator), or
-    - Its structural parent is a TruthValueOperator (e.g. a Variable directly under Where, AND,
-      OR, or Not acts as a condition and has its truth value evaluated).
-
-    Operands of Comparators (Variables, Literals, Attributes) are NOT condition participants
-    because their structural parent is a Comparator, not a TruthValueOperator — they merely
-    provide values and their binding values are not boolean truth results.
-
-    Leaf conditions (Comparator, Predicate, and condition-participant selectables) put their
-    ID and value in bindings. Intermediate nodes (AND, OR, Not) set ``_is_false_`` on the
-    expression but do not put their ID in bindings. Short-circuited subtrees are detected by
-    the absence of any descendant ID in bindings — their ``_is_false_`` is stale and not trusted.
-
-    :param condition_root: The root of the condition expression tree.
-    :param bindings: The bindings from the current evaluation result.
-    :return: A frozenset of UUIDs of condition expressions that were satisfied.
-    """
-    from krrood.entity_query_language.operators.core_logical_operators import (
-        LogicalOperator,
-    )
-
-    satisfied = set()
-    for expr in condition_root._descendants_:
-        if not _is_condition_participant(expr):
-            continue
-        if expr._id_ in bindings:
-            if bindings[expr._id_]:
-                satisfied.add(expr._id_)
-        elif isinstance(expr, LogicalOperator):
-            # Intermediate nodes don't put their ID in bindings. Only trust
-            # _is_false_ if the subtree was actually evaluated (some descendant
-            # is in bindings). Otherwise the node was short-circuited.
-            if any(d._id_ in bindings for d in expr._descendants_):
-                if not expr._is_false_:
-                    satisfied.add(expr._id_)
-        # else: leaf condition not in bindings → short-circuited, skip
-
-    if _is_condition_participant(condition_root):
-        if condition_root._id_ in bindings:
-            if bindings[condition_root._id_]:
-                satisfied.add(condition_root._id_)
-        elif (
-            isinstance(condition_root, LogicalOperator)
-            and not condition_root._is_false_
-        ):
-            satisfied.add(condition_root._id_)
-
-    return frozenset(satisfied)
-
-
-def captures_satisfied_conditions(method):
-    """
-    Decorator for methods that process evaluation results.
-
-    When the expression is the conditions root and the result is True, collects the IDs of
-    satisfied condition expressions and stores them on the result as ``satisfied_condition_ids``.
-
-    Only collects when an actual Filter (Where/Having) exists in the expression tree,
-    detected by the conditions root being different from the overall tree root.
-
-    This is general and can be applied to any expression evaluation pipeline method that takes
-    ``(self, current_result: OperationResult)`` and returns an ``OperationResult``.
-    """
-
-    @wraps(method)
-    def wrapper(self, current_result):
-        result = method(self, current_result)
-        if self._conditions_root_ is self and not current_result.is_false:
-            if self._conditions_root_ is not self._root_:
-                result.satisfied_condition_ids = _collect_satisfied_condition_ids(
-                    self, result.bindings
-                )
-        return result
-
-    return wrapper
 
 
 @dataclass(eq=False)
@@ -368,39 +271,41 @@ class SymbolicExpression(ABC):
         :return: An Iterator method whose body automatically sets and restores ``self._eval_parent_`` around the
         underlying evaluation logic.
         """
-
         previous_parent = self._eval_parent_
         self._eval_parent_ = parent
+        ctx = get_evaluation_context()
+        # Lazily create the evaluation context so that satisfaction tracking
+        # and inference recording work even when _evaluate_ is called directly
+        # (e.g. from tests or nested child evaluations).
+        owns_ctx = ctx is None
+        if owns_ctx:
+            ctx = EvaluationContext(
+                observers=[SatisfiedConditionTracker(), InferenceRecorder()]
+            )
+            set_evaluation_context(ctx)
         try:
-            satisfied_ids = None
+            ctx.on_evaluate_enter(expression=self, sources=sources)
+            # Normalize sources: extract bindings if passed as an OperationResult
             if isinstance(sources, OperationResult):
-                satisfied_ids = sources.satisfied_condition_ids
                 sources = sources.bindings
-            # Carry satisfied IDs through the evaluation so they are available
-            # when @record_inferences captures the result inside _evaluate__.
-            self._carried_satisfied_ids_ = satisfied_ids
             sources = copy(sources) if sources is not None else {}
             if self._id_ in sources:
                 result = OperationResult(sources, self._is_false_, self)
-                if satisfied_ids is not None:
-                    result.satisfied_condition_ids = satisfied_ids
+                ctx.on_result_yielded(expression=self, result=result)
                 yield result
             else:
                 for result in map(
                     self._evaluate_conclusions_and_update_bindings_,
                     self._evaluate__(sources),
                 ):
-                    if (
-                        satisfied_ids is not None
-                        and result.satisfied_condition_ids is None
-                    ):
-                        result.satisfied_condition_ids = satisfied_ids
+                    ctx.on_result_yielded(expression=self, result=result)
                     yield result
         finally:
             self._eval_parent_ = previous_parent
-            self._carried_satisfied_ids_ = None
+            ctx.on_evaluate_exit(expression=self)
+            if owns_ctx:
+                set_evaluation_context(None)
 
-    @captures_satisfied_conditions
     def _evaluate_conclusions_and_update_bindings_(
         self, current_result: OperationResult
     ) -> OperationResult:
@@ -417,6 +322,13 @@ class SymbolicExpression(ABC):
             current_result.bindings = next(
                 conclusion._evaluate_(current_result.bindings, parent=self)
             ).bindings
+
+        ctx = get_evaluation_context()
+        if ctx is not None:
+            ctx.on_conclusions_processed(
+                expression=self,
+                result=current_result,
+            )
         return current_result
 
     @abstractmethod
@@ -760,15 +672,6 @@ class OperationResult:
     Only set when the overall condition result is True.
     """
 
-    def __post_init__(self):
-        if (
-            self.satisfied_condition_ids is None
-            and self.previous_operation_result is not None
-        ):
-            prev = self.previous_operation_result.satisfied_condition_ids
-            if prev is not None:
-                self.satisfied_condition_ids = prev
-
     @property
     def all_bindings(self) -> Bindings:
         """
@@ -872,11 +775,7 @@ class Selectable(SymbolicExpression, Generic[T], ABC):
         :return: The OperationResult instance with an updated truth value.
         """
         self._update_truth_value_(bindings[self._id_])
-        result = OperationResult(bindings, self._is_false_, self, child_result)
-        carried = getattr(self, "_carried_satisfied_ids_", None)
-        if carried is not None and result.satisfied_condition_ids is None:
-            result.satisfied_condition_ids = carried
-        return result
+        return OperationResult(bindings, self._is_false_, self, child_result)
 
     def _update_truth_value_(self, current_value: Any) -> None:
         """

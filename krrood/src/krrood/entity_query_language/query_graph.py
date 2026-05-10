@@ -19,8 +19,8 @@ from krrood.entity_query_language.operators.core_logical_operators import (
 from krrood.entity_query_language.core.base_expressions import (
     SymbolicExpression,
     Filter,
-    _is_condition_participant,
 )
+from krrood.entity_query_language.evaluation import _is_condition_participant
 from krrood.entity_query_language.core.variable import (
     Variable,
     Literal,

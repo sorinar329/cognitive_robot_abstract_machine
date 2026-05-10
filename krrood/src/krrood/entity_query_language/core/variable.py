@@ -45,7 +45,6 @@ from krrood.entity_query_language.utils import (
 )
 from krrood.entity_query_language.explanation import (
     monitored,
-    record_inferences,
 )
 
 DomainType = Iterable[T]
@@ -234,7 +233,6 @@ class InstantiatedVariable(
     ) -> Iterable[OperationResult]:
         yield from self._instantiate_using_child_vars_and_yield_results_(sources)
 
-    @record_inferences
     def _instantiate_using_child_vars_and_yield_results_(
         self, sources: Bindings
     ) -> Iterator[OperationResult]:

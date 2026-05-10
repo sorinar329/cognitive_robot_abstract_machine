@@ -220,26 +220,6 @@ def register_inference(
         pass
 
 
-def record_inferences(func: Callable) -> Callable:
-    """
-    Decorator for methods yielding OperationResults to record inferred instances.
-
-    :param func: The method to decorate.
-    :return: The wrapped method.
-    """
-
-    @wraps(func)
-    def wrapper(self, *args, **kwargs):
-        for result in func(self, *args, **kwargs):
-            # If the current variable produced a binding for itself, record it
-            # self._id_ is always present on SymbolicExpression
-            if self._id_ in result.bindings:
-                register_inference(result.bindings[self._id_], self, result)
-            yield result
-
-    return wrapper
-
-
 def explain_inference(instance: Any) -> Optional[InferenceExplanation]:
     """
     Retrieve the explanation of how the given instance was created through inference.

@@ -125,12 +125,6 @@ def cartesian_product_while_passing_the_bindings_around(
         def stage(bindings):
             for result in inner_expression._evaluate_(bindings, parent=parent):
                 result.update(bindings)
-                # Carry forward satisfied_condition_ids from accumulated bindings
-                # when the current result doesn't have its own satisfaction data
-                if result.satisfied_condition_ids is None:
-                    prev = getattr(bindings, "satisfied_condition_ids", None)
-                    if prev is not None:
-                        result.satisfied_condition_ids = prev
                 yield result
 
         return stage
