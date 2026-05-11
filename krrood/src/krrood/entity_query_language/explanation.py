@@ -1,5 +1,4 @@
 import inspect
-import uuid
 import weakref
 from dataclasses import dataclass, field
 from functools import wraps
@@ -10,7 +9,6 @@ from typing_extensions import TYPE_CHECKING
 if TYPE_CHECKING:
     from krrood.entity_query_language.core.base_expressions import (
         OperationResult,
-        Filter,
     )
 
 
@@ -93,68 +91,14 @@ class InferenceExplanation:
 
     def condition_graph(self):
         """
-        Build a rustworkx PyDAG of the condition expression tree.
-
-        Each node in the graph has attributes:
-          - ``name``: the expression name (str)
-          - ``is_satisfied``: True if the condition was satisfied, False otherwise
-          - ``expression``: the SymbolicExpression object
-
-        Edges go from child to parent, preserving the original tree structure.
-
-        :return: A ``rustworkx.PyDAG``, or None if no conditions exist or no satisfaction
-            data is available.
-        """
-        if not self.satisfied_condition_ids or self.query_root is None:
-            return None
-
-        condition_root = self.query_node._conditions_root_
-
-        # If condition_root is the overall root, there are no Filter conditions
-        from krrood.entity_query_language.core.base_expressions import Filter
-
-        if not any(isinstance(e, Filter) for e in self.query_root._all_expressions_):
-            return None
-
-        import rustworkx as rx
-
-        graph = rx.PyDAG()
-        expression_to_index: dict = {}
-
-        def add_node(expr, parent_index=None):
-            if expr._id_ in expression_to_index:
-                return expression_to_index[expr._id_]
-
-            is_satisfied = expr._id_ in self.satisfied_condition_ids
-            node_index = graph.add_node(
-                {
-                    "name": expr._name_,
-                    "is_satisfied": is_satisfied,
-                    "expression": expr,
-                }
-            )
-            expression_to_index[expr._id_] = node_index
-
-            if parent_index is not None:
-                graph.add_edge(node_index, parent_index, None)
-
-            for child in expr._children_:
-                add_node(child, node_index)
-
-            return node_index
-
-        add_node(condition_root)
-        return graph
-
-    def build_condition_query_graph(self):
-        """
         Build a QueryGraph of the full query tree with satisfaction data overlaid.
 
-        Condition nodes that were NOT satisfied are colored grey; satisfied condition
-        nodes keep their type-based color. Non-condition nodes are unaffected.
+        Each ``QueryNode`` carries an ``is_satisfied`` flag grounded directly on
+        the satisfied condition IDs.  Unsatisfied condition subtrees are also
+        marked as *faded* for visualization purposes.
 
-        :return: A ``QueryGraph`` instance, or None if no query root or no satisfaction
-            data is available.
+        :return: A :class:`QueryGraph` instance, or None if no conditions exist
+            or no satisfaction data is available.
         """
         if self.query_root is None or not self.satisfied_condition_ids:
             return None
@@ -165,20 +109,32 @@ class InferenceExplanation:
             satisfied_condition_ids=self.satisfied_condition_ids,
         )
 
-    def visualize_condition_graph(self, **visualize_kwargs):
+    def as_string(
+            self, focus_package: Optional[str] = None
+    ) -> str:
         """
-        Build and render a query graph with condition satisfaction overlaid.
+        Convert an InferenceExplanation into a human-readable string.
 
-        Keyword arguments are forwarded to ``QueryGraph.visualize()`` (e.g.
-        ``figsize``, ``node_size``, ``font_size``, ``edge_style``).
-
-        :return: The (fig, ax) tuple from matplotlib, or None if no condition
-            data is available.
+        :param focus_package: Optional package name to filter the stack further.
+        :return: A formatted string explaining the inference.
         """
-        qg = self.build_condition_query_graph()
-        if qg is None:
-            return None
-        return qg.visualize(**visualize_kwargs)
+        # Allow further filtering at explanation time
+        display_stack = filter_stack(self.stack, internal_package=focus_package)
+
+        formatted_stack = []
+        for frame_info in display_stack:
+            formatted_stack.append(
+                f'  File "{frame_info.filename}", line {frame_info.lineno}, in {frame_info.function}\n'
+                f'    {frame_info.code_context[0].strip() if frame_info.code_context else "???"}\n'
+            )
+
+        stack_str = "".join(formatted_stack[:10])  # Limit to 10 frames
+
+        return (
+            f"Instance {self.instance} was created by inference variable: {self.query_node}\n"
+            f"Part of query: {self.query_root}\n"
+            f"Call stack at definition:\n{stack_str}"
+        )
 
 
 # Dictionary to store inference explanations for instances.
@@ -231,32 +187,3 @@ def explain_inference(instance: Any) -> Optional[InferenceExplanation]:
         return INFERENCE_RECORD.get(instance)
     except TypeError:
         return None
-
-
-def format_inference_explanation(
-    explanation: InferenceExplanation, focus_package: Optional[str] = None
-) -> str:
-    """
-    Convert an InferenceExplanation into a human-readable string.
-
-    :param explanation: The explanation object to format.
-    :param focus_package: Optional package name to filter the stack further.
-    :return: A formatted string explaining the inference.
-    """
-    # Allow further filtering at explanation time
-    display_stack = filter_stack(explanation.stack, internal_package=focus_package)
-
-    formatted_stack = []
-    for frame_info in display_stack:
-        formatted_stack.append(
-            f'  File "{frame_info.filename}", line {frame_info.lineno}, in {frame_info.function}\n'
-            f'    {frame_info.code_context[0].strip() if frame_info.code_context else "???"}\n'
-        )
-
-    stack_str = "".join(formatted_stack[:10])  # Limit to 10 frames
-
-    return (
-        f"Instance {explanation.instance} was created by inference variable: {explanation.query_node}\n"
-        f"Part of query: {explanation.query_root}\n"
-        f"Call stack at definition:\n{stack_str}"
-    )

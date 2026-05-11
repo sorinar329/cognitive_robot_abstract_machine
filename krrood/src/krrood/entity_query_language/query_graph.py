@@ -159,6 +159,7 @@ class QueryGraph:
         layout: str = "tidy",
         edge_style: str = "orthogonal",
         label_max_chars_per_line: Optional[int] = 13,
+        filename: str = "query_graph.pdf",
     ):
         """
         Visualizes the graph using the specified layout and style options.
@@ -181,6 +182,7 @@ class QueryGraph:
             layout=layout,
             edge_style=edge_style,
             label_max_chars_per_line=label_max_chars_per_line,
+            filename=filename,
         )
         return visualizer.render()
 
@@ -227,11 +229,17 @@ class QueryGraph:
         if expression in self.expression_node_map:
             return self.expression_node_map[expression]
 
+        is_satisfied = (
+            self.satisfied_condition_ids is not None
+            and _is_condition_participant(expression)
+            and expression._id_ in self.satisfied_condition_ids
+        )
         node = QueryNode(
             self.get_expression_name(expression),
             self.graph,
             color=ColorLegend.from_expression(expression, self.satisfied_condition_ids),
             data=expression,
+            is_satisfied=is_satisfied,
         )
         self.expression_node_map[expression] = node
 
@@ -334,3 +342,9 @@ class QueryNode(RXUtilsNode):
     """
 
     enclosed_name: ClassVar[str] = "Selected Variable"
+    is_satisfied: bool = field(default=False)
+    """
+    True if this node's expression is a condition participant whose evaluation
+    result was True. Grounded directly on satisfied_condition_ids, not derived
+    from the faded propagation pass.
+    """

@@ -10,7 +10,6 @@ from krrood.entity_query_language.factories import (
 )
 from krrood.entity_query_language.explanation import (
     explain_inference,
-    format_inference_explanation,
     register_inference,
 )
 from krrood.entity_query_language.query.query import Query
@@ -47,7 +46,7 @@ def test_explain_inference_basic():
     # 3. Check explanation
     explanation_obj = explain_inference(john)
     assert explanation_obj is not None
-    explanation = format_inference_explanation(explanation_obj)
+    explanation = explanation_obj.as_string()
 
     assert "Person" in explanation
     assert "test_explain_inference_basic" in explanation
@@ -76,7 +75,7 @@ def test_explain_inference_nested():
 
     explanation_obj = explain_inference(alice)
     assert explanation_obj is not None
-    explanation = format_inference_explanation(explanation_obj)
+    explanation = explanation_obj.as_string()
 
     assert "Person" in explanation
     assert "test_explain_inference_nested" in explanation
@@ -105,8 +104,8 @@ def test_explain_inference_multiple_instances():
     expl_charlie_obj = explain_inference(charlie)
     assert expl_bob_obj is not None
     assert expl_charlie_obj is not None
-    expl_bob = format_inference_explanation(expl_bob_obj)
-    expl_charlie = format_inference_explanation(expl_charlie_obj)
+    expl_bob = expl_bob_obj.as_string()
+    expl_charlie = expl_charlie_obj.as_string()
 
     assert "test_explain_inference_multiple_instances" in expl_bob
     assert "test_explain_inference_multiple_instances" in expl_charlie
@@ -142,7 +141,7 @@ def test_explain_inference_deeply_nested():
 
     explanation_obj = explain_inference(dave)
     assert explanation_obj is not None
-    explanation = format_inference_explanation(explanation_obj)
+    explanation = explanation_obj.as_string()
 
     assert "Person" in explanation
     assert "test_explain_inference_deeply_nested" in explanation
@@ -182,12 +181,12 @@ def test_explain_inference_focus_package():
     # Full explanation
     explanation_obj = explain_inference(frank)
     assert explanation_obj is not None
-    explanation_full = format_inference_explanation(explanation_obj)
+    explanation_full = explanation_obj.as_string()
     assert "test_explanation.py" in explanation_full
     # Assuming krrood is in the path for some internal frames if any (though here it's mostly test)
     # But we can force a check that only contains 'test_explanation' if we filter by it
-    explanation_filtered = format_inference_explanation(
-        explanation_obj, focus_package="test_explanation.py"
+    explanation_filtered = explanation_obj.as_string(
+        focus_package="test_explanation.py"
     )
 
     assert "test_explanation.py" in explanation_filtered
@@ -402,17 +401,15 @@ def test_condition_graph_pipeline_simple():
     explanation = explain_inference(results[0])
     assert explanation is not None
 
-    graph = explanation.condition_graph()
-    assert graph is not None
-    assert graph.num_nodes() > 0
+    qg = explanation.condition_graph()
+    assert qg is not None
+    assert len(qg.expression_node_map) > 0
 
     comp_nodes = [
-        graph.get_node_data(i)
-        for i in graph.node_indices()
-        if graph.get_node_data(i)["name"] == ">"
+        node for node in qg.expression_node_map.values() if node.name == ">"
     ]
     assert len(comp_nodes) == 1
-    assert comp_nodes[0]["is_satisfied"] is True
+    assert comp_nodes[0].is_satisfied is True
 
 
 def test_condition_graph_pipeline_nested_and_or():
@@ -427,20 +424,19 @@ def test_condition_graph_pipeline_nested_and_or():
     explanation = explain_inference(results[0])
     assert explanation is not None
 
-    graph = explanation.condition_graph()
-    assert graph is not None
+    qg = explanation.condition_graph()
+    assert qg is not None
 
     nodes_by_name = {
-        graph.get_node_data(i)["name"]: graph.get_node_data(i)
-        for i in graph.node_indices()
+        node.name: node for node in qg.expression_node_map.values()
     }
     assert "AND" in nodes_by_name
     assert "OR" in nodes_by_name
-    assert nodes_by_name["AND"]["is_satisfied"] is True
-    assert nodes_by_name["OR"]["is_satisfied"] is True
-    assert nodes_by_name[">"]["is_satisfied"] is True
-    assert nodes_by_name["<"]["is_satisfied"] is True
-    assert nodes_by_name["=="]["is_satisfied"] is False
+    assert nodes_by_name["AND"].is_satisfied is True
+    assert nodes_by_name["OR"].is_satisfied is True
+    assert nodes_by_name[">"].is_satisfied is True
+    assert nodes_by_name["<"].is_satisfied is True
+    assert nodes_by_name["=="].is_satisfied is False
 
 
 def test_condition_graph_pipeline_not():
@@ -453,16 +449,15 @@ def test_condition_graph_pipeline_not():
     explanation = explain_inference(results[0])
     assert explanation is not None
 
-    graph = explanation.condition_graph()
-    assert graph is not None
+    qg = explanation.condition_graph()
+    assert qg is not None
 
     nodes_by_name = {
-        graph.get_node_data(i)["name"]: graph.get_node_data(i)
-        for i in graph.node_indices()
+        node.name: node for node in qg.expression_node_map.values()
     }
     assert "Not" in nodes_by_name
-    assert nodes_by_name["Not"]["is_satisfied"] is True
-    assert nodes_by_name[">"]["is_satisfied"] is False
+    assert nodes_by_name["Not"].is_satisfied is True
+    assert nodes_by_name[">"].is_satisfied is False
 
 
 def test_condition_graph_pipeline_no_conditions():
@@ -476,7 +471,6 @@ def test_condition_graph_pipeline_no_conditions():
         explanation = explain_inference(item)
         assert explanation is not None
         assert explanation.condition_graph() is None
-        assert explanation.build_condition_query_graph() is None
 
 
 def test_condition_graph_pipeline_or_short_circuit():
@@ -489,17 +483,16 @@ def test_condition_graph_pipeline_or_short_circuit():
     explanation = explain_inference(results[0])
     assert explanation is not None
 
-    graph = explanation.condition_graph()
-    assert graph is not None
+    qg = explanation.condition_graph()
+    assert qg is not None
 
     nodes_by_name = {
-        graph.get_node_data(i)["name"]: graph.get_node_data(i)
-        for i in graph.node_indices()
+        node.name: node for node in qg.expression_node_map.values()
     }
     assert "OR" in nodes_by_name
-    assert nodes_by_name["OR"]["is_satisfied"] is True
-    assert nodes_by_name[">"]["is_satisfied"] is True
-    assert nodes_by_name["<"]["is_satisfied"] is False
+    assert nodes_by_name["OR"].is_satisfied is True
+    assert nodes_by_name[">"].is_satisfied is True
+    assert nodes_by_name["<"].is_satisfied is False
 
 
 def test_condition_graph_pipeline_complex():
@@ -514,26 +507,23 @@ def test_condition_graph_pipeline_complex():
     explanation = explain_inference(results[0])
     assert explanation is not None
 
-    graph = explanation.condition_graph()
-    assert graph is not None
+    qg = explanation.condition_graph()
+    assert qg is not None
 
     nodes_by_name = {
-        graph.get_node_data(i)["name"]: graph.get_node_data(i)
-        for i in graph.node_indices()
+        node.name: node for node in qg.expression_node_map.values()
     }
     # val=5: 5>0=True, Not(5==2)=Not(False)=True → OR short-circuits, AND satisfied
-    assert nodes_by_name["AND"]["is_satisfied"] is True
-    assert nodes_by_name["OR"]["is_satisfied"] is True
-    assert nodes_by_name["Not"]["is_satisfied"] is True
-    assert nodes_by_name["=="]["is_satisfied"] is False
+    assert nodes_by_name["AND"].is_satisfied is True
+    assert nodes_by_name["OR"].is_satisfied is True
+    assert nodes_by_name["Not"].is_satisfied is True
+    assert nodes_by_name["=="].is_satisfied is False
     # Two ">" nodes: val > 0 (satisfied) and val > 1 (short-circuited, not satisfied)
     gt_nodes = [
-        n
-        for n in (graph.get_node_data(i) for i in graph.node_indices())
-        if n["name"] == ">"
+        node for node in qg.expression_node_map.values() if node.name == ">"
     ]
     assert len(gt_nodes) == 2
-    assert sum(1 for n in gt_nodes if n["is_satisfied"]) == 1
+    assert sum(1 for n in gt_nodes if n.is_satisfied) == 1
 
 
 def test_condition_graph_pipeline_multiple_results():
@@ -550,15 +540,13 @@ def test_condition_graph_pipeline_multiple_results():
     for item in results:
         explanation = explain_inference(item)
         assert explanation is not None
-        graph = explanation.condition_graph()
-        assert graph is not None
+        qg = explanation.condition_graph()
+        assert qg is not None
         comp_nodes = [
-            graph.get_node_data(i)
-            for i in graph.node_indices()
-            if graph.get_node_data(i)["name"] == ">"
+            node for node in qg.expression_node_map.values() if node.name == ">"
         ]
         assert len(comp_nodes) == 1
-        assert comp_nodes[0]["is_satisfied"] is True
+        assert comp_nodes[0].is_satisfied is True
 
 
 def test_condition_graph_pipeline_non_weakly_referenceable():
@@ -678,8 +666,8 @@ def test_query_graph_satisfaction_colors_all_satisfied():
             assert node.color.color == original_colors[id(node.data)]
 
 
-def test_explanation_build_and_visualize_condition_graph():
-    """InferenceExplanation.build_condition_query_graph() creates correct QueryGraph."""
+def test_explanation_condition_graph_and_visualize():
+    """InferenceExplanation.condition_graph() creates correct QueryGraph."""
     val = variable_from([6])
     query = entity(inference(Item)(value=val)).where(
         or_(and_(val > 5, val < 10), val == 11)
@@ -690,7 +678,7 @@ def test_explanation_build_and_visualize_condition_graph():
     explanation = explain_inference(results[0])
     assert explanation is not None
 
-    qg = explanation.build_condition_query_graph()
+    qg = explanation.condition_graph()
     qg.visualize()
     assert qg is not None
     assert qg.satisfied_condition_ids == explanation.satisfied_condition_ids
@@ -699,6 +687,6 @@ def test_explanation_build_and_visualize_condition_graph():
         if node.data._name_ == "AND":
             assert "not satisfied" not in node.color.name.lower()
 
-    fig, ax = explanation.visualize_condition_graph()
+    fig, ax = explanation.condition_graph().visualize()
     assert fig is not None
     assert ax is not None
