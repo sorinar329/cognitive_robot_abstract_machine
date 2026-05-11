@@ -15,7 +15,8 @@ import rclpy
 
 from giskardpy.motion_statechart.context import MotionStatechartContext
 from krrood.symbolic_math.symbolic_math import trinary_logic_not
-from segmind.detectors.agent_event_detectors_nodes import HoldingDetector, LossOfHoldingDetector, LiftingDetector
+from segmind.detectors.agent_event_detectors_nodes import HoldingDetector, LossOfHoldingDetector, LiftingDetector, \
+    OpeningDetector
 from segmind.detectors.atomic_event_detectors_nodes import (
     ContactDetector,
     LossOfContactDetector, TranslationDetector, StopTranslationDetector,
@@ -129,6 +130,17 @@ def run_demo():
 
     lifting_node = LiftingDetector(excluded_objects=["base_footprint", "bowl"])
 
+    opening_detector = OpeningDetector(
+        handle_name="fridge_door1_handle",
+        gripper_groups=[
+            ["gripper_left_right_inner_finger", "gripper_left_left_inner_finger",
+             "gripper_left_right_inner_knuckle", "gripper_left_left_inner_knuckle"]
+        ],
+        observation_window=10,
+        distance_threshold=0.01,
+        angle_threshold=0.3,
+        excluded_objects=["base_footprint", "bowl"],
+    )
 
     statechart.add_node(contact_node)
     statechart.add_node(loss_of_contact_node)
@@ -141,6 +153,7 @@ def run_demo():
     statechart.add_node(holding_node)
     statechart.add_node(loss_of_holding_node)
     statechart.add_node(lifting_node)
+    statechart.add_node(opening_detector)
 
 
 

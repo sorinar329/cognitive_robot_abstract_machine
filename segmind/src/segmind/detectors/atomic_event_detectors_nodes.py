@@ -46,19 +46,24 @@ class ContactDetector(AbstractDetector):
         :return: List of ContactEvent instances generated during this update.
         """
         new_contact_pairs = self.get_relation(context, tracked_objects, contact)
+        CONTACT_DEBOUNCE_FRAMES = 15
 
         events = []
+
         for obj, contact_list in new_contact_pairs.items():
             new_contacts = (
                 contact_list
                 if obj not in segmind_context.latest_contact_bodies
                 else contact_list - segmind_context.latest_contact_bodies[obj]
             )
-            if new_contacts:
-                segmind_context.latest_contact_bodies.setdefault(obj, set()).update(new_contacts)
-                events.extend(
-                    [ContactEvent(tracked_object=obj, with_object=c) for c in new_contacts]
-                )
+            for c in new_contacts:
+                key = (obj, c)
+                count = segmind_context.contact_frame_counter.get(key, 0) + 1
+                segmind_context.contact_frame_counter[key] = count
+                if count >= CONTACT_DEBOUNCE_FRAMES:
+                    segmind_context.contact_frame_counter.pop(key)
+                    segmind_context.latest_contact_bodies.setdefault(obj, set()).add(c)
+                    events.append(ContactEvent(tracked_object=obj, with_object=c))
 
         return events
 
@@ -92,24 +97,30 @@ class LossOfContactDetector(AbstractDetector):
         new_contact_pairs = self.get_relation(context, tracked_objects, contact)
 
         events = []
+        LOSS_OF_CONTACT_DEBOUNCE_FRAMES = 15
+
         for obj, contact_list in list(segmind_context.latest_contact_bodies.items()):
             loss_contacts = (
                 contact_list.copy()
                 if obj not in new_contact_pairs
                 else contact_list - new_contact_pairs[obj]
             )
-            if loss_contacts:
+            for c in loss_contacts:
+                key = (obj, c)
+                count = segmind_context.contact_loss_frame_counter.get(key, 0) + 1
+                segmind_context.contact_loss_frame_counter[key] = count
 
-                segmind_context.latest_contact_bodies[obj] -= loss_contacts
-                if not segmind_context.latest_contact_bodies[obj]:
-                    segmind_context.latest_contact_bodies.pop(obj)
+                if count >= LOSS_OF_CONTACT_DEBOUNCE_FRAMES:
+                    segmind_context.contact_loss_frame_counter.pop(key)
+                    segmind_context.latest_contact_bodies[obj].discard(c)
+                    if not segmind_context.latest_contact_bodies[obj]:
+                        segmind_context.latest_contact_bodies.pop(obj)
+                    events.append(LossOfContactEvent(tracked_object=obj, with_object=c))
 
-                events.extend(
-                    [
-                        LossOfContactEvent(tracked_object=obj, with_object=s)
-                        for s in loss_contacts
-                    ]
-                )
+            # If contact is back, reset the loss counter for that pair
+            regained = new_contact_pairs.get(obj, set()) & contact_list
+            for c in regained:
+                segmind_context.contact_loss_frame_counter.pop((obj, c), None)
 
         return events
 
@@ -123,7 +134,7 @@ class MotionDetector(AbstractDetector):
     bodies and generating events when movement is detected.
     """
 
-    window_size: int = 20
+    window_size: int = 40
     """
     The window size indicates how many poses to consider for movement.
     """

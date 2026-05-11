@@ -14,10 +14,12 @@ from semantic_digital_twin.spatial_types.spatial_types import Pose
 from semantic_digital_twin.world_description.geometry import BoundingBox
 from semantic_digital_twin.world_description.world_entity import Body
 
+def _truncate_timestamp(ts: datetime) -> datetime:
+    return ts.replace(microsecond=(ts.microsecond // 100000) * 100000)
 
 @dataclass
 class DetectionEvent(ABC):
-    timestamp: datetime = field(default=datetime.now())
+    timestamp: datetime = field(default_factory=datetime.now)
     """
     The time at which the event occurred, defaults to current time.
     """
@@ -81,10 +83,10 @@ class EventWithOneTrackedObject(EventWithTrackedObjects, HasPrimaryTrackedObject
     def __eq__(self, other):
         return (other.__class__ == self.__class__
                 and self.tracked_object == other
-                and round(self.timestamp, 1) == round(other.timestamp, 1))
+                and _truncate_timestamp(self.timestamp) == _truncate_timestamp(other.timestamp))
 
     def __hash__(self):
-        return hash((self.__class__, self.tracked_object, round(self.timestamp, 1)))
+        return hash((self.__class__, self.tracked_object, _truncate_timestamp(self.timestamp)))
 
 
 @dataclass(kw_only=True)
@@ -110,10 +112,10 @@ class EventWithTwoTrackedObjects(EventWithTrackedObjects, HasPrimaryAndSecondary
         return (other.__class__ == self.__class__
                 and self.tracked_object == other.tracked_object
                 and self.with_object == other.with_object
-                and round(self.timestamp, 1) == round(other.timestamp, 1))
+                and _truncate_timestamp(self.timestamp) == _truncate_timestamp(other.timestamp))
 
     def __hash__(self):
-        hash_tuple = (self.__class__, self.tracked_object, round(self.timestamp, 1))
+        hash_tuple = (self.__class__, self.tracked_object, _truncate_timestamp(self.timestamp))
         if self.with_object is not None:
             hash_tuple += (self.with_object,)
         return hash(hash_tuple)
@@ -339,7 +341,7 @@ class HoldingEvent(EventWithTwoTrackedObjects):
         return (other.__class__ == self.__class__
                 and self.tracked_object == other.tracked_object
                 and self.with_object == other.with_object
-                and round(self.timestamp, 1) == round(other.timestamp, 1))
+                )
 
 
 
@@ -359,7 +361,7 @@ class LossOfHoldingEvent(EventWithTwoTrackedObjects):
         return (other.__class__ == self.__class__
                 and self.tracked_object == other.tracked_object
                 and self.with_object == other.with_object
-                and round(self.timestamp, 1) == round(other.timestamp, 1))
+                )
 
 
 @dataclass(unsafe_hash=True)
@@ -378,4 +380,24 @@ class LiftingEvent(EventWithTwoTrackedObjects):
     def __eq__(self, other):
         return (other.__class__ == self.__class__
                 and self.tracked_object == other.tracked_object
-                and round(self.timestamp, 1) == round(other.timestamp, 1))
+                )
+
+
+@dataclass(unsafe_hash=True)
+class OpeningEvent(EventWithTwoTrackedObjects):
+    """
+    Represents an event where a handle is being opened by a gripper,
+    detected by correlated translation between gripper and handle.
+    """
+    grippers: List[Body] = field(default_factory=list)
+
+    def __str__(self):
+        gripper_names = ", ".join(g.name.name for g in self.grippers)
+        return f"{self.__class__.__name__}: {self.tracked_object.name} opened by [{gripper_names}] - {self.timestamp}"
+
+    def __eq__(self, other):
+        return (other.__class__ == self.__class__
+                and self.tracked_object == other.tracked_object
+                and self.with_object == other.with_object
+                and _truncate_timestamp(self.timestamp) == _truncate_timestamp(other.timestamp))
+

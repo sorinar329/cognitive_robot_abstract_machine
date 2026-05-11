@@ -123,6 +123,19 @@ class SegmindContext(ContextExtension):
     Cleared when holding is lost.
     """
 
+    contact_frame_counter: Dict[tuple, int] = field(default_factory=dict)
+    contact_loss_frame_counter: Dict[tuple, int] = field(default_factory=dict)
+
+    opening_tracker: Dict[Body, dict] = field(default_factory=dict)
+    """
+    Maps handle body to tracking state: pose history of handle and gripper during observation window.
+    """
+
+    latest_opening: set = field(default_factory=set)
+    """
+    Set of handles for which an OpeningEvent has already been fired.
+    """
+
 @dataclass(repr=False, eq=False)
 class AbstractDetector(MotionStatechartNode, ABC):
     tracked_object: Optional[List[Body]] = field(kw_only=True, default=None)
