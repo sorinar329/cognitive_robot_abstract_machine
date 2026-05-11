@@ -26,7 +26,7 @@ from krrood.entity_query_language.core.base_expressions import (
     UnaryExpression,
     Bindings,
     OperationResult,
-    Selectable,
+    Selectable, SymbolicExpression,
 )
 from krrood.entity_query_language.operators.comparator import Comparator
 from krrood.entity_query_language.utils import (
@@ -156,13 +156,16 @@ class MappedVariable(UnaryExpression, CanBehaveLikeAVariable[T], ABC):
                 child_result.bindings | {self._id_: mapped_value}, child_result
             )
             for child_result in self._child_._evaluate_(sources, parent=self)
-            for mapped_value in self._apply_mapping_(child_result.value)
+            for mapped_value in self._apply_mapping_(child_result.value, sources=sources)
         )
 
     @abstractmethod
-    def _apply_mapping_(self, value: Any) -> Iterable[Any]:
+    def _apply_mapping_(self, value: Any, sources: Optional[Bindings] = None) -> Iterable[Any]:
         """
         Apply the mapping to a value from the child variable.
+
+        :param value: The value to map.
+        :param sources: The bindings from the evaluation context.
         """
         pass
 
@@ -233,7 +236,7 @@ class Attribute(MappedVariable):
         """
         self._type_ = get_field_type_endpoint(self._owner_class_, self._attribute_name_)
 
-    def _apply_mapping_(self, value: Any) -> Iterable[Any]:
+    def _apply_mapping_(self, value: Any, sources: Optional[Bindings] = None) -> Iterable[Any]:
         yield getattr(value, self._attribute_name_)
 
     @property
@@ -255,9 +258,14 @@ class Index(MappedVariable):
     The key to index with.
     """
 
-    def _apply_mapping_(self, value: Any) -> Iterable[Any]:
+    def _apply_mapping_(self, value: Any, sources: Optional[Bindings] = None) -> Iterable[Any]:
+        sources = sources or {}
         try:
-            yield value[self._key_]
+            if isinstance(self._key_, SymbolicExpression):
+                for key in self._key_._evaluate_(sources, parent=self):
+                    yield value[key.value]
+            else:
+                yield value[self._key_]
         except IndexError:  # break iterator if the key does not exist
             return
 
@@ -284,7 +292,7 @@ class Call(MappedVariable):
     The keyword arguments to call the method with.
     """
 
-    def _apply_mapping_(self, value: Any) -> Iterable[Any]:
+    def _apply_mapping_(self, value: Any, sources: Optional[Bindings] = None) -> Iterable[Any]:
         if len(self._args_) > 0 or len(self._kwargs_) > 0:
             yield value(*self._args_, **self._kwargs_)
         else:
@@ -307,7 +315,7 @@ class FlatVariable(MappedVariable):
     similar to UNNEST in SQL.
     """
 
-    def _apply_mapping_(self, value: Iterable[Any]) -> Iterable[Any]:
+    def _apply_mapping_(self, value: Iterable[Any], sources: Optional[Bindings] = None) -> Iterable[Any]:
         yield from value
 
     @cached_property
