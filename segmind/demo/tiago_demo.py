@@ -165,15 +165,18 @@ def run_demo():
     placing_node.end_condition = trinary_logic_not(support_node.observation_variable)
     pickup_node.start_condition = loss_of_support_node.observation_variable
     pickup_node.end_condition = trinary_logic_not(loss_of_support_node.observation_variable)
-    #holding_node.start_condition = contact_node.observation_variable
-    #holding_node.end_condition = trinary_logic_not(contact_node.observation_variable)
-    #loss_of_holding_node.start_condition = loss_of_contact_node.observation_variable
-    #loss_of_holding_node.end_condition = trinary_logic_not(loss_of_contact_node.observation_variable)
-
+    holding_node.start_condition = contact_node.observation_variable
+    holding_node.end_condition = trinary_logic_not(contact_node.observation_variable)
+    loss_of_holding_node.start_condition = loss_of_contact_node.observation_variable
+    loss_of_holding_node.end_condition = trinary_logic_not(loss_of_contact_node.observation_variable)
+    lifting_node.start_condition = holding_node.observation_variable
+    lifting_node.end_condition = trinary_logic_not(holding_node.observation_variable)
+    opening_detector.start_condition = holding_node.observation_variable
+    opening_detector.end_condition = trinary_logic_not(holding_node.observation_variable)
 
     segmind_context = episode_executor.context.require_extension(SegmindContext)
     episode_executor.compile(statechart)
-
+    statechart.draw("sony.pdf")
     # Replay episode frame by frame
     import time
 
@@ -185,7 +188,7 @@ def run_demo():
     t_interval = t_start
 
     for frame_data in file_player.frame_data_generator:
-        if frame_count % 2 == 0:
+        if frame_count % 1 == 0:
             file_player.process_objects_data(frame_data)
             episode_executor.tick()
 
