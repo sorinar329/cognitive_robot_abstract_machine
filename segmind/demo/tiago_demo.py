@@ -46,10 +46,6 @@ CSV_PATH = (
     "/segmind/resources/tiago_episodes/data/data.csv"
 )
 
-IGNORED_OBJECTS = ["iCub"]
-FIXED_OBJECTS = ["scene"]
-
-
 # ---------------------------------------------------------------------------
 # Setup helpers
 # ---------------------------------------------------------------------------
@@ -69,8 +65,6 @@ def build_episode_executor(world, csv_path: str) -> tuple:
     episode_executor = EpisodeSegmenterExecutor(
         context=context,
         player=file_player,
-        ignored_objects=IGNORED_OBJECTS,
-        fixed_objects=FIXED_OBJECTS,
     )
     return file_player, context, episode_executor
 
