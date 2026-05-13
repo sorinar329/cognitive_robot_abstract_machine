@@ -1,5 +1,7 @@
 import numpy as np
 from giskardpy.motion_statechart.context import MotionStatechartContext
+from krrood.entity_query_language.explanation import explain_inference
+from krrood.entity_query_language.query_graph import QueryGraph
 from segmind.datastructures.events import (
     ContactEvent,
     LossOfContactEvent,
@@ -22,6 +24,7 @@ from segmind.detectors.coarse_event_detector_nodes import PickUpDetector, Placin
 from segmind.detectors.spatial_relation_detector_nodes import SupportDetector, LossOfSupportDetector, \
     ContainmentDetector, LossOfContainmentDetector, InsertionDetector
 from segmind.episode_segmenter import EpisodeSegmenterExecutor
+from segmind.event_explainer import EventExplainer
 from segmind.statecharts.segmind_statechart import SegmindStatechart
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
@@ -149,6 +152,23 @@ def test_pickup(simple_apartment_setup):
     assert len(events_of(segmind_context, TranslationEvent)) >= 1
     assert len(events_of(segmind_context, LossOfSupportEvent)) == 1
     assert len(events_of(segmind_context, PickUpEvent)) == 1
+
+    events = events_of(segmind_context, PickUpEvent)
+    for event in events:
+        explainer = EventExplainer(event)
+        if explainer.explanation is None:
+            continue
+        explainer.explanation.condition_graph().visualize(filename=f"pick_up_event_condition_graph.pdf")
+        print(explainer.explanation.as_string())
+        print("===================================")
+        print(explainer.get_satisfied_condition_expressions_for_a_detected_event().tolist())
+        print("===================================")
+        print(explainer.get_participating_events_in_detection().tolist())
+        print("===================================")
+        conditions = explainer.get_conditions_that_relate_the_participating_events()
+        QueryGraph(conditions).visualize(filename=f"conditions_meta_query.pdf")
+        print(conditions.tolist())
+
     milk.parent_connection.origin = HomogeneousTransformationMatrix.from_xyz_rpy(-1.7, 0, 1.07, yaw=np.pi)
 
 def test_placing(simple_apartment_setup):

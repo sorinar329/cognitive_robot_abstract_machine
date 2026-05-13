@@ -86,7 +86,7 @@ def is_iterable(obj: Any) -> bool:
 
     :param obj: The object to check.
     """
-    return hasattr(obj, "__iter__") and not isinstance(
+    return callable(getattr(obj, "__iter__", None)) and not isinstance(
         obj, (str, type, bytes, bytearray)
     )
 
@@ -121,14 +121,16 @@ def cartesian_product_while_passing_the_bindings_around(
     :param parent: The parent expression.
     :return: An Iterable of Bindings for each combination of values.
     """
-    expression_evaluation_generators = [
-        (
-            lambda bindings, inner_expression=expression: (
+    def _make_stage(inner_expression):
+        def stage(bindings):
+            for result in inner_expression._evaluate_(bindings, parent=parent):
                 result.update(bindings)
-                for result in inner_expression._evaluate_(bindings, parent=parent)
-            )
-        )
-        for expression in expressions
+                yield result
+
+        return stage
+
+    expression_evaluation_generators = [
+        _make_stage(expression) for expression in expressions
     ]
 
     yield from chain_stages(expression_evaluation_generators, sources)

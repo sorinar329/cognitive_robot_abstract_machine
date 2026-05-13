@@ -12,7 +12,7 @@ from abc import ABC, abstractmethod
 from collections import UserDict
 from copy import copy
 from dataclasses import dataclass, field
-from functools import cached_property
+from functools import cached_property, lru_cache
 
 from typing_extensions import (
     Dict,
@@ -34,6 +34,14 @@ from krrood.entity_query_language.exceptions import NoExpressionFoundForGivenID
 from krrood.entity_query_language.utils import make_list, T, make_set, is_iterable
 from krrood.symbol_graph.symbol_graph import SymbolGraph
 from krrood.utils import memoize
+from krrood.entity_query_language.evaluation import (
+    EvaluationContext,
+    EvaluationTracker,
+    SatisfiedConditionTracker,
+    InferenceRecorder,
+    get_evaluation_context,
+    set_evaluation_context,
+)
 
 if TYPE_CHECKING:
     from krrood.entity_query_language.rules.conclusion import Conclusion
@@ -109,7 +117,7 @@ class SymbolicExpression(ABC):
     def __post_init__(self):
         self._expression_ = self
 
-    @memoize
+    @lru_cache
     def _get_expression_by_id_(self, id_: uuid.UUID) -> SymbolicExpression:
         try:
             return next(
@@ -264,22 +272,40 @@ class SymbolicExpression(ABC):
         :return: An Iterator method whose body automatically sets and restores ``self._eval_parent_`` around the
         underlying evaluation logic.
         """
-
         previous_parent = self._eval_parent_
         self._eval_parent_ = parent
+        ctx = get_evaluation_context()
+        # Lazily create the evaluation context so that satisfaction tracking
+        # and inference recording work even when _evaluate_ is called directly
+        # (e.g. from tests or nested child evaluations).
+        owns_ctx = ctx is None
+        if owns_ctx:
+            ctx = EvaluationContext(
+                observers=[EvaluationTracker(), SatisfiedConditionTracker(), InferenceRecorder()]
+            )
+            set_evaluation_context(ctx)
         try:
+            ctx.on_evaluate_enter(expression=self, sources=sources)
+            # Normalize sources: extract bindings if passed as an OperationResult
             if isinstance(sources, OperationResult):
                 sources = sources.bindings
             sources = copy(sources) if sources is not None else {}
             if self._id_ in sources:
-                yield OperationResult(sources, self._is_false_, self)
+                result = OperationResult(sources, self._is_false_, self)
+                ctx.on_result_yielded(expression=self, result=result)
+                yield result
             else:
-                yield from map(
+                for result in map(
                     self._evaluate_conclusions_and_update_bindings_,
                     self._evaluate__(sources),
-                )
+                ):
+                    ctx.on_result_yielded(expression=self, result=result)
+                    yield result
         finally:
             self._eval_parent_ = previous_parent
+            ctx.on_evaluate_exit(expression=self)
+            if owns_ctx:
+                set_evaluation_context(None)
 
     def _evaluate_conclusions_and_update_bindings_(
         self, current_result: OperationResult
@@ -297,6 +323,13 @@ class SymbolicExpression(ABC):
             current_result.bindings = next(
                 conclusion._evaluate_(current_result.bindings, parent=self)
             ).bindings
+
+        ctx = get_evaluation_context()
+        if ctx is not None:
+            ctx.on_conclusions_processed(
+                expression=self,
+                result=current_result,
+            )
         return current_result
 
     @abstractmethod
@@ -632,6 +665,18 @@ class OperationResult:
     previous_operation_result: Optional[OperationResult] = None
     """
     The result of the operation that was evaluated before this one.
+    """
+    satisfied_condition_ids: Optional[frozenset] = None
+    """
+    A frozenset of UUIDs of condition expressions in the condition tree that were satisfied (truth value = True)
+    during this evaluation. Populated at the conditions root after all conditions have been evaluated.
+    Only set when the overall condition result is True.
+    """
+    evaluated_expression_ids: Optional[frozenset] = None
+    """
+    A frozenset of UUIDs of all expressions that were evaluated along the evaluation path that produced
+    this result. Populated by the EvaluationTracker observer. Unlike satisfied_condition_ids, this
+    includes all evaluated expressions regardless of truth value.
     """
 
     @property
