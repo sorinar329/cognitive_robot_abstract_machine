@@ -58,7 +58,7 @@ class AbstractInteractionDetector(AbstractDetector, ABC):
     bodies and generating events when detected.
     """
 
-    shift_threshold: timedelta = timedelta(seconds=15)
+    shift_threshold: timedelta = timedelta(seconds=2)
     """
     The threshold for the time difference between two events to be considered an interaction.
     """

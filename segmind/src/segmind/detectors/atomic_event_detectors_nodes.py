@@ -134,7 +134,7 @@ class MotionDetector(AbstractDetector):
     bodies and generating events when movement is detected.
     """
 
-    window_size: int = 40
+    window_size: int = 20
     """
     The window size indicates how many poses to consider for movement.
     """
