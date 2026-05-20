@@ -1,4 +1,4 @@
----
+from test import world---
 jupyter:
   jupytext:
     text_representation:
@@ -46,6 +46,8 @@ from semantic_digital_twin.robots.pr2 import PR2
 world = setup_world()
 pr2_view = PR2.from_world(world)
 context = Context(world, pr2_view)
+
+origin_pose = pr2_view.root.global_pose
 ```
 
 Next up we will create the location designator description, the {meth}`~pycram.designators.location_designator.CostmapLocation` that we will be using needs a
@@ -104,6 +106,9 @@ plan = execute_single(NavigateAction(next(iter(location))), context=context)
 
 with simulated_robot:
     plan.perform()
+
+with world.modify_world():
+    pr2_view.root.parent_connection.origin = origin_pose
 ```
 
 As you can see we get a pose near the countertop where the robot can be placed without colliding with it. Furthermore,
@@ -128,6 +133,9 @@ plan = execute_single(NavigateAction(next(iter(location))), context=context)
 
 with simulated_robot:
     plan.perform()
+
+with world.modify_world():
+    pr2_view.root.parent_connection.origin = origin_pose
 ```
 
 ## Location Designator as Generator

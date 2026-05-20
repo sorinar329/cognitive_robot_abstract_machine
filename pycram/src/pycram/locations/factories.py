@@ -42,7 +42,7 @@ def _make_default_occupancy_costmap(context: Context, target: Pose) -> Occupancy
         width=200,
         height=200,
         world=context.world,
-        distance_to_obstacle=(base_bb.depth / 2 + base_bb.width / 2) / 2,
+        distance_to_obstacle=(base_bb.depth / 2 + base_bb.width / 2) / 2 + 0.1,
         robot_view=context.robot,
         origin=ground_pose,
     )
