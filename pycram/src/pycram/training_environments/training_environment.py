@@ -4,8 +4,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import ClassVar, Optional
 
-import rclpy
-
 from krrood.adapters.json_serializer import from_json
 from krrood.entity_query_language.backends import ProbabilisticBackend
 from krrood.entity_query_language.factories import underspecified, variable
@@ -115,6 +113,8 @@ class TrainingEnvironment(ABC):
         plan = self.setup_plan(limit)
 
         if self.visualize:
+            import rclpy
+
             pub = VizMarkerPublisher(
                 _world=plan.context.world,
                 node=rclpy.create_node("test_node"),
@@ -192,7 +192,7 @@ class MoveToReachTrainingEnvironment(TrainingEnvironment):
 
         move_to_reach = underspecified(MoveToReach)(
             target_pose_manipulator=target_pose,
-            target_pose_robot=underspecified(Pose2D)(
+            target_pose_offset_robot=underspecified(Pose2D)(
                 x=..., y=..., yaw=..., reference_frame=None
             ),
             hip_rotation=...,
