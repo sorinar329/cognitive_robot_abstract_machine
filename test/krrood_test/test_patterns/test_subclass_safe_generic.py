@@ -1,6 +1,6 @@
 import sys
-from dataclasses import fields
-from typing import Union
+from dataclasses import fields, dataclass
+from typing import Union, TypeVar, Generic, List
 
 from typing_extensions import (
     get_type_hints,
@@ -9,7 +9,10 @@ from typing_extensions import (
 )
 
 from krrood.entity_query_language.factories import variable_from
-from krrood.patterns.subclass_safe_generic import SubClassSafeGeneric
+from krrood.patterns.subclass_safe_generic import (
+    SubClassSafeGeneric,
+    AbstractSubClassSafeGeneric,
+)
 from krrood.utils import get_generic_type_params
 from ..dataset.classes_with_generic import (
     FirstGeneric,
@@ -149,3 +152,142 @@ def test_ComplexCombinedThreeGenericSubClassSafeWithThirdTypes():
     assert resolved_hints["combined_three_generic_first_argument"] == ExampleClass
     assert resolved_hints["combined_three_generic_second_argument"] == CombinedClass
     assert resolved_hints["one_generic_first_argument"] == int
+
+T = TypeVar("T")
+T2 = TypeVar("T2")
+U = TypeVar("U")
+V = TypeVar("V")
+
+
+def test_multiple_generic_parameters_specialization():
+    """
+    Test that when a base has multiple generic parameters and some are specialized
+    with concrete types while others stay generic, all are correctly handled.
+    The current implementation using u_roots[0] and zip(unique_bases, specialized_types)
+    is expected to fail here because it only maps the first parameter of the first base.
+    """
+
+    @dataclass
+    class MultiBase(Generic[T, T2], AbstractSubClassSafeGeneric):
+        attr1: T
+        attr2: T2
+
+    @dataclass
+    class Intermediate(Generic[U], MultiBase[U, int]):
+        pass
+
+    @dataclass
+    class Final(Intermediate[str]):
+        pass
+
+    field_dict = {f.name: f for f in fields(Final)}
+    assert field_dict["attr1"].type == str
+    assert field_dict["attr2"].type == int
+
+
+def test_deep_inheritance_substitution():
+    """
+    Test that substitutions are correctly propagated through deep inheritance.
+    """
+
+    @dataclass
+    class Base(Generic[T], AbstractSubClassSafeGeneric):
+        attr: T
+
+    @dataclass
+    class Intermediate(Generic[U], Base[U]):
+        pass
+
+    @dataclass
+    class Final(Intermediate[int]):
+        pass
+
+    field_dict = {f.name: f for f in fields(Final)}
+    assert field_dict["attr"].type == int
+
+
+def test_transitive_resolution_complex():
+    """
+    Test that transitive resolution works for complex types like List[T].
+    If T -> U and U -> int, then List[T] should become List[int].
+    """
+
+    @dataclass
+    class Base(Generic[T], AbstractSubClassSafeGeneric):
+        attr: List[T]
+
+    @dataclass
+    class Intermediate(Generic[U], Base[U]):
+        pass
+
+    @dataclass
+    class Final(Intermediate[int]):
+        pass
+
+    field_dict = {f.name: f for f in fields(Final)}
+    assert field_dict["attr"].type == List[int]
+
+
+W = TypeVar("W")
+
+
+def test_multiple_generic_bases_map_failure():
+    """
+    Test that multiple generic bases are correctly reconstructed in the substitution map.
+    The current zip-based implementation is expected to fail.
+    """
+    from krrood.entity_query_language.utils import ensure_hashable
+
+    @dataclass
+    class Base1(Generic[T, T2], AbstractSubClassSafeGeneric):
+        pass
+
+    @dataclass
+    class Base2(Generic[V], AbstractSubClassSafeGeneric):
+        pass
+
+    @dataclass
+    class Combined(Generic[U, W], Base1[U, int], Base2[W]):
+        pass
+
+    @dataclass
+    class Final(Combined[str, bool]):
+        pass
+
+    subs = Final._get_generic_type_substitutions()
+
+    # T2 should be mapped to int (via Combined)
+    assert subs.get(ensure_hashable(T2)) == int
+    # V should be mapped to W and then to bool, so resolved V should be bool
+    # We use subs.get because it might be missing or wrongly mapped
+
+    # In a perfect world, we should be able to resolve V to bool through the chain V -> W -> bool
+    from krrood.class_diagrams.utils import resolve_type
+
+    res = resolve_type(V, subs)
+    assert res.resolved_type == bool
+
+
+def test_transitive_map_failure():
+    """
+    Test that the substitution map itself is not transitively resolved.
+    If T -> U and U -> int, resolving List[T] should give List[int].
+    """
+
+    @dataclass
+    class Base(Generic[T], AbstractSubClassSafeGeneric):
+        pass
+
+    @dataclass
+    class Intermediate(Generic[U], Base[U]):
+        pass
+
+    @dataclass
+    class Final(Intermediate[int]):
+        pass
+
+    subs = Final._get_generic_type_substitutions()
+    from krrood.class_diagrams.utils import resolve_type
+
+    res = resolve_type(List[T], subs)
+    assert res.resolved_type == List[int]
