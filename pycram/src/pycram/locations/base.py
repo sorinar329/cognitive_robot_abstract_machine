@@ -37,11 +37,11 @@ class Location(Iterable[Pose]):
     The target pose for the location.
     """
 
-    generator: PoseGeneratorBackend = field(default=None)
+    generator: PoseGeneratorBackend
     """
     Backend that generates pose candidates.
     """
-    validators: List[PoseValidator] = field(default=None)
+    validators: List[PoseValidator]
     """
     Validators that are used to check if a generated pose is valid.
     """

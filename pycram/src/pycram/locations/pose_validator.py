@@ -20,7 +20,9 @@ from pycram.robot_plans import MoveToolCenterPointMotion
 from pycram.view_manager import ViewManager
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.spatial_types.spatial_types import Pose
-from semantic_digital_twin.world_description.connections import Connection6DoF
+from semantic_digital_twin.world_description.connections import (
+    FixedConnection,
+)
 from semantic_digital_twin.world_description.geometry import Box, Scale
 from semantic_digital_twin.world_description.shape_collection import ShapeCollection
 from semantic_digital_twin.world_description.world_entity import (
@@ -33,10 +35,20 @@ logger = logging.getLogger("pycram")
 
 @dataclass
 class VisibilityValidator(PoseValidator):
+    """
+    Validator for checking if either the given pose or body is visible for the robot. One has to be given, if both are
+    provided the body is prefered
+    """
 
     target_pose: Pose = field(default=None)
+    """
+    Pose for which visibility should be checked
+    """
 
     target_body: Body = field(default=None)
+    """
+    Body for which visibility should be checked
+    """
 
     def __call__(self, *args, **kwargs) -> bool:
         assert self.target_pose or self.target_body
@@ -49,11 +61,12 @@ class VisibilityValidator(PoseValidator):
         )
         with self.world.modify_world():
             self.world.add_connection(
-                Connection6DoF.create_with_dofs(
-                    parent=self.world.root, child=gen_body, world=self.world
+                FixedConnection(
+                    parent=self.world.root,
+                    child=gen_body,
+                    parent_T_connection_expression=self.target_pose.to_homogeneous_matrix(),
                 )
             )
-        gen_body.parent_connection.origin = self.target_pose.to_homogeneous_matrix()
 
         result = self._ray_test(gen_body)
 
@@ -71,8 +84,8 @@ class VisibilityValidator(PoseValidator):
         r_t = self.world.ray_tracer
         camera = self.robot.get_default_camera()
         ray = r_t.ray_test(
-            camera.bodies[0].global_transform.to_position().to_np()[:3],
-            target_body.global_transform.to_position().to_np()[:3],
+            camera.bodies[0].global_transform.to_position()[:3].to_np(),
+            target_body.global_transform.to_position()[:3].to_np(),
             multiple_hits=True,
         )
 
@@ -80,12 +93,22 @@ class VisibilityValidator(PoseValidator):
 
         return hit_bodies[0] == target_body if len(hit_bodies) > 0 else False
 
+
 @dataclass
 class ReachabilityValidator(PoseValidator):
+    """
+    Validator that checks if a single pose is reachable with a link of the robot.
+    """
 
     pose: Pose
+    """
+    Pose that should be reached with the tip_link
+    """
 
     tip_link: KinematicStructureEntity
+    """
+    Link that should be moved to the given pose
+    """
 
     def __call__(self) -> bool:
         return ReachabilitySequenceValidator(
@@ -98,10 +121,20 @@ class ReachabilityValidator(PoseValidator):
 
 @dataclass
 class ReachabilitySequenceValidator(PoseValidator):
+    """
+    Validator that checks if a sequence of poses is reachable with the given robot link. Poses are addressed in the
+    order they are given.
+    """
 
     pose_sequence: List[Pose]
+    """
+    Sequence of poses that should be reached
+    """
 
     tip_link: KinematicStructureEntity
+    """
+    Link of the robot which should be used for reachability checking
+    """
 
     def create_msc(self):
         alternative_motion = AlternativeMotion.check_for_alternative(

@@ -578,7 +578,6 @@ def is_place_occupied(
     # Build a mesh for the region box at its current pose
     region_box_shape = box.as_shape()  # returns a Box centered at the region
     region_mesh = region_box_shape.mesh.copy()
-    # region_mesh.apply_transform(region_box_shape.origin.to_np())
     region_mesh.apply_transform(world.transform(pose, world.root).to_np())
 
     # Prepare collision manager with the region mesh

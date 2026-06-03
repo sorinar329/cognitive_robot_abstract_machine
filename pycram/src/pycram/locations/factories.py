@@ -24,30 +24,6 @@ from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.world_entity import Body
 
 
-def _make_default_occupancy_costmap(context: Context, target: Pose) -> OccupancyCostmap:
-    """
-    Creates an occupancy cost map with the default parameters.
-
-    :param context: The context for which the map is created.
-    :param target: The target pose for the occupancy cost map.
-    :returns: A occupancy cost map with default parameters.
-    """
-    ground_pose = deepcopy(target)
-    ground_pose.z = 0
-
-    base_bb = context.robot.base.bounding_box
-
-    return OccupancyCostmap(
-        resolution=0.02,
-        width=200,
-        height=200,
-        world=context.world,
-        distance_to_obstacle=(base_bb.depth / 2 + base_bb.width / 2) / 2 + 0.1,
-        robot_view=context.robot,
-        origin=ground_pose,
-    )
-
-
 def _get_object_in_hand(
     test_robot: AbstractRobot, test_world: World, arm: Arms = Arms.BOTH
 ) -> Optional[Body]:
@@ -116,7 +92,7 @@ def reachability_location(
         VerticalAlignment.NoAlignment,
         man,
     )
-    costmap = _make_default_occupancy_costmap(context, target_pose) & RingCostmap(
+    costmap = OccupancyCostmap.default_map(context, target_pose) & RingCostmap(
         resolution=0.02,
         width=200,
         height=200,
@@ -180,7 +156,7 @@ def visibility_location(target: Union[Pose, Body], context: Context) -> Location
     )
 
     camera = context.robot.get_default_camera()
-    costmap = _make_default_occupancy_costmap(context, target_pose) & VisibilityCostmap(
+    costmap = OccupancyCostmap.default_map(context, target_pose) & VisibilityCostmap(
         min_height=camera.minimal_height,
         max_height=camera.maximal_height,
         world=context.world,

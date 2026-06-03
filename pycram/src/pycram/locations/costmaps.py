@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib import colors
 from skimage.measure import label
-from typing_extensions import Tuple, List, Optional, Iterator, Callable
+from typing_extensions import Tuple, List, Optional, Iterator, Callable, TYPE_CHECKING
 
 from pycram.locations.base import PoseGeneratorBackend
 from semantic_digital_twin.robots.abstract_robot import AbstractRobot
@@ -24,6 +24,9 @@ from semantic_digital_twin.spatial_types import (
 from semantic_digital_twin.spatial_types.spatial_types import Pose, Point3, Vector3
 from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.world_entity import Body
+
+if TYPE_CHECKING:
+    from pycram.datastructures.dataclasses import Context
 
 logger = logging.getLogger("pycram")
 
@@ -440,10 +443,19 @@ class OccupancyCostmap(Costmap):
     """
 
     distance_to_obstacle: float
+    """
+    The distance by which obstacles in the occupancy map are inflated and are therefore not valid positions, in meter
+    """
 
     robot_view: AbstractRobot
+    """
+    Robot semantic annotation which is used to create the map
+    """
 
     _distance_to_obstacle_index: int = field(init=False, default=None)
+    """
+    Conversion of the distance_to_obstacle to index range for the internal representation.
+    """
 
     def __post_init__(self):
         self._distance_to_obstacle_index = max(
@@ -549,6 +561,31 @@ class OccupancyCostmap(Costmap):
         map = np.pad(map, (offset // 2, offset // 2 + odd))
 
         return np.flip(map)
+
+    @classmethod
+    def default_map(cls, context: Context, target: Pose) -> OccupancyCostmap:
+        """
+        Creates an occupancy costmap with some default values, the most important one being that the distance_to_obstacle
+        is set to the radius of the robot base.
+
+        :param context: The context to create the occupancy cost map.
+        :param target: The target pose for the occupancy cost map.
+        :returns: A occupancy cost map with default values.
+        """
+        ground_pose = deepcopy(target)
+        ground_pose.z = 0
+
+        base_bb = context.robot.base.bounding_box
+
+        return OccupancyCostmap(
+            resolution=0.02,
+            width=200,
+            height=200,
+            world=context.world,
+            distance_to_obstacle=(base_bb.depth / 2 + base_bb.width / 2) / 2 + 0.1,
+            robot_view=context.robot,
+            origin=ground_pose,
+        )
 
 
 @dataclass

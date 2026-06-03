@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import List
 
-import numpy as np
+from typing_extensions import Optional, Any
 
 from krrood.entity_query_language.factories import (
     an,
@@ -12,8 +12,13 @@ from krrood.entity_query_language.factories import (
     variable,
     underspecified,
 )
+from pycram.config.action_conf import ActionConfig
+from pycram.datastructures.enums import Arms, ApproachDirection, VerticalAlignment
+from pycram.datastructures.grasp import GraspDescription
 from pycram.locations.factories import reachability_location
 from pycram.plans.factories import sequential, execute_single
+from pycram.plans.failures import BodyUnfetchable
+from pycram.robot_plans.actions.base import ActionDescription
 from pycram.robot_plans.actions.composite.facing import FaceAtAction
 from pycram.robot_plans.actions.core.container import OpenAction
 from pycram.robot_plans.actions.core.navigation import NavigateAction
@@ -22,18 +27,10 @@ from pycram.robot_plans.actions.core.placing import PlaceAction
 from pycram.robot_plans.actions.core.robot_body import ParkArmsAction, MoveTorsoAction
 from pycram.view_manager import ViewManager
 from semantic_digital_twin.datastructures.definitions import TorsoState
-from semantic_digital_twin.reasoning.predicates import InsideOf, allclose
+from semantic_digital_twin.reasoning.predicates import InsideOf
 from semantic_digital_twin.semantic_annotations.semantic_annotations import Drawer
 from semantic_digital_twin.spatial_types.spatial_types import Pose
 from semantic_digital_twin.world_description.world_entity import Body
-from typing_extensions import Optional, Any
-
-from pycram.config.action_conf import ActionConfig
-from pycram.datastructures.enums import Arms, ApproachDirection, VerticalAlignment
-from pycram.datastructures.grasp import GraspDescription, GraspPose
-
-from pycram.plans.failures import ConfigurationNotReached, BodyUnfetchable
-from pycram.robot_plans.actions.base import ActionDescription
 
 
 @dataclass
@@ -164,12 +161,6 @@ class TransportAction(ActionDescription):
             keep_joint_states=True,
         )
 
-    def validate(
-        self, result: Optional[Any] = None, max_wait_time: Optional[timedelta] = None
-    ):
-        # The validation of each core action is done in the action itself, so no more validation needed here.
-        pass
-
 
 @dataclass
 class PickAndPlaceAction(ActionDescription):
@@ -210,14 +201,6 @@ class PickAndPlaceAction(ActionDescription):
                 ]
             )
         ).perform()
-
-    def validate(
-        self, result: Optional[Any] = None, max_wait_time: Optional[timedelta] = None
-    ):
-        if self.object_designator.pose.__eq__(self.target_location):
-            pass
-        else:
-            raise ValueError("Object not moved to the target location")
 
 
 @dataclass
@@ -261,12 +244,6 @@ class MoveAndPlaceAction(ActionDescription):
                 ]
             )
         ).perform()
-
-    def validate(
-        self, result: Optional[Any] = None, max_wait_time: Optional[timedelta] = None
-    ):
-        # The validation will be done in each of the core action perform methods so no need to validate here.
-        pass
 
 
 @dataclass
@@ -313,9 +290,3 @@ class MoveAndPickUpAction(ActionDescription):
                 ]
             )
         ).perform()
-
-    def validate(
-        self, result: Optional[Any] = None, max_wait_time: Optional[timedelta] = None
-    ):
-        # The validation will be done in each of the core action perform methods so no need to validate here.
-        pass

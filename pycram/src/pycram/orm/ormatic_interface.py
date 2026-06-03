@@ -27,6 +27,7 @@ import giskardpy.middleware.ros2.scripts.iai_robots.hsr.configs
 import giskardpy.middleware.ros2.scripts.iai_robots.pr2.configs
 import giskardpy.middleware.ros2.scripts.iai_robots.stretch.configs
 import giskardpy.middleware.ros2.scripts.iai_robots.tracy.configs
+import giskardpy.middleware.ros2.scripts.tools.interactive_marker
 import giskardpy.middleware.ros2.utils.utils_for_tests
 import giskardpy.model.world_config
 import giskardpy.motion_statechart.binding_policy
@@ -92,7 +93,6 @@ import pycram.exceptions
 import pycram.language
 import pycram.locations.backends
 import pycram.locations.base
-import pycram.locations.locations
 import pycram.locations.pose_validator
 import pycram.motion_executor
 import pycram.orm.model
@@ -173,6 +173,7 @@ import semantic_digital_twin.semantic_annotations.semantic_annotations
 import semantic_digital_twin.spatial_computations.ik_solver
 import semantic_digital_twin.spatial_types.derivatives
 import semantic_digital_twin.spatial_types.spatial_types
+import semantic_digital_twin.utils
 import semantic_digital_twin.world
 import semantic_digital_twin.world_description.connection_properties
 import semantic_digital_twin.world_description.connections
@@ -4461,6 +4462,24 @@ class InequalityConstraintDAO(
     }
 
 
+class InteractiveMarkerNodeDAO(
+    Base,
+    DataAccessObject[
+        giskardpy.middleware.ros2.scripts.tools.interactive_marker.InteractiveMarkerNode
+    ],
+):
+
+    __tablename__ = "InteractiveMarkerNodeDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    motion_timeout_seconds: Mapped[builtins.float] = mapped_column(
+        use_existing_column=True
+    )
+
+
 class InvalidCollisionCheckErrorDAO(
     CollisionCheckingErrorDAO,
     DataAccessObject[semantic_digital_twin.exceptions.InvalidCollisionCheckError],
@@ -4668,6 +4687,55 @@ class JointStateDAO(
     )
 
 
+class KinematicChainMarkerDAO(
+    Base,
+    DataAccessObject[
+        giskardpy.middleware.ros2.scripts.tools.interactive_marker.KinematicChainMarker
+    ],
+):
+
+    __tablename__ = "KinematicChainMarkerDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    root_link: Mapped[builtins.str] = mapped_column(
+        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
+    )
+    tip_link: Mapped[builtins.str] = mapped_column(
+        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
+    )
+    marker_scale: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+    marker_box_size: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+    marker_color_value: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+    marker_color_alpha: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+
+    root_body_id: Mapped[int] = mapped_column(
+        ForeignKey("KinematicStructureEntityDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+    tip_body_id: Mapped[int] = mapped_column(
+        ForeignKey("KinematicStructureEntityDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+
+    root_body: Mapped[KinematicStructureEntityDAO] = relationship(
+        "KinematicStructureEntityDAO",
+        uselist=False,
+        foreign_keys=[root_body_id],
+        post_update=True,
+    )
+    tip_body: Mapped[KinematicStructureEntityDAO] = relationship(
+        "KinematicStructureEntityDAO",
+        uselist=False,
+        foreign_keys=[tip_body_id],
+        post_update=True,
+    )
+
+
 class KinematicStructureEntitySpatialRelationDAO(
     Base,
     DataAccessObject[
@@ -4773,10 +4841,6 @@ class LocationDAO(Base, DataAccessObject[pycram.locations.base.Location]):
         Integer, primary_key=True, use_existing_column=True
     )
 
-    polymorphic_type: Mapped[str] = mapped_column(
-        String(255), nullable=False, use_existing_column=True
-    )
-
     context_id: Mapped[typing.Optional[builtins.int]] = mapped_column(
         ForeignKey("ContextDAO.database_id", use_alter=True),
         nullable=True,
@@ -4813,48 +4877,6 @@ class LocationDAO(Base, DataAccessObject[pycram.locations.base.Location]):
             foreign_keys="[LocationDAO_validators_association.source_locationdao_id]",
         )
     )
-
-    __mapper_args__ = {
-        "polymorphic_on": "polymorphic_type",
-        "polymorphic_identity": "LocationDAO",
-    }
-
-
-class GiskardLocationDAO(
-    LocationDAO, DataAccessObject[pycram.locations.locations.GiskardLocation]
-):
-
-    __tablename__ = "GiskardLocationDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        ForeignKey(LocationDAO.database_id), primary_key=True, use_existing_column=True
-    )
-
-    threshold: Mapped[builtins.float] = mapped_column(use_existing_column=True)
-
-    arm: Mapped[pycram.datastructures.enums.Arms] = mapped_column(
-        krrood.ormatic.custom_types.PolymorphicEnumType,
-        nullable=False,
-        use_existing_column=True,
-    )
-
-    grasp_description_id: Mapped[typing.Optional[builtins.int]] = mapped_column(
-        ForeignKey("GraspDescriptionDAO.database_id", use_alter=True),
-        nullable=True,
-        use_existing_column=True,
-    )
-
-    grasp_description: Mapped[GraspDescriptionDAO] = relationship(
-        "GraspDescriptionDAO",
-        uselist=False,
-        foreign_keys=[grasp_description_id],
-        post_update=True,
-    )
-
-    __mapper_args__ = {
-        "polymorphic_identity": "GiskardLocationDAO",
-        "inherit_condition": database_id == LocationDAO.database_id,
-    }
 
 
 class LogicalErrorDAO(
@@ -5139,6 +5161,41 @@ class MixingActionDAO(
         "polymorphic_identity": "MixingActionDAO",
         "inherit_condition": database_id == ActionDescriptionDAO.database_id,
     }
+
+
+class MockedNodeClassDAO(
+    Base, DataAccessObject[semantic_digital_twin.utils.MockedNodeClass]
+):
+
+    __tablename__ = "MockedNodeClassDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+
+class MockedNodeModuleDAO(
+    Base, DataAccessObject[semantic_digital_twin.utils.MockedNodeModule]
+):
+
+    __tablename__ = "MockedNodeModuleDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    Node: Mapped[TypeType] = mapped_column(
+        TypeType, nullable=False, use_existing_column=True
+    )
+
+
+class MockedRCLPYDAO(Base, DataAccessObject[semantic_digital_twin.utils.MockedRCLPY]):
+
+    __tablename__ = "MockedRCLPYDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
 
 
 class MotionDidNotFinishDAO(
