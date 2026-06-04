@@ -14,7 +14,6 @@ from typing import (
     Set,
     List,
     DefaultDict,
-    TypeVar,
     Union,
     Any,
 )
@@ -25,10 +24,7 @@ from typing_extensions import get_origin, get_args
 from krrood.adapters.json_serializer import list_like_classes
 from krrood.class_diagrams.attribute_introspector import (
     DataclassOnlyIntrospector,
-    DiscoveredAttribute,
 )
-from krrood.class_diagrams.class_diagram import WrappedClass
-from krrood.class_diagrams.wrapped_field import WrappedField
 from krrood.entity_query_language.factories import variable, contains, a, entity
 from semantic_digital_twin.datastructures.definitions import JointStateType
 from semantic_digital_twin.datastructures.joint_state import JointState
@@ -82,6 +78,11 @@ logger = logging.getLogger("semantic_digital_twin")
 
 @dataclass(eq=False)
 class HasRobotParts(ABC):
+    """
+    Mixin for semantic annotations that have robot parts assigned to them.
+    Provides methods for robot part aggregation, as well as handling the automatic setup of robot parts.
+    """
+
     @property
     def _robot_parts(self) -> list[AbstractRobotPart]:
         """
@@ -197,6 +198,9 @@ class HasRobotParts(ABC):
 class AbstractRobotPart(HasRootBody, HasRobotParts, ABC):
     """
     Abstract base class for all robot parts.
+    A robot part is a part of a robot that can have its own kinematic structure and hardware interfaces,
+    such as arms, sensors, or the mobile base.
+    The robot property is computed lazily to avoid circular dependencies.
     """
 
     joint_states: list[JointState] = field(default_factory=list)
@@ -584,10 +588,9 @@ class AbstractRobot(Agent, HasRobotParts, ABC):
         """
         Validates the robot semantic annotation.
             The validation process includes:
-            1. Printing out missing fields of any robot part, so that the user can check if they are intentionally left blank.
-            2. Deepcopy the resulting world to ensure that all parts of the robot are initialized in the correct order
-            3. Assert that the copied world is the same as the original world
-            4. Assert that the robot semantic annotation has a default camera.
+            1. Deepcopy the resulting world to ensure that all parts of the robot are initialized in the correct order
+            2. Assert that the copied world is the same as the original world
+            3. Assert that the robot semantic annotation has a default camera.
 
         :return: True if the robot semantic annotation is valid, False otherwise.
         """

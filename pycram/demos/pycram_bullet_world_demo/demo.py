@@ -113,7 +113,9 @@ plan = sequential(
             Pose.from_xyz_rpy(5.1, 3.3, 0.75, yaw=1.57, reference_frame=world.root),
             Arms.LEFT,
             GraspDescription(
-                ApproachDirection.FRONT, VerticalAlignment.TOP, pr2.left_arm.manipulator
+                ApproachDirection.FRONT,
+                VerticalAlignment.TOP,
+                pr2.left_arm.end_effector,
             ),
         ),
     ],

@@ -98,7 +98,6 @@ def test_door_opening(wall_door_handle_world, hsr_world_setup, rclpy_node):
     world, wall, door, handle = wall_door_handle_world
     hsr_copy = deepcopy(hsr_world_setup)
     world.merge_world(hsr_copy)
-    robot = HSRB.from_world(world)
     odom_combined = world.get_body_by_name("odom_combined")
     odom_combined.parent_connection.origin = (
         HomogeneousTransformationMatrix.from_xyz_rpy(x=1)
@@ -149,8 +148,12 @@ def test_translate_free_space_to_where_condition(wall_door_handle_world):
     result_to_compare = (
         parameters.truncation_assignments_from_where_conditions.update_variables(
             {
-                Continuous("MoveToReach.target_pose_offset_robot.x"): SpatialVariables.x.value,
-                Continuous("MoveToReach.target_pose_offset_robot.y"): SpatialVariables.y.value,
+                Continuous(
+                    "MoveToReach.target_pose_offset_robot.x"
+                ): SpatialVariables.x.value,
+                Continuous(
+                    "MoveToReach.target_pose_offset_robot.y"
+                ): SpatialVariables.y.value,
             }
         )
     )
