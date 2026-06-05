@@ -347,6 +347,9 @@ class StretchMobileBase(MobileBase, HasTorso[StretchTorso]):
 
 @dataclass(eq=False)
 class Stretch(AbstractRobot, HasMobileBase[StretchMobileBase]):
+    """
+    The Stretch 2 robot by Hello Robot. https://teal-blue-zpt3.squarespace.com/stretch-2
+    """
 
     @classmethod
     def get_ros_file_path(cls) -> str:

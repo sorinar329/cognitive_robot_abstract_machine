@@ -455,6 +455,9 @@ class TiagoMobileBase(MobileBase, HasTorso[TiagoTorso]):
 
 @dataclass(eq=False)
 class Tiago(AbstractRobot, HasMobileBase[TiagoMobileBase]):
+    """
+    The Tiago++ robot by PAL Robotics with updated Robotiq grippers. https://pal-robotics.com/blog/tiago-bi-manual-robot-research/
+    """
 
     @classmethod
     def get_ros_file_path(cls) -> str:

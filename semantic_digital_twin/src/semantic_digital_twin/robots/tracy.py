@@ -310,6 +310,9 @@ class TracyCamera(Camera):
 class Tracy(
     AbstractRobot, HasLeftRightArm[TracyLeftArm, TracyRightArm], HasSensors[TracyCamera]
 ):
+    """
+    The dual UR10 arm setup used in the TraceBot project. https://vib.ai.uni-bremen.de/page/comingsoon/the-tracebot-laboratory/
+    """
 
     @classmethod
     def get_ros_file_path(cls) -> str:

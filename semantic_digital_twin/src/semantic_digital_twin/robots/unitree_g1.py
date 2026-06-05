@@ -422,6 +422,9 @@ class UnitreeG1MobileBase(MobileBase):
 class UnitreeG1(
     AbstractRobot, HasMobileBase[UnitreeG1MobileBase], HasTorso[UnitreeG1Torso]
 ):
+    """
+    The Unitree G1 robot by Unitree Robotics. https://www.unitree.com/g1
+    """
 
     @classmethod
     def get_ros_file_path(cls) -> str:
