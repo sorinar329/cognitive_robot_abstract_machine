@@ -1,10 +1,13 @@
 import logging
 
+from krrood.entity_query_language.core.base_expressions import SymbolicExpression
+from krrood.entity_query_language.core.variable import InstantiatedVariable
+from krrood.entity_query_language.explanation.explanation import explain_inference
+from krrood.entity_query_language.factories import entity, variable, in_, inference, an
+from krrood.entity_query_language.query.quantifiers import An
 from numpy.ma.testutils import (
     assert_equal,
 )  # You could replace this with numpy's regular assert for better compatibility
-
-from krrood.entity_query_language.factories import entity, variable, in_, inference, an
 from semantic_digital_twin.adapters.world_entity_kwargs_tracker import (
     WorldEntityWithIDKwargsTracker,
 )
@@ -198,10 +201,10 @@ def test_handle_semantic_annotation_eql(apartment_world_setup):
     ],
 )
 def test_infer_apartment_semantic_annotation(
-    semantic_annotation_type,
-    update_existing_semantic_annotations,
-    scenario,
-    apartment_world_setup,
+        semantic_annotation_type,
+        update_existing_semantic_annotations,
+        scenario,
+        apartment_world_setup,
 ):
     fit_rules_and_assert_semantic_annotations(
         apartment_world_setup,
@@ -224,7 +227,7 @@ def test_generated_semantic_annotations(kitchen_world):
     assert len(drawer_container_names) == 19
 
 
-@pytest.mark.order("second_to_last")
+@pytest.mark.order("third_to_last")
 def test_apartment_semantic_annotations(apartment_world_setup):
     world_reasoner = WorldReasoner(apartment_world_setup)
     world_reasoner.fit_semantic_annotations(
@@ -242,8 +245,24 @@ def test_apartment_semantic_annotations(apartment_world_setup):
     assert len(drawer_container_names) == 27
 
 
+@pytest.mark.order("second_to_last")
+def test_explain_inferred_semantic_annotations(apartment_world_setup):
+    world_reasoner = WorldReasoner(apartment_world_setup)
+    found_semantic_annotations = list(world_reasoner.infer_semantic_annotations())
+    drawer = next(ann for ann in found_semantic_annotations if isinstance(ann, Drawer))
+    explanation = explain_inference(drawer)
+    assert explanation is not None
+    assert isinstance(explanation.query_root, SymbolicExpression)
+    assert explanation.get_satisfied_conditions_as_string() == (
+        '(Handle.root == FixedConnection.child)'
+        '\nAND (FixedConnection.parent == PrismaticConnection.child)')
+    visualize = False
+    if visualize:
+        explanation.condition_graph().visualize(filename="drawer_explanation.pdf")
+
+
 def fit_rules_and_assert_semantic_annotations(
-    world, semantic_annotation_type, update_existing_semantic_annotations, scenario
+        world, semantic_annotation_type, update_existing_semantic_annotations, scenario
 ):
     world_reasoner = WorldReasoner(world)
     world_reasoner.fit_semantic_annotations(
