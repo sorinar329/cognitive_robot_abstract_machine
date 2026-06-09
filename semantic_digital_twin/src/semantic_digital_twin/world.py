@@ -204,6 +204,7 @@ class WorldModelUpdateContextManager:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         try:
+            # If error, clean up before re-raising
             if exc_val:
                 model_manager = self.world._model_manager
                 model_manager._active_world_model_update_context_manager_ids.remove(
@@ -220,23 +221,28 @@ class WorldModelUpdateContextManager:
             self.world.delete_orphaned_dofs()
             clear_memoization_cache(self.world)
             model_manager = self.world._model_manager
-            model_manager._active_world_model_update_context_manager_ids.remove(self._id)
+            model_manager._active_world_model_update_context_manager_ids.remove(
+                self._id
+            )
 
-            if not model_manager._active_world_model_update_context_manager_ids:
-                model_manager.model_modification_blocks.append(
-                    model_manager.current_model_modification_block
-                )
-                model_manager.current_model_modification_block = (
-                    WorldModelModificationBlock()
-                )
-                try:
-                    if exc_type is None:
-                        self.world._notify_model_change(
-                            publish_changes=self.publish_changes
-                        )
-                finally:
-                    self.world.world_is_being_modified = False
-                    model_manager._current_modifications_will_be_published = None
+            # if there are still open context managers dont publish yet
+            if model_manager._active_world_model_update_context_manager_ids:
+                return
+
+            model_manager.model_modification_blocks.append(
+                model_manager.current_model_modification_block
+            )
+            model_manager.current_model_modification_block = (
+                WorldModelModificationBlock()
+            )
+            try:
+                if exc_type is None:
+                    self.world._notify_model_change(
+                        publish_changes=self.publish_changes
+                    )
+            finally:
+                self.world.world_is_being_modified = False
+                model_manager._current_modifications_will_be_published = None
         finally:
             # keep outside the if block, as it needs to be released as many times as it was acquired
             self.world._world_lock.release()
