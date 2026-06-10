@@ -4,12 +4,13 @@ import time
 import tempfile
 from contextlib import contextmanager
 from dataclasses import is_dataclass, dataclass
-from typing import Type, List, Set
+from typing import Type, List, Set, Tuple
 
 import plotly.graph_objects as go
 import tqdm
 
 import pycram.orm.ormatic_interface  # type: ignore
+import pycram.plans.plan_node
 import semantic_digital_twin  # type: ignore
 from experiments.experiment_definitions import (
     ExperimentResult,
@@ -17,7 +18,6 @@ from experiments.experiment_definitions import (
     MeanAndStandardDeviation,
     TypstRenderer,
 )
-import pycram.plans.plan_node
 from krrood.class_diagrams import ClassDiagram
 from krrood.ormatic.data_access_objects.alternative_mappings import AlternativeMapping
 from krrood.ormatic.helper import get_classes_of_ormatic_interface
@@ -26,25 +26,28 @@ from krrood.ormatic.type_dict import TypeDict
 from krrood.utils import recursive_subclasses
 
 
-# import classes from the existing interface
-classes, alternative_mappings, type_mappings = get_classes_of_ormatic_interface(
-    pycram.orm.ormatic_interface
-)
-classes = set(classes)
+def build_cram_class_sets() -> Tuple[Set[Type], List[Type], dict]:
+    """
+    Collect all mappable classes, alternative mappings, and type mappings from
+    the pycram ORM interface.
+    """
+    classes, alternative_mappings, type_mappings = get_classes_of_ormatic_interface(
+        pycram.orm.ormatic_interface
+    )
+    classes = set(classes)
 
-alternative_mappings += [am for am in recursive_subclasses(AlternativeMapping)]
-alternative_mappings = list(set(alternative_mappings))
-# keep only dataclasses that are NOT AlternativeMapping subclasses
-classes = {
-    c for c in classes if is_dataclass(c) and not issubclass(c, AlternativeMapping)
-}
-classes |= {am.original_class() for am in recursive_subclasses(AlternativeMapping)}
-
-alternative_mappings = [
-    am
-    for am in recursive_subclasses(AlternativeMapping)
-    if am.original_class() in classes
-]
+    alternative_mappings += [am for am in recursive_subclasses(AlternativeMapping)]
+    alternative_mappings = list(set(alternative_mappings))
+    classes = {
+        c for c in classes if is_dataclass(c) and not issubclass(c, AlternativeMapping)
+    }
+    classes |= {am.original_class() for am in recursive_subclasses(AlternativeMapping)}
+    alternative_mappings = [
+        am
+        for am in recursive_subclasses(AlternativeMapping)
+        if am.original_class() in classes
+    ]
+    return classes, alternative_mappings, type_mappings
 
 
 @dataclass
@@ -83,19 +86,27 @@ def _silence_ormatic_logger():
 
 def ormatic_scalability_experiment(
     filtered_classes: Set[Type],
+    alternative_mappings: List[Type],
+    type_mappings: dict,
 ) -> ORMaticScalabilityExperimentResult:
     """
     Run a single ORMatic scalability experiment over a fixed set of classes.
 
     :param filtered_classes: Pre-determined set of classes to map.
+    :param alternative_mappings: Alternative mapping classes to apply.
+    :param type_mappings: Custom type mappings for ORMatic.
     :return: Timing and structural measurements for this run.
     """
     with _silence_ormatic_logger():
-        return _ormatic_scalability_experiment(filtered_classes)
+        return _ormatic_scalability_experiment(
+            filtered_classes, alternative_mappings, type_mappings
+        )
 
 
 def _ormatic_scalability_experiment(
     filtered_classes: Set[Type],
+    alternative_mappings: List[Type],
+    type_mappings: dict,
 ) -> ORMaticScalabilityExperimentResult:
     begin = time.perf_counter()
 
@@ -136,17 +147,21 @@ def _ormatic_scalability_experiment(
 
 def run_scalability_experiment(
     classes: List[Type],
+    alternative_mappings: List[Type],
+    type_mappings: dict,
     class_drop_probability: float = 0.3,
     iterations: int = 10,
     required_classes: List[Type] | None = None,
 ) -> ORMaticScalabilityAggregateResult:
     """
-    Fix a random subset of classes once, then run the generation process `iterations` times
-    with that same subset and aggregate mean and variance of all timing measurements.
+    Randomly resample the class subset each iteration, run the generation process
+    `iterations` times, and aggregate mean and standard deviation of all measurements.
 
     :param classes: Full pool of classes to sample from.
+    :param alternative_mappings: Alternative mapping classes to apply.
+    :param type_mappings: Custom type mappings for ORMatic.
     :param class_drop_probability: Probability of dropping each class when building the subset.
-    :param iterations: Number of generation runs over the fixed subset.
+    :param iterations: Number of generation runs.
     :param required_classes: Classes that are always included regardless of drop probability.
     :return: Aggregated timing statistics across all runs.
     """
@@ -158,7 +173,11 @@ def run_scalability_experiment(
         }
         filtered_classes |= {am.original_class() for am in alternative_mappings}
         filtered_classes |= pinned
-        results.append(ormatic_scalability_experiment(filtered_classes))
+        results.append(
+            ormatic_scalability_experiment(
+                filtered_classes, alternative_mappings, type_mappings
+            )
+        )
 
     return ORMaticScalabilityAggregateResult(
         class_drop_probability=class_drop_probability,
@@ -232,13 +251,21 @@ def plot_scalability(table: ExperimentsTable) -> go.Figure:
 
 
 def main():
+    classes, alternative_mappings, type_mappings = build_cram_class_sets()
     required_classes = [pycram.plans.plan_node.UnderspecifiedNode]
     results = []
     for class_drop_probability in tqdm.tqdm(
         list(reversed([0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]))
     ):
         results.append(
-            run_scalability_experiment(classes, class_drop_probability, iterations=2)
+            run_scalability_experiment(
+                classes,
+                alternative_mappings,
+                type_mappings,
+                class_drop_probability,
+                iterations=2,
+                required_classes=required_classes,
+            )
         )
 
     table = ExperimentsTable(results)
