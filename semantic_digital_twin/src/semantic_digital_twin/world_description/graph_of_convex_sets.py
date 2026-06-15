@@ -320,16 +320,39 @@ class GraphOfConvexSets:
 
         :return: An event representing the obstacles in the search space.
         """
+        bloated_obstacles = cls._build_bloated_obstacle_collection(
+            search_space,
+            semantic_obstacle_annotation,
+            semantic_wall_annotation,
+            bloat_obstacles,
+            bloat_walls,
+        )
+        return cls.obstacles_from_bounding_boxes(
+            bloated_obstacles, search_space.event, keep_z
+        )
 
-        def bloat_obstacle(bb):
-            return bb.bloat(bloat_obstacles, bloat_obstacles, 0.01)
+    @classmethod
+    def _build_bloated_obstacle_collection(
+        cls,
+        search_space: BoundingBoxCollection,
+        semantic_obstacle_annotation: SemanticAnnotation,
+        semantic_wall_annotation: Optional[SemanticAnnotation] = None,
+        bloat_obstacles: float = 0.0,
+        bloat_walls: float = 0.0,
+    ) -> BoundingBoxCollection:
+        """
+        Collect and bloat obstacle bounding boxes from semantic annotations.
 
-        def bloat_wall(bb):
-            if bb.width > bb.depth:
-                return bb.bloat(bloat_walls, 0, 0.01)
-            else:
-                return bb.bloat(0, bloat_walls, 0.01)
+        Filters out agent entities so the robot does not treat itself as an obstacle.
+        Applies independent bloat amounts to obstacles and walls.
 
+        :param search_space: The search space; its reference frame is used as the origin.
+        :param semantic_obstacle_annotation: The annotation containing obstacle entities.
+        :param semantic_wall_annotation: An optional annotation containing wall entities.
+        :param bloat_obstacles: Amount to expand each obstacle bounding box symmetrically in x and y.
+        :param bloat_walls: Amount to expand wall bounding boxes in their thinner dimension.
+        :return: A BoundingBoxCollection of the bloated obstacle and wall bounding boxes.
+        """
         world_root = search_space.reference_frame
         world = world_root._world
 
@@ -353,20 +376,22 @@ class GraphOfConvexSets:
             for entity in entities_to_consider
         ]
 
-        bbs = BoundingBoxCollection([], world_root)
-        for bb_collection in collections:
-            bbs = bbs.merge(bb_collection)
+        obstacle_bounding_boxes = BoundingBoxCollection([], world_root)
+        for bounding_box_collection in collections:
+            obstacle_bounding_boxes = obstacle_bounding_boxes.merge(bounding_box_collection)
 
         bloated_obstacles = BoundingBoxCollection(
-            [bloat_obstacle(bb) for bb in bbs],
+            [bounding_box.bloat(bloat_obstacles, bloat_obstacles, 0.01) for bounding_box in obstacle_bounding_boxes],
             world_root,
         )
 
         if semantic_wall_annotation is not None:
             bloated_walls: BoundingBoxCollection = BoundingBoxCollection(
                 [
-                    bloat_wall(bb)
-                    for bb in semantic_wall_annotation.as_bounding_box_collection_at_origin(
+                    bounding_box.bloat(bloat_walls, 0, 0.01)
+                    if bounding_box.width > bounding_box.depth
+                    else bounding_box.bloat(0, bloat_walls, 0.01)
+                    for bounding_box in semantic_wall_annotation.as_bounding_box_collection_at_origin(
                         HomogeneousTransformationMatrix(reference_frame=world_root)
                     )
                 ],
@@ -374,9 +399,7 @@ class GraphOfConvexSets:
             )
             bloated_obstacles.merge(bloated_walls)
 
-        return cls.obstacles_from_bounding_boxes(
-            bloated_obstacles, search_space.event, keep_z
-        )
+        return bloated_obstacles
 
     @classmethod
     def obstacles_from_bounding_boxes(
@@ -478,39 +501,13 @@ class GraphOfConvexSets:
 
         :return: The connectivity graph. If no obstacles are found, an empty graph is returned.
         """
-
-        def bloat_obstacle(bounding_box):
-            return bounding_box.bloat(bloat_obstacles, bloat_obstacles, 0.01)
-
-        def bloat_wall(bounding_box):
-            if bounding_box.width > bounding_box.depth:
-                return bounding_box.bloat(bloat_walls, 0, 0.01)
-            else:
-                return bounding_box.bloat(0, bloat_walls, 0.01)
-
-        world_root = search_space.reference_frame
-
-        bloated_obstacles: BoundingBoxCollection = BoundingBoxCollection(
-            [
-                bloat_obstacle(bounding_box)
-                for bounding_box in semantic_obstacle_annotation.as_bounding_box_collection_at_origin(
-                    HomogeneousTransformationMatrix(reference_frame=world_root)
-                )
-            ],
-            world_root,
+        bloated_obstacles = cls._build_bloated_obstacle_collection(
+            search_space,
+            semantic_obstacle_annotation,
+            semantic_wall_annotation,
+            bloat_obstacles,
+            bloat_walls,
         )
-
-        if semantic_wall_annotation is not None:
-            bloated_walls: BoundingBoxCollection = BoundingBoxCollection(
-                [
-                    bloat_wall(bounding_box)
-                    for bounding_box in semantic_wall_annotation.as_bounding_box_collection_at_origin(
-                        HomogeneousTransformationMatrix(reference_frame=world_root)
-                    )
-                ],
-                world_root,
-            )
-            bloated_obstacles.merge(bloated_walls)
 
         search_event = search_space.event
 
@@ -622,40 +619,13 @@ class GraphOfConvexSets:
 
         :return: The connectivity graph. If no obstacles are found, an empty graph is returned.
         """
-
-        # create search space for calculations
-        def bloat_obstacle(bounding_box):
-            return bounding_box.bloat(bloat_obstacles, bloat_obstacles, 0.01)
-
-        def bloat_wall(bounding_box):
-            if bounding_box.width > bounding_box.depth:
-                return bounding_box.bloat(bloat_walls, 0, 0.01)
-            else:
-                return bounding_box.bloat(0, bloat_walls, 0.01)
-
-        world_root = search_space.reference_frame
-
-        nav_obstacles: BoundingBoxCollection = BoundingBoxCollection(
-            [
-                bloat_obstacle(bounding_box)
-                for bounding_box in semantic_obstacle_annotation.as_bounding_box_collection_at_origin(
-                    HomogeneousTransformationMatrix(reference_frame=world_root)
-                )
-            ],
-            world_root,
+        nav_obstacles = cls._build_bloated_obstacle_collection(
+            search_space,
+            semantic_obstacle_annotation,
+            semantic_wall_annotation,
+            bloat_obstacles,
+            bloat_walls,
         )
-
-        if semantic_wall_annotation is not None:
-            nav_walls: BoundingBoxCollection = BoundingBoxCollection(
-                [
-                    bloat_wall(bounding_box)
-                    for bounding_box in semantic_wall_annotation.as_bounding_box_collection_at_origin(
-                        HomogeneousTransformationMatrix(reference_frame=world_root)
-                    )
-                ],
-                world_root,
-            )
-            nav_obstacles.merge(nav_walls)
 
         if not nav_obstacles:
             return cls(

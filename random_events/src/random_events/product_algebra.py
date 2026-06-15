@@ -435,12 +435,12 @@ class Event(AbstractCompositeSet):
             return instance
 
         # Compute the union of all variables from Python-side inputs — no C++ round-trip.
-        all_variables = SortedSet(v for ss in simple_sets for v in ss.variables)
+        all_variables = SortedSet(variable for simple_set in simple_sets for variable in simple_set.variables)
 
         # Fill missing variables in each input SimpleEvent before building the C++ Event,
         # so every cpp_object is up-to-date when we pass it to rl.Event.
-        for ss in simple_sets:
-            ss.fill_missing_variables(all_variables)
+        for simple_set in simple_sets:
+            simple_set.fill_missing_variables(all_variables)
 
         instance.simple_set_example = simple_sets[0]
         instance.cpp_object = rl.Event(
@@ -468,9 +468,9 @@ class Event(AbstractCompositeSet):
         if self._variables is not None:
             return self._variables
         # Fallback: materialise from C++ and cache (edge cases / legacy callers).
-        vars_set = SortedSet(v for ss in self.simple_sets for v in ss.variables)
-        self._variables = vars_set
-        return vars_set
+        variables_set = SortedSet(variable for simple_set in self.simple_sets for variable in simple_set.variables)
+        self._variables = variables_set
+        return variables_set
 
     def get_variable(self, key: VariableMapKey) -> Variable:
         """
@@ -493,8 +493,8 @@ class Event(AbstractCompositeSet):
         Update the simple set example to the first simple set in the event.
         Use this whenever the simple sets change in-place
         """
-        simple = self.simple_sets
-        self.simple_set_example = simple[0] if simple else SimpleEvent.from_data()
+        simple_sets = self.simple_sets
+        self.simple_set_example = simple_sets[0] if simple_sets else SimpleEvent.from_data()
 
     def fill_missing_variables(self, variables: Optional[Iterable[Variable]] = None):
         """
@@ -549,9 +549,8 @@ class Event(AbstractCompositeSet):
         """
         result = self._from_cpp(self.cpp_object.union_with(other.cpp_object))
         # If the two events have different variable sets, update _variables to the union.
-        other_vars = getattr(other, '_variables', None)
-        if other_vars is not None and self._variables is not None and other_vars != self._variables:
-            result._variables = self._variables | other_vars
+        if other._variables is not None and self._variables is not None and other._variables != self._variables:
+            result._variables = self._variables | other._variables
         return result
 
     def marginal(self, variables: VariableSet) -> Event:
