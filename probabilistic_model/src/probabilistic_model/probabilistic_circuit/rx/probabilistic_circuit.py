@@ -13,7 +13,6 @@ import numpy as np
 import rustworkx as rx
 import rustworkx.visualization
 import tqdm
-from scipy.special import logsumexp
 from sortedcontainers import SortedSet
 from typing_extensions import (
     List,
@@ -48,6 +47,31 @@ from random_events.product_algebra import VariableMap, SimpleEvent, Event
 from random_events.set import Set
 from krrood.adapters.json_serializer import SubclassJSONSerializer, to_json, from_json
 from random_events.variable import Variable, Symbolic, Continuous, Integer
+
+
+def logsumexp(a, axis=None):
+    """
+    Numerically stable log-sum-exp.
+
+    A lightweight drop-in for :func:`scipy.special.logsumexp` for the cases used
+    in this module (a list/array reduced over ``axis``, or a 1-D array reduced
+    over everything). scipy's implementation carries large per-call dispatch
+    overhead that dominates the circuit inference loops, where this is called
+    once per sum unit per query.
+
+    :param a: The values to reduce. May be a list of scalars/arrays.
+    :param axis: The axis to reduce over, or ``None`` to reduce over all entries.
+    :return: ``log(sum(exp(a)))`` reduced over ``axis``.
+    """
+    a = np.asarray(a, dtype=float)
+    amax = np.amax(a, axis=axis, keepdims=True)
+    # avoid nan when a whole reduction is -inf (or +inf): subtract 0 instead
+    amax = np.where(np.isfinite(amax), amax, 0.0)
+    with np.errstate(divide="ignore"):
+        out = np.log(np.sum(np.exp(a - amax), axis=axis, keepdims=True)) + amax
+    if axis is None:
+        return out.reshape(())[()]
+    return np.squeeze(out, axis=axis)
 
 
 class PlotAlignment(IntEnum):
