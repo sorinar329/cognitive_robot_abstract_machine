@@ -170,24 +170,24 @@ class Synchronizer(WorldEntityWithClassBasedID):
             process_id=os.getpid(),
         )
 
-    def subscription_callback(self, msg: std_msgs.msg.String):
+    def subscription_callback(self, message: std_msgs.msg.String):
         """
         Wrap the origin subscription callback by self-skipping and disabling the next world callback.
         Holds the world lock while deserializing to ensure no changes happen while building the tracker and
         running from_json.
 
-        :param msg: The incoming ROS string message containing a serialized synchronization message.
+        :param message: The incoming ROS string message containing a serialized synchronization message.
         """
         with self._world._world_lock:
             tracker = WorldEntityWithIDKwargsTracker.from_world(self._world)
-            deserialized_msg = from_json(
-                json.loads(msg.data), **tracker.create_kwargs()
+            deserialized_message = from_json(
+                json.loads(message.data), **tracker.create_kwargs()
             )
 
-            if deserialized_msg.meta_data == self.meta_data:
+            if deserialized_message.meta_data == self.meta_data:
                 return
 
-            self._subscription_callback(deserialized_msg)
+            self._subscription_callback(deserialized_message)
 
     def acknowledge_message(self, message: message_type):
         if self.acknowledge_publisher is None:
@@ -330,6 +330,8 @@ class ModelReloadSynchronizer(Synchronizer):
         Save the current world model to the database and publish the primary key to the ROS topic such that other
         processes can subscribe to the model changes and update their worlds.
         """
+        from semantic_digital_twin.orm.ormatic_interface import WorldMappingDAO  # type: ignore
+
         dao = to_dao(self._world)
         self.session.add(dao)
         self.session.commit()
