@@ -23,6 +23,7 @@ import coraplex.alternative_motion_mappings.tiago_motion_mapping
 import coraplex.datastructures.dataclasses
 import coraplex.datastructures.execution_data
 import coraplex.datastructures.grasp
+import coraplex.datastructures.grasp_scoring
 import coraplex.datastructures.trajectory
 import coraplex.exceptions
 import coraplex.language
@@ -5209,6 +5210,30 @@ class GraspDescriptionDAO(
         foreign_keys=[end_effector_id],
         post_update=True,
     )
+
+
+class GraspScorerDAO(
+    Base, DataAccessObject[coraplex.datastructures.grasp_scoring.GraspScorer]
+):
+    __tablename__ = "GraspScorerDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    weight_normal: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+    weight_distance: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+    weight_clearance: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+    penalty_collision: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+    collision_tolerance: Mapped[builtins.float] = mapped_column(
+        use_existing_column=True
+    )
+    penalty_clearance: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+    penalty_unstable: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+    score_partial_contact: Mapped[builtins.float] = mapped_column(
+        use_existing_column=True
+    )
+    ground_plane_z: Mapped[builtins.float] = mapped_column(use_existing_column=True)
 
 
 class GraspingActionDAO(
@@ -13139,6 +13164,31 @@ class ScaleDAO(
     z: Mapped[builtins.float] = mapped_column(use_existing_column=True)
 
 
+class ScoredGraspDAO(
+    Base, DataAccessObject[coraplex.datastructures.grasp_scoring.ScoredGrasp]
+):
+    __tablename__ = "ScoredGraspDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
+
+    score: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+    id: Mapped[builtins.str] = mapped_column(
+        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
+    )
+
+    pose_id: Mapped[int] = mapped_column(
+        ForeignKey("PoseMappingDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+
+    pose: Mapped[PoseMappingDAO] = relationship(
+        "PoseMappingDAO", uselist=False, foreign_keys=[pose_id], post_update=True
+    )
+
+
 class SelfCollisionAvoidanceDAO(
     GoalDAO,
     DataAccessObject[
@@ -18256,12 +18306,13 @@ class ActiveConnection1DOFDAO(
     multiplier: Mapped[builtins.float] = mapped_column(use_existing_column=True)
     offset: Mapped[builtins.float] = mapped_column(use_existing_column=True)
 
-    dof_id: Mapped[uuid.UUID] = mapped_column(
-        sqlalchemy.sql.sqltypes.UUID, nullable=False, use_existing_column=True
-    )
-
     axis_id: Mapped[int] = mapped_column(
         ForeignKey("Vector3MappingDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+    raw_dof_id: Mapped[int] = mapped_column(
+        ForeignKey("DegreeOfFreedomDAO.database_id", use_alter=True),
         nullable=True,
         use_existing_column=True,
     )
@@ -18273,6 +18324,9 @@ class ActiveConnection1DOFDAO(
 
     axis: Mapped[Vector3MappingDAO] = relationship(
         "Vector3MappingDAO", uselist=False, foreign_keys=[axis_id], post_update=True
+    )
+    raw_dof: Mapped[DegreeOfFreedomDAO] = relationship(
+        "DegreeOfFreedomDAO", uselist=False, foreign_keys=[raw_dof_id], post_update=True
     )
     dynamics: Mapped[JointDynamicsDAO] = relationship(
         "JointDynamicsDAO", uselist=False, foreign_keys=[dynamics_id], post_update=True
@@ -18360,23 +18414,57 @@ class DifferentialDriveDAO(
         use_existing_column=True,
     )
 
-    x_id: Mapped[uuid.UUID] = mapped_column(
-        sqlalchemy.sql.sqltypes.UUID, nullable=False, use_existing_column=True
+    x_id: Mapped[int] = mapped_column(
+        ForeignKey("DegreeOfFreedomDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
     )
-    y_id: Mapped[uuid.UUID] = mapped_column(
-        sqlalchemy.sql.sqltypes.UUID, nullable=False, use_existing_column=True
+    y_id: Mapped[int] = mapped_column(
+        ForeignKey("DegreeOfFreedomDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
     )
-    roll_id: Mapped[uuid.UUID] = mapped_column(
-        sqlalchemy.sql.sqltypes.UUID, nullable=False, use_existing_column=True
+    roll_id: Mapped[int] = mapped_column(
+        ForeignKey("DegreeOfFreedomDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
     )
-    pitch_id: Mapped[uuid.UUID] = mapped_column(
-        sqlalchemy.sql.sqltypes.UUID, nullable=False, use_existing_column=True
+    pitch_id: Mapped[int] = mapped_column(
+        ForeignKey("DegreeOfFreedomDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
     )
-    yaw_id: Mapped[uuid.UUID] = mapped_column(
-        sqlalchemy.sql.sqltypes.UUID, nullable=False, use_existing_column=True
+    yaw_id: Mapped[int] = mapped_column(
+        ForeignKey("DegreeOfFreedomDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
     )
-    x_velocity_id: Mapped[uuid.UUID] = mapped_column(
-        sqlalchemy.sql.sqltypes.UUID, nullable=False, use_existing_column=True
+    x_velocity_id: Mapped[int] = mapped_column(
+        ForeignKey("DegreeOfFreedomDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+
+    x: Mapped[DegreeOfFreedomDAO] = relationship(
+        "DegreeOfFreedomDAO", uselist=False, foreign_keys=[x_id], post_update=True
+    )
+    y: Mapped[DegreeOfFreedomDAO] = relationship(
+        "DegreeOfFreedomDAO", uselist=False, foreign_keys=[y_id], post_update=True
+    )
+    roll: Mapped[DegreeOfFreedomDAO] = relationship(
+        "DegreeOfFreedomDAO", uselist=False, foreign_keys=[roll_id], post_update=True
+    )
+    pitch: Mapped[DegreeOfFreedomDAO] = relationship(
+        "DegreeOfFreedomDAO", uselist=False, foreign_keys=[pitch_id], post_update=True
+    )
+    yaw: Mapped[DegreeOfFreedomDAO] = relationship(
+        "DegreeOfFreedomDAO", uselist=False, foreign_keys=[yaw_id], post_update=True
+    )
+    x_velocity: Mapped[DegreeOfFreedomDAO] = relationship(
+        "DegreeOfFreedomDAO",
+        uselist=False,
+        foreign_keys=[x_velocity_id],
+        post_update=True,
     )
 
     __mapper_args__ = {
@@ -18398,26 +18486,68 @@ class OmniDriveDAO(
         use_existing_column=True,
     )
 
-    x_id: Mapped[uuid.UUID] = mapped_column(
-        sqlalchemy.sql.sqltypes.UUID, nullable=False, use_existing_column=True
+    x_id: Mapped[int] = mapped_column(
+        ForeignKey("DegreeOfFreedomDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
     )
-    y_id: Mapped[uuid.UUID] = mapped_column(
-        sqlalchemy.sql.sqltypes.UUID, nullable=False, use_existing_column=True
+    y_id: Mapped[int] = mapped_column(
+        ForeignKey("DegreeOfFreedomDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
     )
-    roll_id: Mapped[uuid.UUID] = mapped_column(
-        sqlalchemy.sql.sqltypes.UUID, nullable=False, use_existing_column=True
+    roll_id: Mapped[int] = mapped_column(
+        ForeignKey("DegreeOfFreedomDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
     )
-    pitch_id: Mapped[uuid.UUID] = mapped_column(
-        sqlalchemy.sql.sqltypes.UUID, nullable=False, use_existing_column=True
+    pitch_id: Mapped[int] = mapped_column(
+        ForeignKey("DegreeOfFreedomDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
     )
-    yaw_id: Mapped[uuid.UUID] = mapped_column(
-        sqlalchemy.sql.sqltypes.UUID, nullable=False, use_existing_column=True
+    yaw_id: Mapped[int] = mapped_column(
+        ForeignKey("DegreeOfFreedomDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
     )
-    x_velocity_id: Mapped[uuid.UUID] = mapped_column(
-        sqlalchemy.sql.sqltypes.UUID, nullable=False, use_existing_column=True
+    x_velocity_id: Mapped[int] = mapped_column(
+        ForeignKey("DegreeOfFreedomDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
     )
-    y_velocity_id: Mapped[uuid.UUID] = mapped_column(
-        sqlalchemy.sql.sqltypes.UUID, nullable=False, use_existing_column=True
+    y_velocity_id: Mapped[int] = mapped_column(
+        ForeignKey("DegreeOfFreedomDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+
+    x: Mapped[DegreeOfFreedomDAO] = relationship(
+        "DegreeOfFreedomDAO", uselist=False, foreign_keys=[x_id], post_update=True
+    )
+    y: Mapped[DegreeOfFreedomDAO] = relationship(
+        "DegreeOfFreedomDAO", uselist=False, foreign_keys=[y_id], post_update=True
+    )
+    roll: Mapped[DegreeOfFreedomDAO] = relationship(
+        "DegreeOfFreedomDAO", uselist=False, foreign_keys=[roll_id], post_update=True
+    )
+    pitch: Mapped[DegreeOfFreedomDAO] = relationship(
+        "DegreeOfFreedomDAO", uselist=False, foreign_keys=[pitch_id], post_update=True
+    )
+    yaw: Mapped[DegreeOfFreedomDAO] = relationship(
+        "DegreeOfFreedomDAO", uselist=False, foreign_keys=[yaw_id], post_update=True
+    )
+    x_velocity: Mapped[DegreeOfFreedomDAO] = relationship(
+        "DegreeOfFreedomDAO",
+        uselist=False,
+        foreign_keys=[x_velocity_id],
+        post_update=True,
+    )
+    y_velocity: Mapped[DegreeOfFreedomDAO] = relationship(
+        "DegreeOfFreedomDAO",
+        uselist=False,
+        foreign_keys=[y_velocity_id],
+        post_update=True,
     )
 
     __mapper_args__ = {
@@ -18441,26 +18571,62 @@ class Connection6DoFDAO(
         use_existing_column=True,
     )
 
-    x_id: Mapped[uuid.UUID] = mapped_column(
-        sqlalchemy.sql.sqltypes.UUID, nullable=False, use_existing_column=True
+    x_id: Mapped[int] = mapped_column(
+        ForeignKey("DegreeOfFreedomDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
     )
-    y_id: Mapped[uuid.UUID] = mapped_column(
-        sqlalchemy.sql.sqltypes.UUID, nullable=False, use_existing_column=True
+    y_id: Mapped[int] = mapped_column(
+        ForeignKey("DegreeOfFreedomDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
     )
-    z_id: Mapped[uuid.UUID] = mapped_column(
-        sqlalchemy.sql.sqltypes.UUID, nullable=False, use_existing_column=True
+    z_id: Mapped[int] = mapped_column(
+        ForeignKey("DegreeOfFreedomDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
     )
-    qx_id: Mapped[uuid.UUID] = mapped_column(
-        sqlalchemy.sql.sqltypes.UUID, nullable=False, use_existing_column=True
+    qx_id: Mapped[int] = mapped_column(
+        ForeignKey("DegreeOfFreedomDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
     )
-    qy_id: Mapped[uuid.UUID] = mapped_column(
-        sqlalchemy.sql.sqltypes.UUID, nullable=False, use_existing_column=True
+    qy_id: Mapped[int] = mapped_column(
+        ForeignKey("DegreeOfFreedomDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
     )
-    qz_id: Mapped[uuid.UUID] = mapped_column(
-        sqlalchemy.sql.sqltypes.UUID, nullable=False, use_existing_column=True
+    qz_id: Mapped[int] = mapped_column(
+        ForeignKey("DegreeOfFreedomDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
     )
-    qw_id: Mapped[uuid.UUID] = mapped_column(
-        sqlalchemy.sql.sqltypes.UUID, nullable=False, use_existing_column=True
+    qw_id: Mapped[int] = mapped_column(
+        ForeignKey("DegreeOfFreedomDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+
+    x: Mapped[DegreeOfFreedomDAO] = relationship(
+        "DegreeOfFreedomDAO", uselist=False, foreign_keys=[x_id], post_update=True
+    )
+    y: Mapped[DegreeOfFreedomDAO] = relationship(
+        "DegreeOfFreedomDAO", uselist=False, foreign_keys=[y_id], post_update=True
+    )
+    z: Mapped[DegreeOfFreedomDAO] = relationship(
+        "DegreeOfFreedomDAO", uselist=False, foreign_keys=[z_id], post_update=True
+    )
+    qx: Mapped[DegreeOfFreedomDAO] = relationship(
+        "DegreeOfFreedomDAO", uselist=False, foreign_keys=[qx_id], post_update=True
+    )
+    qy: Mapped[DegreeOfFreedomDAO] = relationship(
+        "DegreeOfFreedomDAO", uselist=False, foreign_keys=[qy_id], post_update=True
+    )
+    qz: Mapped[DegreeOfFreedomDAO] = relationship(
+        "DegreeOfFreedomDAO", uselist=False, foreign_keys=[qz_id], post_update=True
+    )
+    qw: Mapped[DegreeOfFreedomDAO] = relationship(
+        "DegreeOfFreedomDAO", uselist=False, foreign_keys=[qw_id], post_update=True
     )
 
     __mapper_args__ = {
