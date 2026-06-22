@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
+from enum import StrEnum
 
 import numpy as np
 import pandas as pd
@@ -9,6 +10,40 @@ import pandas as pd
 from giskardpy.qp.qp_data_symbolic import QPDataSymbolic
 
 logger = logging.getLogger(__name__)
+
+
+class DebuggerColumn(StrEnum):
+    """Column labels for the debugger's pandas frames."""
+
+    LOWER_BOUNDS = "lower bounds"
+    """Lower bounds of the decision variables."""
+
+    UPPER_BOUNDS = "upper bounds"
+    """Upper bounds of the decision variables."""
+
+    SOLUTION = "solution"
+    """The solution expanded to the full decision-variable layout."""
+
+    QUADRATIC_WEIGHT = "quadratic weight"
+    """Quadratic weight of each decision variable."""
+
+    LINEAR_WEIGHT = "linear weight"
+    """Linear weight of each decision variable."""
+
+    CONSTRAINT_VALUE_WITHOUT_SLACK = "constraint value no slack"
+    """Result of the constraint matrix times the decision variables, excluding slack."""
+
+    SLACK = "slack"
+    """How much a constraint is violated."""
+
+    BOUNDS = "bounds"
+    """Equality constraint bounds."""
+
+    INEQUALITY_LOWER_BOUNDS = "lower_bounds"
+    """Lower bounds of the inequality constraints."""
+
+    INEQUALITY_UPPER_BOUNDS = "upper_bounds"
+    """Upper bounds of the inequality constraints."""
 
 
 @dataclass
@@ -97,11 +132,11 @@ class QuadraticProgramDebugger:
         """
         self.direct_limits = pd.DataFrame(
             {
-                "lower bounds": self.qp_data_symbolic.box_lower_constraints.evaluate(),
-                "solution": self.padded_solution,
-                "upper bounds": self.qp_data_symbolic.box_upper_constraints.evaluate(),
-                "quadratic weight": self.qp_data_symbolic.quadratic_weights.evaluate(),
-                "linear weight": self.qp_data_symbolic.linear_weights.evaluate(),
+                DebuggerColumn.LOWER_BOUNDS: self.qp_data_symbolic.box_lower_constraints.evaluate(),
+                DebuggerColumn.SOLUTION: self.padded_solution,
+                DebuggerColumn.UPPER_BOUNDS: self.qp_data_symbolic.box_upper_constraints.evaluate(),
+                DebuggerColumn.QUADRATIC_WEIGHT: self.qp_data_symbolic.quadratic_weights.evaluate(),
+                DebuggerColumn.LINEAR_WEIGHT: self.qp_data_symbolic.linear_weights.evaluate(),
             },
             self.free_variable_names,
             dtype=float,
@@ -120,9 +155,9 @@ class QuadraticProgramDebugger:
         bounds = self.qp_data_symbolic.equality_bounds.evaluate()
         self.equality_constraints = pd.DataFrame(
             {
-                "constraint value w/o slack": constraint_value_without_slack,
-                "slack": bounds - constraint_value_without_slack,
-                "bounds": bounds,
+                DebuggerColumn.CONSTRAINT_VALUE_WITHOUT_SLACK: constraint_value_without_slack,
+                DebuggerColumn.SLACK: bounds - constraint_value_without_slack,
+                DebuggerColumn.BOUNDS: bounds,
             },
             self.equality_constr_names,
             dtype=float,
@@ -149,9 +184,9 @@ class QuadraticProgramDebugger:
         if len(self.inequality_constr_names) > 0:
             self.inequality_constraints = pd.DataFrame(
                 {
-                    "lower_bounds": lower_bounds,
-                    "constraint value w/o slack": constraint_value_without_slack,
-                    "upper_bounds": upper_bounds,
+                    DebuggerColumn.INEQUALITY_LOWER_BOUNDS: lower_bounds,
+                    DebuggerColumn.CONSTRAINT_VALUE_WITHOUT_SLACK: constraint_value_without_slack,
+                    DebuggerColumn.INEQUALITY_UPPER_BOUNDS: upper_bounds,
                 },
                 self.inequality_constr_names,
                 dtype=float,
