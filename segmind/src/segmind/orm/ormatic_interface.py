@@ -31,6 +31,7 @@ import segmind.datastructures.object_tracker
 import segmind.demos.pouring_demo
 import segmind.demos.tiago_apartment_scene
 import segmind.demos.tiago_arm_demo
+import segmind.detectors.agent_event_detectors_nodes
 import segmind.detectors.atomic_event_detectors_nodes
 import segmind.detectors.base
 import segmind.detectors.coarse_event_detector_nodes
@@ -238,6 +239,29 @@ class ContainmentEventDAO(
     }
 
 
+class HoldingEventDAO(
+    EventWithTrackedObjectsDAO,
+    DataAccessObject[segmind.datastructures.events.HoldingEvent],
+):
+    __tablename__ = "HoldingEventDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(EventWithTrackedObjectsDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    grippers: Mapped[
+        typing.List[semantic_digital_twin.world_description.world_entity.Body]
+    ] = mapped_column(JSON, nullable=False, use_existing_column=True)
+
+    __mapper_args__ = {
+        "polymorphic_identity": "HoldingEventDAO",
+        "inherit_condition": database_id == EventWithTrackedObjectsDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
 class InsertionEventDAO(
     EventWithTrackedObjectsDAO,
     DataAccessObject[segmind.datastructures.events.InsertionEvent],
@@ -294,6 +318,29 @@ class LossOfContainmentEventDAO(
 
     __mapper_args__ = {
         "polymorphic_identity": "LossOfContainmentEventDAO",
+        "inherit_condition": database_id == EventWithTrackedObjectsDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
+class LossOfHoldingEventDAO(
+    EventWithTrackedObjectsDAO,
+    DataAccessObject[segmind.datastructures.events.LossOfHoldingEvent],
+):
+    __tablename__ = "LossOfHoldingEventDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(EventWithTrackedObjectsDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    grippers: Mapped[
+        typing.List[semantic_digital_twin.world_description.world_entity.Body]
+    ] = mapped_column(JSON, nullable=False, use_existing_column=True)
+
+    __mapper_args__ = {
+        "polymorphic_identity": "LossOfHoldingEventDAO",
         "inherit_condition": database_id == EventWithTrackedObjectsDAO.database_id,
         "polymorphic_load": "selectin",
     }
@@ -358,6 +405,28 @@ class MotionEventDAO(
     }
 
 
+class LiftingEventDAO(
+    MotionEventDAO, DataAccessObject[segmind.datastructures.events.LiftingEvent]
+):
+    __tablename__ = "LiftingEventDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(MotionEventDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    grippers: Mapped[
+        typing.List[semantic_digital_twin.world_description.world_entity.Body]
+    ] = mapped_column(JSON, nullable=False, use_existing_column=True)
+
+    __mapper_args__ = {
+        "polymorphic_identity": "LiftingEventDAO",
+        "inherit_condition": database_id == MotionEventDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
 class PickUpEventDAO(
     EventWithTrackedObjectsDAO,
     DataAccessObject[segmind.datastructures.events.PickUpEvent],
@@ -410,6 +479,25 @@ class RotationEventDAO(
     __mapper_args__ = {
         "polymorphic_identity": "RotationEventDAO",
         "inherit_condition": database_id == MotionEventDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
+class StackingEventDAO(
+    EventWithTrackedObjectsDAO,
+    DataAccessObject[segmind.datastructures.events.StackingEvent],
+):
+    __tablename__ = "StackingEventDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(EventWithTrackedObjectsDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "StackingEventDAO",
+        "inherit_condition": database_id == EventWithTrackedObjectsDAO.database_id,
         "polymorphic_load": "selectin",
     }
 
@@ -626,6 +714,75 @@ class AbstractDetectorDAO(
     }
 
 
+class HoldingDetectorDAO(
+    AbstractDetectorDAO,
+    DataAccessObject[segmind.detectors.agent_event_detectors_nodes.HoldingDetector],
+):
+    __tablename__ = "HoldingDetectorDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(AbstractDetectorDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    gripper_body_names: Mapped[typing.List[builtins.str]] = mapped_column(
+        JSON, nullable=False, use_existing_column=True
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "HoldingDetectorDAO",
+        "inherit_condition": database_id == AbstractDetectorDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
+class LiftingDetectorDAO(
+    AbstractDetectorDAO,
+    DataAccessObject[segmind.detectors.agent_event_detectors_nodes.LiftingDetector],
+):
+    __tablename__ = "LiftingDetectorDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(AbstractDetectorDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    lift_threshold: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+
+    __mapper_args__ = {
+        "polymorphic_identity": "LiftingDetectorDAO",
+        "inherit_condition": database_id == AbstractDetectorDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
+class LossOfHoldingDetectorDAO(
+    AbstractDetectorDAO,
+    DataAccessObject[
+        segmind.detectors.agent_event_detectors_nodes.LossOfHoldingDetector
+    ],
+):
+    __tablename__ = "LossOfHoldingDetectorDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(AbstractDetectorDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    gripper_body_names: Mapped[typing.List[builtins.str]] = mapped_column(
+        JSON, nullable=False, use_existing_column=True
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "LossOfHoldingDetectorDAO",
+        "inherit_condition": database_id == AbstractDetectorDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
 class ContactDetectorDAO(
     AbstractDetectorDAO,
     DataAccessObject[segmind.detectors.atomic_event_detectors_nodes.ContactDetector],
@@ -792,6 +949,9 @@ class SegmindContextDAO(Base, DataAccessObject[segmind.detectors.base.SegmindCon
             semantic_digital_twin.semantic_annotations.semantic_annotations.Aperture
         ]
     ] = mapped_column(JSON, nullable=False, use_existing_column=True)
+    latest_lifting: Mapped[
+        typing.Set[semantic_digital_twin.world_description.world_entity.Body]
+    ] = mapped_column(JSON, nullable=False, use_existing_column=True)
 
     logger_id: Mapped[int] = mapped_column(
         ForeignKey("EventLoggerDAO.database_id", use_alter=True),
@@ -870,6 +1030,25 @@ class PlacingDetectorDAO(
     __mapper_args__ = {
         "polymorphic_identity": "PlacingDetectorDAO",
         "inherit_condition": database_id == AbstractInteractionDetectorDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
+class StackingDetectorDAO(
+    AbstractDetectorDAO,
+    DataAccessObject[segmind.detectors.coarse_event_detector_nodes.StackingDetector],
+):
+    __tablename__ = "StackingDetectorDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(AbstractDetectorDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "StackingDetectorDAO",
+        "inherit_condition": database_id == AbstractDetectorDAO.database_id,
         "polymorphic_load": "selectin",
     }
 

@@ -102,9 +102,30 @@ class SegmindContext(ContextExtension):
     List of insertion pairs, to avoid duplicate events
     """
 
+    stacking_pairs: set[Any] = field(default_factory=set)
+    """
+    Set of (upper.id, lower.id) pairs already reported as stacked, to avoid duplicate events
+    """
+
     tracker_registry: ObjectTrackerFactory = field(default_factory=ObjectTrackerFactory)
     """
-    The object tracker registry.    
+    The object tracker registry.
+    """
+
+    latest_holding: IndexedBodyPairs = field(default_factory=dict)
+    """
+    Dictionary mapping each held body to the set of gripper bodies currently holding it.
+    """
+
+    lifting_baselines: Dict[Body, Pose] = field(default_factory=dict)
+    """
+    Dictionary mapping each currently held body to the pose it had when holding started.
+    Used by LiftingDetector to measure vertical displacement since the hold began.
+    """
+
+    latest_lifting: Set[Body] = field(default_factory=set)
+    """
+    Set of bodies for which a LiftingEvent has already fired during the current hold.
     """
 
 @dataclass(repr=False, eq=False)

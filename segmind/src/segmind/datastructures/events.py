@@ -260,12 +260,91 @@ class PickUpEvent(EventWithTrackedObjects):
 
 
 @dataclass(unsafe_hash=True)
+class StackingEvent(EventWithTrackedObjects):
+    """
+    Represents an event where an object becomes newly stacked on another,
+    similar object that is itself currently supported by something.
+    """
+
+
+@dataclass(unsafe_hash=True)
 class PlacingEvent(EventWithTrackedObjects):
     """
     Represents an event where an object is placed on another object.
     """
     ...
 
+
+
+@dataclass(unsafe_hash=True)
+class HoldingEvent(EventWithTrackedObjects):
+    """
+    Represents an event where an object starts being held, i.e. is in contact with at least
+    one of a robot's gripper bodies.
+    """
+
+    grippers: List[Body] = field(default_factory=list)
+    """
+    The gripper bodies currently in contact with the held object.
+    """
+
+    grippers_frozen_copy: List[BodyDAO] = field(default_factory=list)
+    """
+    Will be set to a copy of grippers, to be used by ORMatic and the NEEMInterface.
+    """
+
+    def __post_init__(self):
+        super().__post_init__()
+
+        if self.grippers:
+            self.grippers_frozen_copy = list(self.grippers)
+
+
+@dataclass(unsafe_hash=True)
+class LossOfHoldingEvent(EventWithTrackedObjects):
+    """
+    Represents an event where a held object is no longer in contact with any gripper body.
+    """
+
+    grippers: List[Body] = field(default_factory=list)
+    """
+    The gripper bodies that were holding the object right before contact was lost.
+    """
+
+    grippers_frozen_copy: List[BodyDAO] = field(default_factory=list)
+    """
+    Will be set to a copy of grippers, to be used by ORMatic and the NEEMInterface.
+    """
+
+    def __post_init__(self):
+        super().__post_init__()
+
+        if self.grippers:
+            self.grippers_frozen_copy = list(self.grippers)
+
+
+@dataclass(unsafe_hash=True)
+class LiftingEvent(MotionEvent):
+    """
+    Represents an event where a held object has risen above the lift threshold relative to
+    the pose it had when holding started.
+    """
+
+    grippers: List[Body] = field(default_factory=list)
+    """
+    The gripper bodies holding the object while it was lifted.
+    """
+
+    grippers_frozen_copy: List[BodyDAO] = field(default_factory=list)
+    """
+    Will be set to a copy of grippers, to be used by ORMatic and the NEEMInterface.
+    """
+
+    def __post_init__(self):
+        super().__post_init__()
+
+        if self.grippers:
+            self.grippers_frozen_copy = list(self.grippers)
 
 
 @dataclass(unsafe_hash=True)

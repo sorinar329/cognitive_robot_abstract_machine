@@ -1035,6 +1035,17 @@ class ProcthorBox(HasRootBody): ...
 
 
 @dataclass(eq=False)
+class Cube(HasRootBody):
+    """
+    A generic cube-shaped rigid body, e.g. a manipulation-experiment prop.
+
+    Used as a similarity marker: two bodies both annotated as ``Cube`` are
+    treated as interchangeable objects by reasoning that groups bodies by
+    shape rather than by a specific household-item type.
+    """
+
+
+@dataclass(eq=False)
 class Houseplant(HasRootBody):
     """
     A houseplant.

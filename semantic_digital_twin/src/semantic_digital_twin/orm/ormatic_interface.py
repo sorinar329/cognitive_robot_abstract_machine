@@ -87,6 +87,7 @@ import semantic_digital_twin.robots.robot_part_mixins
 import semantic_digital_twin.robots.robot_parts
 import semantic_digital_twin.robots.stretch
 import semantic_digital_twin.robots.tiago
+import semantic_digital_twin.robots.tiago_mjcf
 import semantic_digital_twin.robots.tracy
 import semantic_digital_twin.robots.unitree_g1
 import semantic_digital_twin.semantic_annotations.mixins
@@ -1458,6 +1459,57 @@ class TiagoRightGripperDAO_fingers_association(Base, AssociationDataAccessObject
 
     source_tiagorightgripperdao_id: Mapped[int] = mapped_column(
         ForeignKey("TiagoRightGripperDAO.database_id")
+    )
+    target_fingerdao_id: Mapped[int] = mapped_column(
+        ForeignKey("FingerDAO.database_id")
+    )
+
+    target: Mapped[FingerDAO] = relationship(
+        "FingerDAO", foreign_keys=[target_fingerdao_id], lazy="selectin"
+    )
+
+
+class TiagoMjcfLeftGripperDAO_fingers_association(Base, AssociationDataAccessObject):
+    __tablename__ = "_10452936536482754193687357541923539476262121822466600479439723"
+
+    database_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+
+    source_tiagomjcfleftgripperdao_id: Mapped[int] = mapped_column(
+        ForeignKey("TiagoMjcfLeftGripperDAO.database_id")
+    )
+    target_fingerdao_id: Mapped[int] = mapped_column(
+        ForeignKey("FingerDAO.database_id")
+    )
+
+    target: Mapped[FingerDAO] = relationship(
+        "FingerDAO", foreign_keys=[target_fingerdao_id], lazy="selectin"
+    )
+
+
+class TiagoMjcfNeckDAO_sensors_association(Base, AssociationDataAccessObject):
+    __tablename__ = "_78878275951882732586810483972165673616245973345318324763047039"
+
+    database_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+
+    source_tiagomjcfneckdao_id: Mapped[int] = mapped_column(
+        ForeignKey("TiagoMjcfNeckDAO.database_id")
+    )
+    target_tiagocameradao_id: Mapped[int] = mapped_column(
+        ForeignKey("TiagoCameraDAO.database_id")
+    )
+
+    target: Mapped[TiagoCameraDAO] = relationship(
+        "TiagoCameraDAO", foreign_keys=[target_tiagocameradao_id], lazy="selectin"
+    )
+
+
+class TiagoMjcfRightGripperDAO_fingers_association(Base, AssociationDataAccessObject):
+    __tablename__ = "_43917589067079238661866641995009881508505176072983742340959641"
+
+    database_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+
+    source_tiagomjcfrightgripperdao_id: Mapped[int] = mapped_column(
+        ForeignKey("TiagoMjcfRightGripperDAO.database_id")
     )
     target_fingerdao_id: Mapped[int] = mapped_column(
         ForeignKey("FingerDAO.database_id")
@@ -3405,7 +3457,7 @@ class FileUriResolverDAO(
         Integer, primary_key=True, use_existing_column=True
     )
 
-    base_directory: Mapped[builtins.str] = mapped_column(
+    base_directory: Mapped[typing.Optional[builtins.str]] = mapped_column(
         sqlalchemy.sql.sqltypes.Text, use_existing_column=True
     )
 
@@ -8950,6 +9002,19 @@ class HasRobotPartsDAO(
         "polymorphic_on": "polymorphic_type",
         "polymorphic_identity": "HasRobotPartsDAO",
     }
+
+
+class IsPartWholeRelationshipDAO(
+    Base,
+    DataAccessObject[
+        semantic_digital_twin.semantic_annotations.mixins.IsPartWholeRelationship
+    ],
+):
+    __tablename__ = "IsPartWholeRelationshipDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        Integer, primary_key=True, use_existing_column=True
+    )
 
 
 class IsPerceivableDAO(
@@ -16875,6 +16940,269 @@ class TiagoTorsoDAO(
     }
 
 
+class TiagoMjcfLeftArmDAO(
+    ArmDAO, DataAccessObject[semantic_digital_twin.robots.tiago_mjcf.TiagoMjcfLeftArm]
+):
+    __tablename__ = "TiagoMjcfLeftArmDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(ArmDAO.database_id), primary_key=True, use_existing_column=True
+    )
+
+    end_effector_id: Mapped[int] = mapped_column(
+        ForeignKey("TiagoMjcfLeftGripperDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+
+    end_effector: Mapped[TiagoMjcfLeftGripperDAO] = relationship(
+        "TiagoMjcfLeftGripperDAO",
+        uselist=False,
+        foreign_keys=[end_effector_id],
+        post_update=True,
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "TiagoMjcfLeftArmDAO",
+        "inherit_condition": database_id == ArmDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
+class TiagoMjcfLeftGripperDAO(
+    EndEffectorDAO,
+    DataAccessObject[semantic_digital_twin.robots.tiago_mjcf.TiagoMjcfLeftGripper],
+):
+    __tablename__ = "TiagoMjcfLeftGripperDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(EndEffectorDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    fingers: Mapped[builtins.list[TiagoMjcfLeftGripperDAO_fingers_association]] = (
+        relationship(
+            "TiagoMjcfLeftGripperDAO_fingers_association",
+            collection_class=builtins.list,
+            cascade="all, delete-orphan",
+            foreign_keys="[TiagoMjcfLeftGripperDAO_fingers_association.source_tiagomjcfleftgripperdao_id]",
+            lazy="selectin",
+        )
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "TiagoMjcfLeftGripperDAO",
+        "inherit_condition": database_id == EndEffectorDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
+class TiagoMjcfLeftIndexFingerDAO(
+    FingerDAO,
+    DataAccessObject[semantic_digital_twin.robots.tiago_mjcf.TiagoMjcfLeftIndexFinger],
+):
+    __tablename__ = "TiagoMjcfLeftIndexFingerDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(FingerDAO.database_id), primary_key=True, use_existing_column=True
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "TiagoMjcfLeftIndexFingerDAO",
+        "inherit_condition": database_id == FingerDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
+class TiagoMjcfLeftThumbDAO(
+    FingerDAO,
+    DataAccessObject[semantic_digital_twin.robots.tiago_mjcf.TiagoMjcfLeftThumb],
+):
+    __tablename__ = "TiagoMjcfLeftThumbDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(FingerDAO.database_id), primary_key=True, use_existing_column=True
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "TiagoMjcfLeftThumbDAO",
+        "inherit_condition": database_id == FingerDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
+class TiagoMjcfMobileBaseDAO(
+    MobileBaseDAO,
+    DataAccessObject[semantic_digital_twin.robots.tiago_mjcf.TiagoMjcfMobileBase],
+):
+    __tablename__ = "TiagoMjcfMobileBaseDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(MobileBaseDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    torso_id: Mapped[int] = mapped_column(
+        ForeignKey("TiagoMjcfTorsoDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+
+    torso: Mapped[TiagoMjcfTorsoDAO] = relationship(
+        "TiagoMjcfTorsoDAO", uselist=False, foreign_keys=[torso_id], post_update=True
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "TiagoMjcfMobileBaseDAO",
+        "inherit_condition": database_id == MobileBaseDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
+class TiagoMjcfNeckDAO(
+    NeckDAO, DataAccessObject[semantic_digital_twin.robots.tiago_mjcf.TiagoMjcfNeck]
+):
+    __tablename__ = "TiagoMjcfNeckDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(NeckDAO.database_id), primary_key=True, use_existing_column=True
+    )
+
+    sensors: Mapped[builtins.list[TiagoMjcfNeckDAO_sensors_association]] = relationship(
+        "TiagoMjcfNeckDAO_sensors_association",
+        collection_class=builtins.list,
+        cascade="all, delete-orphan",
+        foreign_keys="[TiagoMjcfNeckDAO_sensors_association.source_tiagomjcfneckdao_id]",
+        lazy="selectin",
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "TiagoMjcfNeckDAO",
+        "inherit_condition": database_id == NeckDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
+class TiagoMjcfRightArmDAO(
+    ArmDAO, DataAccessObject[semantic_digital_twin.robots.tiago_mjcf.TiagoMjcfRightArm]
+):
+    __tablename__ = "TiagoMjcfRightArmDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(ArmDAO.database_id), primary_key=True, use_existing_column=True
+    )
+
+    end_effector_id: Mapped[int] = mapped_column(
+        ForeignKey("TiagoMjcfRightGripperDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+
+    end_effector: Mapped[TiagoMjcfRightGripperDAO] = relationship(
+        "TiagoMjcfRightGripperDAO",
+        uselist=False,
+        foreign_keys=[end_effector_id],
+        post_update=True,
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "TiagoMjcfRightArmDAO",
+        "inherit_condition": database_id == ArmDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
+class TiagoMjcfRightGripperDAO(
+    EndEffectorDAO,
+    DataAccessObject[semantic_digital_twin.robots.tiago_mjcf.TiagoMjcfRightGripper],
+):
+    __tablename__ = "TiagoMjcfRightGripperDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(EndEffectorDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    fingers: Mapped[builtins.list[TiagoMjcfRightGripperDAO_fingers_association]] = (
+        relationship(
+            "TiagoMjcfRightGripperDAO_fingers_association",
+            collection_class=builtins.list,
+            cascade="all, delete-orphan",
+            foreign_keys="[TiagoMjcfRightGripperDAO_fingers_association.source_tiagomjcfrightgripperdao_id]",
+            lazy="selectin",
+        )
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "TiagoMjcfRightGripperDAO",
+        "inherit_condition": database_id == EndEffectorDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
+class TiagoMjcfRightIndexFingerDAO(
+    FingerDAO,
+    DataAccessObject[semantic_digital_twin.robots.tiago_mjcf.TiagoMjcfRightIndexFinger],
+):
+    __tablename__ = "TiagoMjcfRightIndexFingerDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(FingerDAO.database_id), primary_key=True, use_existing_column=True
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "TiagoMjcfRightIndexFingerDAO",
+        "inherit_condition": database_id == FingerDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
+class TiagoMjcfRightThumbDAO(
+    FingerDAO,
+    DataAccessObject[semantic_digital_twin.robots.tiago_mjcf.TiagoMjcfRightThumb],
+):
+    __tablename__ = "TiagoMjcfRightThumbDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(FingerDAO.database_id), primary_key=True, use_existing_column=True
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "TiagoMjcfRightThumbDAO",
+        "inherit_condition": database_id == FingerDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
+class TiagoMjcfTorsoDAO(
+    TorsoDAO, DataAccessObject[semantic_digital_twin.robots.tiago_mjcf.TiagoMjcfTorso]
+):
+    __tablename__ = "TiagoMjcfTorsoDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(TorsoDAO.database_id), primary_key=True, use_existing_column=True
+    )
+
+    neck_id: Mapped[int] = mapped_column(
+        ForeignKey("TiagoMjcfNeckDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+
+    neck: Mapped[TiagoMjcfNeckDAO] = relationship(
+        "TiagoMjcfNeckDAO", uselist=False, foreign_keys=[neck_id], post_update=True
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "TiagoMjcfTorsoDAO",
+        "inherit_condition": database_id == TorsoDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
 class TracyCameraDAO(
     CameraDAO, DataAccessObject[semantic_digital_twin.robots.tracy.TracyCamera]
 ):
@@ -18141,6 +18469,38 @@ class TiagoMujocoDAO(
     }
 
 
+class TiagoMjcfDAO(
+    AbstractRobotDAO,
+    DataAccessObject[semantic_digital_twin.robots.tiago_mjcf.TiagoMjcf],
+):
+    __tablename__ = "TiagoMjcfDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(AbstractRobotDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    mobile_base_id: Mapped[int] = mapped_column(
+        ForeignKey("TiagoMjcfMobileBaseDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+
+    mobile_base: Mapped[TiagoMjcfMobileBaseDAO] = relationship(
+        "TiagoMjcfMobileBaseDAO",
+        uselist=False,
+        foreign_keys=[mobile_base_id],
+        post_update=True,
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "TiagoMjcfDAO",
+        "inherit_condition": database_id == AbstractRobotDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
 class TracyDAO(
     AbstractRobotDAO, DataAccessObject[semantic_digital_twin.robots.tracy.Tracy]
 ):
@@ -18405,6 +18765,27 @@ class CooktopDAO(
 
     __mapper_args__ = {
         "polymorphic_identity": "CooktopDAO",
+        "inherit_condition": database_id == HasRootBodyDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
+class CubeDAO(
+    HasRootBodyDAO,
+    DataAccessObject[
+        semantic_digital_twin.semantic_annotations.semantic_annotations.Cube
+    ],
+):
+    __tablename__ = "CubeDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(HasRootBodyDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "CubeDAO",
         "inherit_condition": database_id == HasRootBodyDAO.database_id,
         "polymorphic_load": "selectin",
     }

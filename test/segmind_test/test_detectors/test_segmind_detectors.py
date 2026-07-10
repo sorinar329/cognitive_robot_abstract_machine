@@ -14,18 +14,24 @@ from segmind.datastructures.events import (
     PlacingEvent,
     RotationEvent,
     StopRotationEvent,
+    HoldingEvent,
+    LossOfHoldingEvent,
+    LiftingEvent,
+    StackingEvent,
 )
+from segmind.detectors.agent_event_detectors_nodes import HoldingDetector, LossOfHoldingDetector, LiftingDetector
 from segmind.detectors.atomic_event_detectors_nodes import RotationDetector, StopRotationDetector, ContactDetector, \
     LossOfContactDetector, TranslationDetector, StopTranslationDetector
 from segmind.detectors.base import SegmindContext
-from segmind.detectors.coarse_event_detector_nodes import PickUpDetector, PlacingDetector
+from segmind.detectors.coarse_event_detector_nodes import PickUpDetector, PlacingDetector, StackingDetector
 from segmind.detectors.spatial_relation_detector_nodes import SupportDetector, LossOfSupportDetector, \
     ContainmentDetector, LossOfContainmentDetector, InsertionDetector
 from segmind.episode_segmenter import EpisodeSegmenterExecutor
 from segmind.statecharts.segmind_statechart import SegmindStatechart
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
+from semantic_digital_twin.semantic_annotations.semantic_annotations import Cube
 from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
-from semantic_digital_twin.world_description.connections import FixedConnection
+from semantic_digital_twin.world_description.connections import FixedConnection, Connection6DoF
 from semantic_digital_twin.world_description.geometry import Box, Scale
 from semantic_digital_twin.world_description.shape_collection import ShapeCollection
 from semantic_digital_twin.world_description.world_entity import Body
@@ -234,6 +240,161 @@ def test_pickup_then_place_back_on_same_surface(_simple_apartment_setup):
     assert len(events_of(segmind_context, SupportEvent)) == 2
     assert len(events_of(segmind_context, PlacingEvent)) == 1
     milk.parent_connection.origin = HomogeneousTransformationMatrix.from_xyz_rpy(-1.7, 0, 1.07, yaw=np.pi)
+
+
+def test_holding_and_lifting(_simple_apartment_setup):
+    segmind_executor, segmind_context, milk, box1, box2 = _build_executor(_simple_apartment_setup)
+    world = _simple_apartment_setup
+    milk_pose = milk.global_pose
+    parked_pose = HomogeneousTransformationMatrix.from_xyz_rpy(5, 5, 5)
+
+    with world.modify_world():
+        gripper = Body(
+            name=PrefixedName("gripper_finger"),
+            collision=ShapeCollection([Box(scale=Scale(1, 1, 1))]),
+            visual=ShapeCollection([Box(scale=Scale(1, 1, 1))]),
+        )
+        world.add_connection(Connection6DoF.create_with_dofs(
+            world=world,
+            parent=world.root,
+            child=gripper,
+        ))
+    gripper.parent_connection.origin = parked_pose
+
+    statechart = SegmindStatechart().build_statechart([
+        HoldingDetector(gripper_body_names=["gripper_finger"], tracked_object=milk),
+        LossOfHoldingDetector(gripper_body_names=["gripper_finger"], tracked_object=milk),
+        LiftingDetector(tracked_object=milk),
+    ])
+    segmind_executor.compile(statechart)
+    segmind_executor.tick()
+
+    assert len(events_of(segmind_context, HoldingEvent)) == 0
+
+    # Move the gripper onto the milk to start a hold.
+    gripper.parent_connection.origin = HomogeneousTransformationMatrix.from_xyz_rpy(
+        milk_pose.x, milk_pose.y, milk_pose.z
+    )
+    segmind_executor.tick()
+    assert len(events_of(segmind_context, HoldingEvent)) == 1
+    assert len(events_of(segmind_context, LiftingEvent)) == 0
+
+    # Raise both the milk and the gripper together, staying in contact, past the lift threshold.
+    for i in range(5):
+        z = milk_pose.z + 0.02 * (i + 1)
+        milk.parent_connection.origin = HomogeneousTransformationMatrix.from_xyz_rpy(milk_pose.x, milk_pose.y, z)
+        gripper.parent_connection.origin = HomogeneousTransformationMatrix.from_xyz_rpy(milk_pose.x, milk_pose.y, z)
+        segmind_executor.tick()
+
+    assert len(events_of(segmind_context, LiftingEvent)) == 1
+
+    # Move the gripper away again to end the hold.
+    gripper.parent_connection.origin = parked_pose
+    segmind_executor.tick()
+    assert len(events_of(segmind_context, LossOfHoldingEvent)) == 1
+
+    milk.parent_connection.origin = HomogeneousTransformationMatrix.from_xyz_rpy(-1.7, 0, 1.07, yaw=np.pi)
+
+
+def _add_stack_cube(world, name):
+    cube = Body(
+        name=PrefixedName(name),
+        collision=ShapeCollection([Box(scale=Scale(0.2, 0.2, 0.2))]),
+        visual=ShapeCollection([Box(scale=Scale(0.2, 0.2, 0.2))]),
+    )
+    world.add_connection(Connection6DoF.create_with_dofs(world=world, parent=world.root, child=cube))
+    world.add_semantic_annotations([Cube(root=cube)])
+    return cube
+
+
+def test_stacking_detector(_simple_apartment_setup):
+    segmind_executor, segmind_context, milk, box1, box2 = _build_executor(_simple_apartment_setup)
+    world = _simple_apartment_setup
+    box1_pose = box1.global_pose
+    parked_pose = HomogeneousTransformationMatrix.from_xyz_rpy(5, 5, 5)
+    # Half of box1's height (0.95) plus half of a stack cube's height (0.2), minus a small
+    # deliberate overlap so is_supported_by sees contact rather than two disjoint boxes.
+    first_level_offset = 0.475 + 0.1 - 0.02
+    level_offset = 0.1 + 0.1 - 0.02
+
+    with world.modify_world():
+        cube_a = _add_stack_cube(world, "stack_cube_a")
+        cube_b = _add_stack_cube(world, "stack_cube_b")
+        cube_c = _add_stack_cube(world, "stack_cube_c")
+
+    for cube in (cube_a, cube_b, cube_c):
+        cube.parent_connection.origin = parked_pose
+
+    statechart = SegmindStatechart().build_statechart(
+        [SupportDetector(), LossOfSupportDetector(), StackingDetector()])
+    segmind_executor.compile(statechart)
+    segmind_executor.tick()
+
+    assert len(events_of(segmind_context, StackingEvent)) == 0
+
+    # cube_a rests on box1, which is not annotated as a Cube -- alone this must not count.
+    cube_a.parent_connection.origin = HomogeneousTransformationMatrix.from_xyz_rpy(
+        box1_pose.x, box1_pose.y, box1_pose.z + first_level_offset,
+    )
+    segmind_executor.tick()
+    assert len(events_of(segmind_context, StackingEvent)) == 0
+
+    # cube_b rests on cube_a, which is itself supported by box1 -- this must count.
+    cube_b.parent_connection.origin = HomogeneousTransformationMatrix.from_xyz_rpy(
+        box1_pose.x, box1_pose.y, box1_pose.z + first_level_offset + level_offset,
+    )
+    segmind_executor.tick()
+    assert len(events_of(segmind_context, StackingEvent)) == 1
+
+    # cube_c rests on cube_b, extending the chain -- one more event.
+    cube_c.parent_connection.origin = HomogeneousTransformationMatrix.from_xyz_rpy(
+        box1_pose.x, box1_pose.y, box1_pose.z + first_level_offset + 2 * level_offset,
+    )
+    segmind_executor.tick()
+    assert len(events_of(segmind_context, StackingEvent)) == 2
+
+    for cube in (cube_a, cube_b, cube_c):
+        cube.parent_connection.origin = parked_pose
+
+
+def test_stacking_detector_requires_currently_supported_lower_object(_simple_apartment_setup):
+    segmind_executor, segmind_context, milk, box1, box2 = _build_executor(_simple_apartment_setup)
+    world = _simple_apartment_setup
+    box1_pose = box1.global_pose
+    parked_pose = HomogeneousTransformationMatrix.from_xyz_rpy(5, 5, 5)
+    first_level_offset = 0.475 + 0.1 - 0.02
+    level_offset = 0.1 + 0.1 - 0.02
+
+    with world.modify_world():
+        cube_a = _add_stack_cube(world, "stack_cube_live_a")
+        cube_b = _add_stack_cube(world, "stack_cube_live_b")
+
+    cube_a.parent_connection.origin = parked_pose
+    cube_b.parent_connection.origin = parked_pose
+
+    statechart = SegmindStatechart().build_statechart(
+        [SupportDetector(), LossOfSupportDetector(), StackingDetector()])
+    segmind_executor.compile(statechart)
+    segmind_executor.tick()
+
+    # cube_a is placed on box1 and then knocked off again before cube_b is placed on it.
+    cube_a.parent_connection.origin = HomogeneousTransformationMatrix.from_xyz_rpy(
+        box1_pose.x, box1_pose.y, box1_pose.z + first_level_offset,
+    )
+    segmind_executor.tick()
+    cube_a.parent_connection.origin = parked_pose
+    segmind_executor.tick()
+
+    # cube_b follows cube_a to its new, unsupported spot -- still resting on cube_a, but
+    # cube_a itself no longer has any support, so this must not count as stacking.
+    cube_b.parent_connection.origin = HomogeneousTransformationMatrix.from_xyz_rpy(
+        parked_pose.x, parked_pose.y, parked_pose.z + level_offset,
+    )
+    segmind_executor.tick()
+    assert len(events_of(segmind_context, StackingEvent)) == 0
+
+    cube_a.parent_connection.origin = parked_pose
+    cube_b.parent_connection.origin = parked_pose
 
 
 def test_translation(_simple_apartment_setup):

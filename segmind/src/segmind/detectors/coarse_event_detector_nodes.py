@@ -3,14 +3,15 @@ from __future__ import annotations
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import timedelta
-from typing import List, Callable, Any
+from typing import List, Callable, Any, Set
 from giskardpy.motion_statechart.context import MotionStatechartContext
 from segmind.datastructures.events import (
     SupportEvent,
     DetectionEvent,
     PlacingEvent, TranslationEvent, LossOfSupportEvent, PickUpEvent, StopTranslationEvent, ContactEvent,
-    ContainmentEvent, InsertionEvent,
+    ContainmentEvent, InsertionEvent, StackingEvent,
 )
+from semantic_digital_twin.semantic_annotations.mixins import HasRootKinematicStructureEntity
 from semantic_digital_twin.world_description.world_entity import Body
 from segmind.detectors.base import AbstractDetector, SegmindContext
 
@@ -153,3 +154,93 @@ class PickUpDetector(AbstractInteractionDetector):
                 tracked_object=primary.tracked_object,
             ),
         )
+
+
+@dataclass(eq=False, repr=False)
+class StackingDetector(AbstractDetector):
+    """
+    Detects when a tracked object becomes newly stacked on another, similar object.
+
+    An ``upper`` object counts as stacked on a ``lower`` one once all of the
+    following currently hold, per :attr:`SegmindContext.latest_support`:
+
+    * ``upper`` is currently supported by ``lower``.
+    * ``upper`` and ``lower`` are similar, i.e. they share at least one
+      semantic annotation type (e.g. both are annotated as ``Cube``).
+    * ``lower`` is itself currently supported by something.
+
+    The last condition is why a single object resting on the floor never
+    produces a StackingEvent by itself: the floor is not itself supported by
+    anything. Once a second, similar object is placed on top of it, that
+    object's ``lower`` (the first one) is supported by the floor, so the
+    condition is met and the pair fires. Reading current support state
+    (rather than only past SupportEvents) is what keeps this correct if a
+    lower support relation has since been lost -- a broken chain no longer
+    satisfies the "lower is itself supported" check.
+    """
+
+    def update_context_and_events(
+        self,
+        context: MotionStatechartContext,
+        segmind_context: SegmindContext,
+        tracked_objects: List[Body],
+    ) -> List[DetectionEvent]:
+        """
+        Finds newly-formed stacking pairs among the currently supported tracked objects.
+
+        :param context: The current motion statechart context.
+        :param segmind_context: The shared SegmindContext containing the information required to track events.
+        :param tracked_objects: List of bodies to check as the upper object of a stack.
+        :return: List of newly detected StackingEvent instances.
+        """
+        events = []
+        latest_support = segmind_context.latest_support
+
+        for upper in tracked_objects:
+            for lower in latest_support.get(upper, set()):
+                if not latest_support.get(lower):
+                    continue
+                if not self._are_similar(context, upper, lower):
+                    continue
+
+                key = (upper.id, lower.id)
+                if key in segmind_context.stacking_pairs:
+                    continue
+
+                segmind_context.stacking_pairs.add(key)
+                events.append(StackingEvent(tracked_object=upper, with_object=lower))
+
+        return events
+
+    def _are_similar(self, context: MotionStatechartContext, a: Body, b: Body) -> bool:
+        """
+        Two bodies are similar if they share at least one semantic annotation type.
+
+        :param context: The current motion statechart context, used to look up annotations.
+        :param a: The first body.
+        :param b: The second body.
+        :return: True if ``a`` and ``b`` have a common semantic annotation type.
+        """
+        return bool(
+            self._semantic_annotation_types(context, a)
+            & self._semantic_annotation_types(context, b)
+        )
+
+    @staticmethod
+    def _semantic_annotation_types(context: MotionStatechartContext, body: Body) -> Set[type]:
+        """
+        The semantic annotation types rooted at ``body``.
+
+        Filters the world's full annotation list by root rather than reading
+        it off the body directly: nothing currently populates a body's own
+        semantic-annotation backref, so ``body`` itself cannot answer this.
+
+        :param context: The current motion statechart context, used to look up annotations.
+        :param body: The body to find semantic annotation types for.
+        :return: Set of semantic annotation types rooted at ``body``.
+        """
+        return {
+            type(annotation)
+            for annotation in context.world.semantic_annotations
+            if isinstance(annotation, HasRootKinematicStructureEntity) and annotation.root is body
+        }

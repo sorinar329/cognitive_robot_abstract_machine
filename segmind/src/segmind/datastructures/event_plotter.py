@@ -1,8 +1,8 @@
 from __future__ import annotations
 import os
 import logging
-from dataclasses import dataclass
-from datetime import datetime
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta
 from os.path import dirname, abspath
 from typing import List, Optional, Union
 from collections import defaultdict
@@ -20,6 +20,13 @@ logger = logging.getLogger(__name__)
 class EventPlotter:
     """
     A class responsible for plotting events from a timeline.
+    """
+
+    minimum_bar_duration: timedelta = field(default=timedelta(seconds=0.2))
+    """
+    Width to draw for each event's bar. DetectionEvent is a point in time and carries no
+    duration of its own, so without this every bar would have x_start == x_end and plotly's
+    timeline chart would render it with zero width, i.e. invisible.
     """
 
     def plot(self, events: List[DetectionEvent], show: bool = True, save_path: Optional[str] = None) -> None:
@@ -51,7 +58,7 @@ class EventPlotter:
         for event in events:
             data_dict['event'].append(event.__class__.__name__)
             data_dict['start'].append(event.timestamp.timestamp())
-            data_dict['end'].append(event.timestamp.timestamp())
+            data_dict['end'].append(event.timestamp.timestamp() + self.minimum_bar_duration.total_seconds())
 
             if isinstance(event, EventWithTrackedObjects):
                 object_name = ", ".join([str(obj.name) for obj in event.tracked_objects])
