@@ -1,0 +1,74 @@
+<mujoco model="pouring_demo">
+    <compiler angle="radian"/>
+    <option timestep="0.004" gravity="0 0 -9.81"/>
+    <default>
+        <geom condim="4" friction="1 0.005 0.0001"/>
+    </default>
+    <worldbody>
+        <!-- Floor -->
+        <geom name="floor" type="plane" size="2 2 0.1" rgba="0.85 0.80 0.75 1"/>
+
+        <!--
+            Source cup: open box cup with a freejoint (lift + tilt control).
+            Cup half-height (centre → rim) = 0.14 m, used as pour offset.
+            Initial position (upright on floor):
+              centre world pos (-0.30,  0,  0.15)
+              bottom world pos (-0.30,  0,  0.004)  ← just above floor
+              rim    world pos (-0.30,  0,  0.29)
+            Outer wall span: x ∈ [-0.357, -0.243]  (spacing to target cup ≈ 0.18 m)
+        -->
+        <body name="source_cup" pos="-0.30 0 0.15">
+            <freejoint name="source_cup_joint"/>
+            <geom name="sc_bottom" type="box" size="0.045 0.045 0.006" pos="0 0 -0.14"    rgba="0.85 0.35 0.3 1"/>
+            <geom name="sc_right"  type="box" size="0.006 0.045 0.14"  pos=" 0.051 0 0"   rgba="0.85 0.35 0.3 0.8"/>
+            <geom name="sc_left"   type="box" size="0.006 0.045 0.14"  pos="-0.051 0 0"   rgba="0.85 0.35 0.3 0.8"/>
+            <geom name="sc_front"  type="box" size="0.045 0.006 0.14"  pos="0  0.051 0"   rgba="0.85 0.35 0.3 0.8"/>
+            <geom name="sc_back"   type="box" size="0.045 0.006 0.14"  pos="0 -0.051 0"   rgba="0.85 0.35 0.3 0.8"/>
+        </body>
+
+        <!--
+            Target cup: fixed open box cup at world origin.
+              centre world pos (0, 0, 0)
+              rim    world pos (0, 0, 0.246)
+            After lift + move, source cup is placed at (-0.14, 0, z_lift).
+            When tilted π/2 the source rim reaches (0, 0, z_lift) → above target cup.
+        -->
+        <body name="target_cup" pos="0 0 0">
+            <geom name="tc_bottom" type="box" size="0.05 0.05 0.006"  pos="0 0 0.006"     rgba="0.3 0.45 0.85 1"/>
+            <geom name="tc_right"  type="box" size="0.006 0.05 0.12"  pos=" 0.056 0 0.126" rgba="0.3 0.45 0.85 0.8"/>
+            <geom name="tc_left"   type="box" size="0.006 0.05 0.12"  pos="-0.056 0 0.126" rgba="0.3 0.45 0.85 0.8"/>
+            <geom name="tc_front"  type="box" size="0.05 0.006 0.12"  pos="0  0.056 0.126" rgba="0.3 0.45 0.85 0.8"/>
+            <geom name="tc_back"   type="box" size="0.05 0.006 0.12"  pos="0 -0.056 0.126" rgba="0.3 0.45 0.85 0.8"/>
+        </body>
+
+        <!--
+            Particles (liquid) stacked inside the source cup.
+            Cup interior world frame: x ∈ [-0.345, -0.255], y ∈ [-0.045, 0.045],
+            z ∈ [0.016, 0.29].  Particles centred at x=-0.30, radius=0.012.
+        -->
+        <body name="particle_0" pos="-0.30  0.000 0.040"><freejoint/>
+            <geom type="sphere" size="0.012" mass="0.01" rgba="0.1 0.65 0.95 0.9" condim="4"/>
+        </body>
+        <body name="particle_1" pos="-0.30  0.015 0.065"><freejoint/>
+            <geom type="sphere" size="0.012" mass="0.01" rgba="0.1 0.65 0.95 0.9" condim="4"/>
+        </body>
+        <body name="particle_2" pos="-0.30 -0.015 0.065"><freejoint/>
+            <geom type="sphere" size="0.012" mass="0.01" rgba="0.1 0.65 0.95 0.9" condim="4"/>
+        </body>
+        <body name="particle_3" pos="-0.30  0.000 0.090"><freejoint/>
+            <geom type="sphere" size="0.012" mass="0.01" rgba="0.1 0.65 0.95 0.9" condim="4"/>
+        </body>
+        <body name="particle_4" pos="-0.30  0.015 0.115"><freejoint/>
+            <geom type="sphere" size="0.012" mass="0.01" rgba="0.1 0.65 0.95 0.9" condim="4"/>
+        </body>
+        <body name="particle_5" pos="-0.30 -0.015 0.115"><freejoint/>
+            <geom type="sphere" size="0.012" mass="0.01" rgba="0.1 0.65 0.95 0.9" condim="4"/>
+        </body>
+        <body name="particle_6" pos="-0.30  0.000 0.140"><freejoint/>
+            <geom type="sphere" size="0.012" mass="0.01" rgba="0.1 0.65 0.95 0.9" condim="4"/>
+        </body>
+        <body name="particle_7" pos="-0.30  0.000 0.165"><freejoint/>
+            <geom type="sphere" size="0.012" mass="0.01" rgba="0.1 0.65 0.95 0.9" condim="4"/>
+        </body>
+    </worldbody>
+</mujoco>
