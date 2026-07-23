@@ -10,16 +10,18 @@ from coraplex.datastructures.enums import (
     ApproachDirection,
     VerticalAlignment,
     Arms,
+    MovementType,
 )
 from coraplex.datastructures.grasp import GraspDescription
 from coraplex.execution_environment import simulated_robot, real_robot
 from coraplex.plans.factories import sequential, execute_single
 from coraplex.plans.plan_node import MotionNode, ActionNode
-from coraplex.robot_plans import MoveMotion
+from coraplex.robot_plans import MoveMotion, MoveToolCenterPointMotion
 from coraplex.robot_plans.actions.core.navigation import NavigateAction
 from coraplex.robot_plans.actions.core.pick_up import PickUpAction
 from coraplex.robot_plans.actions.core.robot_body import MoveTorsoAction
-from semantic_digital_twin.datastructures.definitions import TorsoState
+from coraplex.robot_plans.motions.gripper import MoveGripperMotion
+from semantic_digital_twin.datastructures.definitions import GripperState, TorsoState
 from semantic_digital_twin.robots.pr2 import PR2
 from semantic_digital_twin.spatial_types import Point3, Quaternion
 from semantic_digital_twin.spatial_types.spatial_types import Pose
@@ -97,6 +99,49 @@ def test_move_motion_chart(immutable_model_world):
 
     assert msc
     np.testing.assert_equal(msc.goal_pose.to_position().to_np(), np.array([1, 1, 1, 1]))
+
+
+def test_move_tool_center_point_motion_uses_tight_threshold(immutable_model_world):
+    """
+    MoveToolCenterPointMotion drives grasp approaches, so it must not fall
+    back to Giskard's loose default CartesianPose/CartesianPosition threshold
+    (0.01m): that tolerance is wide enough to let the gripper stop a
+    centimeter away from a small object, e.g. missing or off-center grasps.
+    """
+    world, view, context = immutable_model_world
+    target = Pose(Point3.from_iterable([1, 1, 1]), reference_frame=world.root)
+
+    cartesian_motion = MoveToolCenterPointMotion(
+        target, Arms.LEFT, movement_type=MovementType.CARTESIAN
+    )
+    execute_single(cartesian_motion, context=context)
+    assert isinstance(cartesian_motion.motion_chart, CartesianPose)
+    assert cartesian_motion.motion_chart.threshold == 0.005
+
+    translation_motion = MoveToolCenterPointMotion(
+        target, Arms.LEFT, movement_type=MovementType.TRANSLATION
+    )
+    execute_single(translation_motion, context=context)
+    assert translation_motion.motion_chart.threshold == 0.005
+
+
+def test_move_gripper_motion_tolerates_stall_only_when_closing(immutable_model_world):
+    """
+    Closing the gripper must tolerate the fingers stalling against a grasped
+    object instead of raising MotionDidNotFinish when they never reach their
+    nominal fully-closed target. Opening must not: stalling before reaching
+    the open target is a real problem worth surfacing, not a contact
+    artifact.
+    """
+    world, view, context = immutable_model_world
+
+    close_motion = MoveGripperMotion(motion=GripperState.CLOSE, gripper=Arms.LEFT)
+    execute_single(close_motion, context=context)
+    assert close_motion.motion_chart.tolerate_stall is True
+
+    open_motion = MoveGripperMotion(motion=GripperState.OPEN, gripper=Arms.LEFT)
+    execute_single(open_motion, context=context)
+    assert open_motion.motion_chart.tolerate_stall is False
 
 
 @pytest.mark.skipif(skip_tests, reason="Alternative motion mappings not available")

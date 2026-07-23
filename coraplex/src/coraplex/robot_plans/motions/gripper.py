@@ -25,6 +25,18 @@ from coraplex.view_manager import ViewManager
 from coraplex.utils import translate_pose_along_local_axis
 
 
+TOOL_ORIENTATION_THRESHOLD = 0.02
+"""
+Orientation tolerance in rad (~1.1 degrees) for tool-center-point poses.
+
+The position ``threshold`` of 0.005 doubles as a rotation tolerance in
+:class:`CartesianPose` unless overridden -- 0.005 rad (0.29 degrees) is
+unreachable for a physically simulated arm, whose PD-tracked joints settle
+with a residual orientation error of ~0.008 rad, so such a task never
+registers as done and stalls the rest of the plan behind it.
+"""
+
+
 @dataclass
 class ReachMotion(BaseMotion):
     """ """
@@ -85,6 +97,7 @@ class ReachMotion(BaseMotion):
                 tip_link=tip,
                 goal_pose=pose,
                 threshold=0.005,
+                orientation_threshold=TOOL_ORIENTATION_THRESHOLD,
                 name="Reach",
             )
             for pose in self._calculate_pose_sequence()
@@ -123,6 +136,10 @@ class MoveGripperMotion(BaseMotion):
             name=(
                 "OpenGripper" if self.motion == GripperState.OPEN else "CloseGripper"
             ),
+            # Closing must not fail just because a grasped object physically
+            # stops the fingers before their nominal fully-closed target;
+            # opening stalling early is a real problem worth surfacing.
+            tolerate_stall=self.motion == GripperState.CLOSE,
         )
 
 
@@ -169,6 +186,7 @@ class MoveToolCenterPointMotion(BaseMotion):
                 goal_point=self.target.to_position(),
                 name="MoveTCP",
                 weight=DefaultWeights.WEIGHT_BELOW_CA,
+                threshold=0.005,
             )
         else:
             task = CartesianPose(
@@ -177,6 +195,8 @@ class MoveToolCenterPointMotion(BaseMotion):
                 goal_pose=self.target,
                 name="MoveTCP",
                 weight=DefaultWeights.WEIGHT_BELOW_CA,
+                threshold=0.005,
+                orientation_threshold=TOOL_ORIENTATION_THRESHOLD,
             )
         return task
 
@@ -265,6 +285,7 @@ class MoveManipulatorMotion(BaseMotion):
             tip_link=self.end_effector.tool_frame,
             goal_pose=self.target,
             threshold=0.005,
+            orientation_threshold=TOOL_ORIENTATION_THRESHOLD,
             binding_policy=GoalBindingPolicy.Bind_on_start,
             name=self.__class__.__name__,
         )

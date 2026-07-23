@@ -318,6 +318,55 @@ class TestCartesianTasks:
             atol=goal.threshold,
         )
 
+    def test_orientation_threshold_decouples_rotation_tolerance(
+        self, cylinder_bot_world: World
+    ):
+        """
+        A residual orientation error above ``threshold`` but below
+        ``orientation_threshold`` must count as goal reached -- a physically
+        tracked arm settles with a small orientation error that a shared
+        position/rotation threshold (meant as a position tolerance in meters)
+        wrongly rejects, leaving the task running forever.
+
+        The goal pose here only differs from the start pose by a 0.05 rad yaw,
+        so on the very first tick the position error is exactly zero while the
+        rotation error is 0.05 rad -- isolating the rotation half of the
+        observation.
+        """
+        tip = cylinder_bot_world.get_kinematic_structure_entity_by_name("bot")
+        goal_pose = Pose.from_xyz_rpy(
+            yaw=0.05, reference_frame=cylinder_bot_world.root
+        )
+
+        motion_statechart = MotionStatechart()
+        motion_statechart.add_nodes(
+            [
+                strict := CartesianPose(
+                    root_link=cylinder_bot_world.root,
+                    tip_link=tip,
+                    goal_pose=goal_pose,
+                    threshold=0.01,
+                    name="strict",
+                ),
+                loose := CartesianPose(
+                    root_link=cylinder_bot_world.root,
+                    tip_link=tip,
+                    goal_pose=goal_pose,
+                    threshold=0.01,
+                    orientation_threshold=0.1,
+                    name="loose",
+                ),
+            ]
+        )
+        motion_statechart.add_node(EndMotion.when_true(loose))
+
+        executor = Executor(MotionStatechartContext(world=cylinder_bot_world))
+        executor.compile(motion_statechart=motion_statechart)
+        executor.tick()
+
+        assert strict.observation_state == ObservationStateValues.FALSE
+        assert loose.observation_state == ObservationStateValues.TRUE
+
     def test_long_goal(self, pr2_world_state_reset: World):
         motion_statechart = MotionStatechart()
         motion_statechart.add_nodes(

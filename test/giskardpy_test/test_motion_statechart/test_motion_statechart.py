@@ -310,6 +310,104 @@ def test_two_goals(pr2_world_state_reset: World):
     assert np.allclose(pr2_world_state_reset.state.jerks, 0)
 
 
+def test_joint_position_list_tolerate_stall(pr2_world_state_reset: World):
+    """
+    JointPositionList(tolerate_stall=True) must finish once the commanded
+    joint's velocity has settled near zero, even though it never reaches its
+    nominal target -- simulating a joint that got physically stopped (e.g. a
+    gripper finger against a grasped object) before arriving. Capping the
+    joint's own velocity limit to a tiny value makes it provably unable to
+    traverse the requested distance within the tick budget, while its tracked
+    velocity still settles below the stall threshold almost immediately.
+    """
+    torso_joint = pr2_world_state_reset.get_connection_by_name("torso_lift_joint")
+    torso_joint.raw_dof.limits.lower.velocity = -1e-3
+    torso_joint.raw_dof.limits.upper.velocity = 1e-3
+
+    msc = MotionStatechart()
+    msc.add_node(
+        joint_goal := JointPositionList(
+            goal_state=JointState.from_mapping({torso_joint: 1.0}),
+            tolerate_stall=True,
+            stall_min_time=0.2,
+        )
+    )
+    msc.add_node(EndMotion.when_true(joint_goal))
+
+    kin_sim = Executor(MotionStatechartContext(world=pr2_world_state_reset))
+    kin_sim.compile(motion_statechart=msc)
+    kin_sim.tick_until_end(timeout=1000)
+
+    assert not np.isclose(torso_joint.position, 1.0, atol=1e-2), (
+        "the joint should not have reached its nominal target -- its velocity "
+        "was capped far too low to traverse the distance within the timeout, "
+        "this test is only meaningful if it stayed far away"
+    )
+
+
+def test_joint_position_list_without_tolerate_stall_times_out(
+    pr2_world_state_reset: World,
+):
+    """
+    Regression control for test_joint_position_list_tolerate_stall: with
+    tolerate_stall left False (the default), the same stalled scenario must
+    never reach EndMotion -- proving tolerate_stall is what unblocks it, not
+    some unrelated change.
+    """
+    torso_joint = pr2_world_state_reset.get_connection_by_name("torso_lift_joint")
+    torso_joint.raw_dof.limits.lower.velocity = -1e-3
+    torso_joint.raw_dof.limits.upper.velocity = 1e-3
+
+    msc = MotionStatechart()
+    msc.add_node(
+        joint_goal := JointPositionList(
+            goal_state=JointState.from_mapping({torso_joint: 1.0}),
+            tolerate_stall=False,
+        )
+    )
+    msc.add_node(EndMotion.when_true(joint_goal))
+
+    kin_sim = Executor(MotionStatechartContext(world=pr2_world_state_reset))
+    kin_sim.compile(motion_statechart=msc)
+
+    with pytest.raises(TimeoutError):
+        kin_sim.tick_until_end(timeout=200)
+
+
+def test_local_minimum_reached_only_depends_on_given_dofs(pr2_world_state_reset: World):
+    """
+    LocalMinimumReached(dofs=[...]) must only depend on the given subset of
+    DOFs, not every active DOF in the world -- otherwise passing a DOF subset
+    to tolerate a stall on one joint could be defeated by unrelated motion
+    elsewhere in the robot.
+    """
+    torso_joint = pr2_world_state_reset.get_connection_by_name("torso_lift_joint")
+    moving_joint = pr2_world_state_reset.get_connection_by_name("r_wrist_roll_joint")
+
+    msc = MotionStatechart()
+    msc.add_nodes(
+        [
+            JointPositionList(goal_state=JointState.from_mapping({moving_joint: 2.0})),
+            local_min := LocalMinimumReached(
+                dofs=[torso_joint.raw_dof], min_time=0.1
+            ),
+        ]
+    )
+    msc.add_node(EndMotion.when_true(local_min))
+
+    kin_sim = Executor(MotionStatechartContext(world=pr2_world_state_reset))
+    kin_sim.compile(motion_statechart=msc)
+
+    # torso_joint never moves (nothing commands it), so the scoped monitor
+    # should report "settled" almost immediately despite r_wrist_roll_joint
+    # actively moving toward its own target the whole time.
+    kin_sim.tick_until_end(timeout=1000)
+    assert not np.isclose(moving_joint.position, 2.0, atol=1e-2), (
+        "r_wrist_roll_joint should still be mid-motion when EndMotion fires -- "
+        "otherwise this test doesn't prove the monitor ignored it."
+    )
+
+
 @dataclass(eq=False, repr=False)
 class _TestThreadMonitor(ThreadPayloadMonitor):
     delay: float = 0.05

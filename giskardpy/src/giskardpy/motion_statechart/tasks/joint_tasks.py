@@ -8,6 +8,7 @@ from giskardpy.motion_statechart.data_types import DefaultWeights
 from giskardpy.motion_statechart.exceptions import NodeInitializationError
 from giskardpy.motion_statechart.graph_node import NodeArtifacts
 from giskardpy.motion_statechart.graph_node import Task
+from giskardpy.motion_statechart.monitors.monitors import local_minimum_expression
 from semantic_digital_twin.datastructures.joint_state import JointState
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.spatial_types.derivatives import Derivatives
@@ -46,6 +47,30 @@ class JointPositionList(Task):
     The maximum velocity of the joints.
     """
 
+    tolerate_stall: bool = field(default=False, kw_only=True)
+    """
+    If True, the task is also considered done once the commanded joints'
+    velocities have settled near zero for ``stall_min_time`` seconds, even if
+    the position error has not converged below ``threshold`` -- e.g. because a
+    joint physically stopped against an obstacle (a gripper finger against a
+    grasped object) before reaching its nominal target. Leave False for goals
+    where stalling before the target is a real failure that should still be
+    surfaced (e.g. opening a gripper with nothing in the way).
+    """
+
+    stall_min_time: float = field(default=1.0, kw_only=True)
+    """
+    Minimum elapsed control time before a stall can count as "done" (see
+    ``tolerate_stall``).
+    """
+
+    stall_velocity_threshold: float = field(default=0.01, kw_only=True)
+    """
+    Fraction of each joint's max velocity below which it counts as stalled
+    (see ``tolerate_stall``); forwarded as ``local_minimum_expression``'s
+    ``joint_convergence_threshold``.
+    """
+
     def build(self, context: MotionStatechartContext) -> NodeArtifacts:
         if len(self.goal_state) == 0:
             raise NodeInitializationError(node=self, reason="empty goal_state")
@@ -72,7 +97,19 @@ class JointPositionList(Task):
                 task_expression=current,
             )
             errors.append(sm.abs(error) < self.threshold)
-        artifacts.observation = sm.logic_all(sm.Vector(errors))
+        position_reached = sm.logic_all(sm.Vector(errors))
+
+        if not self.tolerate_stall:
+            artifacts.observation = position_reached
+            return artifacts
+
+        stalled = local_minimum_expression(
+            dofs=[connection.raw_dof for connection in self.goal_state.connections],
+            context=context,
+            joint_convergence_threshold=self.stall_velocity_threshold,
+            min_time=self.stall_min_time,
+        )
+        artifacts.observation = sm.trinary_logic_or(position_reached, stalled)
         return artifacts
 
     def apply_limits_to_target(

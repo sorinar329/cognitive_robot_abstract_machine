@@ -467,6 +467,14 @@ class MJCFParser:
         except WorldEntityNotFoundError:
             if dof_name in self.mimic_joints:
                 dof_name = self.mimic_joints[dof_name]
+                try:
+                    # The mimicked joint's DOF may already exist (parsed
+                    # earlier): reuse it so both joints genuinely share one
+                    # DegreeOfFreedom, instead of creating a second, distinct
+                    # one that merely happens to have the same name.
+                    return self.world.get_degree_of_freedom_by_name(dof_name)
+                except WorldEntityNotFoundError:
+                    pass
             if (
                 mujoco_joint.range is None
                 or mujoco_joint.range[0] == 0
@@ -514,9 +522,23 @@ class MJCFParser:
             ), f"Actuator {actuator_name} is associated with joint {joint_name} which has {len(connection.dofs)} DOFs, but only single-DOF joints are supported for actuators."
             actuator.add_dof(dofs[0])
         else:
-            actuator.add_dof(
-                self.world.get_degree_of_freedom_by_name(mujoco_actuator.target)
+            tendon_name = mujoco_actuator.target
+            tendon = next(
+                t
+                for t in self.world.simulator_additional_properties
+                if isinstance(t, MujocoTendon) and t.name == tendon_name
             )
+            for joint_name in tendon.joints:
+                connection = self.world.get_connection_by_name(joint_name)
+                dofs = list(connection.dofs)
+                assert (
+                    len(dofs) == 1
+                ), f"Actuator {actuator_name} is associated (via tendon {tendon_name}) with joint {joint_name} which has {len(dofs)} DOFs, but only single-DOF joints are supported for tendon-driven actuators."
+                dof = dofs[0]
+                # Mimicked joints (see mimic_joints/parse_dof) genuinely share
+                # one DegreeOfFreedom; don't list it twice for the actuator.
+                if dof not in actuator.dofs:
+                    actuator.add_dof(dof)
         actuator.simulator_additional_properties.append(
             MujocoActuator(
                 activation_limited=mujoco_actuator.actlimited,
@@ -646,10 +668,6 @@ class MJCFParser:
                 coef = float(joint.get("coef"))
                 assert coef is not None and coef is not None
                 joints[name] = coef
-            dof = DegreeOfFreedom(
-                name=PrefixedName(tendon.name),
-            )
-            self.world.add_degree_of_freedom(dof)
             self.world.simulator_additional_properties.append(
                 MujocoTendon(
                     name=tendon.name,

@@ -172,12 +172,15 @@ class PickUpAction(ActionDescription):
                     grasp_description=self.grasp_description,
                 ),
                 MoveGripperMotion(motion=GripperState.CLOSE, gripper=self.arm),
-                AttachNode(
-                    body=self.object_designator,
-                    new_parent=ViewManager.get_end_effector_view(
-                        self.arm, self.robot
-                    ).tool_frame,
-                ),
+                # Temporarily disabled to isolate whether a genuinely physical
+                # grasp (real contact/friction) survives the lift on its own,
+                # without also welding the object into MuJoCo's kinematic tree.
+                # AttachNode(
+                #     body=self.object_designator,
+                #     new_parent=ViewManager.get_end_effector_view(
+                #         self.arm, self.robot
+                #     ).tool_frame,
+                # ),
                 MoveToolCenterPointMotion(
                     lift_to_pose,
                     self.arm,

@@ -94,11 +94,12 @@ class PandaGripper(EndEffector, HasTwoFingers[PandaLeftFinger, PandaRightFinger]
         return cls(
             root=robot_root._world.get_body_in_branch_by_name(robot_root, "/hand"),
             tool_frame=robot_root._world.get_body_in_branch_by_name(
-                robot_root, "/hand"
+                robot_root, "/tool_frame"
             ),
             # Rotates the tool frame's forward-facing axis onto the hand's local
-            # +Z, which is where the fingers reach out to (the "pinch_site" in
-            # the MJCF sits 0.1034m further along that same axis).
+            # +Z, which is where the fingers reach out to (the "/tool_frame"
+            # body in the MJCF sits 0.1034m further along that same axis, at
+            # the point where the gripper actually grasps an object).
             front_facing_orientation=Quaternion(
                 0, 0.7071067811865476, 0, 0.7071067811865476
             ),

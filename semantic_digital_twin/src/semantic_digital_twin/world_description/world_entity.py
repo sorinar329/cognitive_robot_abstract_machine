@@ -979,6 +979,29 @@ class Connection(WorldEntity, HasSimulatorProperties, SubclassJSONSerializer, AB
         orientation = self.origin_expression.to_quaternion()
         return Matrix.vstack([position, orientation]).T
 
+    def static_origin_as_position_quaternion(self) -> Matrix:
+        """
+        Like :meth:`origin_as_position_quaternion`, but excludes ``_kinematics``,
+        the connection's DOF-dependent rotation/translation.
+
+        :func:`origin_as_position_quaternion` evaluates the DOF's *current*
+        value into the result, so a joint whose current position is nonzero
+        (e.g. a revolute joint whose valid range excludes zero, defaulting to
+        its nearest limit) bakes that rotation into what simulator adapters
+        treat as the child body's constant mounting pose -- double-counting
+        it once the simulator's own joint mechanism applies the same DOF's
+        rotation again at runtime. ``parent_T_connection_expression`` and
+        ``connection_T_child_expression`` are both guaranteed constant (see
+        ``__post_init__``), so composing only those two gives the true,
+        DOF-independent mounting pose.
+        """
+        static_transform = (
+            self.parent_T_connection_expression @ self.connection_T_child_expression
+        )
+        position = static_transform.to_position()[:3]
+        orientation = static_transform.to_quaternion()
+        return Matrix.vstack([position, orientation]).T
+
     @property
     def dofs(self) -> list[DegreeOfFreedom]:
         """
