@@ -15,7 +15,9 @@ from coraplex.execution_environment import simulated_robot, ExecutionEnvironment
 from coraplex.plans.factories import sequential
 from coraplex.robot_plans.actions.composite.transporting import TransportAction
 from coraplex.robot_plans.actions.core.pick_up import PickUpAction
+from coraplex.robot_plans.actions.core.placing import PlaceAction
 from coraplex.robot_plans.actions.core.robot_body import ParkArmsAction, MoveTorsoAction
+from examples.coraplex_demo import world
 from physics_simulators.base_simulator import SimulatorConstraints
 
 from semantic_digital_twin.adapters.mesh import STLParser
@@ -67,6 +69,12 @@ context = Context(
 )
 
 box = world.get_body_by_name("cube0")
+box2 = world.get_body_by_name("cube1")
+
+# Drop the cube onto the second table ("table2" in the scene, centered at
+# x=0.34, y=0.16, top at z=0.1): the object's center should end up one cube
+# half-size above that top.
+place_location = Pose.from_xyz_rpy(x=0.34, y=0.16, z=0.12, reference_frame=world.root)
 
 plan = sequential(
     [
@@ -78,11 +86,32 @@ plan = sequential(
                 ApproachDirection.FRONT,
                 VerticalAlignment.TOP,
                 context.robot.get_arms()[0].end_effector,
-            ),)
+            ),),
+        PlaceAction(box, place_location, Arms.LEFT),
+        ParkArmsAction(Arms.BOTH),
 ],
+
     context=context
 )
+box_position = world.get_body_by_name("cube0").global_pose
 
+plan2 = sequential(
+    [
+        ParkArmsAction(Arms.BOTH),
+        PickUpAction(
+            box2,
+            Arms.LEFT,
+            GraspDescription(
+                ApproachDirection.FRONT,
+                VerticalAlignment.TOP,
+                context.robot.get_arms()[0].end_effector,
+            ),
+        ),
+        PlaceAction(box2, box_position, Arms.LEFT),
+        ParkArmsAction(Arms.BOTH),
+],
+context=context
+)
 
 #s = SpatialTypePublisher(node=node, _world=world)
 #s.add(SpatialTypeVisualization(context.robot.get_arms()[0].end_effector.tool_frame.global_pose))
@@ -168,6 +197,26 @@ with ExecutionEnvironment(
     execution_type=execition_mode, collision_avoidance=False, real_time_pacing=True
 ):
     plan.perform()
+    cube2 = world.get_body_by_name("cube0")
+    box_position = Pose.from_xyz_rpy(x=cube2.global_pose.x, y=cube2.global_pose.y, z=cube2.global_pose.z + 0.06, reference_frame=world.root)
+    plan2 = sequential(
+        [
+            ParkArmsAction(Arms.BOTH),
+            PickUpAction(
+                box2,
+                Arms.LEFT,
+                GraspDescription(
+                    ApproachDirection.FRONT,
+                    VerticalAlignment.TOP,
+                    context.robot.get_arms()[0].end_effector,
+                ),
+            ),
+            PlaceAction(box2, box_position, Arms.LEFT),
+            ParkArmsAction(Arms.BOTH),
+        ],
+        context=context
+    )
+    plan2.perform()
 
 stop_printing.set()
 print("--- final positions ---")

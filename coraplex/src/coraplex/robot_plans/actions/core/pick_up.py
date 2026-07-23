@@ -156,6 +156,14 @@ class PickUpAction(ActionDescription):
     The GraspDescription that should be used for picking up the object.
     """
 
+    grasp_opening: Optional[float] = None
+    """
+    Explicit finger opening (in meters) the grasp closes to, instead of the
+    gripper's fully-closed CLOSE state. A smaller opening squeezes harder;
+    ``None`` keeps the default CLOSE behaviour. Only affects this pick's
+    closing motion, not the robot's shared gripper states.
+    """
+
     @property
     def _action_plan(self) -> PlanNode:
 
@@ -171,7 +179,11 @@ class PickUpAction(ActionDescription):
                     arm=self.arm,
                     grasp_description=self.grasp_description,
                 ),
-                MoveGripperMotion(motion=GripperState.CLOSE, gripper=self.arm),
+                MoveGripperMotion(
+                    motion=GripperState.CLOSE,
+                    gripper=self.arm,
+                    target_opening=self.grasp_opening,
+                ),
                 # Temporarily disabled to isolate whether a genuinely physical
                 # grasp (real contact/friction) survives the lift on its own,
                 # without also welding the object into MuJoCo's kinematic tree.

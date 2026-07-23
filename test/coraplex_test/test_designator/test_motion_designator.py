@@ -144,6 +144,81 @@ def test_move_gripper_motion_tolerates_stall_only_when_closing(immutable_model_w
     assert open_motion.motion_chart.tolerate_stall is False
 
 
+def test_move_gripper_motion_target_opening_overrides_state_position(
+    immutable_model_world,
+):
+    """
+    An explicit ``target_opening`` must override the finger positions the
+    GripperState would otherwise command, so a grasp can close to a specific
+    squeeze without changing the robot's shared CLOSE state -- while the same
+    fingers are still targeted, so the sim synchronizer maps it to the
+    actuator ctrl the same way.
+    """
+    world, view, context = immutable_model_world
+
+    custom_opening = 0.015
+    custom_motion = MoveGripperMotion(
+        motion=GripperState.CLOSE, gripper=Arms.LEFT, target_opening=custom_opening
+    )
+    execute_single(custom_motion, context=context)
+
+    default_motion = MoveGripperMotion(motion=GripperState.CLOSE, gripper=Arms.LEFT)
+    execute_single(default_motion, context=context)
+
+    assert set(custom_motion.motion_chart.goal_state.connections) == set(
+        default_motion.motion_chart.goal_state.connections
+    )
+    assert all(
+        value == custom_opening
+        for value in custom_motion.motion_chart.goal_state.target_values
+    )
+    assert all(
+        value == 0.0
+        for value in default_motion.motion_chart.goal_state.target_values
+    )
+
+
+def test_pick_up_action_threads_grasp_opening_to_close_motion(immutable_model_world):
+    """
+    PickUpAction's ``grasp_opening`` must reach the grasp's CLOSE motion (and
+    only that motion), so a caller can pick with a specific squeeze while the
+    OPEN motion and the robot's shared gripper states stay untouched.
+    """
+    world, view, context = immutable_model_world
+    grasp_description = GraspDescription(
+        ApproachDirection.FRONT,
+        VerticalAlignment.NoAlignment,
+        view.left_arm.end_effector,
+    )
+    custom_opening = 0.012
+
+    pick_up = PickUpAction(
+        world.get_body_by_name("milk.stl"),
+        Arms.LEFT,
+        grasp_description,
+        grasp_opening=custom_opening,
+    )
+    gripper_motions = pick_up._action_plan.plan.get_nodes_by_designator_type(
+        MoveGripperMotion
+    )
+    openings = {
+        node.designator.motion: node.designator.target_opening
+        for node in gripper_motions
+    }
+    assert openings[GripperState.CLOSE] == custom_opening
+    assert openings[GripperState.OPEN] is None
+
+    default_pick_up = PickUpAction(
+        world.get_body_by_name("milk.stl"),
+        Arms.LEFT,
+        grasp_description,
+    )
+    default_motions = default_pick_up._action_plan.plan.get_nodes_by_designator_type(
+        MoveGripperMotion
+    )
+    assert all(node.designator.target_opening is None for node in default_motions)
+
+
 @pytest.mark.skipif(skip_tests, reason="Alternative motion mappings not available")
 def test_alternative_mapping(hsr_apartment_world):
     world, view, context = hsr_apartment_world

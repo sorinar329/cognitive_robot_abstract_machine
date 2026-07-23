@@ -123,16 +123,41 @@ class MoveGripperMotion(BaseMotion):
     """
     If the gripper is allowed to collide with something
     """
+    target_opening: Optional[float] = None
+    """
+    Explicit finger opening (in meters) to command instead of the position
+    the GripperState would resolve to.
+
+    Targets the same finger connections, so the sim synchronizer still
+    translates it into the actuator ctrl setpoint the same way -- a smaller
+    opening simply commands a tighter squeeze. Used to grasp with a specific
+    force without changing the robot's shared OPEN/CLOSE states.
+    """
 
     def perform(self):
         return
+
+    def _goal_state(self, end_effector: EndEffector) -> JointState:
+        """
+        The finger joint state this motion commands: the GripperState's own
+        state, or -- when ``target_opening`` is set -- the same finger
+        connections remapped to that explicit opening.
+        """
+        state = end_effector.get_joint_state_by_type(self.motion)
+        if self.target_opening is None:
+            return state
+        return JointState.from_mapping(
+            mapping={
+                connection: self.target_opening for connection in state.connections
+            },
+        )
 
     @property
     def _motion_chart(self):
         arm = ViewManager().get_end_effector_view(self.gripper, self.robot)
 
         return JointPositionList(
-            goal_state=arm.get_joint_state_by_type(self.motion),
+            goal_state=self._goal_state(arm),
             name=(
                 "OpenGripper" if self.motion == GripperState.OPEN else "CloseGripper"
             ),

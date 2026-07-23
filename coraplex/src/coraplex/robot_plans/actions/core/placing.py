@@ -87,7 +87,12 @@ class PlaceAction(ActionDescription):
                     reverse_reach_order=True,
                 ),
                 MoveGripperMotion(GripperState.OPEN, self.arm),
-                DetachNode(body=self.object_designator, new_parent=self.world.root),
+                # Temporarily disabled to resolve placing purely physically:
+                # the object is held only by real contact/friction (AttachNode
+                # is likewise disabled in PickUpAction), so opening the gripper
+                # above the target already lets it settle onto the surface by
+                # gravity -- no kinematic re-parent to the world is needed.
+                # DetachNode(body=self.object_designator, new_parent=self.world.root),
                 MoveToolCenterPointMotion(retract_pose, self.arm),
             ],
             self.context,
