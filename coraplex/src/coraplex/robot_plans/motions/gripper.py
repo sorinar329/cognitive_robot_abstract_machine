@@ -134,6 +134,12 @@ class MoveGripperMotion(BaseMotion):
     force without changing the robot's shared OPEN/CLOSE states.
     """
 
+    finger_velocity: Optional[float] = None
+    """
+    Explicit finger joint velocity (in m/s) to command instead of
+    :attr:`JointPositionList`'s default. ``None`` keeps the default velocity.
+    """
+
     def perform(self):
         return
 
@@ -156,6 +162,10 @@ class MoveGripperMotion(BaseMotion):
     def _motion_chart(self):
         arm = ViewManager().get_end_effector_view(self.gripper, self.robot)
 
+        kwargs = {}
+        if self.finger_velocity is not None:
+            kwargs["max_velocity"] = self.finger_velocity
+
         return JointPositionList(
             goal_state=self._goal_state(arm),
             name=(
@@ -165,6 +175,7 @@ class MoveGripperMotion(BaseMotion):
             # stops the fingers before their nominal fully-closed target;
             # opening stalling early is a real problem worth surfacing.
             tolerate_stall=self.motion == GripperState.CLOSE,
+            **kwargs,
         )
 
 
@@ -191,6 +202,19 @@ class MoveToolCenterPointMotion(BaseMotion):
     The type of movement that should be performed.
     """
 
+    reference_linear_velocity: Optional[float] = None
+    """
+    Explicit linear reference velocity (in m/s) to command instead of the
+    task's default. ``None`` keeps the default velocity.
+    """
+
+    reference_angular_velocity: Optional[float] = None
+    """
+    Explicit angular reference velocity (in rad/s) to command instead of the
+    task's default. Only used for :class:`CartesianPose` (the orientation
+    part). ``None`` keeps the default velocity.
+    """
+
     def perform(self):
         return
 
@@ -205,6 +229,9 @@ class MoveToolCenterPointMotion(BaseMotion):
         )
         task = None
         if self.movement_type == MovementType.TRANSLATION:
+            kwargs = {}
+            if self.reference_linear_velocity is not None:
+                kwargs["reference_velocity"] = self.reference_linear_velocity
             task = CartesianPosition(
                 root_link=root,
                 tip_link=tip,
@@ -212,8 +239,14 @@ class MoveToolCenterPointMotion(BaseMotion):
                 name="MoveTCP",
                 weight=DefaultWeights.WEIGHT_BELOW_CA,
                 threshold=0.005,
+                **kwargs,
             )
         else:
+            kwargs = {}
+            if self.reference_linear_velocity is not None:
+                kwargs["reference_linear_velocity"] = self.reference_linear_velocity
+            if self.reference_angular_velocity is not None:
+                kwargs["reference_angular_velocity"] = self.reference_angular_velocity
             task = CartesianPose(
                 root_link=root,
                 tip_link=tip,
@@ -222,6 +255,7 @@ class MoveToolCenterPointMotion(BaseMotion):
                 weight=DefaultWeights.WEIGHT_BELOW_CA,
                 threshold=0.005,
                 orientation_threshold=TOOL_ORIENTATION_THRESHOLD,
+                **kwargs,
             )
         return task
 
