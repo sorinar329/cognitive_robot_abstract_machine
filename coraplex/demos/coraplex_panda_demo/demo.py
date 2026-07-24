@@ -1,18 +1,26 @@
+import os
 import threading
 import time
 import numpy
 import rclpy
 from rclpy.executors import MultiThreadedExecutor
+from sqlalchemy import text
+from sqlalchemy.orm import Session
 
 from coraplex.datastructures.dataclasses import Context
 from coraplex.datastructures.enums import Arms, ApproachDirection, VerticalAlignment, ExecutionType
 from coraplex.datastructures.grasp import GraspDescription
 
 from coraplex.execution_environment import ExecutionEnvironment
+from coraplex.orm.ormatic_interface import Base
 from coraplex.plans.factories import sequential
+from coraplex.plans.plan_node import PlanNode
 from coraplex.robot_plans.actions.core.pick_up import PickUpAction
 from coraplex.robot_plans.actions.core.placing import PlaceAction
 from coraplex.robot_plans.actions.core.robot_body import ParkArmsAction
+
+from krrood.ormatic.data_access_objects.helper import to_dao
+from krrood.ormatic.utils import create_engine
 
 from semantic_digital_twin.adapters.mjcf import MJCFParser
 from semantic_digital_twin.adapters.multi_sim import MujocoSim, MujocoBody
@@ -173,6 +181,59 @@ CUBE_SPAWN_ORIENTATION = numpy.array([1.0, 0.0, 0.0, 0.0])
 Spawn orientation (identity quaternion) of every cube.
 """
 
+DATABASE_URI: str = os.environ.get(
+    "CORAPLEX_PANDA_DEMO_DATABASE_URI",
+    "postgresql+psycopg://semantic_digital_twin:naren@localhost:5432/coraplex_panda_demo",
+)
+"""
+Connection string for the database that stores every stacking attempt's
+plan -- including all of its action parameters (target poses, arm, grasp
+description, per-node status) -- for later analysis.
+
+Reuses the ``semantic_digital_twin`` role already provisioned on this host
+for the other demos/experiments in this workspace; only the database itself
+is dedicated to this demo. Uses the ``psycopg`` (v3) driver explicitly since
+only that, not ``psycopg2``, is installed in this environment.
+"""
+
+
+def _create_database_session(database_uri: str) -> Session:
+    """
+    Connect to the database, create any missing tables, and return an ORM
+    session that plans can be persisted through.
+    """
+    print(f"[database] Connecting to {database_uri} ...")
+    engine = create_engine(database_uri)
+    Base.metadata.create_all(bind=engine, checkfirst=True)
+    print("[database] Schema verified.")
+    return Session(engine)
+
+
+def persist_plan(
+    plan: PlanNode, iteration_index: int, step_name: str, succeeded: bool
+) -> None:
+    """
+    Persists one stacking attempt's plan -- every action's parameters plus
+    its recorded per-node status -- to the database.
+
+    Called for both successful and failed attempts, so failed attempts
+    remain available for later analysis. Persistence failures are logged
+    and swallowed so a database hiccup never aborts the run.
+    """
+    try:
+        database_session.add(to_dao(plan))
+        database_session.commit()
+        print(
+            f"[database] iteration {iteration_index} '{step_name}' persisted "
+            f"(succeeded={succeeded})"
+        )
+    except Exception as exc:
+        print(
+            f"[database] failed to persist iteration {iteration_index} "
+            f"'{step_name}': {exc}"
+        )
+        database_session.rollback()
+
 
 def reset_cubes() -> None:
     """
@@ -190,10 +251,10 @@ def reset_cubes() -> None:
         )
 
 
-def stack_on(object_body, target_body, picking_arm) -> None:
+def _build_stack_plan(object_body, target_body, picking_arm) -> PlanNode:
     """
-    Picks up ``object_body`` and places it centered above ``target_body``,
-    one cube height higher.
+    Builds (without performing) a park/pick/place/park plan that stacks
+    ``object_body`` centered above ``target_body``, one cube height higher.
     """
     target_pose = target_body.global_pose
     place_location = Pose.from_xyz_rpy(
@@ -202,7 +263,7 @@ def stack_on(object_body, target_body, picking_arm) -> None:
         z=target_pose.z + STACK_HEIGHT_OFFSET,
         reference_frame=world.root,
     )
-    sequential(
+    return sequential(
         [
             ParkArmsAction(Arms.BOTH),
             PickUpAction(
@@ -218,26 +279,34 @@ def stack_on(object_body, target_body, picking_arm) -> None:
             ParkArmsAction(Arms.BOTH),
         ],
         context=context,
-    ).perform()
+    )
 
 
-def attempt_stack(object_body, target_body, picking_arm, step_name: str) -> None:
+def attempt_stack(
+    object_body, target_body, picking_arm, step_name: str, iteration_index: int
+) -> None:
     """
-    Runs :func:`stack_on` for one cube, logging and swallowing any failure
-    instead of letting it propagate.
+    Builds and performs one stacking attempt, logging and swallowing any
+    failure instead of letting it propagate, then persists the attempt's
+    plan (successful or not) to the database.
 
     A single failed grasp/place should not crash the whole run -- it skips
     to the next cube (or iteration) instead, re-parking the arms first so
     the robot starts the next attempt from a known configuration.
     """
+    plan = _build_stack_plan(object_body, target_body, picking_arm)
+    succeeded = False
     try:
-        stack_on(object_body, target_body, picking_arm)
+        plan.perform()
+        succeeded = True
     except Exception as exc:
         print(f"[warning] {step_name} failed ({type(exc).__name__}: {exc}), moving on")
         try:
             sequential([ParkArmsAction(Arms.BOTH)], context=context).perform()
         except Exception as park_exc:
             print(f"[warning] re-park after {step_name} also failed: {park_exc}")
+
+    persist_plan(plan, iteration_index, step_name, succeeded)
 
 
 def print_iteration_summary(iteration_index: int) -> None:
@@ -251,6 +320,8 @@ def print_iteration_summary(iteration_index: int) -> None:
     }
     print(f"--- iteration {iteration_index} final heights: {heights} ---")
 
+
+database_session = _create_database_session(DATABASE_URI)
 
 #constraints = SimulatorConstraints(max_number_of_steps=10000)
 multi_sim.start_simulation()
@@ -286,7 +357,7 @@ with ExecutionEnvironment(
                     "attempts and moving to the next iteration"
                 )
                 break
-            attempt_stack(cube_to_pick, cube_to_stack_on, Arms.LEFT, step_label)
+            attempt_stack(cube_to_pick, cube_to_stack_on, Arms.LEFT, step_label, iteration)
             time.sleep(1)
 
         print_iteration_summary(iteration)
@@ -301,6 +372,15 @@ with ExecutionEnvironment(
 stop_printing.set()
 print("--- final positions ---")
 print_positions()
+
+try:
+    persisted_plan_count = database_session.execute(
+        text('SELECT COUNT(*) FROM "SequentialNodeDAO"')
+    ).scalar()
+    print(f"[database] Total persisted plans (SequentialNodeDAO): {persisted_plan_count}")
+except Exception as exc:
+    print(f"[database] Could not read row count: {exc}")
+database_session.close()
 
 print("Plan finished, keeping the viewer open until it is closed")
 while multi_sim.simulator.renderer.is_running():
