@@ -38,6 +38,12 @@ from semantic_digital_twin.semantic_annotations.semantic_annotations import (
 )
 from semantic_digital_twin.spatial_types.spatial_types import Pose
 from semantic_digital_twin.world import World
+
+from giskardpy.motion_statechart.context import MotionStatechartContext
+from segmind.episode_segmenter import EpisodeSegmenterExecutor
+from segmind.statecharts.segmind_statechart import SegmindStatechart
+from segmind.detectors.base import SegmindContext
+
 from test.coraplex_test.conftest import viz_marker_publisher
 
 
@@ -102,7 +108,7 @@ plan2 = sequential(
             box2,
             Arms.LEFT,
             GraspDescription(
-                ApproachDirection.FRONT,
+                ApproachDirection.LEFT,
                 VerticalAlignment.TOP,
                 context.robot.get_arms()[0].end_effector,
             ),
@@ -144,7 +150,7 @@ multi_sim = MujocoSim(
     step_size=0.0001,
     real_time_factor=1,
     physically_simulated_dofs=physically_simulated_dofs,
-    sync_rate_hz=100,
+    sync_rate_hz=15
 )
 time_start = time.time()
 
@@ -191,8 +197,35 @@ printing_thread = threading.Thread(
 )
 printing_thread.start()
 
+# --- Segmind event detection, running in parallel with execution ---
+# A detector statechart adds no QP constraints, so the executor's qp_controller
+# stays None and its tick() never calls apply_control_commands -- it is a pure
+# read-only observer of the live world. It reads the same world model MuJoCo
+# keeps in sync (contacts are computed geometrically from body poses, not from
+# MuJoCo's solver), so ticking it in a background thread detects events live
+# without interfering with the plan's own control loop.
+segmind_executor = EpisodeSegmenterExecutor(
+    context=MotionStatechartContext(world=world)
+)
+segmind_executor.compile(SegmindStatechart().build_statechart())
+segmind_context = segmind_executor.context.require_extension(SegmindContext)
+
+stop_detecting = threading.Event()
+
+
+def detect_events_periodically(stop_event: threading.Event):
+    while not stop_event.is_set():
+        segmind_executor.tick()
+        time.sleep(1 / 60)
+
+
+detector_thread = threading.Thread(
+    target=detect_events_periodically, args=(stop_detecting,), daemon=True
+)
+
 #constraints = SimulatorConstraints(max_number_of_steps=10000)
 multi_sim.start_simulation()
+detector_thread.start()
 with ExecutionEnvironment(
     execution_type=execition_mode, collision_avoidance=False, real_time_pacing=True
 ):
@@ -218,9 +251,26 @@ with ExecutionEnvironment(
     )
     plan2.perform()
 
+# The episode is over: stop the detector thread and read the event logger.
+stop_detecting.set()
+detector_thread.join()
 stop_printing.set()
 print("--- final positions ---")
 print_positions()
+
+detected_events = segmind_context.logger.get_events()
+print(f"--- Segmind detected {len(detected_events)} events ---")
+for detected_event in detected_events:
+    print(" ", detected_event)
+
+event_timeline_path = os.path.abspath(
+    os.path.join(
+        os.path.dirname(os.path.abspath(__file__)),
+        "..", "..", "..", "segmind", "demo", "event_timeline.html",
+    )
+)
+segmind_context.logger.plot_events(show=False, save_path=event_timeline_path)
+print(f"Segmind event timeline written to {event_timeline_path}")
 
 print("Plan finished, keeping the viewer open until it is closed")
 while multi_sim.simulator.renderer.is_running():
