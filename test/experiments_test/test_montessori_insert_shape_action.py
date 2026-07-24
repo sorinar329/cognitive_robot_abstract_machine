@@ -198,21 +198,40 @@ def test_has_fallen_through_hole_is_false_right_after_kinematic_placement(
 def test_has_fallen_through_hole_is_true_once_the_shape_settles_in_mujoco(
     montessori_with_robot,
 ):
-    from experiments.montessori.montessori_demo import _settle_shape_in_mujoco
+    """
+    The action only ever brings the shape above its hole; whether it actually goes
+    through is decided by physics, so this is only true after the shape has had time to
+    fall and come to rest in the running simulation.
+    """
+    import time
+
+    from experiments.montessori.montessori_demo import (
+        SHAPE_SETTLE_DURATION,
+        _equip_robot_for_physical_simulation,
+        _start_physical_simulation,
+    )
 
     montessori = montessori_with_robot
     cube_shape = shape_with_category(montessori, "cube")
     context = Context(
         montessori.world, montessori.robot, query_backend=ProbabilisticBackend()
     )
+    physically_simulated_dofs = _equip_robot_for_physical_simulation(montessori.robot)
 
     action = InsertMontessoriShapeAction(
         montessori_shape=cube_shape, board=montessori.board, arm=Arms.RIGHT
     )
-    with simulated_robot:
-        node = execute_single(action, context=context)
-        node.perform()
+    multi_sim = _start_physical_simulation(
+        montessori, physically_simulated_dofs, headless=True
+    )
+    try:
+        with simulated_robot:
+            node = execute_single(action, context=context)
+            node.perform()
 
-    _settle_shape_in_mujoco(cube_shape, montessori, headless=True)
+        time.sleep(SHAPE_SETTLE_DURATION)
+        montessori.world.update_forward_kinematics()
+    finally:
+        multi_sim.stop_simulation()
 
     assert action.has_fallen_through_hole() is True

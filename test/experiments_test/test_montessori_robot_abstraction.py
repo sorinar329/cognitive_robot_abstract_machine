@@ -7,9 +7,12 @@ package, which this environment cannot resolve.
 
 from experiments.montessori.montessori_demo import (
     ARM_ACTUATOR_POSITION_GAIN,
-    BASE_ACTUATOR_POSITION_GAIN,
+    BASE_JOINT_ARMATURE,
+    BASE_JOINT_DAMPING,
+    _base_connections_without_hardware_interface,
     _base_degrees_of_freedom_without_hardware_interface,
-    _hold_controlled_joints_in_mujoco,
+    _equip_robot_for_physical_simulation,
+    _gripper_drive_degrees_of_freedom,
 )
 from experiments.montessori.world import MontessoriWorld, robot_installed
 
@@ -59,21 +62,32 @@ def test_base_degrees_of_freedom_without_hardware_interface_excludes_controlled_
     assert controlled_dof_names == EXPECTED_CONTROLLED_DOF_NAMES
 
 
-def test_hold_controlled_joints_in_mujoco_generalizes_to_a_non_hsrb_robot():
+def test_equip_robot_for_physical_simulation_generalizes_to_a_non_hsrb_robot():
     montessori = MontessoriWorld()
     robot = montessori.spawn_robot(SyntheticWheeledArmRobot)
     controlled_dofs = set(robot.degrees_of_freedom_with_hardware_interface)
     base_dofs = set(_base_degrees_of_freedom_without_hardware_interface(robot))
 
-    _hold_controlled_joints_in_mujoco(robot)
+    _equip_robot_for_physical_simulation(robot)
 
-    held_dofs = {dof for actuator in robot._world.actuators for dof in actuator.dofs}
-    assert held_dofs == controlled_dofs | base_dofs
+    actuated_dofs = {
+        dof for actuator in robot._world.actuators for dof in actuator.dofs
+    }
+    assert actuated_dofs == controlled_dofs | set(
+        _gripper_drive_degrees_of_freedom(robot)
+    )
+    assert actuated_dofs.isdisjoint(base_dofs)
     for actuator in robot._world.actuators:
         [mujoco_actuator] = actuator.simulator_additional_properties
-        expected_gain = (
-            BASE_ACTUATOR_POSITION_GAIN
-            if actuator.dofs[0] in base_dofs
-            else ARM_ACTUATOR_POSITION_GAIN
-        )
-        assert mujoco_actuator.gain_parameters[0] == expected_gain
+        assert mujoco_actuator.gain_parameters[0] == ARM_ACTUATOR_POSITION_GAIN
+
+
+def test_equip_robot_for_physical_simulation_stabilizes_a_non_hsrb_robots_wheels():
+    montessori = MontessoriWorld()
+    robot = montessori.spawn_robot(SyntheticWheeledArmRobot)
+
+    _equip_robot_for_physical_simulation(robot)
+
+    for connection in _base_connections_without_hardware_interface(robot):
+        assert connection.dynamics.damping == BASE_JOINT_DAMPING
+        assert connection.dynamics.armature == BASE_JOINT_ARMATURE

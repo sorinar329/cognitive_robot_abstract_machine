@@ -43,8 +43,9 @@ from experiments.montessori.insertion_experience import ShapeInsertionExperience
 from experiments.montessori.montessori_demo import (
     DEFAULT_ROBOT_CLASS,
     MAX_INSERTION_ATTEMPTS,
-    _hold_controlled_joints_in_mujoco,
+    _equip_robot_for_physical_simulation,
     _insert_shape_or_none,
+    _start_physical_simulation,
 )
 from experiments.montessori.semantics import MontessoriShape, NoMatchingHoleError
 from experiments.montessori.world import MontessoriWorld, robot_installed
@@ -70,8 +71,8 @@ def _run_once(run_index: int, headless: bool) -> List[ShapeInsertionExperience]:
 
     :param run_index: Index of this run, stored on every recorded experience (see
         :attr:`~experiments.montessori.insertion_experience.ShapeInsertionExperience.run_index`).
-    :param headless: Whether to run the settling MuJoCo simulations without opening a
-        viewer window.
+    :param headless: Whether to run the MuJoCo simulation without opening a viewer
+        window.
     :return: One experience per insertion attempt made during this run.
     """
     # Imported lazily: pulls in rclpy at module level (see
@@ -80,12 +81,37 @@ def _run_once(run_index: int, headless: bool) -> List[ShapeInsertionExperience]:
 
     montessori = MontessoriWorld()
     montessori.spawn_robot(DEFAULT_ROBOT_CLASS)
-    _hold_controlled_joints_in_mujoco(montessori.robot)
+    physically_simulated_dofs = _equip_robot_for_physical_simulation(montessori.robot)
+    multi_sim = _start_physical_simulation(
+        montessori, physically_simulated_dofs, headless
+    )
 
     context = Context(
         montessori.world, montessori.robot, query_backend=ProbabilisticBackend()
     )
     experiences = []
+    try:
+        _record_insertion_attempts(run_index, montessori, context, experiences)
+    finally:
+        multi_sim.stop_simulation()
+    return experiences
+
+
+def _record_insertion_attempts(
+    run_index: int,
+    montessori: MontessoriWorld,
+    context: "Context",
+    experiences: List[ShapeInsertionExperience],
+) -> None:
+    """
+    Attempt to insert every shape that has a matching hole inside the already-running
+    simulation, appending one experience per attempt.
+
+    :param run_index: Index of the run these attempts belong to.
+    :param montessori: The Montessori scene, already equipped and simulating.
+    :param context: The CRAM execution context to run the insertion actions in.
+    :param experiences: Collected experiences, appended to in place.
+    """
     for shape in montessori.world.get_semantic_annotations_by_type(MontessoriShape):
         try:
             montessori.board.hole_for(shape)
@@ -93,7 +119,7 @@ def _run_once(run_index: int, headless: bool) -> List[ShapeInsertionExperience]:
             continue
 
         for attempt in range(1, MAX_INSERTION_ATTEMPTS + 1):
-            result = _insert_shape_or_none(shape, montessori, context, headless, attempt)
+            result = _insert_shape_or_none(shape, montessori, context, attempt)
             if result is None:
                 # No InsertionAttemptResult is produced when the reach target was
                 # occupied, so there is nothing to record for this attempt.
@@ -110,8 +136,6 @@ def _run_once(run_index: int, headless: bool) -> List[ShapeInsertionExperience]:
             )
             if result.fell_through_hole:
                 break
-
-    return experiences
 
 
 def generate_insertion_experience(runs: int, headless: bool, database_uri: str) -> None:

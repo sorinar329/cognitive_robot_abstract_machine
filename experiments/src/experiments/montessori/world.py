@@ -45,7 +45,9 @@ from semantic_digital_twin.semantic_annotations.semantic_annotations import (
 )
 from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix, Point3
 from semantic_digital_twin.world import World
+from semantic_digital_twin.adapters.multi_sim import MujocoGeom
 from semantic_digital_twin.world_description.connections import (
+    Connection6DoF,
     FixedConnection,
     OmniDrive,
 )
@@ -568,6 +570,32 @@ def _hole_marker_shape(footprint: HoleFootprint, color: Color) -> Mesh:
     return marker
 
 
+GRASP_FRICTION = [1.0, 0.5, 0.5]
+"""
+Contact friction (sliding, torsional, rolling; see :attr:`MujocoGeom.friction`) given to
+every loose shape, so a gripper can hold one by friction alone.
+
+MuJoCo's own defaults leave torsional friction at 0.005 and rolling friction at 0.0001,
+effectively zero: a shape pinched between two flat fingertips then spins and rolls out of
+them however firmly they squeeze, because nothing resists rotation about the contact
+normal. These are the values the Panda gripper's own grasping scene uses.
+"""
+
+
+def _with_grasp_friction(shape: Shape) -> Shape:
+    """
+    Give ``shape`` the contact friction a friction-only grasp needs (see
+    :data:`GRASP_FRICTION`).
+
+    :param shape: The shape to modify in place.
+    :return: The same shape, for chaining.
+    """
+    shape.simulator_additional_properties.append(
+        MujocoGeom(friction=list(GRASP_FRICTION))
+    )
+    return shape
+
+
 def _shape_body(
     name: PrefixedName,
     category: MontessoriShapeCategory,
@@ -603,7 +631,7 @@ def _shape_body(
             shape = _footprint_shape_mesh(footprint, thickness=0.03, color=color)
         case MontessoriShapeCategory.TRIANGULAR_PRISM:
             shape = _footprint_shape_mesh(footprint, thickness=0.02, color=color)
-    return _body_with_shape(name, shape)
+    return _body_with_shape(name, _with_grasp_friction(shape))
 
 
 def robot_installed(robot_class: Type[AbstractRobot]) -> bool:
@@ -727,6 +755,42 @@ class MontessoriWorld:
         self.world.add_semantic_annotation(annotation)
         return annotation
 
+    def _spawn_free_body(
+        self,
+        annotation: HasRootKinematicStructureEntity,
+        position: Point3,
+    ) -> HasRootKinematicStructureEntity:
+        """
+        Like :meth:`_spawn`, but connects the annotation's root to the world root with a
+        free (:class:`Connection6DoF`) joint, so gravity and contacts can move it.
+
+        A simulator treats an unjointed body as welded to its parent, so an annotation
+        spawned with :meth:`_spawn` cannot be picked up, dropped, or settle under gravity
+        at all.
+
+        :param annotation: The semantic annotation to spawn.
+        :param position: The annotation's position, expressed in the world root frame.
+        :return: The spawned annotation.
+        """
+        connection = Connection6DoF.create_with_dofs(
+            world=self.world,
+            parent=self.world.root,
+            child=annotation.root,
+        )
+        self.world.add_connection(connection)
+        # Bakes the pose into the connection's own dof values (x, y, z, qx, qy, qz, qw)
+        # rather than passing it as create_with_dofs' parent_T_connection_expression:
+        # MuJoCo export only reads a Connection6DoF's dof values into the free joint's
+        # keyframe qpos, which is MuJoCo's *absolute* world pose for a free joint, not a
+        # fixed offset applied on top of it. Passing it as parent_T_connection_expression
+        # leaves the dofs at create_with_dofs' identity default, so MuJoCo starts the
+        # body at the world origin regardless of where it was spawned.
+        connection.origin = HomogeneousTransformationMatrix.from_xyz_rpy(
+            x=position.x, y=position.y, z=position.z
+        )
+        self.world.add_semantic_annotation(annotation)
+        return annotation
+
     def _build_floor_and_table(self) -> None:
         floor = Floor(
             name=_name("floor"),
@@ -825,7 +889,7 @@ class MontessoriWorld:
             shape_class = MONTESSORI_SHAPE_CLASSES[category]
             shape = shape_class(name=_name(shape_key), root=body)
             y = TABLE_SHAPE_ROW_START_Y + index * TABLE_SHAPE_ROW_SPACING
-            self._spawn(shape, self._resting_position_on_table(body, y))
+            self._spawn_free_body(shape, self._resting_position_on_table(body, y))
 
     @staticmethod
     def _resting_position_on_table(body: Body, y: float) -> Point3:

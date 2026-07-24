@@ -11,7 +11,7 @@ import time
 import trimesh
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from enum import IntEnum
+from enum import Enum, IntEnum, auto
 from types import NoneType
 from typing_extensions import Dict, List, Any, ClassVar, Type, Optional, Union, Set
 
@@ -99,6 +99,38 @@ def cas_pose_to_list(pose: HomogeneousTransformationMatrix) -> List[float]:
     except Exception as e:
         raise QuaternionConversionError(rotation_matrix, str(e))
     return [pos[0], pos[1], pos[2], quat[0], quat[1], quat[2], quat[3]]
+
+
+class ReparentingMode(Enum):
+    """
+    How an AttachNode/DetachNode-style re-parent of a body in the world model is
+    reflected in the simulator's own kinematic tree.
+
+    The world model re-parents a grasped object onto the gripper so planning and
+    visualization know the robot is carrying it. Whether the *simulator* should follow
+    suit is a separate question, and the answer depends on whether the carrying arm is
+    physically simulated.
+    """
+
+    WELD = auto()
+    """
+    Mirror the re-parent by welding the body to (or un-welding it from) its new parent.
+
+    Required whenever the carrying arm is kinematically teleported rather than
+    physically simulated: friction cannot react to an instantaneous position jump the
+    way it reacts to continuous motion, so an unwelded object is left behind the moment
+    the arm moves.
+    """
+
+    CONTACT_ONLY = auto()
+    """
+    Leave the body free in the simulator, so only real contact and friction hold it.
+
+    Requires the carrying arm and gripper to be physically simulated (see
+    :attr:`MujocoSynchronizer.physically_simulated_dofs`), since nothing else keeps the
+    object in the gripper: a grasp that slips is then a genuine physical outcome rather
+    than a modelling artifact.
+    """
 
 
 class GeomVisibilityAndCollisionType(IntEnum):
@@ -598,9 +630,19 @@ class Connection1DOFConverter(ConnectionConverter, ABC):
         px, py, pz, qw, qx, qy, qz = cas_pose_to_list(child_T_connection_transform)
         joint_pos = [px, py, pz]
         joint_quat = [qw, qx, qy, qz]
-        joint_range = [dof.limits.lower.position, dof.limits.upper.position]
+        # entity.dof, not the raw dof: a mimicking joint shares the mimicked joint's dof
+        # but travels a multiplier/offset-scaled fraction of it, and only entity.dof
+        # applies that scaling. Copying the raw range onto the mimic would contradict
+        # the equality constraint coupling the two, leaving the solver to reconcile a
+        # limit and an equality that cannot both hold.
+        connection_limits = entity.dof.limits
+        joint_range = [
+            connection_limits.lower.position,
+            connection_limits.upper.position,
+        ]
         if any([r is None for r in joint_range]):
             joint_range = [0, 0]
+        joint_range = sorted(joint_range)
         joint_props.update(
             {
                 self.pos_str: joint_pos,
@@ -1822,6 +1864,14 @@ class MujocoBuilder(MultiSimBuilder):
                     parent_connection.origin_as_position_quaternion().evaluate()[0]
                 )
                 qpos += [px, py, pz, qw, qx, qy, qz]
+            elif isinstance(parent_connection, ActiveConnection1DOF):
+                # parent_connection.position, not the raw dof state: a mimicking joint
+                # shares the mimicked joint's dof but sits at a multiplier/offset-scaled
+                # fraction of it. Baking the raw value into both joints' keyframe starts
+                # the mimic outside its own limits and in violation of the equality
+                # constraint coupling the two, which the solver then resolves by driving
+                # the pair away from the pose the world model describes.
+                qpos.append(parent_connection.position)
             else:
                 qpos += [
                     self.world.state[dof.id].position
@@ -2858,6 +2908,14 @@ class MujocoSynchronizer(MultiSimSynchronizer):
     entity_converter: Type[EntityConverter] = field(default=MujocoConverter)
     entity_spawner: Type[EntitySpawner] = field(default=MujocoEntitySpawner)
 
+    reparenting_mode: ReparentingMode = field(
+        default=ReparentingMode.WELD, kw_only=True
+    )
+    """
+    How an AttachNode/DetachNode-style re-parent of a body is reflected in MuJoCo (see
+    :meth:`_reparent_in_simulator`).
+    """
+
     UNTHROTTLED_SYNC_RATE_HZ: ClassVar[float] = float("inf")
     """
     Assign this to :attr:`sync_rate_hz` to sync on every single call, i.e. to not throttle the
@@ -2897,6 +2955,24 @@ class MujocoSynchronizer(MultiSimSynchronizer):
 
     _last_sync_time: float = field(init=False, default=0.0, repr=False)
 
+    _desired_positions: Dict[UUID, float] = field(
+        init=False, default_factory=dict, repr=False
+    )
+    """
+    Per-dof integrated position setpoint for :attr:`physically_simulated_dofs`, keyed by
+    dof id.
+
+    A controller commanding "keep pushing" against a contact writes ``measured +
+    one_step_increment`` into ``world.state`` each tick, because :meth:`_sim_to_world`
+    resets the belief to the measured position in between. Mapping that belief straight
+    to ``ctrl`` pins the position servo's setpoint at the contact surface (near-zero
+    force), so instead the commanded increments are accumulated here -- immune to the
+    measurement resets, since the diff in :meth:`_write_1dof_to_qpos` is taken against
+    :attr:`_previous_dof_positions`, which :meth:`_sim_to_world` rebases after every
+    readback -- and the setpoint latches past the contact, letting the servo keep
+    pressing (e.g. a gripper actually squeezing a grasped object).
+    """
+
     _previous_dof_positions: Dict[UUID, float] = field(
         init=False, default_factory=dict, repr=False
     )
@@ -2926,10 +3002,6 @@ class MujocoSynchronizer(MultiSimSynchronizer):
         super().__post_init__()
         self.simulator._data_read_hooks.append(self._sim_to_world)
 
-    def on_model_change(self, **kwargs):
-        self._qpos_adr_cache.clear()
-        super().on_model_change(**kwargs)
-
     def _dof_ids_for(self, connection: Connection) -> List[UUID]:
         """
         Return the world-state dof ids backing ``connection``, in a fixed order used
@@ -2950,21 +3022,14 @@ class MujocoSynchronizer(MultiSimSynchronizer):
     def on_model_change(self, **kwargs):
         """
         Like :meth:`MultiSimSynchronizer.on_model_change`, but additionally
-        detects an AttachNode/DetachNode-style re-parent -- a
-        ``RemoveConnectionModification`` immediately followed, in the same
-        ``modify_world()`` block, by an ``AddConnectionModification`` for the
-        *same* child -- and mirrors it into MuJoCo's own kinematic tree via
-        :meth:`MujocoSimulator.attach`/:meth:`MujocoSimulator.detach`, instead
-        of the normal (no-op, for ``FixedConnection``) entity spawn.
-
-        Without this, re-parenting only updates the world model (used by
-        RViz/planning), so a body that MuJoCo is genuinely, physically
-        simulating (e.g. a grasped object held by real contact/friction)
-        keeps behaving as an independent free body in MuJoCo, oblivious to
-        being "attached" -- it gets left behind the instant the (kinematically
-        teleported) arm carrying it moves, since friction can't react to an
-        instantaneous position jump the way it reacts to continuous motion.
+        invalidates :attr:`_qpos_adr_cache` (any model change can shift every
+        joint's qpos address) and detects an AttachNode/DetachNode-style
+        re-parent -- a ``RemoveConnectionModification`` immediately followed, in
+        the same ``modify_world()`` block, by an ``AddConnectionModification``
+        for the *same* child -- handling it per :attr:`reparenting_mode`
+        instead of the normal (no-op, for ``FixedConnection``) entity spawn.
         """
+        self._qpos_adr_cache.clear()
         modifications = self._world._model_manager.model_modification_blocks[-1]
         reparented_child_ids = {
             modification.child_id
@@ -2989,12 +3054,18 @@ class MujocoSynchronizer(MultiSimSynchronizer):
 
     def _reparent_in_simulator(self, connection: Connection) -> None:
         """
-        Weld (or un-weld) ``connection``'s child body in MuJoCo to mirror an
-        AttachNode/DetachNode-style re-parent, using the body's *actual,
-        physically-settled* pose (both :meth:`MujocoSimulator.attach` and
-        :meth:`MujocoSimulator.detach` read live ``_mj_data`` poses when no
-        explicit transform is given), not an idealized/kinematic one.
+        Mirror an AttachNode/DetachNode-style re-parent of ``connection``'s child
+        body into MuJoCo, as directed by :attr:`reparenting_mode`.
+
+        Under :attr:`ReparentingMode.WELD` the body is welded to (or un-welded
+        from) its new parent using its *actual, physically-settled* pose (both
+        :meth:`MujocoSimulator.attach` and :meth:`MujocoSimulator.detach` read
+        live ``_mj_data`` poses when no explicit transform is given), not an
+        idealized/kinematic one. Under
+        :attr:`ReparentingMode.CONTACT_ONLY` this is a no-op.
         """
+        if self.reparenting_mode is ReparentingMode.CONTACT_ONLY:
+            return
         child_name = connection.child.name.name
         if connection.parent.id == self._world.root.id:
             # DetachNode: placed back down -- restore free dynamics.
@@ -3177,11 +3248,46 @@ class MujocoSynchronizer(MultiSimSynchronizer):
         state[connection.qy.id].position = float(dof_quat_xyzw[1])
         state[connection.qz.id].position = float(dof_quat_xyzw[2])
 
+    @staticmethod
+    def _mimics_another_joint(connection: ActiveConnection1DOF) -> bool:
+        """
+        Whether ``connection`` follows another connection's joint rather than owning the
+        dof behind it.
+
+        Matches the rule :class:`MujocoBuilder` itself uses when it emits the equality
+        constraint coupling the two (a connection owns its dof when they share a name),
+        so the two stay in agreement about which joint is authoritative.
+        """
+        return connection.name.name != connection.raw_dof.name.name
+
+    @staticmethod
+    def _shared_dof_value(
+        connection: ActiveConnection1DOF, joint_value: float
+    ) -> float:
+        """
+        Undo ``connection``'s multiplier and offset, turning a reading of its own joint
+        into the value of the (possibly shared) dof behind it.
+
+        Every connection sharing a dof writes into the same world-state entry, so a
+        mimicking connection that wrote its own scaled reading straight in would
+        overwrite whatever the connection it mimics just reported.
+        """
+        return (joint_value - connection.offset) / connection.multiplier
+
+    @staticmethod
+    def _joint_value(connection: ActiveConnection1DOF, dof_value: float) -> float:
+        """
+        Apply ``connection``'s multiplier and offset, turning a value of the (possibly
+        shared) dof behind it into the position of ``connection``'s own joint.
+        """
+        return dof_value * connection.multiplier + connection.offset
+
     def _read_1dof_from_qpos(
         self, connection: ActiveConnection1DOF, qpos_adr: int
     ) -> None:
         """
-        Copy a single MuJoCo qpos slot into ``world.state`` for ``connection``.
+        Copy a single MuJoCo qpos slot into ``world.state`` for ``connection``, undoing
+        the connection's own scaling first (see :meth:`_shared_dof_value`).
 
         For a DOF in ``physically_simulated_dofs`` the measured qvel is copied
         into the state's velocity as well: a stall detector watching
@@ -3190,15 +3296,15 @@ class MujocoSynchronizer(MultiSimSynchronizer):
         the controller's still-nonzero commanded velocity -- otherwise a
         joint physically stopped by contact never registers as stalled.
         """
-        self._world.state[connection.raw_dof.id].position = float(
-            self.simulator._mj_data.qpos[qpos_adr]
+        self._world.state[connection.raw_dof.id].position = self._shared_dof_value(
+            connection, float(self.simulator._mj_data.qpos[qpos_adr])
         )
         if connection.raw_dof not in self.physically_simulated_dofs:
             return
         dof_adr = self._resolve_dof_adr(connection)
         if dof_adr is not None:
-            self._world.state[connection.raw_dof.id].velocity = float(
-                self.simulator._mj_data.qvel[dof_adr]
+            self._world.state[connection.raw_dof.id].velocity = (
+                float(self.simulator._mj_data.qvel[dof_adr]) / connection.multiplier
             )
 
     def _sim_to_world(self, force: bool = False) -> None:
@@ -3211,10 +3317,6 @@ class MujocoSynchronizer(MultiSimSynchronizer):
         :meth:`resync_from_simulator` to bypass the throttle window after a reset). The
         sibling state-change callback is paused across the write so our own
         ``notify_state_change`` does not echo back into :meth:`_on_state_change`.
-
-        Access to ``_mj_model``/``_mj_data`` is guarded by the simulator's
-        ``_model_lock`` so this can never overlap with an in-flight ``mj_step`` or model
-        recompile on another thread.
         """
         if self.sync_rate_hz <= 0:
             return
@@ -3238,46 +3340,48 @@ class MujocoSynchronizer(MultiSimSynchronizer):
         # stale/inconsistent value, not memory corruption -- step_callback's
         # own locking already covers the crash-causing case (mj_step itself).
         for connection in self._world.connections:
-            if isinstance(connection, FixedConnection):
+            if isinstance(connection, MujocoBuilder._ignore_connection_types):
+                continue
+            # Only the connection that owns a dof reports it back. Every connection
+            # sharing that dof writes into the same world-state entry, so letting a
+            # mimicking one report too makes the belief whichever happened to be read
+            # last -- and that belief is commanded straight back out, driving the
+            # coupled joints further apart with every sync.
+            if isinstance(
+                connection, ActiveConnection1DOF
+            ) and self._mimics_another_joint(connection):
                 continue
             qpos_adr = self._resolve_qpos_adr(connection)
             if qpos_adr is None:
+                logger.warning(
+                    "sim→world sync: no MuJoCo joint found for connection "
+                    "%s; skipping",
+                    connection.name.name,
+                )
                 continue
-        with self.simulator._model_lock:
-            for connection in self._world.connections:
-                if isinstance(connection, FixedConnection):
-                    continue
-                qpos_adr = self._resolve_qpos_adr(connection)
-                if qpos_adr is None:
-                    logger.warning(
-                        "sim→world sync: no MuJoCo joint found for connection "
-                        "%s; skipping",
-                        connection.name.name,
-                    )
-                    continue
 
-                if isinstance(connection, Connection6DoF):
-                    self._read_6dof_from_qpos(connection, qpos_adr)
-                elif isinstance(connection, ActiveConnection1DOF):
-                    self._read_1dof_from_qpos(connection, qpos_adr)
-                else:
-                    logger.warning(
-                        "sim→world sync: unsupported connection type %s for "
-                        "joint %s; skipping",
-                        type(connection).__name__,
-                        connection.name.name,
-                    )
-                    continue
+            if isinstance(connection, Connection6DoF):
+                self._read_6dof_from_qpos(connection, qpos_adr)
+            elif isinstance(connection, ActiveConnection1DOF):
+                self._read_1dof_from_qpos(connection, qpos_adr)
+            else:
+                logger.warning(
+                    "sim→world sync: unsupported connection type %s for "
+                    "joint %s; skipping",
+                    type(connection).__name__,
+                    connection.name.name,
+                )
+                continue
 
-                for dof_id in self._dof_ids_for(connection):
-                    new_value = self._world.state[dof_id].position
-                    if not numpy.isclose(
-                        new_value,
-                        self._previous_dof_positions.get(dof_id, numpy.nan),
-                        atol=1e-4,
-                        rtol=1e-4,
-                    ):
-                        changed_dof_positions[dof_id] = new_value
+            for dof_id in self._dof_ids_for(connection):
+                new_value = self._world.state[dof_id].position
+                if not numpy.isclose(
+                    new_value,
+                    self._previous_dof_positions.get(dof_id, numpy.nan),
+                    atol=1e-4,
+                    rtol=1e-4,
+                ):
+                    changed_dof_positions[dof_id] = new_value
 
         if changed_dof_positions:
             self._previous_dof_positions.update(changed_dof_positions)
@@ -3329,20 +3433,89 @@ class MujocoSynchronizer(MultiSimSynchronizer):
     ) -> bool:
         """
         Push the 1DoF world state for ``connection`` into the MuJoCo qpos slot at
-        ``qpos_adr``.
+        ``qpos_adr``, and into its actuator's ``ctrl`` setpoint if it has one, so the
+        actuator's PD controller tracks the commanded position instead of continuing to
+        servo toward a stale setpoint.
 
         No-op if the dof value matches :attr:`_previous_dof_positions`.
 
-        :return: True if the qpos slot was written.
+        The ``qpos`` write is skipped (``ctrl`` is still updated) for dofs in
+        :attr:`physically_simulated_dofs`: those are meant to be driven purely by the
+        actuator/contact model, not kinematically teleported every tick. For those dofs
+        the ``ctrl`` setpoint comes from the accumulated commanded increments (see
+        :attr:`_desired_positions`), not the raw belief position, so a controller
+        pushing against a contact builds up an actual servo force instead of chasing the
+        measured stall position.
+
+        :return: True if the commanded change was consumed, meaning the caller must
+            rebase :attr:`_previous_dof_positions` for this connection.
         """
         dof_id = connection.raw_dof.id
         current = self._world.state[dof_id].position
-        if dof_id in self._previous_dof_positions and (
-            current == self._previous_dof_positions[dof_id]
-        ):
+        previous = self._previous_dof_positions.get(dof_id, current)
+        if dof_id in self._previous_dof_positions and current == previous:
             return False
-        self.simulator._mj_data.qpos[qpos_adr] = current
+
+        if connection.raw_dof in self.physically_simulated_dofs:
+            setpoint = self._integrate_desired_position(
+                connection.raw_dof,
+                commanded_increment=current - previous,
+                fallback_position=previous,
+            )
+        else:
+            self.simulator._mj_data.qpos[qpos_adr] = self._joint_value(
+                connection, current
+            )
+            setpoint = current
+        self._write_ctrl_setpoint(connection, self._joint_value(connection, setpoint))
         return True
+
+    def _integrate_desired_position(
+        self,
+        dof: DegreeOfFreedom,
+        commanded_increment: float,
+        fallback_position: float,
+    ) -> float:
+        """
+        Advance and return ``dof``'s accumulated position setpoint (see
+        :attr:`_desired_positions`) by one commanded increment, clamped to the dof's
+        position limits so the setpoint cannot wind up arbitrarily far past what the
+        joint could ever reach.
+
+        :param dof: The physically simulated dof being commanded.
+        :param commanded_increment: The controller's pure position increment since the
+            last state notification.
+        :param fallback_position: Starting point for a dof commanded for the first time.
+        :return: The new setpoint.
+        """
+        desired = self._desired_positions.get(dof.id, fallback_position)
+        desired += commanded_increment
+        lower = dof.limits.lower.position
+        upper = dof.limits.upper.position
+        if lower is not None:
+            desired = max(lower, desired)
+        if upper is not None:
+            desired = min(upper, desired)
+        self._desired_positions[dof.id] = desired
+        return desired
+
+    def _write_ctrl_setpoint(
+        self, connection: ActiveConnection1DOF, setpoint: float
+    ) -> None:
+        """
+        Push ``setpoint``, converted into the actuator's own control units, into the
+        ``ctrl`` slot of the MuJoCo actuator driving ``connection``.
+
+        No-op when no actuator drives the connection, or when it is absent from the
+        compiled model.
+        """
+        actuator = self._resolve_actuator(connection)
+        ctrl_adr = self._resolve_ctrl_adr(connection)
+        if actuator is None or ctrl_adr is None:
+            return
+        self.simulator._mj_data.ctrl[ctrl_adr] = self._ctrl_for_position(
+            actuator, setpoint
+        )
 
     def _on_state_change(self) -> None:
         """
@@ -3358,7 +3531,7 @@ class MujocoSynchronizer(MultiSimSynchronizer):
 
         with self.simulator._model_lock:
             for connection in self._world.connections:
-                if isinstance(connection, FixedConnection):
+                if isinstance(connection, MujocoBuilder._ignore_connection_types):
                     continue
                 qpos_adr = self._resolve_qpos_adr(connection)
                 if qpos_adr is None:
@@ -3446,6 +3619,7 @@ class MultiSim(ABC):
         real_time_factor: float = 1.0,
         physically_simulated_dofs: Optional[Set[DegreeOfFreedom]] = None,
         sync_rate_hz: float = 30,
+        reparenting_mode: ReparentingMode = ReparentingMode.WELD,
         **kwargs,
     ):
         """
@@ -3466,6 +3640,8 @@ class MultiSim(ABC):
             MujocoSynchronizer._sim_to_world). Should comfortably exceed the
             control loop's own tick rate so it isn't planning against stale
             feedback of where those DOFs have actually settled.
+        :param reparenting_mode: How a world-model re-parent of a body (e.g. a
+            grasped object onto the gripper) is reflected in the simulator.
         """
         self.builder_class().build_world(world=world, file_path=self.default_file_path)
         self.simulator = self.simulator_class(
@@ -3480,6 +3656,7 @@ class MultiSim(ABC):
             simulator=self.simulator,
             physically_simulated_dofs=physically_simulated_dofs or set(),
             sync_rate_hz=sync_rate_hz,
+            reparenting_mode=reparenting_mode,
         )
 
     def start_simulation(self, constraints: Optional[SimulatorConstraints] = None):

@@ -2,12 +2,14 @@ import logging
 import os
 import threading
 import time
+from dataclasses import dataclass
 
 import mujoco
 import pytest
 import numpy
 from PIL import Image
 from scipy.spatial.transform import Rotation
+from typing_extensions import List, Optional, Tuple
 
 from semantic_digital_twin.adapters.mesh import STLParser
 from semantic_digital_twin.adapters.urdf import URDFParser
@@ -28,9 +30,14 @@ from semantic_digital_twin.world_description.connections import (
     Connection6DoF,
     FixedConnection,
     OmniDrive,
+    PrismaticConnection,
     RevoluteConnection,
 )
-from semantic_digital_twin.world_description.degree_of_freedom import DegreeOfFreedom
+from semantic_digital_twin.world_description.degree_of_freedom import (
+    DegreeOfFreedom,
+    DegreeOfFreedomLimits,
+)
+from semantic_digital_twin.spatial_types.derivatives import DerivativeMap
 from semantic_digital_twin.world_description.geometry import (
     Box,
     Scale,
@@ -48,9 +55,11 @@ from semantic_digital_twin.adapters.mjcf import MJCFParser
 from semantic_digital_twin.adapters.multi_sim import (
     MujocoSim,
     MujocoActuator,
+    MujocoBody,
     MujocoBuilder,
     MujocoLight,
     MujocoSynchronizer,
+    ReparentingMode,
 )
 
 urdf_dir = os.path.join(
@@ -851,9 +860,7 @@ def test_omni_drive_spawn_pose_is_baked_into_static_body_frame(tmp_path):
     builder = MujocoBuilder()
     builder.build_world(world=world, file_path=str(tmp_path / "scene.xml"))
 
-    [robot_body] = [
-        body for body in builder.spec.bodies if body.name == "robot_root"
-    ]
+    [robot_body] = [body for body in builder.spec.bodies if body.name == "robot_root"]
 
     expected_pose = world.compute_forward_kinematics_np(world.root, robot_root)
     expected_position = expected_pose[:3, 3]
@@ -862,12 +869,8 @@ def test_omni_drive_spawn_pose_is_baked_into_static_body_frame(tmp_path):
     )
 
     assert not numpy.allclose(expected_position, [0.0, 0.0, 0.0])
-    numpy.testing.assert_allclose(
-        list(robot_body.pos), expected_position, atol=1e-6
-    )
-    numpy.testing.assert_allclose(
-        list(robot_body.quat), expected_quat_wxyz, atol=1e-6
-    )
+    numpy.testing.assert_allclose(list(robot_body.pos), expected_position, atol=1e-6)
+    numpy.testing.assert_allclose(list(robot_body.quat), expected_quat_wxyz, atol=1e-6)
 
 
 def test_world_sim_state_sync():
@@ -1038,7 +1041,9 @@ def test_sim_to_world_sync_does_not_drop_concurrent_edits_during_pause_window():
 
         multi_sim.synchronizer._state_callback.pause = pause_and_make_concurrent_edit
 
-        multi_sim.synchronizer.sync_rate_hz = MujocoSynchronizer.UNTHROTTLED_SYNC_RATE_HZ
+        multi_sim.synchronizer.sync_rate_hz = (
+            MujocoSynchronizer.UNTHROTTLED_SYNC_RATE_HZ
+        )
         multi_sim.synchronizer._sim_to_world()
 
         # joint_b is resolvable again, matching the spawn having finished; the edit
@@ -1113,7 +1118,9 @@ def test_sim_to_world_sync_does_not_notify_when_nothing_moved():
     try:
         _spawn_revolute_joint(world, "resting_joint")
 
-        multi_sim.synchronizer.sync_rate_hz = MujocoSynchronizer.UNTHROTTLED_SYNC_RATE_HZ
+        multi_sim.synchronizer.sync_rate_hz = (
+            MujocoSynchronizer.UNTHROTTLED_SYNC_RATE_HZ
+        )
         multi_sim.synchronizer._sim_to_world()  # establish the baseline snapshot
 
         version_before = world.state.version
@@ -1159,7 +1166,9 @@ def test_sim_to_world_logs_when_no_mujoco_joint_is_found(monkeypatch):
             multi_sim.synchronizer, "_resolve_qpos_adr", lambda connection: None
         )
 
-        multi_sim.synchronizer.sync_rate_hz = MujocoSynchronizer.UNTHROTTLED_SYNC_RATE_HZ
+        multi_sim.synchronizer.sync_rate_hz = (
+            MujocoSynchronizer.UNTHROTTLED_SYNC_RATE_HZ
+        )
         with _RecordingLogHandler(
             "semantic_digital_twin.adapters.multi_sim"
         ) as log_handler:
@@ -1286,3 +1295,1179 @@ def test_connection6dof_with_non_root_parent_raises_instead_of_silently_wrong_sy
             multi_sim.synchronizer._read_6dof_from_qpos(connection, qpos_adr=0)
     finally:
         stop_multisim_if_running(multi_sim)
+
+
+# The real Panda joint1-4 actuator values, kept together so every position-servo
+# scene below is driven by the same gains the demo scene actually uses.
+PANDA_ARM_GAIN = 2000
+PANDA_ARM_DAMPING = 200
+PANDA_ARM_FORCE_RANGE = [-87, 87]
+
+# The real Panda gripper actuator values: a fixed tendon remapping the fingers'
+# 0-0.04m travel onto a 0-255 ctrl range, so ctrl and position do not share units.
+PANDA_GRIPPER_GAIN = 0.0156863
+PANDA_GRIPPER_STIFFNESS = 100
+PANDA_GRIPPER_DAMPING = 10
+
+
+def _add_affine_position_servo(
+    world: World,
+    dof: DegreeOfFreedom,
+    gain: float,
+    stiffness: float,
+    damping: float,
+    force_range: Optional[List[float]] = None,
+    name: Optional[PrefixedName] = None,
+) -> Actuator:
+    """
+    Add a MuJoCo affine position-servo actuator driving ``dof`` to ``world``.
+
+    MuJoCo evaluates such an actuator as ``force = gain * ctrl - stiffness * length -
+    damping * velocity``, so the ``ctrl`` value the world→sim sync has to write for a
+    commanded position is the one making that force zero -- which only equals the
+    position itself when ``gain == stiffness``.
+
+    :param gain: The actuator's ``gainprm[0]``.
+    :param stiffness: Positional feedback gain, stored as ``biasprm[1] = -stiffness``.
+    :param damping: Velocity feedback gain, stored as ``biasprm[2] = -damping``.
+    :param force_range: Force clamping limits, left unlimited when omitted.
+    :param name: Actuator name, needed only when the test looks it up by name in the
+        compiled model.
+    :return: The actuator, already added to ``world``.
+
+    .. note::
+        Must be called inside a ``world.modify_world()`` block.
+    """
+    actuator = Actuator() if name is None else Actuator(name=name)
+    actuator.add_dof(dof=dof)
+    actuator_properties = MujocoActuator(
+        dynamics_type=mujoco.mjtDyn.mjDYN_NONE,
+        dynamics_parameters=[0.0] * 10,
+        gain_type=mujoco.mjtGain.mjGAIN_FIXED,
+        gain_parameters=[gain] + [0.0] * 9,
+        bias_type=mujoco.mjtBias.mjBIAS_AFFINE,
+        bias_parameters=[0, -stiffness, -damping] + [0.0] * 7,
+    )
+    if force_range is not None:
+        actuator_properties.force_limited = mujoco.mjtLimited.mjLIMITED_TRUE
+        actuator_properties.force_range = force_range
+    actuator.simulator_additional_properties.append(actuator_properties)
+    world.add_actuator(actuator=actuator)
+    return actuator
+
+
+def _actuator_ctrl(multi_sim: MujocoSim, actuator: Actuator) -> float:
+    """
+    :return: The live ``ctrl`` setpoint of ``actuator`` in the compiled MuJoCo model.
+    """
+    return multi_sim.simulator.get_actuator(actuator.name.name).result.ctrl[0]
+
+
+def test_actuated_joint_ctrl_tracks_commanded_qpos():
+    """
+    Writing a new commanded position into world.state for a dof that is driven by a
+    strong PD actuator must move the actuator's ctrl setpoint along with it. If ctrl is
+    left stale, MuJoCo's actuator keeps servoing toward the old setpoint and fights
+    every subsequent qpos write, so the joint never settles at the commanded position
+    (it oscillates instead).
+    """
+    target = 1.0
+
+    world = World()
+    multi_sim = MujocoSim(world=world, headless=headless, step_size=STEP_SIZE)
+
+    try:
+        multi_sim.start_simulation()
+        time.sleep(1)
+
+        base = Body(name=PrefixedName("actuated_base"))
+        link = Body(name=PrefixedName("actuated_link"))
+        link.collision = ShapeCollection(
+            [Cylinder(width=0.05, height=0.3, color=Color(0.5, 0.5, 0.5, 1.0))],
+            reference_frame=link,
+        )
+        dof = DegreeOfFreedom(name=PrefixedName("actuated_joint"))
+
+        with world.modify_world():
+            world.add_connection(FixedConnection(parent=world.root, child=base))
+            world.add_degree_of_freedom(dof)
+            connection = RevoluteConnection(
+                name=dof.name,
+                parent=base,
+                child=link,
+                axis=Vector3.Z(reference_frame=link),
+                raw_dof=dof,
+                parent_T_connection_expression=HomogeneousTransformationMatrix.from_xyz_rpy(
+                    reference_frame=base
+                ),
+            )
+            world.add_connection(connection)
+            _add_affine_position_servo(
+                world,
+                dof,
+                gain=PANDA_ARM_GAIN,
+                stiffness=PANDA_ARM_GAIN,
+                damping=PANDA_ARM_DAMPING,
+            )
+
+        time.sleep(1)
+
+        connection.position = target
+        time.sleep(2)
+
+        final_position = multi_sim.simulator.get_joint_value(dof.name.name).result
+
+        multi_sim.stop_simulation()
+
+        assert numpy.isclose(final_position, target, atol=0.05), (
+            f"Joint did not settle at commanded position: got {final_position}, "
+            f"expected {target}. The actuator's ctrl setpoint is likely stale "
+            "and fighting the qpos write."
+        )
+    finally:
+        stop_multisim_if_running(multi_sim)
+
+
+def test_ctrl_for_position_matches_actuator_affine_equilibrium():
+    """
+    _ctrl_for_position must solve MuJoCo's affine actuator equation
+    (force = gainprm[0]*ctrl + biasprm[0] + biasprm[1]*length + biasprm[2]*velocity)
+    for the zero-force ctrl setpoint at a given position, not just copy the position
+    through. For a direct per-joint actuator (gainprm=biasprm chosen so ctrl and
+    position share units) this happens to reduce to ctrl == position, but for a
+    tendon-driven actuator remapping to a different control range (like the Panda
+    gripper's 0-0.04m -> 0-255 ctrl range) it must not.
+    """
+    arm_actuator = Actuator()
+    arm_actuator.simulator_additional_properties.append(
+        MujocoActuator(
+            bias_type=mujoco.mjtBias.mjBIAS_AFFINE,
+            bias_parameters=[0, -PANDA_ARM_GAIN, -PANDA_ARM_DAMPING] + [0.0] * 7,
+            gain_type=mujoco.mjtGain.mjGAIN_FIXED,
+            gain_parameters=[PANDA_ARM_GAIN] + [0.0] * 9,
+        )
+    )
+    for position in (0.0, 0.5, -0.3):
+        assert numpy.isclose(
+            MujocoSynchronizer._ctrl_for_position(arm_actuator, position), position
+        )
+
+    gripper_actuator = Actuator()
+    gripper_actuator.simulator_additional_properties.append(
+        MujocoActuator(
+            bias_type=mujoco.mjtBias.mjBIAS_AFFINE,
+            bias_parameters=[0, -PANDA_GRIPPER_STIFFNESS, -PANDA_GRIPPER_DAMPING]
+            + [0.0] * 7,
+            gain_type=mujoco.mjtGain.mjGAIN_FIXED,
+            gain_parameters=[PANDA_GRIPPER_GAIN] + [0.0] * 9,
+        )
+    )
+    for position in (0.0, 0.02, 0.04):
+        expected_ctrl = PANDA_GRIPPER_STIFFNESS * position / PANDA_GRIPPER_GAIN
+        assert numpy.isclose(
+            MujocoSynchronizer._ctrl_for_position(gripper_actuator, position),
+            expected_ctrl,
+            rtol=1e-3,
+        ), (
+            f"ctrl for position {position} should be {expected_ctrl:.2f} "
+            "(the tendon actuator's real gain/bias remap), not the raw position."
+        )
+
+
+def test_tendon_actuator_ctrl_uses_correct_unit_conversion():
+    """
+    Integration-level version of
+    test_ctrl_for_position_matches_actuator_affine_equilibrium: a tendon-driven actuator
+    wired up through the real MujocoSim pipeline must receive a correctly unit-converted
+    ctrl value when its dof's commanded position changes, not a raw copy of the
+    position.
+    """
+    target_position = 0.02
+
+    world = World()
+    multi_sim = MujocoSim(world=world, headless=headless, step_size=STEP_SIZE)
+
+    try:
+        multi_sim.start_simulation()
+        time.sleep(1)
+
+        base = Body(name=PrefixedName("tendon_base"))
+        link = Body(name=PrefixedName("tendon_link"))
+        link.collision = ShapeCollection(
+            [Cylinder(width=0.01, height=0.04, color=Color(0.5, 0.5, 0.5, 1.0))],
+            reference_frame=link,
+        )
+        dof = DegreeOfFreedom(name=PrefixedName("tendon_joint"))
+
+        with world.modify_world():
+            world.add_connection(FixedConnection(parent=world.root, child=base))
+            world.add_degree_of_freedom(dof)
+            connection = PrismaticConnection(
+                name=dof.name,
+                parent=base,
+                child=link,
+                axis=Vector3.Z(reference_frame=link),
+                raw_dof=dof,
+                parent_T_connection_expression=HomogeneousTransformationMatrix.from_xyz_rpy(
+                    reference_frame=base
+                ),
+            )
+            world.add_connection(connection)
+            actuator = _add_affine_position_servo(
+                world,
+                dof,
+                gain=PANDA_GRIPPER_GAIN,
+                stiffness=PANDA_GRIPPER_STIFFNESS,
+                damping=PANDA_GRIPPER_DAMPING,
+                name=PrefixedName("tendon_actuator"),
+            )
+
+        time.sleep(1)
+
+        connection.position = target_position
+        time.sleep(0.5)
+
+        ctrl = _actuator_ctrl(multi_sim, actuator)
+        multi_sim.stop_simulation()
+
+        expected_ctrl = PANDA_GRIPPER_STIFFNESS * target_position / PANDA_GRIPPER_GAIN
+        assert numpy.isclose(ctrl, expected_ctrl, rtol=1e-2), (
+            f"ctrl was {ctrl}, expected {expected_ctrl:.2f} (the tendon "
+            "actuator's own gain/bias remap of the commanded position), "
+            "not a raw copy of the position."
+        )
+    finally:
+        stop_multisim_if_running(multi_sim)
+
+
+def _build_physically_simulated_revolute_joint(
+    name_prefix: str,
+) -> Tuple[World, RevoluteConnection, Actuator]:
+    """
+    Build a world holding one PD-actuated revolute joint, ready to be marked
+    physically simulated.
+
+    :param name_prefix: Prefix for the scene's body, joint and link names.
+    :return: The world, the joint's connection and its actuator.
+    """
+    world = World()
+    root = Body(name=PrefixedName("world"))
+    base = Body(name=PrefixedName(f"{name_prefix}_base"))
+    link = Body(name=PrefixedName(f"{name_prefix}_link"))
+    link.collision = ShapeCollection(
+        [Cylinder(width=0.05, height=0.3, color=Color(0.5, 0.5, 0.5, 1.0))],
+        reference_frame=link,
+    )
+    dof = DegreeOfFreedom(name=PrefixedName(f"{name_prefix}_joint"))
+
+    with world.modify_world():
+        world.add_body(root)
+        world.add_connection(FixedConnection(parent=root, child=base))
+        world.add_degree_of_freedom(dof)
+        connection = RevoluteConnection(
+            name=dof.name,
+            parent=base,
+            child=link,
+            axis=Vector3.Z(reference_frame=link),
+            raw_dof=dof,
+            parent_T_connection_expression=HomogeneousTransformationMatrix.from_xyz_rpy(
+                reference_frame=base
+            ),
+        )
+        world.add_connection(connection)
+        actuator = _add_affine_position_servo(
+            world,
+            dof,
+            gain=PANDA_ARM_GAIN,
+            stiffness=PANDA_ARM_GAIN,
+            damping=PANDA_ARM_DAMPING,
+        )
+
+    return world, connection, actuator
+
+
+def test_physically_simulated_dof_skips_qpos_teleport():
+    """
+    A dof marked as physically_simulated must not have its qpos force-written by the
+    world→sim sync -- only its actuator's ctrl setpoint. The point of this flag is to
+    let MuJoCo's real actuator/contact dynamics decide the dof's actual position (e.g. a
+    gripper finger stopping against a grasped object) instead of a kinematic snap
+    fighting/overriding whatever physics would otherwise produce.
+    """
+    target = 1.0
+    world, connection, actuator = _build_physically_simulated_revolute_joint("physsim")
+
+    multi_sim = MujocoSim(
+        world=world,
+        headless=headless,
+        step_size=STEP_SIZE,
+        physically_simulated_dofs={connection.raw_dof},
+    )
+
+    try:
+        multi_sim.start_simulation()
+        time.sleep(1)
+
+        connection.position = target
+        # Deliberately no settling time here: check the write itself, before
+        # physics has a chance to converge the joint toward the ctrl setpoint.
+        qpos_immediately_after_write = multi_sim.simulator.get_joint_value(
+            connection.raw_dof.name.name
+        ).result
+        ctrl_immediately_after_write = _actuator_ctrl(multi_sim, actuator)
+
+        multi_sim.stop_simulation()
+
+        assert numpy.isclose(ctrl_immediately_after_write, target, atol=1e-6), (
+            "ctrl should still track the commanded position for a "
+            "physically_simulated dof."
+        )
+        assert not numpy.isclose(qpos_immediately_after_write, target, atol=1e-3), (
+            f"qpos was snapped to {qpos_immediately_after_write}, matching the "
+            f"commanded target {target} -- physically_simulated_dofs should "
+            "have skipped the qpos teleport and let physics reach it instead."
+        )
+    finally:
+        stop_multisim_if_running(multi_sim)
+
+
+def test_physically_simulated_dof_velocity_reads_back_measured_settling():
+    """
+    The sim→world sync must overwrite a physically_simulated dof's *velocity* in
+    ``world.state`` with the measured simulator velocity, not just its position.
+
+    A controller (e.g. Giskard) writes its **commanded** velocity into ``world.state``
+    every tick. A stall detector watching those velocities
+    (``JointPositionList(tolerate_stall=True)`` / ``LocalMinimumReached``) needs to see
+    the joint's real, physical settling: a gripper finger physically stopped by a
+    grasped object otherwise still shows the controller's nonzero commanded closing
+    velocity forever, the stall is never detected, and every motion queued behind the
+    grasp never starts.
+    """
+    world, connection, _ = _build_physically_simulated_revolute_joint("velsync")
+    dof = connection.raw_dof
+
+    multi_sim = MujocoSim(
+        world=world,
+        headless=headless,
+        step_size=STEP_SIZE,
+        physically_simulated_dofs={dof},
+    )
+
+    try:
+        multi_sim.start_simulation()
+        time.sleep(1)
+
+        stale_commanded_velocity = 0.2
+        world.state[dof.id].velocity = stale_commanded_velocity
+        time.sleep(0.5)
+
+        read_back_velocity = world.state[dof.id].velocity
+        assert abs(read_back_velocity) < 0.05, (
+            f"world.state still shows the stale commanded velocity "
+            f"{read_back_velocity} for a physically settled joint -- the "
+            "sim→world sync should have overwritten it with the measured "
+            "(near-zero) velocity."
+        )
+    finally:
+        stop_multisim_if_running(multi_sim)
+
+
+def test_physically_simulated_dof_ctrl_latches_commanded_increments_past_contact():
+    """
+    A physically_simulated dof's actuator setpoint must accumulate the controller's
+    commanded increments instead of being re-derived from the measurement-reset belief
+    position.
+
+    A controller commanding "keep pushing" against a contact (e.g. closing a gripper on
+    a grasped object) writes ``measured + one_step_increment`` into ``world.state`` each
+    tick, because the sim→world sync resets the belief to the measured stall position in
+    between. Mapping *that* belief straight to ``ctrl`` pins the position servo's
+    setpoint at the contact surface, which means near-zero squeeze force -- the grasp
+    cannot hold anything. The setpoint must instead integrate the commanded increments,
+    so it latches past the contact and the servo keeps pressing.
+    """
+    contact_position = 0.15
+
+    world = World()
+    root = Body(name=PrefixedName("world"))
+    base = Body(name=PrefixedName("push_base"))
+    slider = Body(name=PrefixedName("push_slider"))
+    slider.collision = ShapeCollection(
+        [Box(scale=Scale(0.05, 0.05, 0.05), color=Color(0.5, 0.5, 0.5, 1.0))],
+        reference_frame=slider,
+    )
+    wall = Body(name=PrefixedName("push_wall"))
+    wall.collision = ShapeCollection(
+        [Box(scale=Scale(0.05, 0.05, 0.05), color=Color(0.8, 0.2, 0.2, 1.0))],
+        reference_frame=wall,
+    )
+    dof = DegreeOfFreedom(name=PrefixedName("push_joint"))
+
+    with world.modify_world():
+        world.add_body(root)
+        world.add_connection(FixedConnection(parent=root, child=base))
+        world.add_connection(
+            FixedConnection(
+                parent=root,
+                child=wall,
+                parent_T_connection_expression=HomogeneousTransformationMatrix.from_xyz_rpy(
+                    x=0.2, reference_frame=root
+                ),
+            )
+        )
+        world.add_degree_of_freedom(dof)
+        connection = PrismaticConnection(
+            name=dof.name,
+            parent=base,
+            child=slider,
+            axis=Vector3.X(reference_frame=slider),
+            raw_dof=dof,
+            parent_T_connection_expression=HomogeneousTransformationMatrix.from_xyz_rpy(
+                reference_frame=base
+            ),
+        )
+        world.add_connection(connection)
+        actuator = _add_affine_position_servo(
+            world,
+            dof,
+            gain=PANDA_ARM_GAIN,
+            stiffness=PANDA_ARM_GAIN,
+            damping=PANDA_ARM_DAMPING,
+            force_range=PANDA_ARM_FORCE_RANGE,
+        )
+
+    multi_sim = MujocoSim(
+        world=world,
+        headless=headless,
+        step_size=STEP_SIZE,
+        physically_simulated_dofs={dof},
+    )
+
+    try:
+        multi_sim.start_simulation()
+        time.sleep(1)
+
+        # Mimic a measurement-fed controller: each step commands one small
+        # increment past the *measured* position (the readback keeps
+        # resetting the belief in between, exactly like Giskard's ticks).
+        for _ in range(40):
+            measured = multi_sim.simulator.get_joint_value(dof.name.name).result
+            connection.position = measured + 0.005
+            time.sleep(0.05)
+
+        time.sleep(0.5)
+        measured_final = multi_sim.simulator.get_joint_value(dof.name.name).result
+        ctrl_final = _actuator_ctrl(multi_sim, actuator)
+
+        assert measured_final < contact_position + 0.01, (
+            f"slider should have physically stalled against the wall near "
+            f"{contact_position}, got {measured_final} -- the scene no longer "
+            "reproduces a blocked joint."
+        )
+        assert ctrl_final > measured_final + 0.02, (
+            f"ctrl setpoint {ctrl_final} sits at the measured stall position "
+            f"{measured_final} -- the commanded increments were re-derived "
+            "from the measurement-reset belief instead of accumulating, so "
+            "the position servo exerts no sustained push against the contact."
+        )
+    finally:
+        stop_multisim_if_running(multi_sim)
+
+
+def test_multiple_physically_simulated_dofs_track_targets_without_oscillating():
+    """
+    Several physically_simulated dofs actuated at the same time (mirroring several of a
+    multi-joint arm's joints being physically simulated simultaneously, not just one
+    isolated dof) must all converge to their commanded targets via their real PD
+    actuators and *stay* converged, not merely pass through the target on their way to a
+    sustained oscillation.
+
+    This is the risk that made a fully physically-simulated arm (as opposed to
+    kinematically teleporting it every tick) a bigger undertaking than making just the
+    gripper's fingers physically simulated: several actuator-driven joints settling at
+    once is a materially different question -- does the ctrl-sync/qpos-skip machinery
+    (physically_simulated_dofs, _write_1dof_to_qpos) hold up across several
+    simultaneously-actuated dofs -- than a single joint settling in isolation. Each
+    joint is mounted directly to its own fixed base (independent of the others) so this
+    isolates that risk from unrelated kinematic-chain dynamics/inertia tuning.
+    """
+    targets = [0.5, -0.3, 0.2]
+
+    world = World()
+    root = Body(name=PrefixedName("world"))
+    dofs = []
+    connections = []
+
+    with world.modify_world():
+        world.add_body(root)
+        for i in range(1, 4):
+            base = Body(name=PrefixedName(f"physsim_base{i}"))
+            link = Body(name=PrefixedName(f"physsim_link{i}"))
+            # Sized (and massed, at MuJoCo's default density) to be in the same
+            # ballpark as a real Panda arm link -- the arm gains applied to a much
+            # lighter test body produce a huge angular acceleration for its tiny
+            # inertia, which blows up numerically at any reasonable step_size.
+            link.collision = ShapeCollection(
+                [Cylinder(width=0.15, height=0.4, color=Color(0.5, 0.5, 0.5, 1.0))],
+                reference_frame=link,
+            )
+            dof = DegreeOfFreedom(name=PrefixedName(f"physsim_joint{i}"))
+
+            world.add_connection(FixedConnection(parent=root, child=base))
+            world.add_degree_of_freedom(dof)
+            connection = RevoluteConnection(
+                name=dof.name,
+                parent=base,
+                child=link,
+                axis=Vector3.X(reference_frame=link),
+                raw_dof=dof,
+                parent_T_connection_expression=HomogeneousTransformationMatrix.from_xyz_rpy(
+                    x=i * 0.5, reference_frame=base
+                ),
+            )
+            world.add_connection(connection)
+            dofs.append(dof)
+            connections.append(connection)
+
+            _add_affine_position_servo(
+                world,
+                dof,
+                gain=PANDA_ARM_GAIN,
+                stiffness=PANDA_ARM_GAIN,
+                damping=PANDA_ARM_DAMPING,
+                # Without a force limit, a stiff PD gain applied to a (relatively
+                # light) test body can produce an enormous instantaneous torque and
+                # diverge numerically.
+                force_range=PANDA_ARM_FORCE_RANGE,
+            )
+
+    multi_sim = MujocoSim(
+        world=world,
+        headless=headless,
+        step_size=0.0001,
+        physically_simulated_dofs=set(dofs),
+        sync_rate_hz=100,
+    )
+
+    try:
+        multi_sim.start_simulation()
+        time.sleep(1)
+
+        # Ramp towards the targets via small incremental writes at roughly
+        # Giskard's own ~50Hz control rate, instead of one instantaneous step
+        # to the final target -- this mirrors how the real control loop
+        # actually drives physically_simulated dofs (small steps every tick).
+        n_steps = 50
+        for step in range(1, n_steps + 1):
+            for connection, target in zip(connections, targets):
+                connection.position = target * step / n_steps
+            time.sleep(0.02)
+        time.sleep(1)
+
+        settled = [
+            multi_sim.simulator.get_joint_value(dof.name.name).result for dof in dofs
+        ]
+        time.sleep(0.5)
+        settled_again = [
+            multi_sim.simulator.get_joint_value(dof.name.name).result for dof in dofs
+        ]
+
+        multi_sim.stop_simulation()
+
+        for dof, target, value in zip(dofs, targets, settled):
+            assert numpy.isclose(value, target, atol=0.05), (
+                f"{dof.name.name} did not converge to its target: got {value}, "
+                f"expected {target}."
+            )
+        for dof, first, second in zip(dofs, settled, settled_again):
+            assert numpy.isclose(first, second, atol=0.01), (
+                f"{dof.name.name} kept moving between two samples 0.5s apart "
+                f"({first} -> {second}) -- it settled onto its target but did "
+                "not stay settled, suggesting sustained oscillation."
+            )
+    finally:
+        stop_multisim_if_running(multi_sim)
+
+
+def _settle_gravity_loaded_cantilever(gravity_compensated: bool) -> float:
+    """
+    Shared setup: a single physically_simulated revolute joint holding a
+    horizontally-extended cantilevered link level at position 0 against gravity, with or
+    without MuJoCo's gravcomp on that link.
+
+    :param gravity_compensated: Whether the link carries a MujocoBody gravcomp property.
+    :return: The joint's settled steady-state position error from 0.
+    """
+    world = World()
+    root = Body(name=PrefixedName("world"))
+    base = Body(name=PrefixedName("cantilever_base"))
+    link = Body(name=PrefixedName("cantilever_link"))
+    link.collision = ShapeCollection(
+        [
+            Cylinder(
+                origin=HomogeneousTransformationMatrix.from_xyz_rpy(
+                    x=0.3, roll=0, pitch=1.5707963267948966, reference_frame=link
+                ),
+                width=0.2,
+                height=0.5,
+                color=Color(0.5, 0.5, 0.5, 1.0),
+            )
+        ],
+        reference_frame=link,
+    )
+    if gravity_compensated:
+        link.simulator_additional_properties.append(
+            MujocoBody(gravitation_compensation_factor=1.0)
+        )
+    dof = DegreeOfFreedom(name=PrefixedName("cantilever_joint"))
+
+    with world.modify_world():
+        world.add_body(root)
+        world.add_connection(FixedConnection(parent=root, child=base))
+        world.add_degree_of_freedom(dof)
+        connection = RevoluteConnection(
+            name=dof.name,
+            parent=base,
+            child=link,
+            axis=Vector3.Y(reference_frame=link),
+            raw_dof=dof,
+            parent_T_connection_expression=HomogeneousTransformationMatrix.from_xyz_rpy(
+                reference_frame=base
+            ),
+        )
+        world.add_connection(connection)
+        _add_affine_position_servo(
+            world,
+            dof,
+            gain=PANDA_ARM_GAIN,
+            stiffness=PANDA_ARM_GAIN,
+            damping=PANDA_ARM_DAMPING,
+            force_range=PANDA_ARM_FORCE_RANGE,
+        )
+
+    multi_sim = MujocoSim(
+        world=world,
+        headless=headless,
+        step_size=0.0001,
+        physically_simulated_dofs={dof},
+    )
+
+    try:
+        multi_sim.start_simulation()
+        time.sleep(1)
+        connection.position = 0.0
+        time.sleep(3)
+        return abs(multi_sim.simulator.get_joint_value(dof.name.name).result)
+    finally:
+        stop_multisim_if_running(multi_sim)
+
+
+def test_gravity_compensation_keeps_a_loaded_joint_within_convergence_threshold():
+    """
+    A physically_simulated joint holding a gravity-loaded link (e.g. the Panda arm's own
+    links, once physically simulated rather than kinematically teleported) settles with
+    a steady-state position error from its PD actuator's gain alone -- without MuJoCo's
+    gravcomp countering gravity separately, this error can exceed JointPositionList's
+    default 0.01 rad convergence threshold
+    (giskardpy/motion_statechart/tasks/joint_tasks.py), so a motion holding such a joint
+    (e.g. ParkArmsAction) never registers as converged and Giskard keeps sending
+    corrective commands indefinitely -- which also stalls the rest of the plan behind
+    it.
+    """
+    error_without_gravcomp = _settle_gravity_loaded_cantilever(
+        gravity_compensated=False
+    )
+    error_with_gravcomp = _settle_gravity_loaded_cantilever(gravity_compensated=True)
+
+    assert error_without_gravcomp > 0.01, (
+        f"expected the uncompensated cantilever to sag past the 0.01 rad "
+        f"convergence threshold to make this test meaningful, got "
+        f"{error_without_gravcomp:.4f} rad -- link/gain setup no longer "
+        "produces enough gravity torque to reproduce the issue."
+    )
+    assert error_with_gravcomp < 0.01, (
+        f"gravity-compensated joint still settled {error_with_gravcomp:.4f} rad "
+        "from its target, exceeding JointPositionList's 0.01 rad convergence "
+        "threshold -- gravcomp did not sufficiently cancel the sag."
+    )
+
+
+TENDON_GRIPPER_AND_CUBE_MJCF = """
+<mujoco>
+  <worldbody>
+    <body name="finger1" pos="0.05 0 0">
+      <joint name="finger_joint1" type="slide" axis="-1 0 0" range="0 0.06" />
+      <geom type="box" size="0.01 0.01 0.03" friction="1 0.5 0.5" />
+    </body>
+    <body name="finger2" pos="-0.05 0 0">
+      <joint name="finger_joint2" type="slide" axis="1 0 0" range="0 0.06" />
+      <geom type="box" size="0.01 0.01 0.03" friction="1 0.5 0.5" />
+    </body>
+    <body name="cube" pos="0 0 0">
+      <joint type="free" />
+      <geom type="box" size="0.02 0.02 0.02" friction="1 0.5 0.5" />
+    </body>
+    <body name="floor" pos="0 0 -0.03">
+      <geom type="box" size="1 1 0.01" />
+    </body>
+  </worldbody>
+  <tendon>
+    <fixed name="split">
+      <joint joint="finger_joint1" coef="0.5" />
+      <joint joint="finger_joint2" coef="0.5" />
+    </fixed>
+  </tendon>
+  <actuator>
+    <general name="gripper_actuator" tendon="split" biastype="affine" gainprm="0.0156863" biasprm="0 -100 -10" />
+  </actuator>
+</mujoco>
+"""
+
+
+def _close_tendon_gripper_around_cube(
+    physically_simulated: bool,
+) -> Tuple[float, float, numpy.ndarray]:
+    """
+    Shared setup for the two tests below: parses a minimal two-finger, tendon-actuated
+    gripper (mirroring the Panda gripper's real MJCF structure -- fixed tendon + a
+    single actuator driving both joints) with a cube resting between the fingers,
+    commands both fingers to a fully-closed target that would require passing through
+    the cube, lets it settle, and reports where everything ended up.
+
+    :param physically_simulated: Whether both finger dofs are marked physically
+        simulated.
+    :return: The two final finger positions and the cube's final position.
+    """
+    world = MJCFParser.from_xml_string(TENDON_GRIPPER_AND_CUBE_MJCF).parse()
+    finger1 = world.get_connection_by_name("finger_joint1")
+    finger2 = world.get_connection_by_name("finger_joint2")
+    physically_simulated_dofs = (
+        {finger1.raw_dof, finger2.raw_dof} if physically_simulated else set()
+    )
+
+    multi_sim = MujocoSim(
+        world=world,
+        headless=headless,
+        step_size=STEP_SIZE,
+        physically_simulated_dofs=physically_simulated_dofs,
+    )
+    try:
+        multi_sim.start_simulation()
+        time.sleep(0.5)
+
+        finger1.position = 0.05
+        finger2.position = 0.05
+        time.sleep(2)
+
+        q1 = multi_sim.simulator.get_joint_value("finger_joint1").result
+        q2 = multi_sim.simulator.get_joint_value("finger_joint2").result
+        cube_position = numpy.asarray(
+            multi_sim.simulator.get_body_position("cube").result[:3], dtype=float
+        )
+        multi_sim.stop_simulation()
+        return q1, q2, cube_position
+    finally:
+        stop_multisim_if_running(multi_sim)
+
+
+def test_physically_simulated_gripper_stalls_on_and_holds_cube():
+    """
+    With both finger dofs marked physically_simulated, closing the gripper onto a cube
+    must stall well short of the (physically unreachable, since it requires passing
+    through the cube) commanded target, and the cube must stay essentially where it
+    started -- proving real contact/friction, not a kinematic snap, is what determines
+    the fingers' resting position and holds the object.
+    """
+    q1, q2, cube_position = _close_tendon_gripper_around_cube(physically_simulated=True)
+
+    assert q1 < 0.03 and q2 < 0.03, (
+        f"fingers should have stalled against the cube well short of the "
+        f"commanded 0.05m target, got q1={q1}, q2={q2}"
+    )
+    assert numpy.allclose(cube_position, [0, 0, 0], atol=0.01), (
+        f"cube should have stayed close to its starting position, held in "
+        f"place by the fingers, got {cube_position}"
+    )
+
+
+def test_mimic_joint_gets_its_own_scaled_range_not_the_joint_it_mimics():
+    """
+    A mimicking joint's MuJoCo range must be its own, scaled by its multiplier and
+    offset, not a copy of the range of the joint it mimics.
+
+    Both joints share one dof, whose limits describe the *mimicked* joint. Copying those
+    onto the mimic contradicts the equality constraint that couples them: the mimic is
+    then free to travel to positions its multiplier says it can never reach, and the
+    solver has to reconcile a limit and an equality that cannot both hold. On the HSR's
+    torso this drives the lift to its upper stop on its own.
+    """
+    world = World()
+    root = Body(name=PrefixedName("world"))
+    base = Body(name=PrefixedName("mimic_base"))
+    driven = Body(name=PrefixedName("driven_link"))
+    mimicking = Body(name=PrefixedName("mimicking_link"))
+    lower_limits = DerivativeMap[float]()
+    lower_limits.position = 0.005
+    upper_limits = DerivativeMap[float]()
+    upper_limits.position = 0.67
+    dof = DegreeOfFreedom(
+        name=PrefixedName("driven_joint"),
+        limits=DegreeOfFreedomLimits(lower=lower_limits, upper=upper_limits),
+    )
+    multiplier = 0.5
+
+    with world.modify_world():
+        world.add_body(root)
+        world.add_connection(FixedConnection(parent=root, child=base))
+        world.add_degree_of_freedom(dof)
+        world.add_connection(
+            RevoluteConnection(
+                name=dof.name,
+                parent=base,
+                child=driven,
+                axis=Vector3.Z(reference_frame=driven),
+                raw_dof=dof,
+            )
+        )
+        world.add_body(mimicking)
+        world.add_connection(
+            RevoluteConnection(
+                name=PrefixedName("mimicking_joint"),
+                parent=base,
+                child=mimicking,
+                axis=Vector3.Z(reference_frame=mimicking),
+                raw_dof=dof,
+                multiplier=multiplier,
+                offset=0.0,
+            )
+        )
+
+    builder = MujocoBuilder()
+    builder.build_world(world=world, file_path="/tmp/mimic_range_scene.xml")
+    model = builder.spec.compile()
+
+    driven_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, "driven_joint")
+    mimicking_id = mujoco.mj_name2id(
+        model, mujoco.mjtObj.mjOBJ_JOINT, "mimicking_joint"
+    )
+    driven_range = list(model.jnt_range[driven_id])
+    mimicking_range = list(model.jnt_range[mimicking_id])
+
+    numpy.testing.assert_allclose(
+        mimicking_range,
+        [limit * multiplier for limit in driven_range],
+        atol=1e-9,
+        err_msg=(
+            f"mimicking joint got range {mimicking_range}, the range of the joint it "
+            f"mimics ({driven_range}) rather than its own {multiplier}x scaling"
+        ),
+    )
+
+
+def _build_mimic_joint_simulation() -> tuple:
+    """
+    Start a simulation of one driven revolute joint and a second that mimics it at half
+    its travel, mirroring how the HSR's torso follows its arm lift.
+
+    :return: The running simulation, the driven connection and the mimicking connection.
+    """
+    world = World()
+    root = Body(name=PrefixedName("world"))
+    base = Body(name=PrefixedName("mimic_base"))
+    driven_link = Body(name=PrefixedName("driven_link"))
+    mimicking_link = Body(name=PrefixedName("mimicking_link"))
+    lower_limits = DerivativeMap[float]()
+    lower_limits.position = -1.0
+    upper_limits = DerivativeMap[float]()
+    upper_limits.position = 1.0
+    dof = DegreeOfFreedom(
+        name=PrefixedName("driven_joint"),
+        limits=DegreeOfFreedomLimits(lower=lower_limits, upper=upper_limits),
+    )
+
+    with world.modify_world():
+        world.add_body(root)
+        world.add_connection(FixedConnection(parent=root, child=base))
+        world.add_degree_of_freedom(dof)
+        driven = RevoluteConnection(
+            name=dof.name,
+            parent=base,
+            child=driven_link,
+            axis=Vector3.Z(reference_frame=driven_link),
+            raw_dof=dof,
+        )
+        world.add_connection(driven)
+        world.add_body(mimicking_link)
+        mimicking = RevoluteConnection(
+            name=PrefixedName("mimicking_joint"),
+            parent=base,
+            child=mimicking_link,
+            axis=Vector3.Z(reference_frame=mimicking_link),
+            raw_dof=dof,
+            multiplier=0.5,
+            offset=0.0,
+        )
+        world.add_connection(mimicking)
+
+    multi_sim = MujocoSim(world=world, headless=headless, step_size=STEP_SIZE)
+    multi_sim.start_simulation()
+    time.sleep(0.5)
+    return multi_sim, driven, mimicking
+
+
+def test_world_to_sim_sync_scales_a_mimicking_joints_commanded_position():
+    """
+    A mimicking joint's qpos must be the shared dof's value scaled by its own multiplier
+    and offset, not a raw copy of it.
+
+    Both joints read from one dof, so writing the raw value into both commands the mimic
+    to travel as far as the joint it mimics -- which its own limits and the equality
+    constraint coupling them both forbid.
+    """
+    multi_sim, driven, mimicking = _build_mimic_joint_simulation()
+
+    try:
+        driven.position = 0.4
+        time.sleep(0.5)
+
+        driven_qpos = multi_sim.simulator.get_joint_value("driven_joint").result
+        mimicking_qpos = multi_sim.simulator.get_joint_value("mimicking_joint").result
+
+        assert float(driven_qpos) == pytest.approx(0.4, abs=0.02)
+        assert float(mimicking_qpos) == pytest.approx(0.2, abs=0.02), (
+            f"mimicking joint sits at {float(mimicking_qpos)}, not the "
+            "0.5x-scaled 0.2 its multiplier allows"
+        )
+    finally:
+        stop_multisim_if_running(multi_sim)
+
+
+def test_sim_to_world_sync_does_not_let_a_mimicking_joint_clobber_the_shared_dof():
+    """
+    Reading a mimicking joint's qpos back must recover the *shared* dof's value, undoing
+    its multiplier and offset.
+
+    Every connection sharing a dof writes into the same world-state entry, so a
+    mimicking joint that writes its own scaled reading straight in overwrites whatever
+    the joint it mimics just reported, and the world model ends up believing a position
+    neither joint is actually at.
+    """
+    multi_sim, driven, mimicking = _build_mimic_joint_simulation()
+
+    try:
+        driven.position = 0.4
+        time.sleep(0.5)
+        multi_sim.synchronizer._sim_to_world(force=True)
+
+        driven_qpos = float(multi_sim.simulator.get_joint_value("driven_joint").result)
+        believed = float(
+            multi_sim.synchronizer._world.state[driven.raw_dof.id].position
+        )
+
+        assert believed == pytest.approx(driven_qpos, abs=1e-3), (
+            f"world model believes the shared dof is at {believed} while the joint it "
+            f"describes is physically at {driven_qpos}; the mimicking joint's reading "
+            "overwrote it"
+        )
+    finally:
+        stop_multisim_if_running(multi_sim)
+
+
+@dataclass
+class CarriedBodyScene:
+    """
+    A body resting on a movable handle, ready to be re-parented onto it the way
+    AttachNode/DetachNode do.
+    """
+
+    multi_sim: MujocoSim
+    """The running simulation the scene lives in."""
+
+    handle_connection: PrismaticConnection
+    """The joint moving the handle the body is carried by."""
+
+    carried_body: Body
+    """The body that gets re-parented onto the handle."""
+
+    def reparent_onto(self, parent: Body) -> None:
+        """
+        Re-parent :attr:`carried_body` onto ``parent`` exactly the way
+        AttachNode/DetachNode do: remove its current connection and add a new one,
+        both inside a single ``modify_world()`` block.
+        """
+        world = self.multi_sim.synchronizer._world
+        with world.modify_world():
+            world.remove_connection(self.carried_body.parent_connection)
+            world.add_connection(
+                FixedConnection(
+                    parent=parent,
+                    child=self.carried_body,
+                    parent_T_connection_expression=world.compute_forward_kinematics(
+                        parent, self.carried_body
+                    ),
+                )
+            )
+
+    def carried_body_joints(self) -> list:
+        """
+        :return: The MuJoCo joints :attr:`carried_body` currently has. A welded body
+            has none of its own; a free body has exactly one free joint.
+        """
+        return self.multi_sim.simulator.get_body_joints(
+            self.carried_body.name.name
+        ).result
+
+
+def _build_carried_body_scene(reparenting_mode: ReparentingMode) -> CarriedBodyScene:
+    """
+    Build and start a :class:`CarriedBodyScene` whose simulation re-parents bodies
+    according to ``reparenting_mode``.
+
+    The handle is driven by a real PD actuator, matching how an arm's own joints hold
+    position via actual force: without one the joint has nothing opposing gravity and
+    free-falls from creation, which an arm's actuated joints never do.
+    """
+    world = World()
+    multi_sim = MujocoSim(
+        world=world,
+        headless=headless,
+        step_size=STEP_SIZE,
+        reparenting_mode=reparenting_mode,
+    )
+    multi_sim.start_simulation()
+    time.sleep(1)
+
+    base = Body(name=PrefixedName("handle_base"))
+    handle = Body(name=PrefixedName("handle"))
+    handle.collision = ShapeCollection(
+        [Box(scale=Scale(0.05, 0.05, 0.05), color=Color(0.2, 0.2, 0.8, 1.0))],
+        reference_frame=handle,
+    )
+    carried_body = Body(name=PrefixedName("attachable_box"))
+    carried_body.collision = ShapeCollection(
+        [Box(scale=Scale(0.04, 0.04, 0.04), color=Color(0.8, 0.2, 0.2, 1.0))],
+        reference_frame=carried_body,
+    )
+    dof = DegreeOfFreedom(name=PrefixedName("handle_joint"))
+
+    with world.modify_world():
+        world.add_connection(FixedConnection(parent=world.root, child=base))
+        handle_connection = PrismaticConnection(
+            name=dof.name,
+            parent=base,
+            child=handle,
+            axis=Vector3.Z(reference_frame=handle),
+            raw_dof=dof,
+            parent_T_connection_expression=HomogeneousTransformationMatrix.from_xyz_rpy(
+                reference_frame=base
+            ),
+        )
+        world.add_degree_of_freedom(dof)
+        world.add_connection(handle_connection)
+        _add_affine_position_servo(
+            world,
+            dof,
+            gain=PANDA_ARM_GAIN,
+            stiffness=PANDA_ARM_GAIN,
+            damping=PANDA_ARM_DAMPING,
+        )
+        world.add_connection(
+            Connection6DoF.create_with_dofs(
+                world=world,
+                parent=world.root,
+                child=carried_body,
+                parent_T_connection_expression=HomogeneousTransformationMatrix.from_xyz_rpy(
+                    z=0.2, reference_frame=world.root
+                ),
+            )
+        )
+
+    time.sleep(1)
+    return CarriedBodyScene(multi_sim, handle_connection, carried_body)
+
+
+def test_weld_reparenting_attaches_and_detaches_the_body_in_the_simulator():
+    """
+    Under :attr:`ReparentingMode.WELD`, re-parenting a body in the world model the way
+    AttachNode/DetachNode do must also weld/un-weld it in MuJoCo's own kinematic tree,
+    not just in the world model.
+
+    Checked structurally rather than by position deltas: a welded child has no joint of
+    its own in MuJoCo at all, while the handle and box geometries are vertically stacked,
+    so a mere resting contact (no weld) can coincidentally reproduce the same delta.
+    """
+    scene = _build_carried_body_scene(ReparentingMode.WELD)
+    world = scene.multi_sim.synchronizer._world
+
+    try:
+        scene.reparent_onto(scene.handle_connection.child)
+        assert scene.carried_body_joints() == [], (
+            "box still has its own MuJoCo joint after being attached under "
+            "ReparentingMode.WELD; it was not welded to the handle"
+        )
+
+        scene.reparent_onto(world.root)
+        detached_joints = scene.carried_body_joints()
+        assert len(detached_joints) == 1 and (
+            detached_joints[0].type == mujoco.mjtJoint.mjJNT_FREE
+        ), (
+            "box did not get a free joint back after being detached to world.root, "
+            f"still welded in MuJoCo: joints={detached_joints}"
+        )
+    finally:
+        stop_multisim_if_running(scene.multi_sim)
+
+
+def test_contact_only_reparenting_leaves_the_body_free_in_the_simulator():
+    """
+    Under :attr:`ReparentingMode.CONTACT_ONLY`, the same world-model re-parent must
+    leave the body's own free joint untouched in MuJoCo, so nothing but real contact and
+    friction holds it to whatever picked it up.
+
+    This is what makes a fully physical grasp possible: with the body welded, a grasp
+    can never slip regardless of how the fingers actually contact it, so the simulation
+    cannot tell a good grasp from a bad one.
+    """
+    scene = _build_carried_body_scene(ReparentingMode.CONTACT_ONLY)
+
+    try:
+        joints_before = scene.carried_body_joints()
+        scene.reparent_onto(scene.handle_connection.child)
+        joints_after = scene.carried_body_joints()
+
+        assert len(joints_before) == 1 and (
+            joints_before[0].type == mujoco.mjtJoint.mjJNT_FREE
+        ), f"box did not start as a free body in MuJoCo: joints={joints_before}"
+        assert len(joints_after) == 1 and (
+            joints_after[0].type == mujoco.mjtJoint.mjJNT_FREE
+        ), (
+            "box lost its free joint when it was attached in the world model; "
+            "ReparentingMode.CONTACT_ONLY must leave MuJoCo's kinematic tree alone "
+            f"so friction alone holds it: joints={joints_after}"
+        )
+    finally:
+        stop_multisim_if_running(scene.multi_sim)
+
+
+def test_kinematically_teleported_gripper_ignores_cube_contact():
+    """
+    Negative control for test_physically_simulated_gripper_stalls_on_and_holds_cube:
+    with physically_simulated_dofs left empty (the default teleport behaviour for every
+    dof), the fingers must reach much closer to the commanded target regardless of the
+    cube being in the way, and the cube gets displaced/ejected rather than held --
+    demonstrating that without physically_simulated_dofs, closing a gripper on an object
+    does not produce a stable, contact-respecting grasp.
+    """
+    q1, q2, cube_position = _close_tendon_gripper_around_cube(
+        physically_simulated=False
+    )
+
+    assert q1 > 0.035 and q2 > 0.035, (
+        f"fingers should have reached close to the commanded 0.05m target "
+        f"regardless of the cube, got q1={q1}, q2={q2}"
+    )
+    assert not numpy.allclose(cube_position, [0, 0, 0], atol=0.01), (
+        f"cube should have been displaced/ejected by the kinematically "
+        f"teleported fingers passing through it, got {cube_position}"
+    )

@@ -44,7 +44,13 @@ from experiments.montessori.semantics import MontessoriShape, NoMatchingHoleErro
 from experiments.montessori.world import MontessoriWorld, robot_installed
 from krrood.entity_query_language.backends import ProbabilisticBackend
 from krrood.utils import clear_memoization_cache
-from semantic_digital_twin.adapters.multi_sim import MujocoActuator, MujocoSim
+from semantic_digital_twin.adapters.multi_sim import (
+    MujocoActuator,
+    MujocoBody,
+    MujocoGeom,
+    MujocoSim,
+    ReparentingMode,
+)
 from coraplex.datastructures.enums import Arms
 from semantic_digital_twin.collision_checking.collision_rules import (
     AllowCollisionBetweenGroups,
@@ -60,8 +66,6 @@ from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.connections import (
     ActiveConnection,
     ActiveConnection1DOF,
-    Connection6DoF,
-    FixedConnection,
 )
 from semantic_digital_twin.world_description.degree_of_freedom import DegreeOfFreedom
 from semantic_digital_twin.world_description.world_entity import Actuator
@@ -88,30 +92,50 @@ robot's joints.
 
 ARM_ACTUATOR_POSITION_GAIN = 100.0
 """
-Proportional gain of the MuJoCo position-hold actuators added to the robot's controlled
-joints (arm, wrist, head).
+Proportional gain of the MuJoCo position-servo actuators driving the robot's controlled
+joints (arm, torso lift, wrist, head).
 """
 
 ARM_ACTUATOR_VELOCITY_GAIN = 10.0
 """
-Derivative (damping) gain of the MuJoCo position-hold actuators added to the robot's
-controlled joints (arm, wrist, head).
+Derivative (damping) gain of the MuJoCo position-servo actuators driving the robot's
+controlled joints (arm, torso lift, wrist, head).
 """
 
-BASE_ACTUATOR_POSITION_GAIN = 1.0
+GRIPPER_ACTUATOR_POSITION_GAIN = ARM_ACTUATOR_POSITION_GAIN
 """
-Proportional gain of the MuJoCo position-hold actuators added to the mobile base's wheel
-joints.
+Proportional gain of the MuJoCo position-servo actuator driving the gripper.
 
-Much lower than :data:`ARM_ACTUATOR_POSITION_GAIN`: the wheels have far less inertia
-than an arm link, and holding them with the arm's gain makes the simulation numerically
-unstable (``QACC`` diverges within the first few milliseconds and never settles).
+The sustained squeeze on a grasped shape does not come from this gain alone: once the
+fingers stall against the shape,
+:meth:`~semantic_digital_twin.adapters.multi_sim.MujocoSynchronizer._integrate_desired_position`
+keeps advancing the servo's setpoint past the contact, so the closing force builds up
+instead of settling at the contact surface.
 """
 
-BASE_ACTUATOR_VELOCITY_GAIN = 0.1
+GRIPPER_ACTUATOR_VELOCITY_GAIN = ARM_ACTUATOR_VELOCITY_GAIN
 """
-Derivative (damping) gain of the MuJoCo position-hold actuators added to the mobile
-base's wheel joints.
+Derivative (damping) gain of the MuJoCo position-servo actuator driving the gripper.
+"""
+
+JOINT_FORCE_RANGE = [-100.0, 100.0]
+"""
+Force clamp of every position-servo actuator added to the robot, taken from the effort
+limit the HSR's own URDF declares for all of these joints.
+
+Without a force limit, a stiff servo acting on a light link can produce an enormous
+instantaneous torque and diverge numerically.
+"""
+
+GRIPPER_FRICTION = [1.0, 0.5, 0.5]
+"""
+Contact friction (sliding, torsional, rolling) given to the gripper's finger geometry,
+matching what the shapes themselves carry (see
+:data:`~experiments.montessori.world.GRASP_FRICTION`).
+
+Both sides of a contact need it: MuJoCo combines the two geoms' friction, so leaving the
+fingers at the near-zero default torsional/rolling values lets a grasped shape spin and
+roll out of them however firmly they squeeze.
 """
 
 BASE_JOINT_DAMPING = 50.0
@@ -123,7 +147,19 @@ joints, resisting spinning regardless of the (weak) position-hold actuator.
 BASE_JOINT_DRY_FRICTION = 5.0
 """
 Dry friction (:attr:`JointDynamics.dry_friction`) added to the mobile base's wheel
-joints, resisting spinning regardless of the (weak) position-hold actuator.
+joints, resisting spinning under gravity and floor contacts.
+"""
+
+BASE_JOINT_ARMATURE = 0.02
+"""
+Rotor inertia (:attr:`JointDynamics.armature`) added to the mobile base's wheel joints.
+
+MuJoCo integrates joint damping explicitly, so a joint stays stable only while
+``damping * step_size / inertia`` remains below 1. A caster wheel's own inertia is
+several orders of magnitude too small for :data:`BASE_JOINT_DAMPING` at
+:data:`MUJOCO_STEP_SIZE`, and its acceleration diverges on the very first step without
+this. Chosen as twice ``BASE_JOINT_DAMPING * MUJOCO_STEP_SIZE``, putting that ratio at
+one half.
 """
 
 MUJOCO_STEP_SIZE = 2e-4
@@ -193,13 +229,15 @@ def _insert_shape(
     shape: MontessoriShape,
     montessori: MontessoriWorld,
     context: Context,
-    headless: bool,
     target_horizontal_offset: Optional[Point3] = None,
 ) -> InsertionAttemptResult:
     """
     Have the robot pick up and insert a single loose shape into its matching hole once,
-    then physically settle it under gravity in MuJoCo (see
-    :func:`_settle_shape_in_mujoco`).
+    then wait for it to physically come to rest.
+
+    Both the pick-and-place and the drop happen inside the already-running simulation:
+    the shape is held by the fingers' friction while carried, and falls through the hole
+    on its own once released, rather than being teleported into place.
 
     Runs with Giskard's collision avoidance off
     (:data:`~coraplex.execution_environment.simulated_robot`'s
@@ -214,17 +252,15 @@ def _insert_shape(
     :param shape: The shape to insert; must have a matching hole (see
         :meth:`~experiments.montessori.semantics.ShapeSortingBoard.hole_for`).
     :param montessori: The Montessori scene, with :attr:`MontessoriWorld.robot` already
-        spawned and its controlled joints already held (see
-        :func:`_hold_controlled_joints_in_mujoco`).
+        spawned and equipped (see :func:`_equip_robot_for_physical_simulation`), inside
+        a running simulation (see :func:`_start_physical_simulation`).
     :param context: The CRAM execution context to run the insertion action in.
-    :param headless: Whether to run the settling MuJoCo simulation without opening a
-        viewer window.
     :param target_horizontal_offset: Horizontal offset to release the shape at; a
         random :func:`_random_horizontal_jitter` is used if not given.
     :return: The attempt's outcome.
     """
-    from coraplex.datastructures.enums import Arms
-    from coraplex.execution_environment import simulated_robot
+    from coraplex.datastructures.enums import Arms, ExecutionType
+    from coraplex.execution_environment import ExecutionEnvironment
     from coraplex.plans.factories import execute_single
     from experiments.montessori.insert_shape_action import InsertMontessoriShapeAction
 
@@ -242,12 +278,20 @@ def _insert_shape(
         arm=Arms.RIGHT,
         target_horizontal_offset=offset,
     )
-    with simulated_robot():
+    # real_time_pacing keeps the control loop advancing at the same rate as the physics
+    # it is driving; without it the planner runs far ahead of the simulation and
+    # commands joint positions the arm has had no wall-clock time to physically reach.
+    with ExecutionEnvironment(
+        execution_type=ExecutionType.SIMULATED,
+        collision_avoidance=False,
+        real_time_pacing=True,
+    ):
         node = execute_single(action, context=context)
         node.perform()
 
-    logger.info("Settling %s in MuJoCo.", shape.name)
-    _settle_shape_in_mujoco(shape, montessori, headless)
+    logger.info("Letting %s settle.", shape.name)
+    time.sleep(SHAPE_SETTLE_DURATION)
+    montessori.world.update_forward_kinematics()
 
     return InsertionAttemptResult(offset, action.has_fallen_through_hole())
 
@@ -256,7 +300,6 @@ def _insert_shape_or_none(
     shape: MontessoriShape,
     montessori: MontessoriWorld,
     context: Context,
-    headless: bool,
     attempt: int,
 ) -> Optional[InsertionAttemptResult]:
     """
@@ -279,10 +322,8 @@ def _insert_shape_or_none(
 
     :param shape: The shape to insert; must have a matching hole.
     :param montessori: The Montessori scene, with :attr:`MontessoriWorld.robot` already
-        spawned and its controlled joints already held.
+        spawned and equipped, inside a running simulation.
     :param context: The CRAM execution context to run the insertion action in.
-    :param headless: Whether to run the settling MuJoCo simulation without opening a
-        viewer window.
     :param attempt: This attempt's 1-based index, used only for the log message.
     :return: The attempt's outcome, or ``None`` if this attempt failed in a retryable
         way.
@@ -291,7 +332,7 @@ def _insert_shape_or_none(
     from giskardpy.motion_statechart.exceptions import CollisionViolatedError
 
     try:
-        return _insert_shape(shape, montessori, context, headless)
+        return _insert_shape(shape, montessori, context)
     except (PointOccupiedError, PlanFailure, CollisionViolatedError) as error:
         logger.warning(
             "%s's insertion attempt %d/%d failed (%s); retrying.",
@@ -381,7 +422,7 @@ def _enable_robot_table_collision_avoidance(montessori: MontessoriWorld) -> None
         )
 
 
-def _insert_all_shapes(montessori: MontessoriWorld, headless: bool) -> None:
+def _insert_all_shapes(montessori: MontessoriWorld) -> None:
     """
     Have the robot pick up and insert every loose shape that has a matching hole into
     the shape-sorting board, skipping any that don't (e.g. the sphere), retrying a shape
@@ -389,11 +430,13 @@ def _insert_all_shapes(montessori: MontessoriWorld, headless: bool) -> None:
     :data:`MAX_INSERTION_ATTEMPTS` times with a jittered drop point before giving up on
     it.
 
+    A retry picks the shape up from wherever it physically ended up, which is not
+    necessarily where it started: a shape that bounced off the board or slipped out of
+    the gripper has genuinely moved.
+
     :param montessori: The Montessori scene, with :attr:`MontessoriWorld.robot` already
-        spawned and its controlled joints already held (see
-        :func:`_hold_controlled_joints_in_mujoco`).
-    :param headless: Whether to run the settling MuJoCo simulations without opening a
-        viewer window.
+        spawned and equipped (see :func:`_equip_robot_for_physical_simulation`), inside
+        a running simulation (see :func:`_start_physical_simulation`).
     """
     # Imported lazily: coraplex.datastructures.dataclasses pulls in
     # coraplex.plans.executables for GiskardExecutable, which imports rclpy at module
@@ -419,7 +462,7 @@ def _insert_all_shapes(montessori: MontessoriWorld, headless: bool) -> None:
                 attempt,
                 MAX_INSERTION_ATTEMPTS,
             )
-            result = _insert_shape_or_none(shape, montessori, context, headless, attempt)
+            result = _insert_shape_or_none(shape, montessori, context, attempt)
             if result is not None and result.fell_through_hole:
                 break
         else:
@@ -431,17 +474,24 @@ def _insert_all_shapes(montessori: MontessoriWorld, headless: bool) -> None:
             )
 
 
-def _position_hold_actuator(
-    position_gain: float, velocity_gain: float
+def _position_servo_actuator(
+    position_gain: float,
+    velocity_gain: float,
+    force_range: Optional[list[float]] = None,
 ) -> MujocoActuator:
     """
-    Build a MuJoCo actuator that holds its degree of freedom at whatever position it had
-    when the simulation started, resisting gravity and contacts with a PD law.
+    Build a MuJoCo actuator that servos its degree of freedom to a commanded position
+    with a PD law, resisting gravity and contacts.
 
-    :param position_gain: Proportional gain of the hold.
-    :param velocity_gain: Derivative (damping) gain of the hold.
+    The commanded position is whatever the world-model sync last wrote into the
+    actuator's ``ctrl`` setpoint, so a joint driven by one of these follows the motion
+    planner physically rather than being teleported to it.
+
+    :param position_gain: Proportional gain of the servo.
+    :param velocity_gain: Derivative (damping) gain of the servo.
+    :param force_range: Force clamp, unlimited when omitted.
     """
-    return MujocoActuator(
+    actuator_properties = MujocoActuator(
         dynamics_type=mujoco.mjtDyn.mjDYN_NONE,
         dynamics_parameters=[ACTUATOR_TIME_CONSTANT] + [0.0] * 9,
         gain_type=mujoco.mjtGain.mjGAIN_FIXED,
@@ -449,23 +499,32 @@ def _position_hold_actuator(
         bias_type=mujoco.mjtBias.mjBIAS_AFFINE,
         bias_parameters=[0, -position_gain, -velocity_gain] + [0.0] * 7,
     )
+    if force_range is not None:
+        actuator_properties.force_limited = mujoco.mjtLimited.mjLIMITED_TRUE
+        actuator_properties.force_range = list(force_range)
+    return actuator_properties
 
 
-def _add_position_hold_actuator(
-    world: World, dof: DegreeOfFreedom, position_gain: float, velocity_gain: float
+def _add_position_servo_actuator(
+    world: World,
+    dof: DegreeOfFreedom,
+    position_gain: float,
+    velocity_gain: float,
+    force_range: Optional[list[float]] = None,
 ) -> None:
     """
-    Add a :func:`_position_hold_actuator` for ``dof`` to ``world``.
+    Add a :func:`_position_servo_actuator` for ``dof`` to ``world``.
 
     :param world: The world to add the actuator to, modified in place.
-    :param dof: The degree of freedom to hold.
-    :param position_gain: Proportional gain of the hold.
-    :param velocity_gain: Derivative (damping) gain of the hold.
+    :param dof: The degree of freedom to drive.
+    :param position_gain: Proportional gain of the servo.
+    :param velocity_gain: Derivative (damping) gain of the servo.
+    :param force_range: Force clamp, unlimited when omitted.
     """
     actuator = Actuator()
     actuator.add_dof(dof=dof)
     actuator.simulator_additional_properties.append(
-        _position_hold_actuator(position_gain, velocity_gain)
+        _position_servo_actuator(position_gain, velocity_gain, force_range)
     )
     world.add_actuator(actuator=actuator)
 
@@ -521,172 +580,206 @@ def _base_connections_without_hardware_interface(
     return base_connections
 
 
-def _hold_controlled_joints_in_mujoco(robot: AbstractRobot) -> None:
+def _gripper_drive_degrees_of_freedom(robot: AbstractRobot) -> list[DegreeOfFreedom]:
     """
-    Keep every joint of the robot that would otherwise be left to MuJoCo's own physics
-    (arm, wrist, head, and the mobile base's wheels) from sagging or spinning under
-    gravity and contacts once MuJoCo starts stepping the world.
+    The degrees of freedom of every end effector that a MuJoCo actuator has to drive for
+    the gripper to physically open and close.
 
-    The arm/wrist/head are held with a MuJoCo position-hold actuator
-    (:data:`ARM_ACTUATOR_POSITION_GAIN`). The base's wheels additionally get joint
-    damping and dry friction (:data:`BASE_JOINT_DAMPING`,
-    :data:`BASE_JOINT_DRY_FRICTION`): their low inertia makes the arm's actuator gains
-    numerically unstable, and a weak actuator (:data:`BASE_ACTUATOR_POSITION_GAIN`)
-    alone is not enough to stop them spinning once the robot has actually driven around
-    and is resting at a real, contact-heavy pose rather than its spawn pose.
+    Read off the end effector's own declared joint states (the open/close configurations
+    it commands), so only the joints the gripper actually drives get an actuator and its
+    remaining joints are left to physics. On the HSR that distinction matters twice
+    over: its four finger joints all mimic one motor joint, so they share a single
+    :class:`DegreeOfFreedom` and one actuator on it drives all four (the mimic
+    relationships are exported to MuJoCo as joint equality constraints), while its two
+    compliant spring joints appear in no joint state at all and must stay free to
+    deflect against a grasped object.
+
+    A gripper with no declared joint states drives nothing, and cannot grasp.
+
+    :param robot: The spawned robot.
+    """
+    driven_dofs = []
+    for end_effector in robot.get_end_effectors():
+        for joint_state in end_effector.joint_states:
+            for connection in joint_state.connections:
+                if connection.raw_dof not in driven_dofs:
+                    driven_dofs.append(connection.raw_dof)
+    return driven_dofs
+
+
+def _gripper_degrees_of_freedom(robot: AbstractRobot) -> set[DegreeOfFreedom]:
+    """
+    Every degree of freedom of every end effector, driven or not.
+
+    A superset of :func:`_gripper_drive_degrees_of_freedom`: the remainder are passive
+    (e.g. the HSR's compliant spring joints), which physics rather than an actuator has
+    to move, or their compliance is teleported away instead of deflecting against a
+    grasped object.
+
+    :param robot: The spawned robot.
+    """
+    return {
+        connection.raw_dof
+        for end_effector in robot.get_end_effectors()
+        for connection in end_effector.connections
+        if isinstance(connection, ActiveConnection1DOF)
+    }
+
+
+def _physically_simulated_degrees_of_freedom(
+    robot: AbstractRobot,
+) -> set[DegreeOfFreedom]:
+    """
+    Every degree of freedom that MuJoCo's actuator and contact model drives, rather than
+    the world-model sync teleporting it (see
+    :attr:`~semantic_digital_twin.adapters.multi_sim.MujocoSynchronizer.physically_simulated_dofs`).
+
+    That is the arm, torso lift, head and the whole gripper. The mobile base is
+    deliberately left out: it is driven through an :class:`OmniDrive` rather than by its
+    wheels, and physically driving those wheels over floor contacts is a separate
+    problem from the physical grasp this demo is about.
+
+    :param robot: The spawned robot.
+    """
+    return set(
+        robot.degrees_of_freedom_with_hardware_interface
+    ) | _gripper_degrees_of_freedom(robot)
+
+
+def _connections_driving(
+    robot: AbstractRobot, degrees_of_freedom: set[DegreeOfFreedom]
+) -> list[ActiveConnection1DOF]:
+    """
+    The robot's connections moved by any of ``degrees_of_freedom``.
+
+    :param robot: The spawned robot.
+    :param degrees_of_freedom: The degrees of freedom to find the connections of.
+    """
+    return [
+        connection
+        for connection in robot.connections
+        if isinstance(connection, ActiveConnection1DOF)
+        and connection.raw_dof in degrees_of_freedom
+    ]
+
+
+def _equip_robot_for_physical_simulation(
+    robot: AbstractRobot,
+) -> set[DegreeOfFreedom]:
+    """
+    Give the robot everything it needs to be driven by MuJoCo's physics rather than
+    kinematically teleported, and report which of its degrees of freedom that covers.
+
+    The arm, torso lift, head and the gripper's driven joint get position-servo
+    actuators (:data:`ARM_ACTUATOR_POSITION_GAIN`,
+    :data:`GRIPPER_ACTUATOR_POSITION_GAIN`) that track whatever the motion planner
+    commands. The gripper's passive joints get none, but are still physically simulated,
+    so their compliance actually deflects. Every physically simulated link gets MuJoCo's
+    own gravity compensation: without it each joint settles with a steady-state error
+    from gravity sag alone, large enough to exceed ``JointPositionList``'s convergence
+    threshold, so a motion merely holding the arm never registers as converged and the
+    plan behind it never starts. The fingers additionally get the contact friction a
+    friction-only grasp needs (:data:`GRIPPER_FRICTION`).
+
+    The mobile base stays kinematic, so its wheels are given no actuator at all -- only
+    joint damping and dry friction (:data:`BASE_JOINT_DAMPING`,
+    :data:`BASE_JOINT_DRY_FRICTION`) to keep them from spinning up under gravity and
+    floor contacts. Servoing them instead diverges immediately: their inertia is tiny
+    next to an arm link's, and nothing commands them, so a position servo just fights
+    the contact forces at whatever position they happen to be teleported to.
 
     :param robot: The spawned robot, modified in place.
+    :return: The degrees of freedom MuJoCo now drives, for
+        :class:`~semantic_digital_twin.adapters.multi_sim.MujocoSim`'s
+        ``physically_simulated_dofs``.
     """
+    physically_simulated_dofs = _physically_simulated_degrees_of_freedom(robot)
+    gripper_dofs = set(_gripper_drive_degrees_of_freedom(robot))
+    actuated_dofs = set(robot.degrees_of_freedom_with_hardware_interface) | gripper_dofs
+
     with robot._world.modify_world():
-        for dof in robot.degrees_of_freedom_with_hardware_interface:
-            _add_position_hold_actuator(
+        for dof in sorted(actuated_dofs, key=lambda d: d.name.name):
+            is_gripper_dof = dof in gripper_dofs
+            _add_position_servo_actuator(
                 robot._world,
                 dof,
-                ARM_ACTUATOR_POSITION_GAIN,
-                ARM_ACTUATOR_VELOCITY_GAIN,
+                (
+                    GRIPPER_ACTUATOR_POSITION_GAIN
+                    if is_gripper_dof
+                    else ARM_ACTUATOR_POSITION_GAIN
+                ),
+                (
+                    GRIPPER_ACTUATOR_VELOCITY_GAIN
+                    if is_gripper_dof
+                    else ARM_ACTUATOR_VELOCITY_GAIN
+                ),
+                force_range=JOINT_FORCE_RANGE,
             )
+        for connection in _connections_driving(robot, physically_simulated_dofs):
+            connection.child.simulator_additional_properties.append(
+                MujocoBody(gravitation_compensation_factor=1.0)
+            )
+        for connection in _connections_driving(robot, gripper_dofs):
+            for shape in connection.child.collision:
+                shape.simulator_additional_properties.append(
+                    MujocoGeom(friction=list(GRIPPER_FRICTION))
+                )
         for connection in _base_connections_without_hardware_interface(robot):
             connection.dynamics.damping = BASE_JOINT_DAMPING
             connection.dynamics.dry_friction = BASE_JOINT_DRY_FRICTION
-            _add_position_hold_actuator(
-                robot._world,
-                connection.raw_dof,
-                BASE_ACTUATOR_POSITION_GAIN,
-                BASE_ACTUATOR_VELOCITY_GAIN,
-            )
+            connection.dynamics.armature = BASE_JOINT_ARMATURE
 
-
-def _make_shape_movable_in_mujoco(shape: MontessoriShape, world: World) -> None:
-    """
-    Re-attach a loose shape's body to the world root with a free
-    (:class:`Connection6DoF`) joint instead of the rigid connection it currently has,
-    preserving its current pose.
-
-    :class:`~coraplex.robot_plans.actions.core.placing.PlaceAction` always re-attaches a
-    placed object with a :class:`~semantic_digital_twin.world_description.connections.FixedConnection`
-    (a deliberate, framework-wide choice; see the ``# TODO: this shouldn't be fixed but
-    6DOF`` comment in ``coraplex.plans.executables.ModelChangeExecutable``), and every
-    loose shape starts out :class:`FixedConnection`'d to the world root too. MuJoCo
-    treats an unjointed body as welded to its parent, so without this a shape cannot be
-    affected by gravity or contacts at all once MuJoCo starts stepping the world.
-
-    :param shape: The shape to make movable.
-    :param world: The world the shape belongs to, modified in place.
-    """
-    current_pose = world.compute_forward_kinematics(world.root, shape.root)
-    with world.modify_world():
-        world.remove_connection(shape.root.parent_connection)
-        connection = Connection6DoF.create_with_dofs(
-            world=world,
-            parent=world.root,
-            child=shape.root,
-        )
-        world.add_connection(connection)
-    # Bakes current_pose into the connection's own DOF values (x, y, z, qx, qy, qz, qw)
-    # rather than passing it as create_with_dofs' parent_T_connection_expression: MuJoCo
-    # export only reads a Connection6DoF's DOF values into the free joint's keyframe
-    # qpos, which is MuJoCo's *absolute* world position/orientation for a free joint, not
-    # a fixed offset applied on top of it. Passing current_pose as
-    # parent_T_connection_expression left the DOFs at their create_with_dofs default
-    # (identity), so MuJoCo always started the shape at the world origin regardless of
-    # current_pose - correct only for whichever shape happened to be the first one ever
-    # settled in a given MontessoriWorld, because MujocoBuilder.build_world's one-time
-    # "connect the existing root to a body literally named 'world'" step reparents that
-    # first shape's free joint via World.move_branch, which (unlike this) writes the
-    # DOF values directly.
-    connection.origin = current_pose
-
-
-def _make_all_shapes_movable_in_mujoco(montessori: MontessoriWorld) -> None:
-    """
-    Apply :func:`_make_shape_movable_in_mujoco` to every loose Montessori shape.
-
-    :param montessori: The Montessori scene, modified in place.
-    """
-    for shape in montessori.world.get_semantic_annotations_by_type(MontessoriShape):
-        _make_shape_movable_in_mujoco(shape, montessori.world)
+    return physically_simulated_dofs
 
 
 SHAPE_SETTLE_DURATION = 2.0
 """
-Real-time seconds a just-inserted shape is given to physically settle under gravity and
-contacts in MuJoCo (see :func:`_settle_shape_in_mujoco`) before it is fixed in place and
-the next shape is inserted.
+Real-time seconds a just-released shape is given to physically fall and come to rest
+before :meth:`~experiments.montessori.insert_shape_action.InsertMontessoriShapeAction.has_fallen_through_hole`
+is asked whether it made it through its hole.
+
+The simulation keeps running throughout, so this is a settling wait, not a separate
+physics pass.
+"""
+
+SYNC_RATE_HZ = 100
+"""
+Rate at which the physically simulated joints' real, physics-driven positions are read
+back into the world model.
+
+Comfortably above Giskard's own control-loop rate, so it plans against current feedback
+of where those joints have actually settled rather than stale readings.
 """
 
 
-def _settle_shape_in_mujoco(
-    shape: MontessoriShape, montessori: MontessoriWorld, headless: bool
-) -> None:
-    """
-    Physically settle a single, just-placed shape under gravity and contacts in MuJoCo,
-    then fix it in place wherever it comes to rest.
-
-    :class:`~coraplex.robot_plans.actions.core.placing.PlaceAction` only ever teleports
-    a shape kinematically to its target pose, so without this every shape is left
-    exactly where it was placed rather than where gravity actually settles it (e.g.
-    resting on the board's surface instead of having dropped through a hole). Settling
-    one shape at a time, right after it is inserted, rather than all of them together
-    only once at the very end (see :func:`_simulate_finished_scene_in_mujoco`), also
-    avoids MuJoCo resolving several simultaneous tight-clearance contacts in the same
-    step, which was observed to make an unrelated shape's contact resolution
-    nondeterministic (which of several simultaneously falling shapes gets wedged varied
-    from run to run, even though each one settles correctly when dropped alone).
-
-    The robot's controlled joints must already be held (see
-    :func:`_hold_controlled_joints_in_mujoco`) before this runs, or they sag/spin under
-    gravity for the duration of the settle and are left in that pose once MuJoCo stops.
-
-    :param shape: The just-inserted shape to settle.
-    :param montessori: The Montessori scene, modified in place.
-    :param headless: Whether to run without opening a MuJoCo viewer window.
-    """
-    _make_shape_movable_in_mujoco(shape, montessori.world)
-
-    mujoco_sim = MujocoSim(
-        world=montessori.world, headless=headless, step_size=MUJOCO_STEP_SIZE
-    )
-    mujoco_sim.start_simulation()
-    time.sleep(SHAPE_SETTLE_DURATION)
-    mujoco_sim.stop_simulation()
-
-    montessori.world.update_forward_kinematics()
-    settled_pose = montessori.world.compute_forward_kinematics(
-        montessori.world.root, shape.root
-    )
-    with montessori.world.modify_world():
-        montessori.world.remove_connection(shape.root.parent_connection)
-        montessori.world.add_connection(
-            FixedConnection(
-                parent=montessori.world.root,
-                child=shape.root,
-                parent_T_connection_expression=settled_pose,
-            )
-        )
-
-
-def _simulate_finished_scene_in_mujoco(
-    montessori: MontessoriWorld, headless: bool
+def _start_physical_simulation(
+    montessori: MontessoriWorld,
+    physically_simulated_dofs: set[DegreeOfFreedom],
+    headless: bool,
 ) -> MujocoSim:
     """
-    Physically simulate the sorted scene in MuJoCo, with the robot's controlled joints
-    held in place and the shapes free to move under gravity and contacts.
+    Start the single, long-running MuJoCo simulation the whole demo executes inside.
 
-    Every shape has already individually settled under physics once, right after it was
-    inserted (see :func:`_settle_shape_in_mujoco`); this final pass is for live viewing
-    of the completed scene, not the shapes' only chance to physically settle.
+    The robot's arm and gripper are driven by their actuators against real contacts, and
+    every loose shape is a free body, so a shape is carried only for as long as the
+    fingers' friction actually holds it (see
+    :attr:`~semantic_digital_twin.adapters.multi_sim.ReparentingMode.CONTACT_ONLY`) and
+    falls through a hole because it physically fits, not because it was teleported there.
 
-    :param montessori: The finished Montessori scene, with :attr:`MontessoriWorld.robot`
-        already spawned.
+    :param montessori: The Montessori scene, with :attr:`MontessoriWorld.robot` already
+        equipped (see :func:`_equip_robot_for_physical_simulation`).
+    :param physically_simulated_dofs: The degrees of freedom MuJoCo drives.
     :param headless: Whether to run without opening a MuJoCo viewer window.
-    :return: The running :class:`MujocoSim`.
+    :return: The running simulation.
     """
-    _make_all_shapes_movable_in_mujoco(montessori)
-
     mujoco_sim = MujocoSim(
-        world=montessori.world, headless=headless, step_size=MUJOCO_STEP_SIZE
+        world=montessori.world,
+        headless=headless,
+        step_size=MUJOCO_STEP_SIZE,
+        physically_simulated_dofs=physically_simulated_dofs,
+        sync_rate_hz=SYNC_RATE_HZ,
+        reparenting_mode=ReparentingMode.CONTACT_ONLY,
     )
-    mujoco_sim.synchronizer.sync_rate_hz = 20
     mujoco_sim.start_simulation()
     return mujoco_sim
 
@@ -717,13 +810,15 @@ def main() -> None:
 
     montessori = MontessoriWorld()
 
+    physically_simulated_dofs: set[DegreeOfFreedom] = set()
     if robot_installed(DEFAULT_ROBOT_CLASS):
         montessori.spawn_robot(DEFAULT_ROBOT_CLASS)
-        # Must happen before any MuJoCo simulation runs, including the per-shape
-        # settling in _insert_all_shapes, or the robot's own joints sag/spin under
-        # gravity for that simulation's duration (see
-        # _hold_controlled_joints_in_mujoco).
-        _hold_controlled_joints_in_mujoco(montessori.robot)
+        # Must happen before the simulation is built: the actuators, gravity
+        # compensation and finger friction it adds are all baked into the MuJoCo model
+        # at build time, not applied to a running one.
+        physically_simulated_dofs = _equip_robot_for_physical_simulation(
+            montessori.robot
+        )
     else:
         logger.warning(
             "%s's description is not installed; spawning the Montessori scene "
@@ -771,11 +866,11 @@ def main() -> None:
     if montessori.robot is not None and ros_active:
         import experiments.orm.ormatic_interface  # type: ignore
 
-        _insert_all_shapes(montessori, headless=arguments.headless)
-        logger.info("Sorting done; starting the MuJoCo simulation.")
-        mujoco_sim = _simulate_finished_scene_in_mujoco(
-            montessori, headless=arguments.headless
+        mujoco_sim = _start_physical_simulation(
+            montessori, physically_simulated_dofs, headless=arguments.headless
         )
+        _insert_all_shapes(montessori)
+        logger.info("Sorting done; the simulation keeps running.")
     elif montessori.robot is not None:
         logger.warning("rclpy is not installed; skipping sorting and MuJoCo.")
 

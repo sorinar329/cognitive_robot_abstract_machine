@@ -184,15 +184,19 @@ class PickUpAction(ActionDescription):
                     gripper=self.arm,
                     target_opening=self.grasp_opening,
                 ),
-                # Temporarily disabled to isolate whether a genuinely physical
-                # grasp (real contact/friction) survives the lift on its own,
-                # without also welding the object into MuJoCo's kinematic tree.
-                # AttachNode(
-                #     body=self.object_designator,
-                #     new_parent=ViewManager.get_end_effector_view(
-                #         self.arm, self.robot
-                #     ).tool_frame,
-                # ),
+                # Re-parents the object onto the gripper in the world model, which the
+                # planner needs to know the robot is carrying it at all (PlaceAction's
+                # pre-condition asks exactly that). Whether the *simulator* follows suit
+                # is a separate choice: under
+                # :attr:`~semantic_digital_twin.adapters.multi_sim.ReparentingMode.CONTACT_ONLY`
+                # the object stays a free body in MuJoCo, so a genuinely physical grasp
+                # has to survive the lift on real contact and friction alone.
+                AttachNode(
+                    body=self.object_designator,
+                    new_parent=ViewManager.get_end_effector_view(
+                        self.arm, self.robot
+                    ).tool_frame,
+                ),
                 MoveToolCenterPointMotion(
                     lift_to_pose,
                     self.arm,

@@ -438,23 +438,34 @@ class ModelChangeExecutable(Executable):
         """
         Re-parent the body to ``new_parent`` while preserving its global pose.
         """
-        obj_transform = self.context.world.compute_forward_kinematics(
-            self.new_parent, self.body
-        )
-        with self.context.world.modify_world():
-            self.context.world.remove_connection(self.body.parent_connection)
-            # TODO: this shouldn't be fixed but 6DOF
-            connection = FixedConnection(
-                parent=self.new_parent,
-                child=self.body,
-                parent_T_connection_expression=obj_transform,
+        world = self.context.world
+        obj_transform = world.compute_forward_kinematics(self.new_parent, self.body)
+        released_to_world = self.new_parent.id == world.root.id
+        with world.modify_world():
+            world.remove_connection(self.body.parent_connection)
+            if released_to_world:
+                # Released back to the world, so the body is free again and whatever
+                # physics does to it from here (settling, falling through a hole) has to
+                # reach the world model. A rigid connection would freeze it wherever it
+                # was let go, and simulators skip rigid connections when syncing.
+                connection = Connection6DoF.create_with_dofs(
+                    parent=self.new_parent, child=self.body, world=world
+                )
+                world.add_connection(connection)
+                # Baked into the connection's own dof values rather than passed as
+                # parent_T_connection_expression: a free joint's pose lives in its dofs,
+                # and leaving them at the identity default puts the body at the origin.
+                connection.origin = obj_transform
+                return
+            # Picked up: the body rides its new parent rigidly in the world model, which
+            # is what tells the planner the robot is carrying it.
+            world.add_connection(
+                FixedConnection(
+                    parent=self.new_parent,
+                    child=self.body,
+                    parent_T_connection_expression=obj_transform,
+                )
             )
-
-            # connection = Connection6DoF.create_with_dofs(
-            #     parent=self.new_parent, child=self.body, world=self.context.world, parent_T_connection_expression=obj_transform
-            # )
-            self.context.world.add_connection(connection)
-            # connection.origin = obj_transform
 
 
 @dataclass

@@ -87,12 +87,14 @@ class PlaceAction(ActionDescription):
                     reverse_reach_order=True,
                 ),
                 MoveGripperMotion(GripperState.OPEN, self.arm),
-                # Temporarily disabled to resolve placing purely physically:
-                # the object is held only by real contact/friction (AttachNode
-                # is likewise disabled in PickUpAction), so opening the gripper
-                # above the target already lets it settle onto the surface by
-                # gravity -- no kinematic re-parent to the world is needed.
-                # DetachNode(body=self.object_designator, new_parent=self.world.root),
+                # Releases the object back to the world in the world model, undoing
+                # PickUpAction's AttachNode; without it the object stays a child of the
+                # gripper forever and rides along with every subsequent arm motion.
+                # Placing still resolves physically: under
+                # :attr:`~semantic_digital_twin.adapters.multi_sim.ReparentingMode.CONTACT_ONLY`
+                # the object is a free body in the simulator throughout, so opening the
+                # gripper above the target is what actually lets gravity settle it.
+                DetachNode(body=self.object_designator, new_parent=self.world.root),
                 MoveToolCenterPointMotion(retract_pose, self.arm),
             ],
             self.context,
