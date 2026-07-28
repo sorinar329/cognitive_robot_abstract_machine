@@ -144,6 +144,17 @@ class GiskardExecutable(Executable):
     DOF's position race ahead of where it has actually, physically settled.
     """
 
+    max_ticks_per_motion_mapping: ClassVar[int] = 2000
+    """
+    Per-motion tick budget for :meth:`_execute_simulation`'s tick loop,
+    managed by :py:class:`pycram.motion_executor.ExecutionEnvironment`.
+
+    The overall loop bound is this value multiplied by the number of motion
+    mappings, so a stuck motion is bounded to roughly
+    ``max_ticks_per_motion_mapping`` ticks before :class:`MotionDidNotFinish`
+    is raised, instead of hanging (or taking minutes) indefinitely.
+    """
+
     _current_motion_state_chart: MotionStatechart = field(init=False, default=None)
     """
     Currently build motion state chart, internal only for managing the building the msc.
@@ -351,7 +362,10 @@ class GiskardExecutable(Executable):
         executor.compile(motion_state_chart)
 
         counter = 0
-        while counter < len(self.motion_mappings) * 2000:
+        while (
+            counter
+            < len(self.motion_mappings) * GiskardExecutable.max_ticks_per_motion_mapping
+        ):
             # Interrupting and pausing are handled inside the motion state chart by
             # per-task monitors (see motion_state_chart): an interrupt ends the
             # motion via EndMotion, a pause holds the active task via its

@@ -1,50 +1,32 @@
 import os
-import signal
-import subprocess
 import threading
 import time
 import numpy
 import rclpy
 from rclpy.executors import MultiThreadedExecutor
+from sqlalchemy import text
+from sqlalchemy.orm import Session
 
 from coraplex.datastructures.dataclasses import Context
 from coraplex.datastructures.enums import Arms, ApproachDirection, VerticalAlignment, ExecutionType
 from coraplex.datastructures.grasp import GraspDescription
 
-from coraplex.execution_environment import simulated_robot, ExecutionEnvironment
+from coraplex.execution_environment import ExecutionEnvironment
+from coraplex.orm.ormatic_interface import Base
 from coraplex.plans.factories import sequential
-from coraplex.robot_plans.actions.composite.transporting import TransportAction
+from coraplex.plans.plan_node import PlanNode
 from coraplex.robot_plans.actions.core.pick_up import PickUpAction
 from coraplex.robot_plans.actions.core.placing import PlaceAction
-from coraplex.robot_plans.actions.core.robot_body import ParkArmsAction, MoveTorsoAction
-from examples.coraplex_demo import world
-from physics_simulators.base_simulator import SimulatorConstraints
+from coraplex.robot_plans.actions.core.robot_body import ParkArmsAction
 
-from semantic_digital_twin.adapters.mesh import STLParser
+from krrood.ormatic.data_access_objects.helper import to_dao
+from krrood.ormatic.utils import create_engine
+
 from semantic_digital_twin.adapters.mjcf import MJCFParser
 from semantic_digital_twin.adapters.multi_sim import MujocoSim, MujocoBody
-from semantic_digital_twin.adapters.ros.visualization.spatial_type_marker_renderer import SpatialTypeVisualization
-from semantic_digital_twin.adapters.ros.visualization.spatial_type_publisher import SpatialTypePublisher
 from semantic_digital_twin.adapters.ros.visualization.viz_marker import VizMarkerPublisher
-from semantic_digital_twin.datastructures.definitions import TorsoState
-from semantic_digital_twin.reasoning.world_reasoner import WorldReasoner
 from semantic_digital_twin.robots.panda import Panda
-from semantic_digital_twin.robots.pr2 import PR2
-from semantic_digital_twin.semantic_annotations.semantic_annotations import (
-    Bowl,
-    Spoon,
-    Drawer,
-    Handle,
-)
 from semantic_digital_twin.spatial_types.spatial_types import Pose
-from semantic_digital_twin.world import World
-
-from giskardpy.motion_statechart.context import MotionStatechartContext
-from segmind.episode_segmenter import EpisodeSegmenterExecutor
-from segmind.statecharts.segmind_statechart import SegmindStatechart
-from segmind.detectors.base import SegmindContext
-
-from test.coraplex_test.conftest import viz_marker_publisher
 
 
 time.sleep(8)  # Wait for the launch file to start
@@ -61,7 +43,9 @@ executor.add_node(node)
 thread = threading.Thread(target=executor.spin, daemon=True, name="rclpy-executor")
 thread.start()
 
-world = MJCFParser("/home/sorin/dev/manipulation_experiments/resources/generated/stacking_scene.xml").parse()
+world = MJCFParser(
+    "/home/nvasant/workspace/ros/src/manipulation_experiments/resources/generated/stacking_scene.xml"
+).parse()
 Panda.from_world(world)
 publisher = VizMarkerPublisher(_world=world, node=node).with_tf_publisher()
 
@@ -75,54 +59,10 @@ context = Context(
 )
 
 box = world.get_body_by_name("cube0")
-box2 = world.get_body_by_name("cube1")
+box1 = world.get_body_by_name("cube1")
+box2 = world.get_body_by_name("cube2")
+box3 = world.get_body_by_name("cube3")
 
-# Drop the cube onto the second table ("table2" in the scene, centered at
-# x=0.34, y=0.16, top at z=0.1): the object's center should end up one cube
-# half-size above that top.
-place_location = Pose.from_xyz_rpy(x=0.34, y=0.16, z=0.12, reference_frame=world.root)
-
-plan = sequential(
-    [
-        ParkArmsAction(Arms.BOTH),
-        PickUpAction(
-            box,
-            Arms.LEFT,
-            GraspDescription(
-                ApproachDirection.FRONT,
-                VerticalAlignment.TOP,
-                context.robot.get_arms()[0].end_effector,
-            ),),
-        PlaceAction(box, place_location, Arms.LEFT),
-        ParkArmsAction(Arms.BOTH),
-],
-
-    context=context
-)
-box_position = world.get_body_by_name("cube0").global_pose
-
-plan2 = sequential(
-    [
-        ParkArmsAction(Arms.BOTH),
-        PickUpAction(
-            box2,
-            Arms.LEFT,
-            GraspDescription(
-                ApproachDirection.LEFT,
-                VerticalAlignment.TOP,
-                context.robot.get_arms()[0].end_effector,
-            ),
-        ),
-        PlaceAction(box2, box_position, Arms.LEFT),
-        ParkArmsAction(Arms.BOTH),
-],
-context=context
-)
-
-#s = SpatialTypePublisher(node=node, _world=world)
-#s.add(SpatialTypeVisualization(context.robot.get_arms()[0].end_effector.tool_frame.global_pose))
-#s.add(SpatialTypeVisualization(Pose.from_xyz_quaternion(0.5, 0, 1, 0, 1, 0, 1, reference_frame=world.root)))
-#s.publish()
 print("Perform Plan")
 
 arm = context.robot.get_arms()[0]
@@ -150,7 +90,7 @@ multi_sim = MujocoSim(
     step_size=0.0001,
     real_time_factor=1,
     physically_simulated_dofs=physically_simulated_dofs,
-    sync_rate_hz=15
+    sync_rate_hz=100,
 )
 time_start = time.time()
 
@@ -197,80 +137,250 @@ printing_thread = threading.Thread(
 )
 printing_thread.start()
 
-# --- Segmind event detection, running in parallel with execution ---
-# A detector statechart adds no QP constraints, so the executor's qp_controller
-# stays None and its tick() never calls apply_control_commands -- it is a pure
-# read-only observer of the live world. It reads the same world model MuJoCo
-# keeps in sync (contacts are computed geometrically from body poses, not from
-# MuJoCo's solver), so ticking it in a background thread detects events live
-# without interfering with the plan's own control loop.
-segmind_executor = EpisodeSegmenterExecutor(
-    context=MotionStatechartContext(world=world)
+NUMBER_OF_ITERATIONS = 10
+"""
+Number of times the full pickup/stack sequence is repeated, so the demo can
+be left running unattended instead of re-started by hand for every trial.
+"""
+
+ITERATION_TIME_LIMIT = 60.0
+"""
+Wall-clock budget (in seconds) for one iteration's cube-stacking attempts,
+checked between attempts.
+
+A stuck grasp (fingers touching the cube without closing around it) can
+otherwise stall an iteration indefinitely. Giskard's own tick budget (see
+``max_ticks_per_motion_mapping`` below) already bounds any single stuck
+attempt, but this is an additional, coarser safety net: once the elapsed
+time for an iteration exceeds this limit, remaining cube attempts are
+skipped and the loop moves on to the next iteration. Because an
+already-in-flight attempt is allowed to finish rather than being killed
+mid-motion (forcibly interrupting a running Giskard execution is unsafe),
+the actual wall-clock time for an iteration that trips this limit can run
+somewhat past it.
+"""
+
+STACK_HEIGHT_OFFSET = 0.06
+"""
+Vertical offset (in meters) above a target cube's center at which a placed
+cube should end up -- one cube height plus a small clearance margin.
+"""
+
+CUBE_SPAWN_POSITIONS = {
+    "cube0": numpy.array([0.40, 0.10, 0.06]),
+    "cube1": numpy.array([0.40, -0.04, 0.06]),
+    "cube2": numpy.array([0.40, -0.14, 0.06]),
+    "cube3": numpy.array([0.40, -0.24, 0.06]),
+}
+"""
+Spawn position of every cube, matching the scene's MJCF definition.
+"""
+
+CUBE_SPAWN_ORIENTATION = numpy.array([1.0, 0.0, 0.0, 0.0])
+"""
+Spawn orientation (identity quaternion) of every cube.
+"""
+
+DATABASE_URI: str = os.environ.get(
+    "CORAPLEX_PANDA_DEMO_DATABASE_URI",
+    "postgresql+psycopg://semantic_digital_twin:naren@localhost:5432/coraplex_panda_demo",
 )
-segmind_executor.compile(SegmindStatechart().build_statechart())
-segmind_context = segmind_executor.context.require_extension(SegmindContext)
+"""
+Connection string for the database that stores every stacking attempt's
+plan -- including all of its action parameters (target poses, arm, grasp
+description, per-node status) -- for later analysis.
 
-stop_detecting = threading.Event()
+Reuses the ``semantic_digital_twin`` role already provisioned on this host
+for the other demos/experiments in this workspace; only the database itself
+is dedicated to this demo. Uses the ``psycopg`` (v3) driver explicitly since
+only that, not ``psycopg2``, is installed in this environment.
+"""
 
 
-def detect_events_periodically(stop_event: threading.Event):
-    while not stop_event.is_set():
-        segmind_executor.tick()
-        time.sleep(1 / 60)
+def _create_database_session(database_uri: str) -> Session:
+    """
+    Connect to the database, create any missing tables, and return an ORM
+    session that plans can be persisted through.
+    """
+    print(f"[database] Connecting to {database_uri} ...")
+    engine = create_engine(database_uri)
+    Base.metadata.create_all(bind=engine, checkfirst=True)
+    print("[database] Schema verified.")
+    return Session(engine)
 
 
-detector_thread = threading.Thread(
-    target=detect_events_periodically, args=(stop_detecting,), daemon=True
-)
+def persist_plan(
+    plan: PlanNode, iteration_index: int, step_name: str, succeeded: bool
+) -> None:
+    """
+    Persists one stacking attempt's plan -- every action's parameters plus
+    its recorded per-node status -- to the database.
 
-#constraints = SimulatorConstraints(max_number_of_steps=10000)
-multi_sim.start_simulation()
-detector_thread.start()
-with ExecutionEnvironment(
-    execution_type=execition_mode, collision_avoidance=False, real_time_pacing=True
-):
-    plan.perform()
-    cube2 = world.get_body_by_name("cube0")
-    box_position = Pose.from_xyz_rpy(x=cube2.global_pose.x, y=cube2.global_pose.y, z=cube2.global_pose.z + 0.06, reference_frame=world.root)
-    plan2 = sequential(
+    Called for both successful and failed attempts, so failed attempts
+    remain available for later analysis. Persistence failures are logged
+    and swallowed so a database hiccup never aborts the run.
+    """
+    try:
+        database_session.add(to_dao(plan))
+        database_session.commit()
+        print(
+            f"[database] iteration {iteration_index} '{step_name}' persisted "
+            f"(succeeded={succeeded})"
+        )
+    except Exception as exc:
+        print(
+            f"[database] failed to persist iteration {iteration_index} "
+            f"'{step_name}': {exc}"
+        )
+        database_session.rollback()
+
+
+def reset_cubes() -> None:
+    """
+    Teleports every cube back to its spawn pose in MuJoCo, undoing the
+    displacement from the previous iteration's stacking attempts.
+
+    Only position and orientation are reset -- MuJoCo exposes no safe,
+    synchronized API to reset a body's velocity, so residual velocity from
+    the previous iteration can carry over as a minor, known limitation.
+    """
+    for name, position in CUBE_SPAWN_POSITIONS.items():
+        multi_sim.simulator.set_body_position(body_name=name, position=position)
+        multi_sim.simulator.set_body_quaternion(
+            body_name=name, quaternion=CUBE_SPAWN_ORIENTATION
+        )
+
+
+def _build_stack_plan(object_body, target_body, picking_arm) -> PlanNode:
+    """
+    Builds (without performing) a park/pick/place/park plan that stacks
+    ``object_body`` centered above ``target_body``, one cube height higher.
+    """
+    target_pose = target_body.global_pose
+    place_location = Pose.from_xyz_rpy(
+        x=target_pose.x,
+        y=target_pose.y,
+        z=target_pose.z + STACK_HEIGHT_OFFSET,
+        reference_frame=world.root,
+    )
+    return sequential(
         [
             ParkArmsAction(Arms.BOTH),
             PickUpAction(
-                box2,
-                Arms.LEFT,
+                object_body,
+                picking_arm,
                 GraspDescription(
                     ApproachDirection.FRONT,
                     VerticalAlignment.TOP,
                     context.robot.get_arms()[0].end_effector,
                 ),
             ),
-            PlaceAction(box2, box_position, Arms.LEFT),
+            PlaceAction(object_body, place_location, picking_arm),
             ParkArmsAction(Arms.BOTH),
         ],
-        context=context
+        context=context,
     )
-    plan2.perform()
 
-# The episode is over: stop the detector thread and read the event logger.
-stop_detecting.set()
-detector_thread.join()
+
+def attempt_stack(
+    object_body, target_body, picking_arm, step_name: str, iteration_index: int
+) -> None:
+    """
+    Builds and performs one stacking attempt, logging and swallowing any
+    failure instead of letting it propagate, then persists the attempt's
+    plan (successful or not) to the database.
+
+    A single failed grasp/place should not crash the whole run -- it skips
+    to the next cube (or iteration) instead, re-parking the arms first so
+    the robot starts the next attempt from a known configuration.
+    """
+    plan = _build_stack_plan(object_body, target_body, picking_arm)
+    succeeded = False
+    try:
+        plan.perform()
+        succeeded = True
+    except Exception as exc:
+        print(f"[warning] {step_name} failed ({type(exc).__name__}: {exc}), moving on")
+        try:
+            sequential([ParkArmsAction(Arms.BOTH)], context=context).perform()
+        except Exception as park_exc:
+            print(f"[warning] re-park after {step_name} also failed: {park_exc}")
+
+    persist_plan(plan, iteration_index, step_name, succeeded)
+
+
+def print_iteration_summary(iteration_index: int) -> None:
+    """
+    Prints the final z-height of every cube, a quick visual check of how
+    high the stack reached in this iteration.
+    """
+    heights = {
+        name: multi_sim.simulator.get_body_position(name).result[2]
+        for name in CUBE_SPAWN_POSITIONS
+    }
+    print(f"--- iteration {iteration_index} final heights: {heights} ---")
+
+
+database_session = _create_database_session(DATABASE_URI)
+
+#constraints = SimulatorConstraints(max_number_of_steps=10000)
+multi_sim.start_simulation()
+iteration_durations = []
+with ExecutionEnvironment(
+    execution_type=execition_mode,
+    collision_avoidance=False,
+    real_time_pacing=True,
+    # A stuck grasp can otherwise retry for several minutes (2000 ticks per
+    # merged motion at 50 Hz = 40 s per motion) before finally giving up --
+    # far too slow across many iterations. 250 still gives each individual
+    # motion a 5 s budget, comfortably above how long a successful one
+    # actually takes at the tuned approach/lift/transport speeds, while
+    # capping a single stuck attempt to well under ITERATION_TIME_LIMIT.
+    max_ticks_per_motion_mapping=250,
+):
+    for iteration in range(1, NUMBER_OF_ITERATIONS + 1):
+        iteration_start = time.time()
+        print(f"=== starting iteration {iteration}/{NUMBER_OF_ITERATIONS} ===")
+        reset_cubes()
+        time.sleep(1.5)
+
+        for cube_to_pick, cube_to_stack_on, step_label in [
+            (box1, box, "cube1 onto cube0"),
+            (box2, box1, "cube2 onto cube1"),
+            (box3, box2, "cube3 onto cube2"),
+        ]:
+            elapsed = time.time() - iteration_start
+            if elapsed > ITERATION_TIME_LIMIT:
+                print(
+                    f"[warning] iteration {iteration} already took {elapsed:.1f}s "
+                    f"(limit {ITERATION_TIME_LIMIT:.0f}s), skipping remaining "
+                    "attempts and moving to the next iteration"
+                )
+                break
+            attempt_stack(cube_to_pick, cube_to_stack_on, Arms.LEFT, step_label, iteration)
+            time.sleep(1)
+
+        print_iteration_summary(iteration)
+
+        iteration_durations.append(time.time() - iteration_start)
+        average_duration = sum(iteration_durations) / len(iteration_durations)
+        print(
+            f"=== iteration {iteration}/{NUMBER_OF_ITERATIONS} took "
+            f"{iteration_durations[-1]:.1f}s (average so far: {average_duration:.1f}s) ==="
+        )
+
 stop_printing.set()
 print("--- final positions ---")
 print_positions()
 
-detected_events = segmind_context.logger.get_events()
-print(f"--- Segmind detected {len(detected_events)} events ---")
-for detected_event in detected_events:
-    print(" ", detected_event)
-
-event_timeline_path = os.path.abspath(
-    os.path.join(
-        os.path.dirname(os.path.abspath(__file__)),
-        "..", "..", "..", "segmind", "demo", "event_timeline.html",
-    )
-)
-segmind_context.logger.plot_events(show=False, save_path=event_timeline_path)
-print(f"Segmind event timeline written to {event_timeline_path}")
+try:
+    persisted_plan_count = database_session.execute(
+        text('SELECT COUNT(*) FROM "SequentialNodeDAO"')
+    ).scalar()
+    print(f"[database] Total persisted plans (SequentialNodeDAO): {persisted_plan_count}")
+except Exception as exc:
+    print(f"[database] Could not read row count: {exc}")
+database_session.close()
 
 print("Plan finished, keeping the viewer open until it is closed")
 while multi_sim.simulator.renderer.is_running():

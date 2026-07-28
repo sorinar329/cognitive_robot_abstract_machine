@@ -3,6 +3,8 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 
+from typing_extensions import Optional
+
 from coraplex.datastructures.enums import ExecutionType
 from coraplex.plans.executables import GiskardExecutable
 
@@ -60,32 +62,58 @@ class ExecutionEnvironment:
     environments.
     """
 
+    max_ticks_per_motion_mapping: Optional[int] = None
+    """
+    Per-motion tick budget applied to every motion state chart created within
+    this environment. ``None`` leaves
+    :py:attr:`~coraplex.plans.executables.GiskardExecutable.max_ticks_per_motion_mapping`
+    unchanged.
+    """
+
+    previous_max_ticks_per_motion_mapping: int = field(init=False, default=0)
+    """
+    Tick budget before entering this environment, used for nested
+    environments.
+    """
+
     def __enter__(self):
         """
         Entering function for 'with' scope, saves the previously set
         :py:attr:`~pycram.plans.executables.GiskardExecutable.execution_type`,
         :py:attr:`~pycram.plans.executables.GiskardExecutable.collision_avoidance`,
-        and :py:attr:`~pycram.plans.executables.GiskardExecutable.real_time_pacing`
+        :py:attr:`~pycram.plans.executables.GiskardExecutable.real_time_pacing`,
+        and :py:attr:`~pycram.plans.executables.GiskardExecutable.max_ticks_per_motion_mapping`
         and sets them to the values of this environment.
         """
         self.previous_type = GiskardExecutable.execution_type
         self.previous_collision_avoidance = GiskardExecutable.collision_avoidance
         self.previous_real_time_pacing = GiskardExecutable.real_time_pacing
+        self.previous_max_ticks_per_motion_mapping = (
+            GiskardExecutable.max_ticks_per_motion_mapping
+        )
         GiskardExecutable.execution_type = self.execution_type
         GiskardExecutable.collision_avoidance = self.collision_avoidance
         GiskardExecutable.real_time_pacing = self.real_time_pacing
+        if self.max_ticks_per_motion_mapping is not None:
+            GiskardExecutable.max_ticks_per_motion_mapping = (
+                self.max_ticks_per_motion_mapping
+            )
 
     def __exit__(self, _type, value, traceback):
         """
         Exit method for the 'with' scope, restores the
         :py:attr:`~pycram.plans.executables.GiskardExecutable.execution_type`,
         :py:attr:`~pycram.plans.executables.GiskardExecutable.collision_avoidance`,
-        and :py:attr:`~pycram.plans.executables.GiskardExecutable.real_time_pacing`
+        :py:attr:`~pycram.plans.executables.GiskardExecutable.real_time_pacing`,
+        and :py:attr:`~pycram.plans.executables.GiskardExecutable.max_ticks_per_motion_mapping`
         to the previously used values.
         """
         GiskardExecutable.execution_type = self.previous_type
         GiskardExecutable.collision_avoidance = self.previous_collision_avoidance
         GiskardExecutable.real_time_pacing = self.previous_real_time_pacing
+        GiskardExecutable.max_ticks_per_motion_mapping = (
+            self.previous_max_ticks_per_motion_mapping
+        )
 
     def __call__(self, collision_avoidance: bool = False):
         """

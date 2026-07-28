@@ -24,7 +24,10 @@ from coraplex.datastructures.grasp import GraspDescription
 from coraplex.plans.factories import sequential
 from coraplex.querying.predicates import GripperIsFree
 from coraplex.robot_plans.actions.base import ActionDescription
-from coraplex.robot_plans.actions.core.pick_up import PickUpAction, ReachAction
+from coraplex.robot_plans.actions.core.pick_up import (
+    GRASP_DETECTION_THRESHOLD,
+    PickUpAction,
+)
 from coraplex.robot_plans.motions.gripper import (
     MoveGripperMotion,
     MoveToolCenterPointMotion,
@@ -57,43 +60,84 @@ class PlaceAction(ActionDescription):
     Arm that is currently holding the object
     """
 
-    @property
-    def _action_plan(self) -> PlanNode:
-        arm = ViewManager.get_arm_view(self.arm, self.robot)
-        end_effector = arm.end_effector
+    placing_linear_velocity: float = 0.03
+    """
+    Linear reference velocity (in m/s) for the final descent onto the
+    target location. Slowed down from the default so the object settles
+    onto the surface instead of being dropped/shoved into place.
+    """
 
+    transport_linear_velocity: float = 0.05
+    """
+    Linear reference velocity (in m/s) for carrying the held object to a
+    pose above the target location, before the final descent.
+    """
+
+    release_opening_velocity: float = 0.05
+    """
+    Finger joint velocity (in m/s) used while opening the gripper to
+    release the object.
+    """
+
+    retract_linear_velocity: float = 0.05
+    """
+    Linear reference velocity (in m/s) for retracting the end effector away
+    from the placed object.
+    """
+
+    def _previous_grasp(self) -> GraspDescription:
+        """
+        The grasp description used by the preceding :class:`PickUpAction` on
+        this object, or a default front/no-alignment grasp if none is found.
+        """
+        end_effector = ViewManager.get_arm_view(self.arm, self.robot).end_effector
         previous_pick = self.plan_node.get_previous_node_by_designator_type(
             PickUpAction
         )
-        previous_grasp = (
-            previous_pick.designator.grasp_description
-            if previous_pick
-            else GraspDescription(
-                ApproachDirection.FRONT, VerticalAlignment.NoAlignment, end_effector
-            )
+        if previous_pick:
+            return previous_pick.designator.grasp_description
+        return GraspDescription(
+            ApproachDirection.FRONT, VerticalAlignment.NoAlignment, end_effector
         )
 
-        _, _, retract_pose = previous_grasp.pose_sequence(
+    @property
+    def _action_plan(self) -> PlanNode:
+        previous_grasp = self._previous_grasp()
+
+        transport_pose, placing_pose, retract_pose = previous_grasp.pose_sequence(
             self.target_location, self.object_designator, reverse=True
         )
 
         return sequential(
             [
-                ReachAction(
-                    self.target_location,
+                MoveToolCenterPointMotion(
+                    transport_pose,
                     self.arm,
-                    previous_grasp,
-                    self.object_designator,
-                    reverse_reach_order=True,
+                    allow_gripper_collision=False,
+                    reference_linear_velocity=self.transport_linear_velocity,
                 ),
-                MoveGripperMotion(GripperState.OPEN, self.arm),
+                MoveToolCenterPointMotion(
+                    placing_pose,
+                    self.arm,
+                    allow_gripper_collision=False,
+                    reference_linear_velocity=self.placing_linear_velocity,
+                ),
+                MoveGripperMotion(
+                    GripperState.OPEN,
+                    self.arm,
+                    finger_velocity=self.release_opening_velocity,
+                ),
                 # Temporarily disabled to resolve placing purely physically:
                 # the object is held only by real contact/friction (AttachNode
                 # is likewise disabled in PickUpAction), so opening the gripper
                 # above the target already lets it settle onto the surface by
                 # gravity -- no kinematic re-parent to the world is needed.
                 # DetachNode(body=self.object_designator, new_parent=self.world.root),
-                MoveToolCenterPointMotion(retract_pose, self.arm),
+                MoveToolCenterPointMotion(
+                    retract_pose,
+                    self.arm,
+                    reference_linear_velocity=self.retract_linear_velocity,
+                ),
             ],
             self.context,
         )
@@ -111,7 +155,7 @@ class PlaceAction(ActionDescription):
         return or_(
             not_(GripperIsFree(end_effector)),
             is_body_in_gripper(variable_from(kwargs["object_designator"]), end_effector)
-            > 0.9,
+            > GRASP_DETECTION_THRESHOLD,
         )
 
     @staticmethod

@@ -39,6 +39,13 @@ from semantic_digital_twin.world_description.world_entity import Body
 
 logger = logging.getLogger(__name__)
 
+GRASP_DETECTION_THRESHOLD: float = 0.9
+"""
+Minimum fraction of sampled rays between the gripper's fingers that must hit
+an object for it to be considered grasped/held (see
+:func:`~semantic_digital_twin.reasoning.robot_predicates.is_body_in_gripper`).
+"""
+
 
 @dataclass
 class ReachAction(ActionDescription):
@@ -71,24 +78,54 @@ class ReachAction(ActionDescription):
     Whether the grasp pose sequence should be approached in reverse order.
     """
 
+    pre_approach_linear_velocity: Optional[float] = None
+    """
+    Explicit linear reference velocity (in m/s) for the initial pre-pose
+    approach. ``None`` keeps the default velocity.
+    """
+
+    final_approach_linear_velocity: Optional[float] = None
+    """
+    Explicit linear reference velocity (in m/s) for the final approach onto
+    the target pose. Slower final approaches reduce the chance of the
+    fingers brushing and displacing the object before the grasp closes.
+    ``None`` keeps the default velocity.
+    """
+
+    open_gripper_at_pre_pose: bool = False
+    """
+    Whether to open the gripper once the pre-pose is reached, instead of
+    leaving it as-is for the whole reach. Used by :class:`PickUpAction` so
+    the gripper is already open going into the (slower) final approach.
+    """
+
     @property
     def _action_plan(self) -> PlanNode:
         target_pre_pose, target_pose, _ = self.grasp_description.pose_sequence(
             self.target_pose, self.object_designator, reverse=self.reverse_reach_order
         )
-        return sequential(
-            children=[
-                MoveToolCenterPointMotion(
-                    target_pre_pose, self.arm, allow_gripper_collision=False
-                ),
-                MoveToolCenterPointMotion(
-                    target_pose,
-                    self.arm,
-                    allow_gripper_collision=False,
-                    movement_type=MovementType.CARTESIAN,
-                ),
-            ],
+        children = [
+            MoveToolCenterPointMotion(
+                target_pre_pose,
+                self.arm,
+                allow_gripper_collision=False,
+                reference_linear_velocity=self.pre_approach_linear_velocity,
+            ),
+        ]
+        if self.open_gripper_at_pre_pose:
+            children.append(
+                MoveGripperMotion(motion=GripperState.OPEN, gripper=self.arm)
+            )
+        children.append(
+            MoveToolCenterPointMotion(
+                target_pose,
+                self.arm,
+                allow_gripper_collision=False,
+                movement_type=MovementType.CARTESIAN,
+                reference_linear_velocity=self.final_approach_linear_velocity,
+            )
         )
+        return sequential(children=children)
 
     def execute(self) -> Any:
         self.add_subplan(self.action_plan).perform()
@@ -126,7 +163,7 @@ class ReachAction(ActionDescription):
         end_effector = ViewManager.get_end_effector_view(kwargs["arm"], context.robot)
         return or_(
             is_body_in_gripper(variable_from(kwargs["object_designator"]), end_effector)
-            > 0.9,
+            > GRASP_DETECTION_THRESHOLD,
             allclose(
                 variable_from(kwargs["object_designator"]).global_pose.to_position(),
                 variable_from(end_effector.tool_frame).global_pose.to_position(),
@@ -164,25 +201,45 @@ class PickUpAction(ActionDescription):
     closing motion, not the robot's shared gripper states.
     """
 
-    @property
-    def _action_plan(self) -> PlanNode:
+    grasp_linear_velocity: float = 0.015
+    """
+    Linear reference velocity (in m/s) for the final approach onto the
+    grasp pose. Slowed down from the default so the fingers don't shove the
+    object out of place before closing around it.
+    """
 
-        _, _, lift_to_pose = self.grasp_description.grasp_pose_sequence(
-            self.object_designator
-        )
+    grasp_closing_velocity: float = 0.08
+    """
+    Finger joint velocity (in m/s) used while closing onto the object.
+
+    Must stay comfortably above the ~0.01 m/s local-minimum/stall detection
+    floor of the closing motion's monitor -- a value too close to that floor
+    gets the CLOSE motion marked "done" almost immediately, before the
+    fingers have actually moved.
+    """
+
+    lift_linear_velocity: float = 0.08
+    """
+    Linear reference velocity (in m/s) for lifting the object clear of the
+    table after grasping.
+    """
+
+    def _grasp_attempt_plan(self) -> PlanNode:
         return sequential(
             children=[
-                MoveGripperMotion(motion=GripperState.OPEN, gripper=self.arm),
                 ReachAction(
                     target_pose=self.object_designator.global_pose,
                     object_designator=self.object_designator,
                     arm=self.arm,
                     grasp_description=self.grasp_description,
+                    final_approach_linear_velocity=self.grasp_linear_velocity,
+                    open_gripper_at_pre_pose=True,
                 ),
                 MoveGripperMotion(
                     motion=GripperState.CLOSE,
                     gripper=self.arm,
                     target_opening=self.grasp_opening,
+                    finger_velocity=self.grasp_closing_velocity,
                 ),
                 # Temporarily disabled to isolate whether a genuinely physical
                 # grasp (real contact/friction) survives the lift on its own,
@@ -193,12 +250,27 @@ class PickUpAction(ActionDescription):
                 #         self.arm, self.robot
                 #     ).tool_frame,
                 # ),
-                MoveToolCenterPointMotion(
-                    lift_to_pose,
-                    self.arm,
-                    allow_gripper_collision=True,
-                    movement_type=MovementType.TRANSLATION,
-                ),
+            ],
+        )
+
+    def _lift_plan(self) -> PlanNode:
+        _, _, lift_to_pose = self.grasp_description.grasp_pose_sequence(
+            self.object_designator
+        )
+        return MoveToolCenterPointMotion(
+            lift_to_pose,
+            self.arm,
+            allow_gripper_collision=True,
+            movement_type=MovementType.TRANSLATION,
+            reference_linear_velocity=self.lift_linear_velocity,
+        )
+
+    @property
+    def _action_plan(self) -> PlanNode:
+        return sequential(
+            children=[
+                self._grasp_attempt_plan(),
+                self._lift_plan(),
             ],
         )
 
@@ -240,7 +312,7 @@ class PickUpAction(ActionDescription):
         return or_(
             not_(GripperIsFree(end_effector)),
             is_body_in_gripper(variable_from(kwargs["object_designator"]), end_effector)
-            > 0.9,
+            > GRASP_DETECTION_THRESHOLD,
         )
 
 
