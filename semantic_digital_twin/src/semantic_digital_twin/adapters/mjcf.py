@@ -139,6 +139,7 @@ class MJCFParser:
                 MujocoGeom(
                     solver_impedance=mujoco_geom.solimp.tolist(),
                     solver_reference=mujoco_geom.solref.tolist(),
+                    friction=mujoco_geom.friction.tolist(),
                 )
             )
             if mujoco_geom.contype != 0 or mujoco_geom.conaffinity != 0:

@@ -99,10 +99,10 @@ tool_frame = gripper.tool_frame
 
 def print_positions():
     """
-    Prints the tool_frame's and cube's position as seen by the world model
-    (Giskard's kinematic belief) side by side with MuJoCo's own live simulated
-    position, so a divergence between "where Giskard thinks it is" and "where
-    it actually, physically is" is visible directly.
+    Prints the tool_frame's and cube's position as seen by the world model (Giskard's
+    kinematic belief) side by side with MuJoCo's own live simulated position, so a
+    divergence between "where Giskard thinks it is" and "where it actually, physically
+    is" is visible directly.
     """
     tool_frame_kinematic = numpy.array(
         world.compute_forward_kinematics(world.root, tool_frame).to_position().evaluate()[:3],
@@ -139,31 +139,30 @@ printing_thread.start()
 
 NUMBER_OF_ITERATIONS = 10
 """
-Number of times the full pickup/stack sequence is repeated, so the demo can
-be left running unattended instead of re-started by hand for every trial.
+Number of times the full pickup/stack sequence is repeated, so the demo can be left
+running unattended instead of re-started by hand for every trial.
 """
 
-ITERATION_TIME_LIMIT = 60.0
+ITERATION_TIME_LIMIT = 80.0
 """
-Wall-clock budget (in seconds) for one iteration's cube-stacking attempts,
-checked between attempts.
+Wall-clock budget (in seconds) for one iteration's cube-stacking attempts, checked
+between attempts.
 
-A stuck grasp (fingers touching the cube without closing around it) can
-otherwise stall an iteration indefinitely. Giskard's own tick budget (see
-``max_ticks_per_motion_mapping`` below) already bounds any single stuck
-attempt, but this is an additional, coarser safety net: once the elapsed
-time for an iteration exceeds this limit, remaining cube attempts are
-skipped and the loop moves on to the next iteration. Because an
-already-in-flight attempt is allowed to finish rather than being killed
-mid-motion (forcibly interrupting a running Giskard execution is unsafe),
-the actual wall-clock time for an iteration that trips this limit can run
-somewhat past it.
+A stuck grasp (fingers touching the cube without closing around it) can otherwise stall
+an iteration indefinitely. Giskard's own tick budget (see
+``max_ticks_per_motion_mapping`` below) already bounds any single stuck attempt, but
+this is an additional, coarser safety net: once the elapsed time for an iteration
+exceeds this limit, remaining cube attempts are skipped and the loop moves on to the
+next iteration. Because an already-in-flight attempt is allowed to finish rather than
+being killed mid-motion (forcibly interrupting a running Giskard execution is unsafe),
+the actual wall-clock time for an iteration that trips this limit can run somewhat past
+it.
 """
 
 STACK_HEIGHT_OFFSET = 0.06
 """
-Vertical offset (in meters) above a target cube's center at which a placed
-cube should end up -- one cube height plus a small clearance margin.
+Vertical offset (in meters) above a target cube's center at which a placed cube should
+end up -- one cube height plus a small clearance margin.
 """
 
 CUBE_SPAWN_POSITIONS = {
@@ -199,8 +198,8 @@ only that, not ``psycopg2``, is installed in this environment.
 
 def _create_database_session(database_uri: str) -> Session:
     """
-    Connect to the database, create any missing tables, and return an ORM
-    session that plans can be persisted through.
+    Connect to the database, create any missing tables, and return an ORM session that
+    plans can be persisted through.
     """
     print(f"[database] Connecting to {database_uri} ...")
     engine = create_engine(database_uri)
@@ -213,12 +212,12 @@ def persist_plan(
     plan: PlanNode, iteration_index: int, step_name: str, succeeded: bool
 ) -> None:
     """
-    Persists one stacking attempt's plan -- every action's parameters plus
-    its recorded per-node status -- to the database.
+    Persists one stacking attempt's plan -- every action's parameters plus its recorded
+    per-node status -- to the database.
 
-    Called for both successful and failed attempts, so failed attempts
-    remain available for later analysis. Persistence failures are logged
-    and swallowed so a database hiccup never aborts the run.
+    Called for both successful and failed attempts, so failed attempts remain available
+    for later analysis. Persistence failures are logged and swallowed so a database
+    hiccup never aborts the run.
     """
     try:
         database_session.add(to_dao(plan))
@@ -235,14 +234,51 @@ def persist_plan(
         database_session.rollback()
 
 
+def persist_world_snapshot() -> None:
+    """
+    Persists the world's physics configuration -- joint dynamics, actuator gains, geom
+    friction/solver parameters, MuJoCo body properties such as the gravity-compensation.
+
+    override applied to the arm, and the arm's rated velocity/acceleration/jerk limits
+    -- to the database, via the same ``WorldMappingDAO`` mapping already used elsewhere
+    in the workspace.
+
+    The acceleration/jerk limits are applied only for the duration of this call and
+    reset immediately afterwards: Giskard's ``prediction_horizon`` in this demo is too
+    short to plan feasible trajectories under the arm's real (low) acceleration/jerk
+    limits (see ``coraplex.plans.executables``), so leaving them applied would break
+    every subsequent motion. Recording the real numbers in the database is still
+    useful on its own, independent of whether the live planner is configured to honor
+    them.
+
+    Called once, before the simulation loop starts, since this configuration is static
+    for the whole demo run.
+    """
+    context.robot._setup_acceleration_limits()
+    context.robot._setup_jerk_limits()
+    try:
+        database_session.add(to_dao(world))
+        database_session.commit()
+        print("[database] world snapshot persisted")
+    except Exception as exc:
+        print(f"[database] failed to persist world snapshot: {exc}")
+        database_session.rollback()
+    finally:
+        for connection in arm.active_connections:
+            connection.raw_dof.limits.lower.acceleration = None
+            connection.raw_dof.limits.upper.acceleration = None
+            connection.raw_dof.limits.lower.jerk = None
+            connection.raw_dof.limits.upper.jerk = None
+
+
 def reset_cubes() -> None:
     """
-    Teleports every cube back to its spawn pose in MuJoCo, undoing the
-    displacement from the previous iteration's stacking attempts.
+    Teleports every cube back to its spawn pose in MuJoCo, undoing the displacement from
+    the previous iteration's stacking attempts.
 
-    Only position and orientation are reset -- MuJoCo exposes no safe,
-    synchronized API to reset a body's velocity, so residual velocity from
-    the previous iteration can carry over as a minor, known limitation.
+    Only position and orientation are reset -- MuJoCo exposes no safe, synchronized API
+    to reset a body's velocity, so residual velocity from the previous iteration can
+    carry over as a minor, known limitation.
     """
     for name, position in CUBE_SPAWN_POSITIONS.items():
         multi_sim.simulator.set_body_position(body_name=name, position=position)
@@ -253,8 +289,8 @@ def reset_cubes() -> None:
 
 def _build_stack_plan(object_body, target_body, picking_arm) -> PlanNode:
     """
-    Builds (without performing) a park/pick/place/park plan that stacks
-    ``object_body`` centered above ``target_body``, one cube height higher.
+    Builds (without performing) a park/pick/place/park plan that stacks ``object_body``
+    centered above ``target_body``, one cube height higher.
     """
     target_pose = target_body.global_pose
     place_location = Pose.from_xyz_rpy(
@@ -286,13 +322,13 @@ def attempt_stack(
     object_body, target_body, picking_arm, step_name: str, iteration_index: int
 ) -> None:
     """
-    Builds and performs one stacking attempt, logging and swallowing any
-    failure instead of letting it propagate, then persists the attempt's
-    plan (successful or not) to the database.
+    Builds and performs one stacking attempt, logging and swallowing any failure instead
+    of letting it propagate, then persists the attempt's plan (successful or not) to the
+    database.
 
-    A single failed grasp/place should not crash the whole run -- it skips
-    to the next cube (or iteration) instead, re-parking the arms first so
-    the robot starts the next attempt from a known configuration.
+    A single failed grasp/place should not crash the whole run -- it skips to the next
+    cube (or iteration) instead, re-parking the arms first so the robot starts the next
+    attempt from a known configuration.
     """
     plan = _build_stack_plan(object_body, target_body, picking_arm)
     succeeded = False
@@ -311,8 +347,8 @@ def attempt_stack(
 
 def print_iteration_summary(iteration_index: int) -> None:
     """
-    Prints the final z-height of every cube, a quick visual check of how
-    high the stack reached in this iteration.
+    Prints the final z-height of every cube, a quick visual check of how high the stack
+    reached in this iteration.
     """
     heights = {
         name: multi_sim.simulator.get_body_position(name).result[2]
@@ -322,9 +358,23 @@ def print_iteration_summary(iteration_index: int) -> None:
 
 
 database_session = _create_database_session(DATABASE_URI)
+persist_world_snapshot()
 
 #constraints = SimulatorConstraints(max_number_of_steps=10000)
 multi_sim.start_simulation()
+
+# MujocoSim rebuilds a fresh MuJoCo model from the World object rather than
+# reusing the scene file directly, which silently drops the scene's
+# <visual><global azimuth="120" elevation="-20"/> hint -- the viewer would
+# otherwise fall back to MuJoCo's own default camera (azimuth=90,
+# elevation=-45), making the cubes' row appear rotated instead of matching
+# the scene's intended viewing angle.
+viewer = multi_sim.simulator.renderer
+if hasattr(viewer, "cam"):
+    viewer.cam.azimuth = 120
+    viewer.cam.elevation = -20
+    viewer.cam.distance = 1.2
+    viewer.cam.lookat[:] = [0.3, 0.0, 0.35]
 iteration_durations = []
 with ExecutionEnvironment(
     execution_type=execition_mode,
