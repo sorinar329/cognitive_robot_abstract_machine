@@ -27,6 +27,7 @@ from krrood.utils import recursive_subclasses
 from scipy.spatial.transform import Rotation
 from trimesh.visual import TextureVisuals
 
+from semantic_digital_twin.adapters.grasp_attachment import GraspAttachmentBackend
 from semantic_digital_twin.callbacks.callback import (
     ModelChangeCallback,
     StateChangeCallback,
@@ -320,9 +321,17 @@ class KinematicStructureEntityConverter(EntityConverter, ABC):
         kinematic_structure_entity_props = EntityConverter._convert(self, entity)
         # The simulator joint supplies the variable part, so the static frame must
         # exclude it (see Connection.reference_origin_expression).
-        [px, py, pz, qx, qy, qz, qw] = (
-            entity.parent_connection.reference_origin_as_position_quaternion().evaluate()[0]
-        )
+        [
+            px,
+            py,
+            pz,
+            qx,
+            qy,
+            qz,
+            qw,
+        ] = entity.parent_connection.reference_origin_as_position_quaternion().evaluate()[
+            0
+        ]
         kinematic_structure_entity_pos = [px, py, pz]
         kinematic_structure_entity_quat = [qw, qx, qy, qz]
         kinematic_structure_entity_props.update(
@@ -2790,7 +2799,7 @@ class MultiSimSynchronizer(ModelChangeCallback, ABC):
 
 
 @dataclass(eq=False)
-class MujocoSynchronizer(MultiSimSynchronizer):
+class MujocoSynchronizer(MultiSimSynchronizer, GraspAttachmentBackend):
     simulator: MujocoSimulator
     entity_converter: Type[EntityConverter] = field(default=MujocoConverter)
     entity_spawner: Type[EntitySpawner] = field(default=MujocoEntitySpawner)
@@ -2825,6 +2834,23 @@ class MujocoSynchronizer(MultiSimSynchronizer):
     def __post_init__(self):
         super().__post_init__()
         self.simulator.read_data_from_simulator = self._sim_to_world
+
+    # %% grasp attachment backend
+
+    def attach_grasped_body(self, grasped_body: Body, gripper_body: Body) -> None:
+        """
+        Rigidly bind ``grasped_body`` to ``gripper_body`` in MuJoCo by re-parenting
+        the grasped body under the gripper body, so it follows the gripper
+        kinematically for the duration of the grasp.
+        """
+        self.simulator.attach(grasped_body.name.name, gripper_body.name.name)
+
+    def release_grasped_body(self, grasped_body: Body) -> None:
+        """
+        Release ``grasped_body`` in MuJoCo by detaching it from its gripper and giving
+        it a free joint again, so it resumes free-body physics.
+        """
+        self.simulator.detach(grasped_body.name.name)
 
     def _resolve_qpos_adr(self, connection: Connection) -> Optional[int]:
         """

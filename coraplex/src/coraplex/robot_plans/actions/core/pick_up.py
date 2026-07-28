@@ -172,7 +172,7 @@ class PickUpAction(ActionDescription):
                     grasp_description=self.grasp_description,
                 ),
                 MoveGripperMotion(motion=GripperState.CLOSE, gripper=self.arm),
-                AttachNode(
+                self._make_attach_node(
                     body=self.object_designator,
                     new_parent=ViewManager.get_end_effector_view(
                         self.arm, self.robot
@@ -186,6 +186,18 @@ class PickUpAction(ActionDescription):
                 ),
             ],
         )
+
+    def _make_attach_node(self, body: Body, new_parent: Body) -> AttachNode:
+        """
+        Build the node that attaches the grasped body to the gripper.
+
+        Overridden by simulator-specific pick-up actions to also drive the physical
+        grasp in their simulator.
+
+        :param body: The grasped body.
+        :param new_parent: The gripper frame the body is attached to.
+        """
+        return AttachNode(body=body, new_parent=new_parent)
 
     @staticmethod
     def pre_condition(

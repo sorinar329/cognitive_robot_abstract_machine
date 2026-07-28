@@ -87,11 +87,25 @@ class PlaceAction(ActionDescription):
                     reverse_reach_order=True,
                 ),
                 MoveGripperMotion(GripperState.OPEN, self.arm),
-                DetachNode(body=self.object_designator, new_parent=self.world.root),
+                self._make_detach_node(
+                    body=self.object_designator, new_parent=self.world.root
+                ),
                 MoveToolCenterPointMotion(retract_pose, self.arm),
             ],
             self.context,
         )
+
+    def _make_detach_node(self, body: Body, new_parent: Body) -> DetachNode:
+        """
+        Build the node that detaches the placed body from its gripper.
+
+        Overridden by simulator-specific place actions to also release the physical
+        grasp in their simulator.
+
+        :param body: The body being placed.
+        :param new_parent: The parent the body is re-attached to after placing.
+        """
+        return DetachNode(body=body, new_parent=new_parent)
 
     @staticmethod
     def pre_condition(

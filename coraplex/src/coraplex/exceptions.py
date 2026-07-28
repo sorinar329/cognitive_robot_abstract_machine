@@ -171,3 +171,30 @@ class UnknownExecutionType(DataclassException):
 
     def suggest_correction(self) -> str:
         return ""
+
+
+@dataclass
+class NoGraspAttachmentBackend(DataclassException):
+    """
+    Raised when a MuJoCo grasp attachment or release is requested but no
+    :class:`~semantic_digital_twin.adapters.grasp_attachment.GraspAttachmentBackend`
+    is registered on the world.
+    """
+
+    body: KinematicStructureEntity
+    """
+    The body whose grasp attachment could not be applied.
+    """
+
+    def error_message(self) -> str:
+        return (
+            f"No grasp attachment backend registered on the world of {self.body}. "
+            "Attachment-based grasping requires a running simulator synchronizer "
+            "(for example a MujocoSim)."
+        )
+
+    def suggest_correction(self) -> str:
+        return (
+            "Start the simulation (e.g. `MujocoSim(world=...)`) before performing an "
+            "attachment-based grasp, or use the friction-based grasp mode."
+        )
