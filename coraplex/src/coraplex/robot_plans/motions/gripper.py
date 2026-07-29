@@ -30,36 +30,44 @@ TOOL_ORIENTATION_THRESHOLD = 0.02
 Orientation tolerance in rad (~1.1 degrees) for tool-center-point poses.
 
 The position ``threshold`` of 0.005 doubles as a rotation tolerance in
-:class:`CartesianPose` unless overridden -- 0.005 rad (0.29 degrees) is
-unreachable for a physically simulated arm, whose PD-tracked joints settle
-with a residual orientation error of ~0.008 rad, so such a task never
-registers as done and stalls the rest of the plan behind it.
+:class:`CartesianPose` unless overridden -- 0.005 rad (0.29 degrees) is unreachable for
+a physically simulated arm, whose PD-tracked joints settle with a residual orientation
+error of ~0.008 rad, so such a task never registers as done and stalls the rest of the
+plan behind it.
 """
-
 
 @dataclass
 class ReachMotion(BaseMotion):
-    """ """
+    """
+    
+    """
 
     object_designator: Body
     """
-    Object designator_description describing the object that should be picked up
+    Object designator_description describing the object that should be picked up.
     """
+
     arm: Arms
     """
-    The arm that should be used for pick up
+    The arm that should be used for pick up.
     """
+
     grasp_description: GraspDescription
     """
-    The grasp description that should be used for picking up the object
+    The grasp description that should be used for picking up the object.
     """
+
     movement_type: MovementType = MovementType.CARTESIAN
     """
     The type of movement that should be performed.
     """
+
     reverse_pose_sequence: bool = False
     """
-    Reverses the sequence of poses, i.e., moves away from the object instead of towards it. Used for placing objects.
+    Reverses the sequence of poses, i.e., moves away from the object instead of towards
+    it.
+
+    Used for placing objects.
     """
 
     def _calculate_pose_sequence(self) -> List[Pose]:
@@ -108,36 +116,48 @@ class ReachMotion(BaseMotion):
 @dataclass
 class MoveGripperMotion(BaseMotion):
     """
-    Opens or closes the gripper
+    Opens or closes the gripper.
     """
-
     motion: GripperState
     """
-    Motion that should be performed, either 'open' or 'close'
+    Motion that should be performed, either 'open' or 'close'.
     """
     gripper: Arms
     """
-    Name of the gripper that should be moved
+    Name of the gripper that should be moved.
     """
+
     allow_gripper_collision: Optional[bool] = None
     """
-    If the gripper is allowed to collide with something
+    If the gripper is allowed to collide with something.
     """
+
     target_opening: Optional[float] = None
     """
-    Explicit finger opening (in meters) to command instead of the position
-    the GripperState would resolve to.
+    Explicit finger opening (in meters) to command instead of the position the
+    GripperState would resolve to.
 
-    Targets the same finger connections, so the sim synchronizer still
-    translates it into the actuator ctrl setpoint the same way -- a smaller
-    opening simply commands a tighter squeeze. Used to grasp with a specific
-    force without changing the robot's shared OPEN/CLOSE states.
+    Targets the same finger connections, so the sim synchronizer still translates it
+    into the actuator ctrl setpoint the same way -- a smaller opening simply commands a
+    tighter squeeze. Used to grasp with a specific force without changing the robot's
+    shared OPEN/CLOSE states.
     """
 
     finger_velocity: Optional[float] = None
     """
     Explicit finger joint velocity (in m/s) to command instead of
-    :attr:`JointPositionList`'s default. ``None`` keeps the default velocity.
+    :attr:`JointPositionList`'s default.
+
+    ``None`` keeps the default velocity.
+    """
+
+    stall_min_time: Optional[float] = None
+    """
+    Explicit minimum stall dwell time (in seconds, see
+    :attr:`JointPositionList.stall_min_time`) to command instead of the default.
+
+    Only meaningful for a CLOSE motion, since that is the only case where stalling is
+    tolerated. ``None`` keeps the default.
     """
 
     def perform(self):
@@ -145,9 +165,9 @@ class MoveGripperMotion(BaseMotion):
 
     def _goal_state(self, end_effector: EndEffector) -> JointState:
         """
-        The finger joint state this motion commands: the GripperState's own
-        state, or -- when ``target_opening`` is set -- the same finger
-        connections remapped to that explicit opening.
+        The finger joint state this motion commands: the GripperState's own state, or --
+        when ``target_opening`` is set -- the same finger connections remapped to that
+        explicit opening.
         """
         state = end_effector.get_joint_state_by_type(self.motion)
         if self.target_opening is None:
@@ -165,6 +185,8 @@ class MoveGripperMotion(BaseMotion):
         kwargs = {}
         if self.finger_velocity is not None:
             kwargs["max_velocity"] = self.finger_velocity
+        if self.stall_min_time is not None:
+            kwargs["stall_min_time"] = self.stall_min_time
 
         return JointPositionList(
             goal_state=self._goal_state(arm),
@@ -182,37 +204,41 @@ class MoveGripperMotion(BaseMotion):
 @dataclass
 class MoveToolCenterPointMotion(BaseMotion):
     """
-    Moves the Tool center point (TCP) of the robot
+    Moves the Tool center point (TCP) of the robot.
     """
 
     target: Pose
     """
-    Target pose to which the TCP should be moved
+    Target pose to which the TCP should be moved.
     """
+
     arm: Arms
     """
-    Arm with the TCP that should be moved to the target
+    Arm with the TCP that should be moved to the target.
     """
     allow_gripper_collision: Optional[bool] = None
     """
-    If the gripper can collide with something
+    If the gripper can collide with something.
     """
+
     movement_type: Optional[MovementType] = MovementType.CARTESIAN
     """
     The type of movement that should be performed.
     """
-
     reference_linear_velocity: Optional[float] = None
     """
-    Explicit linear reference velocity (in m/s) to command instead of the
-    task's default. ``None`` keeps the default velocity.
-    """
+    Explicit linear reference velocity (in m/s) to command instead of the task's
+    default.
 
+    ``None`` keeps the default velocity.
+    """
     reference_angular_velocity: Optional[float] = None
     """
-    Explicit angular reference velocity (in rad/s) to command instead of the
-    task's default. Only used for :class:`CartesianPose` (the orientation
-    part). ``None`` keeps the default velocity.
+    Explicit angular reference velocity (in rad/s) to command instead of the task's
+    default.
+
+    Only used for :class:`CartesianPose` (the orientation part). ``None`` keeps the
+    default velocity.
     """
 
     def perform(self):
@@ -258,25 +284,25 @@ class MoveToolCenterPointMotion(BaseMotion):
                 **kwargs,
             )
         return task
-
-
 @dataclass
 class MoveTCPWaypointsMotion(BaseMotion):
     """
-    Moves the Tool center point (TCP) of the robot
+    Moves the Tool center point (TCP) of the robot.
     """
 
     waypoints: List[Pose]
     """
-    Waypoints the TCP should move along 
+    Waypoints the TCP should move along.
     """
+
     arm: Arms
     """
-    Arm with the TCP that should be moved to the target
+    Arm with the TCP that should be moved to the target.
     """
+
     allow_gripper_collision: Optional[bool] = None
     """
-    If the gripper can collide with something
+    If the gripper can collide with something.
     """
     movement_type: WaypointsMovementType = (
         WaypointsMovementType.ENFORCE_ORIENTATION_FINAL_POINT
@@ -307,27 +333,24 @@ class MoveTCPWaypointsMotion(BaseMotion):
             for pose in self.waypoints
         ]
         return Sequence(nodes=nodes)
-
-
 @dataclass
 class MoveManipulatorMotion(BaseMotion):
     """
-    Moves the Tool center point (TCP) of the robot
+    Moves the Tool center point (TCP) of the robot.
     """
 
     target: Pose
     """
-    Target pose to which the TCP should be moved
+    Target pose to which the TCP should be moved.
     """
-
     end_effector: EndEffector
     """
-    The end effector to move to the target pose
+    The end effector to move to the target pose.
     """
 
     allow_gripper_collision: bool = False
     """
-    If the gripper can collide with something
+    If the gripper can collide with something.
     """
 
     @property

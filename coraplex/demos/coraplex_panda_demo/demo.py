@@ -237,7 +237,8 @@ def persist_plan(
 def persist_world_snapshot() -> None:
     """
     Persists the world's physics configuration -- joint dynamics, actuator gains, geom
-    friction/solver parameters, MuJoCo body properties such as the gravity-compensation
+    friction/solver parameters, MuJoCo body properties such as the gravity-compensation.
+
     override applied to the arm, and the arm's rated velocity/acceleration/jerk limits
     -- to the database, via the same ``WorldMappingDAO`` mapping already used elsewhere
     in the workspace.
@@ -313,9 +314,27 @@ def _build_stack_plan(object_body, target_body, picking_arm) -> PlanNode:
     )
 
 
+def _cube_is_stacked(object_body, target_body) -> bool:
+    """
+    Whether ``object_body`` actually ended up resting on top of ``target_body`` in the
+    physical simulation, judged by its height above ``target_body`` being at least half
+    of :data:`STACK_HEIGHT_OFFSET`.
+
+    Checked against the real MuJoCo state rather than the plan's reported
+    success/failure: a step can raise (e.g. a re-park afterwards timing out) after
+    already having placed the object correctly, and can also report success without the
+    object actually ending up in place (see the module docstring's notes on
+    ``evaluate_conditions=False``) -- so the reported outcome alone is not a reliable
+    signal of whether this step's stacking actually happened.
+    """
+    object_height = multi_sim.simulator.get_body_position(object_body.name.name).result[2]
+    target_height = multi_sim.simulator.get_body_position(target_body.name.name).result[2]
+    return object_height - target_height > STACK_HEIGHT_OFFSET / 2
+
+
 def attempt_stack(
     object_body, target_body, picking_arm, step_name: str, iteration_index: int
-) -> None:
+) -> bool:
     """
     Builds and performs one stacking attempt, logging and swallowing any failure instead
     of letting it propagate, then persists the attempt's plan (successful or not) to the
@@ -324,6 +343,11 @@ def attempt_stack(
     A single failed grasp/place should not crash the whole run -- it skips to the next
     cube (or iteration) instead, re-parking the arms first so the robot starts the next
     attempt from a known configuration.
+
+    :return: True if ``object_body`` did not actually end up stacked on ``target_body``
+        (see :func:`_cube_is_stacked`) -- signals to the caller that continuing this
+        iteration's remaining cubes is pointless, since each one stacks onto the
+        previous, and there is nothing to stack onto (or with) here.
     """
     plan = _build_stack_plan(object_body, target_body, picking_arm)
     succeeded = False
@@ -338,6 +362,7 @@ def attempt_stack(
             print(f"[warning] re-park after {step_name} also failed: {park_exc}")
 
     persist_plan(plan, iteration_index, step_name, succeeded)
+    return not _cube_is_stacked(object_body, target_body)
 
 
 def print_iteration_summary(iteration_index: int) -> None:
@@ -402,7 +427,16 @@ with ExecutionEnvironment(
                     "attempts and moving to the next iteration"
                 )
                 break
-            attempt_stack(cube_to_pick, cube_to_stack_on, Arms.LEFT, step_label, iteration)
+            stacking_failed = attempt_stack(
+                cube_to_pick, cube_to_stack_on, Arms.LEFT, step_label, iteration
+            )
+            if stacking_failed:
+                print(
+                    f"[warning] {step_label} did not end up stacked -- the rest of "
+                    f"iteration {iteration} would only stack onto/with an object that "
+                    "was never actually placed, skipping to the next iteration"
+                )
+                break
             time.sleep(1)
 
         print_iteration_summary(iteration)

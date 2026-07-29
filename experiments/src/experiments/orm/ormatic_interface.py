@@ -3636,6 +3636,36 @@ class ConditionNotSatisfiedDAO(
     }
 
 
+class GraspVerificationFailedDAO(
+    PlanFailureDAO, DataAccessObject[coraplex.exceptions.GraspVerificationFailed]
+):
+    __tablename__ = "GraspVerificationFailedDAO"
+
+    database_id: Mapped[builtins.int] = mapped_column(
+        ForeignKey(PlanFailureDAO.database_id),
+        primary_key=True,
+        use_existing_column=True,
+    )
+
+    attempts: Mapped[builtins.int] = mapped_column(use_existing_column=True)
+
+    object_designator_id: Mapped[int] = mapped_column(
+        ForeignKey("BodyDAO.database_id", use_alter=True),
+        nullable=True,
+        use_existing_column=True,
+    )
+
+    object_designator: Mapped[BodyDAO] = relationship(
+        "BodyDAO", uselist=False, foreign_keys=[object_designator_id], post_update=True
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "GraspVerificationFailedDAO",
+        "inherit_condition": database_id == PlanFailureDAO.database_id,
+        "polymorphic_load": "selectin",
+    }
+
+
 class MotionDidNotFinishDAO(
     PlanFailureDAO, DataAccessObject[coraplex.exceptions.MotionDidNotFinish]
 ):
@@ -5166,6 +5196,9 @@ class PickUpActionDAO(
     grasp_opening: Mapped[typing.Optional[builtins.float]] = mapped_column(
         use_existing_column=True
     )
+    pre_approach_linear_velocity: Mapped[builtins.float] = mapped_column(
+        use_existing_column=True
+    )
     grasp_linear_velocity: Mapped[builtins.float] = mapped_column(
         use_existing_column=True
     )
@@ -5175,6 +5208,10 @@ class PickUpActionDAO(
     lift_linear_velocity: Mapped[builtins.float] = mapped_column(
         use_existing_column=True
     )
+    grasp_stall_min_time: Mapped[builtins.float] = mapped_column(
+        use_existing_column=True
+    )
+    max_grasp_attempts: Mapped[builtins.int] = mapped_column(use_existing_column=True)
 
     arm: Mapped[coraplex.datastructures.enums.Arms] = mapped_column(
         krrood.ormatic.custom_types.PolymorphicEnumType,
@@ -5299,6 +5336,7 @@ class PlaceActionDAO(
     retract_linear_velocity: Mapped[builtins.float] = mapped_column(
         use_existing_column=True
     )
+    max_release_attempts: Mapped[builtins.int] = mapped_column(use_existing_column=True)
 
     arm: Mapped[coraplex.datastructures.enums.Arms] = mapped_column(
         krrood.ormatic.custom_types.PolymorphicEnumType,
@@ -5508,6 +5546,8 @@ class ParkArmsActionDAO(
         use_existing_column=True,
     )
 
+    joint_velocity: Mapped[builtins.float] = mapped_column(use_existing_column=True)
+
     arm: Mapped[coraplex.datastructures.enums.Arms] = mapped_column(
         krrood.ormatic.custom_types.PolymorphicEnumType,
         nullable=False,
@@ -5681,6 +5721,9 @@ class MoveGripperMotionDAO(
         use_existing_column=True
     )
     finger_velocity: Mapped[typing.Optional[builtins.float]] = mapped_column(
+        use_existing_column=True
+    )
+    stall_min_time: Mapped[typing.Optional[builtins.float]] = mapped_column(
         use_existing_column=True
     )
 
@@ -6120,6 +6163,9 @@ class MoveJointsMotionDAO(
     )
     root_link: Mapped[typing.Optional[builtins.str]] = mapped_column(
         sqlalchemy.sql.sqltypes.Text, use_existing_column=True
+    )
+    max_velocity: Mapped[typing.Optional[builtins.float]] = mapped_column(
+        use_existing_column=True
     )
 
     names: Mapped[typing.List[builtins.str]] = mapped_column(
