@@ -10,6 +10,7 @@ from giskardpy.motion_statechart.context import MotionStatechartContext
 from giskardpy.motion_statechart.data_types import ObservationStateValues
 from giskardpy.motion_statechart.graph_node import MotionStatechartNode, NodeArtifacts
 from giskardpy.utils.decorators import dataclass
+from krrood.symbolic_math.symbolic_math import FloatVariable
 from semantic_digital_twin.world_description.degree_of_freedom import DegreeOfFreedom
 
 
@@ -20,15 +21,16 @@ def local_minimum_expression(
     minimum_threshold: float = 0.01,
     maximum_threshold: float = 0.06,
     min_time: float = 1.0,
+    reference_cycle_variable: Optional[FloatVariable] = None,
 ) -> sm.Scalar:
     """
     Build the "has settled" observation expression shared by
-    :class:`LocalMinimumReached` and any task that wants to tolerate stalling
-    (e.g. a gripper closing on a grasped object): true once at least
-    ``min_time`` seconds of the trajectory have elapsed and every DOF in
-    ``dofs`` has a velocity below its own ``max_velocity *
-    joint_convergence_threshold`` (clamped to ``[minimum_threshold,
-    maximum_threshold]``).
+    :class:`LocalMinimumReached` and any task that wants to tolerate stalling (e.g. a
+    gripper closing on a grasped object): true once at least.
+
+    ``min_time`` seconds have elapsed and every DOF in ``dofs`` has a
+    velocity below its own ``max_velocity * joint_convergence_threshold``
+    (clamped to ``[minimum_threshold, maximum_threshold]``).
 
     :param dofs: The degrees of freedom to check.
     :param context: The motion statechart context, for the control timestep
@@ -37,6 +39,13 @@ def local_minimum_expression(
     :param minimum_threshold: See :attr:`LocalMinimumReached.minimum_threshold`.
     :param maximum_threshold: See :attr:`LocalMinimumReached.maximum_threshold`.
     :param min_time: Minimum elapsed control time before the observation can become true.
+    :param reference_cycle_variable: Cycle count elapsed time is measured from,
+        instead of the start of the whole motion chart. Pass a variable a
+        caller updates in its own ``on_start`` (e.g. a per-task "I started
+        running at cycle N" marker) so ``min_time`` gates on how long *that
+        caller* has been active, not on how many cycles the entire chart --
+        including earlier, unrelated tasks -- has already ticked through.
+        ``None`` keeps the previous chart-wide behaviour.
     :return: The observation expression.
     """
     ref = []
@@ -54,7 +63,10 @@ def local_minimum_expression(
         context.qp_controller_config.control_dt
         or context.qp_controller_config.model_predictive_control_time_step
     )
-    traj_longer_than_min_time = context.control_cycle_variable * dt > min_time
+    elapsed_cycles = context.control_cycle_variable
+    if reference_cycle_variable is not None:
+        elapsed_cycles = elapsed_cycles - reference_cycle_variable
+    traj_longer_than_min_time = elapsed_cycles * dt > min_time
     return sm.trinary_logic_and(
         traj_longer_than_min_time, sm.logic_all(sm.abs(vel_symbols) < ref)
     )
@@ -110,8 +122,9 @@ class LocalMinimumReached(MotionStatechartNode):
 
     dofs: Optional[List[DegreeOfFreedom]] = None
     """
-    Degrees of freedom to check for convergence. Defaults to
-    ``context.world.active_degrees_of_freedom`` (every active DOF) if left
+    Degrees of freedom to check for convergence.
+
+    Defaults to ``context.world.active_degrees_of_freedom`` (every active DOF) if left
     ``None``.
     """
 

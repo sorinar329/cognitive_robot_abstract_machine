@@ -201,6 +201,16 @@ class PickUpAction(ActionDescription):
     closing motion, not the robot's shared gripper states.
     """
 
+    pre_approach_linear_velocity: float = 0.1
+    """
+    Linear reference velocity (in m/s) for the initial reach towards the
+    object's pre-grasp standoff, before the final (slower) approach onto the
+    grasp pose. Slowed down from the unconstrained default (0.2 m/s) so the
+    arm's momentum on approach is less likely to knock aside a neighboring
+    object it passes close to on the way in, while still reaching noticeably
+    faster than the final grasp/lift phases.
+    """
+
     grasp_linear_velocity: float = 0.015
     """
     Linear reference velocity (in m/s) for the final approach onto the
@@ -232,6 +242,7 @@ class PickUpAction(ActionDescription):
                     object_designator=self.object_designator,
                     arm=self.arm,
                     grasp_description=self.grasp_description,
+                    pre_approach_linear_velocity=self.pre_approach_linear_velocity,
                     final_approach_linear_velocity=self.grasp_linear_velocity,
                     open_gripper_at_pre_pose=True,
                 ),

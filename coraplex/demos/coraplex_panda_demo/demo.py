@@ -237,25 +237,19 @@ def persist_plan(
 def persist_world_snapshot() -> None:
     """
     Persists the world's physics configuration -- joint dynamics, actuator gains, geom
-    friction/solver parameters, MuJoCo body properties such as the gravity-compensation.
-
+    friction/solver parameters, MuJoCo body properties such as the gravity-compensation
     override applied to the arm, and the arm's rated velocity/acceleration/jerk limits
     -- to the database, via the same ``WorldMappingDAO`` mapping already used elsewhere
     in the workspace.
 
-    The acceleration/jerk limits are applied only for the duration of this call and
-    reset immediately afterwards: Giskard's ``prediction_horizon`` in this demo is too
-    short to plan feasible trajectories under the arm's real (low) acceleration/jerk
-    limits (see ``coraplex.plans.executables``), so leaving them applied would break
-    every subsequent motion. Recording the real numbers in the database is still
-    useful on its own, independent of whether the live planner is configured to honor
-    them.
+    The acceleration/jerk limits are set on the robot's DOFs (and stay live for the
+    whole run, not just this snapshot) by ``Panda.from_world`` itself; see
+    ``coraplex.plans.executables`` for the matching ``prediction_horizon`` that makes
+    them feasible to plan under.
 
     Called once, before the simulation loop starts, since this configuration is static
     for the whole demo run.
     """
-    context.robot._setup_acceleration_limits()
-    context.robot._setup_jerk_limits()
     try:
         database_session.add(to_dao(world))
         database_session.commit()
@@ -263,12 +257,6 @@ def persist_world_snapshot() -> None:
     except Exception as exc:
         print(f"[database] failed to persist world snapshot: {exc}")
         database_session.rollback()
-    finally:
-        for connection in arm.active_connections:
-            connection.raw_dof.limits.lower.acceleration = None
-            connection.raw_dof.limits.upper.acceleration = None
-            connection.raw_dof.limits.lower.jerk = None
-            connection.raw_dof.limits.upper.jerk = None
 
 
 def reset_cubes() -> None:
@@ -309,6 +297,13 @@ def _build_stack_plan(object_body, target_body, picking_arm) -> PlanNode:
                     ApproachDirection.FRONT,
                     VerticalAlignment.TOP,
                     context.robot.get_arms()[0].end_effector,
+                    # The cubes sit in a row; without this, the fingers' opening
+                    # axis is exactly parallel to that row (confirmed empirically:
+                    # dot product -1.0), so any approach overshoot or the finger
+                    # sweep itself can clip a neighboring cube. Rotating 90 degrees
+                    # makes the opening axis perpendicular to the row instead
+                    # (dot product 0.0).
+                    rotate_gripper=True,
                 ),
             ),
             PlaceAction(object_body, place_location, picking_arm),

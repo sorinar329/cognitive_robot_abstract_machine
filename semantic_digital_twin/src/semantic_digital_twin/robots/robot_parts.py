@@ -601,6 +601,8 @@ class AbstractRobot(Agent, HasRobotParts, ABC):
                 robot_part.add_joint_states(robot_part.setup_joint_states())
             self._setup_collision_rules()
             self._setup_velocity_limits()
+            self._setup_acceleration_limits()
+            self._setup_jerk_limits()
             return self
 
     @property
