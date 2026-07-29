@@ -53,14 +53,26 @@ class MoveJointsMotion(BaseMotion):
     (optional).
     """
 
+    max_velocity: Optional[float] = None
+    """
+    Explicit joint velocity (in rad/s or m/s, per joint) to command instead
+    of :class:`JointPositionList`'s default. ``None`` keeps the default
+    velocity. Per-joint velocity limits still clamp this, so a value above
+    what a given joint can do is harmless.
+    """
+
     def perform(self):
         return
 
     @property
     def _motion_chart(self):
         dofs = [self.world.get_connection_by_name(name) for name in self.names]
+        kwargs = {}
+        if self.max_velocity is not None:
+            kwargs["max_velocity"] = self.max_velocity
         return JointPositionList(
-            goal_state=JointState.from_mapping(dict(zip(dofs, self.positions)))
+            goal_state=JointState.from_mapping(dict(zip(dofs, self.positions))),
+            **kwargs,
         )
 
 
