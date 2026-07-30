@@ -5184,6 +5184,9 @@ class PickUpActionDAO(
     grasp_stall_min_time: Mapped[builtins.float] = mapped_column(
         use_existing_column=True
     )
+    object_friction: Mapped[typing.Optional[builtins.float]] = mapped_column(
+        use_existing_column=True
+    )
     max_grasp_attempts: Mapped[builtins.int] = mapped_column(use_existing_column=True)
 
     arm: Mapped[coraplex.datastructures.enums.Arms] = mapped_column(

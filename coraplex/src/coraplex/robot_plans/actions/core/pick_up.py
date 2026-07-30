@@ -256,6 +256,18 @@ class PickUpAction(ActionDescription):
     empty gripper onward.
     """
 
+    object_friction: Optional[float] = None
+    """
+    Sliding friction coefficient applied to the target object's geom before this pick is
+    attempted, overriding the world's default.
+
+    Not consumed by this action's own plan/execution -- friction is a MuJoCo geom
+    property, not a planner goal, so applying it is the caller's responsibility (see
+    ``MujocoSimulator.set_geom_friction``) before performing this action. Carried here
+    purely so the value used for a given attempt is recorded alongside the rest of its
+    parameters. ``None`` leaves the object's friction untouched.
+    """
+
     max_grasp_attempts: int = 3
     """
     How many times to attempt reach+close before giving up on this object.

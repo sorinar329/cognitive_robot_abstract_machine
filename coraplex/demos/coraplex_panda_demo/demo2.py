@@ -1,3 +1,18 @@
+"""
+Experimental copy of ``demo.py`` that randomizes PickUpAction/PlaceAction velocity/
+timing parameters per attempt (see ``pickup_place_parameterization.py``) instead of
+always using their fixed defaults, so that successful attempts persisted to the
+database show real variation, suitable as training data for a probabilistic model.
+
+Kept as a separate file rather than modifying ``demo.py`` in place: that file reflects
+an entire session's worth of validated tuning (grasp reliability, speed, placing-release
+verification, iteration-skip logic), and this randomization is new/unvalidated.
+
+No JPT training or model-based sampling happens here yet -- every attempt draws from a
+fixed Gaussian prior (see ``pickup_place_parameterization.py``). Training a model on the
+resulting data and closing the loop is a follow-up step.
+"""
+
 import os
 import threading
 import time
@@ -15,9 +30,9 @@ from coraplex.execution_environment import ExecutionEnvironment
 from coraplex.orm.ormatic_interface import Base
 from coraplex.plans.factories import sequential
 from coraplex.plans.plan_node import PlanNode
-from coraplex.robot_plans.actions.core.pick_up import PickUpAction
-from coraplex.robot_plans.actions.core.placing import PlaceAction
 from coraplex.robot_plans.actions.core.robot_body import ParkArmsAction
+
+from pickup_place_parameterization import sample_pickup_instance, sample_place_instance
 
 from krrood.ormatic.data_access_objects.helper import to_dao
 from krrood.ormatic.utils import create_engine
@@ -165,6 +180,17 @@ Vertical offset (in meters) above a target cube's center at which a placed cube 
 end up -- one cube height plus a small clearance margin.
 """
 
+STACK_XY_TOLERANCE = 0.03
+"""
+Maximum horizontal (x/y) distance (in meters) allowed between a stacked cube and its
+target's center for the stack to count as properly centered, not just coincidentally at
+the right height.
+
+Matches the tolerance already used by :class:`PlaceAction`'s own ``post_condition`` pose
+check (``placing.py``), which is otherwise unevaluated here since the demo's ``Context``
+is built with ``evaluate_conditions=False``.
+"""
+
 CUBE_SPAWN_POSITIONS = {
     "cube0": numpy.array([0.40, 0.10, 0.06]),
     "cube1": numpy.array([0.40, -0.04, 0.06]),
@@ -213,11 +239,11 @@ def persist_plan(plan: PlanNode, iteration_index: int, step_name: str) -> None:
     Persists one stacking attempt's plan -- every action's parameters plus its recorded
     per-node status -- to the database.
 
-    Called unconditionally for every step of every iteration, regardless of whether the
-    cube actually ended up stacked -- this demo collects every attempt's parameters for
-    later analysis; success-gated persistence (only keeping fully-stacked iterations) is
-    handled by ``demo2.py`` instead. Persistence failures are logged and swallowed so a
-    database hiccup never aborts the run.
+    Only called for steps belonging to an iteration where every cube actually ended up
+    stacked (see the main loop below) -- the database is meant to accumulate only
+    successful stacking runs, as training data for a probabilistic model, so a failed or
+    incomplete iteration's plans are never persisted at all. Persistence failures are
+    logged and swallowed so a database hiccup never aborts the run.
     """
     try:
         database_session.add(to_dao(plan))
@@ -277,6 +303,11 @@ def _build_stack_plan(object_body, target_body, picking_arm) -> PlanNode:
     """
     Builds (without performing) a park/pick/place/park plan that stacks ``object_body``
     centered above ``target_body``, one cube height higher.
+
+    Unlike ``demo.py``, the ``PickUpAction``/``PlaceAction`` velocity/timing parameters
+    are randomly sampled per call (see ``pickup_place_parameterization.py``) instead of
+    using their fixed defaults, so that successful attempts show real, varied parameter
+    values once persisted.
     """
     target_pose = target_body.global_pose
     place_location = Pose.from_xyz_rpy(
@@ -285,26 +316,53 @@ def _build_stack_plan(object_body, target_body, picking_arm) -> PlanNode:
         z=target_pose.z + STACK_HEIGHT_OFFSET,
         reference_frame=world.root,
     )
+
+    grasp_description = GraspDescription(
+        ApproachDirection.FRONT,
+        VerticalAlignment.TOP,
+        context.robot.get_arms()[0].end_effector,
+        # The cubes sit in a row; without this, the fingers' opening
+        # axis is exactly parallel to that row (confirmed empirically:
+        # dot product -1.0), so any approach overshoot or the finger
+        # sweep itself can clip a neighboring cube. Rotating 90 degrees
+        # makes the opening axis perpendicular to the row instead
+        # (dot product 0.0).
+        rotate_gripper=True,
+    )
+
+    pickup_action = sample_pickup_instance(object_body, picking_arm, grasp_description)
+    place_action = sample_place_instance(object_body, place_location, picking_arm)
+
+    # object_friction is recorded on PickUpAction purely for persistence -- the
+    # action itself never applies it (it's a MuJoCo geom property, not a planner
+    # goal), so it must be pushed onto the live simulator here before the pick runs.
+    multi_sim.simulator.set_geom_friction(
+        f"{object_body.name.name}_geom",
+        numpy.array([pickup_action.object_friction, 0.05, 0.0005]),
+    )
+
+    print(
+        f"[params] pickup {object_body.name.name}: "
+        f"pre_approach={pickup_action.pre_approach_linear_velocity:.4f}, "
+        f"grasp={pickup_action.grasp_linear_velocity:.4f}, "
+        f"closing={pickup_action.grasp_closing_velocity:.4f}, "
+        f"lift={pickup_action.lift_linear_velocity:.4f}, "
+        f"stall_min_time={pickup_action.grasp_stall_min_time:.4f}, "
+        f"object_friction={pickup_action.object_friction:.4f}"
+    )
+    print(
+        f"[params] place {object_body.name.name}: "
+        f"transport={place_action.transport_linear_velocity:.4f}, "
+        f"placing={place_action.placing_linear_velocity:.4f}, "
+        f"release={place_action.release_opening_velocity:.4f}, "
+        f"retract={place_action.retract_linear_velocity:.4f}"
+    )
+
     return sequential(
         [
             ParkArmsAction(Arms.BOTH),
-            PickUpAction(
-                object_body,
-                picking_arm,
-                GraspDescription(
-                    ApproachDirection.FRONT,
-                    VerticalAlignment.TOP,
-                    context.robot.get_arms()[0].end_effector,
-                    # The cubes sit in a row; without this, the fingers' opening
-                    # axis is exactly parallel to that row (confirmed empirically:
-                    # dot product -1.0), so any approach overshoot or the finger
-                    # sweep itself can clip a neighboring cube. Rotating 90 degrees
-                    # makes the opening axis perpendicular to the row instead
-                    # (dot product 0.0).
-                    rotate_gripper=True,
-                ),
-            ),
-            PlaceAction(object_body, place_location, picking_arm),
+            pickup_action,
+            place_action,
             ParkArmsAction(Arms.BOTH),
         ],
         context=context,
@@ -313,9 +371,8 @@ def _build_stack_plan(object_body, target_body, picking_arm) -> PlanNode:
 
 def _cube_is_stacked(object_body, target_body) -> bool:
     """
-    Whether ``object_body`` actually ended up resting on top of ``target_body`` in the
-    physical simulation, judged by its height above ``target_body`` being at least half
-    of :data:`STACK_HEIGHT_OFFSET`.
+    Whether ``object_body`` actually ended up resting centered on top of ``target_body``
+    in the physical simulation.
 
     Checked against the real MuJoCo state rather than the plan's reported
     success/failure: a step can raise (e.g. a re-park afterwards timing out) after
@@ -324,13 +381,26 @@ def _cube_is_stacked(object_body, target_body) -> bool:
     ``evaluate_conditions=False``) -- so the reported outcome alone is not a reliable
     signal of whether this step's stacking actually happened.
 
-    This result is informational only (printed in the main loop below) and no longer
-    gates persistence -- every step's plan is persisted regardless of this outcome; see
-    ``demo2.py`` for the success-gated version.
+    Combines two independent checks, since height alone cannot rule out a cube that
+    ended up elevated by coincidence without also being centered above the target (e.g.
+    perched on a neighboring cube's edge, or still caught on the retracting gripper):
+
+    - Height: strictly between half and 1.5x :data:`STACK_HEIGHT_OFFSET` above the
+      target -- a lower bound (rules out "fell off"/"knocked down") and an upper bound
+      (rules out "ended up implausibly high", e.g. still stuck to the gripper).
+    - Horizontal (x/y) distance to the target's center stays within
+      :data:`STACK_XY_TOLERANCE`, i.e. the cube is actually centered above the target
+      rather than merely at the right height somewhere nearby.
     """
-    object_height = multi_sim.simulator.get_body_position(object_body.name.name).result[2]
-    target_height = multi_sim.simulator.get_body_position(target_body.name.name).result[2]
-    return object_height - target_height > STACK_HEIGHT_OFFSET / 2
+    object_position = multi_sim.simulator.get_body_position(object_body.name.name).result
+    target_position = multi_sim.simulator.get_body_position(target_body.name.name).result
+
+    height_difference = object_position[2] - target_position[2]
+    if not (STACK_HEIGHT_OFFSET / 2 < height_difference < STACK_HEIGHT_OFFSET * 1.5):
+        return False
+
+    horizontal_distance = numpy.linalg.norm(object_position[:2] - target_position[:2])
+    return horizontal_distance < STACK_XY_TOLERANCE
 
 
 def attempt_stack(
@@ -344,12 +414,13 @@ def attempt_stack(
     cube (or iteration) instead, re-parking the arms first so the robot starts the next
     attempt from a known configuration.
 
-    Does not persist the plan itself -- see the main loop below, which persists every
-    step of every iteration unconditionally, regardless of whether it actually stacked.
+    Does not persist the plan itself -- see the main loop below, which only persists a
+    whole iteration's plans once every step in it is confirmed to have actually stacked
+    (see :func:`_cube_is_stacked`), so the database only ever accumulates complete,
+    successful stacking runs suitable as training data for a probabilistic model.
 
     :return: The performed plan, and whether ``object_body`` actually ended up stacked
-        on ``target_body`` afterwards (see :func:`_cube_is_stacked`), for informational
-        logging only.
+        on ``target_body`` afterwards (see :func:`_cube_is_stacked`).
     """
     plan = _build_stack_plan(object_body, target_body, picking_arm)
     try:
@@ -379,7 +450,6 @@ def print_iteration_summary(iteration_index: int) -> None:
 database_session = _create_database_session(DATABASE_URI)
 persist_world_snapshot()
 
-#constraints = SimulatorConstraints(max_number_of_steps=10000)
 multi_sim.start_simulation()
 
 # MujocoSim rebuilds a fresh MuJoCo model from the World object rather than
@@ -414,6 +484,7 @@ with ExecutionEnvironment(
         time.sleep(1.5)
 
         iteration_plans: list[tuple[str, PlanNode]] = []
+        iteration_fully_stacked = True
 
         for cube_to_pick, cube_to_stack_on, step_label in [
             (box1, box, "cube1 onto cube0"),
@@ -427,21 +498,32 @@ with ExecutionEnvironment(
                     f"(limit {ITERATION_TIME_LIMIT:.0f}s), skipping remaining "
                     "attempts and moving to the next iteration"
                 )
+                iteration_fully_stacked = False
                 break
             plan, stacked = attempt_stack(cube_to_pick, cube_to_stack_on, Arms.LEFT, step_label)
             iteration_plans.append((step_label, plan))
-            print(
-                f"[info] {step_label} {'stacked' if stacked else 'did NOT stack'} "
-                "(informational only -- every step is persisted regardless)"
-            )
+            if not stacked:
+                print(
+                    f"[warning] {step_label} did not end up stacked -- the rest of "
+                    f"iteration {iteration} would only stack onto/with an object that "
+                    "was never actually placed, skipping to the next iteration"
+                )
+                iteration_fully_stacked = False
+                break
             time.sleep(1)
 
-        for step_label, plan in iteration_plans:
-            persist_plan(plan, iteration, step_label)
-        print(
-            f"[database] iteration {iteration} persisted {len(iteration_plans)} "
-            "step(s) unconditionally"
-        )
+        if iteration_fully_stacked:
+            for step_label, plan in iteration_plans:
+                persist_plan(plan, iteration, step_label)
+            print(
+                f"[database] iteration {iteration} fully stacked, persisted "
+                f"{len(iteration_plans)} step(s)"
+            )
+        else:
+            print(
+                f"[database] iteration {iteration} was not fully stacked, discarding "
+                f"its {len(iteration_plans)} step(s) (not persisted)"
+            )
 
         print_iteration_summary(iteration)
 
