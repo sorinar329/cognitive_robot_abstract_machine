@@ -22,6 +22,7 @@ from semantic_digital_twin.robots.hsrb import HSRB
 from semantic_digital_twin.robots.tracy import Tracy
 from semantic_digital_twin.spatial_types.spatial_types import (
     HomogeneousTransformationMatrix,
+    Point3,
     Vector3,
     Pose,
 )
@@ -37,6 +38,7 @@ from semantic_digital_twin.world_description.degree_of_freedom import (
     DegreeOfFreedom,
     DegreeOfFreedomLimits,
 )
+from semantic_digital_twin.world_description.inertial_properties import Inertial
 from semantic_digital_twin.spatial_types.derivatives import DerivativeMap
 from semantic_digital_twin.world_description.geometry import (
     Box,
@@ -833,44 +835,135 @@ def test_body_frame_excludes_joint_state_at_build_time():
         stop_multisim_if_running(multi_sim)
 
 
-def test_omni_drive_spawn_pose_is_baked_into_static_body_frame(tmp_path):
+def _world_with_omni_drive() -> Tuple[World, OmniDrive, Body]:
     """
-    Regression test: OmniDrive (and DifferentialDrive) never get a MuJoCo joint built for
-    them (see MultiSimBuilder._ignore_connection_types), so nothing else carries their
-    live x/y/yaw state into the exported scene. KinematicStructureEntityConverter._convert
-    used to always read reference_origin_as_position_quaternion(), which excludes that
-    live state - a robot spawned at a non-identity OmniDrive pose therefore ended up at
-    the world origin in MuJoCo, while e.g. RViz (which reads the full
-    origin_as_position_quaternion()) showed it at the correct spawn pose.
+    A world holding nothing but a root and a base body carried by an
+    :class:`OmniDrive`, the minimum needed to exercise movable-base export.
+
+    :return: The world, its drive, and the drive's base body.
     """
     world = World()
     with world.modify_world():
         map_root = Body(name=PrefixedName("map"))
         world.add_body(map_root)
-        robot_root = Body(name=PrefixedName("robot_root"))
+        base_body = Body(name=PrefixedName("robot_root"))
         drive = OmniDrive.create_with_dofs(
-            world=world, parent=map_root, child=robot_root
+            world=world, parent=map_root, child=base_body
         )
         world.add_connection(drive)
+    return world, drive, base_body
 
+
+def test_omni_drive_becomes_movable_planar_joints_at_the_spawn_pose(tmp_path):
+    """
+    An OmniDrive is exported as three planar joints on its base body -- a slider along x,
+    a slider along y and a hinge about z (see MujocoBuilder.omni_drive_planar_joints) --
+    so the base can be driven around the scene at runtime rather than welded at its
+    build-time pose.
+
+    Two things have to hold for that to be useful: loading the model at its home keyframe
+    must place the base at the spawn pose (the joints carry that state, not the static
+    body frame), and moving those joints must move the base. Both are checked here.
+    """
+    world, drive, robot_root = _world_with_omni_drive()
     drive.origin = HomogeneousTransformationMatrix.from_xyz_rpy(
-        x=1.5, y=-0.5, yaw=0.9, reference_frame=map_root
+        x=1.5, y=-0.5, yaw=0.9, reference_frame=world.root
     )
 
-    builder = MujocoBuilder()
-    builder.build_world(world=world, file_path=str(tmp_path / "scene.xml"))
-
-    [robot_body] = [body for body in builder.spec.bodies if body.name == "robot_root"]
-
-    expected_pose = world.compute_forward_kinematics_np(world.root, robot_root)
-    expected_position = expected_pose[:3, 3]
-    expected_quat_wxyz = Rotation.from_matrix(expected_pose[:3, :3]).as_quat(
-        scalar_first=True
+    scene_path = str(tmp_path / "scene.xml")
+    MujocoBuilder(export_omni_drive_as_joints=True).build_world(
+        world=world, file_path=scene_path
     )
+    model = mujoco.MjModel.from_xml_path(scene_path)
+    data = mujoco.MjData(model)
 
+    joint_addresses = {}
+    for dof_name in ("x", "y", "yaw"):
+        joint_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, dof_name)
+        assert joint_id != -1, f"the drive's {dof_name} joint is missing from the model"
+        joint_addresses[dof_name] = model.jnt_qposadr[joint_id]
+
+    # Loading the home keyframe places the base at the spawn pose via the joints.
+    mujoco.mj_resetDataKeyframe(model, data, 0)
+    mujoco.mj_forward(model, data)
+    base_body_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "robot_root")
+    expected_position = world.compute_forward_kinematics_np(world.root, robot_root)[
+        :3, 3
+    ]
     assert not numpy.allclose(expected_position, [0.0, 0.0, 0.0])
-    numpy.testing.assert_allclose(list(robot_body.pos), expected_position, atol=1e-6)
-    numpy.testing.assert_allclose(list(robot_body.quat), expected_quat_wxyz, atol=1e-6)
+    numpy.testing.assert_allclose(data.xpos[base_body_id], expected_position, atol=1e-6)
+
+    # Moving the joints moves the base: the point of exporting them at all.
+    data.qpos[joint_addresses["x"]] = 2.5
+    data.qpos[joint_addresses["y"]] = 0.75
+    mujoco.mj_forward(model, data)
+    numpy.testing.assert_allclose(data.xpos[base_body_id][:2], [2.5, 0.75], atol=1e-6)
+
+
+def test_world_to_sim_sync_drives_the_simulated_base_from_the_drive_dofs():
+    """
+    Changing an :class:`OmniDrive`'s dofs in the world model moves the base body in the
+    simulator, once movable-base export is on.
+
+    Whole-body motion solves through the drive's x/y/yaw as if they were joints, so
+    without this the arm reaches alone from a base welded at its spawn pose and the
+    gripper arrives nowhere near the target the world model believes it reached.
+    """
+    world, drive, _ = _world_with_omni_drive()
+    multi_sim = MujocoSim(
+        world=world,
+        headless=headless,
+        step_size=STEP_SIZE,
+        export_omni_drive_as_joints=True,
+    )
+    try:
+        mj_model = multi_sim.simulator._mj_model
+        mj_data = multi_sim.simulator._mj_data
+        base_body_id = mujoco.mj_name2id(
+            mj_model, mujoco.mjtObj.mjOBJ_BODY, "robot_root"
+        )
+        assert base_body_id != -1
+
+        world.state[drive.x.id].position = 1.25
+        world.state[drive.y.id].position = -0.4
+        world.notify_state_change()
+
+        mujoco.mj_forward(mj_model, mj_data)
+        numpy.testing.assert_allclose(
+            mj_data.xpos[base_body_id][:2], [1.25, -0.4], atol=1e-6
+        )
+    finally:
+        stop_multisim_if_running(multi_sim)
+
+
+def test_world_to_sim_sync_leaves_the_base_welded_without_movable_base_export():
+    """
+    With movable-base export off, the drive gets no simulator joint at all, so the base
+    stays at its build-time pose no matter what the world model commands.
+
+    Guards the default: a scene that never drives its base must not pay for three extra
+    joints the motion solver would otherwise have to hold still.
+    """
+    world, drive, _ = _world_with_omni_drive()
+    multi_sim = MujocoSim(world=world, headless=headless, step_size=STEP_SIZE)
+    try:
+        mj_model = multi_sim.simulator._mj_model
+        mj_data = multi_sim.simulator._mj_data
+        base_body_id = mujoco.mj_name2id(
+            mj_model, mujoco.mjtObj.mjOBJ_BODY, "robot_root"
+        )
+        assert base_body_id != -1
+        assert mujoco.mj_name2id(mj_model, mujoco.mjtObj.mjOBJ_JOINT, "x") == -1
+
+        world.state[drive.x.id].position = 1.25
+        world.notify_state_change()
+
+        mujoco.mj_forward(mj_model, mj_data)
+        numpy.testing.assert_allclose(
+            mj_data.xpos[base_body_id][:2], [0.0, 0.0], atol=1e-6
+        )
+    finally:
+        stop_multisim_if_running(multi_sim)
 
 
 def test_world_sim_state_sync():
@@ -1902,7 +1995,16 @@ def _settle_gravity_loaded_cantilever(gravity_compensated: bool) -> float:
     world = World()
     root = Body(name=PrefixedName("world"))
     base = Body(name=PrefixedName("cantilever_base"))
-    link = Body(name=PrefixedName("cantilever_link"))
+    # Declared, not left at Inertial's placeholder: the simulator honours a body's
+    # declared inertial rather than deriving one from its geometry, and the placeholder
+    # puts a 1kg point mass at the body origin -- which sits on the joint axis, so the
+    # link would hang with no lever arm and no sag to measure at all. Mass and centre of
+    # mass therefore match the cylinder below: extended 0.3m out along x, and about what
+    # its own volume comes to at the density of a solid plastic part.
+    link = Body(
+        name=PrefixedName("cantilever_link"),
+        inertial=Inertial(mass=15.0, center_of_mass=Point3(0.3, 0.0, 0.0)),
+    )
     link.collision = ShapeCollection(
         [
             Cylinder(

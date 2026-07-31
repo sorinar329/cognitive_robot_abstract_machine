@@ -1,6 +1,7 @@
 import os.path
 from dataclasses import dataclass
 
+import numpy
 import pytest
 
 from semantic_digital_twin.adapters.urdf import URDFParser
@@ -217,9 +218,7 @@ def inline_material_urdf_path(milk_mesh_file_path, tmp_path):
 def test_mesh_visual_color_from_globally_declared_material_is_parsed(
     globally_declared_material_urdf_path,
 ):
-    world = URDFParser.from_file(
-        file_path=globally_declared_material_urdf_path
-    ).parse()
+    world = URDFParser.from_file(file_path=globally_declared_material_urdf_path).parse()
     body = world.get_body_by_name("milk_carton")
 
     mesh_shape = body.visual.shapes[0]
@@ -234,3 +233,40 @@ def test_mesh_visual_color_from_inline_material_is_parsed(inline_material_urdf_p
     mesh_shape = body.visual.shapes[0]
     assert isinstance(mesh_shape, Mesh)
     assert mesh_shape.color == Color(0.8, 0.2, 0.1, 1.0)
+
+
+INERTIAL_URDF = """<robot name="inertial_test">
+  <link name="weighted_link">
+    <inertial>
+      <origin xyz="0.1 0.2 0.3" rpy="0 0 0"/>
+      <mass value="7.5"/>
+      <inertia ixx="0.4" ixy="0.01" ixz="0.02" iyy="0.5" iyz="0.03" izz="0.6"/>
+    </inertial>
+  </link>
+</robot>
+"""
+
+
+def test_link_inertial_properties_are_parsed(tmp_path):
+    """
+    A link's declared mass, centre of mass and inertia tensor must reach the body.
+
+    Left unparsed, every body keeps :class:`Inertial`'s placeholder 1kg default, and a
+    simulator either inherits that uniform mass or falls back to inferring one from geom
+    volume -- either way the dynamics describe a robot that does not exist.
+    """
+    urdf_path = tmp_path / "inertial.urdf"
+    urdf_path.write_text(INERTIAL_URDF)
+
+    world = URDFParser.from_file(file_path=str(urdf_path)).parse()
+
+    inertial = world.get_body_by_name("weighted_link").inertial
+    assert inertial.mass == pytest.approx(7.5)
+    assert inertial.center_of_mass.to_np()[:3].tolist() == pytest.approx(
+        [0.1, 0.2, 0.3]
+    )
+    numpy.testing.assert_allclose(
+        inertial.inertia.data,
+        [[0.4, 0.01, 0.02], [0.01, 0.5, 0.03], [0.02, 0.03, 0.6]],
+        atol=1e-9,
+    )

@@ -3258,6 +3258,10 @@ class MultiSimBuilderDAO(
         Integer, primary_key=True, use_existing_column=True
     )
 
+    export_omni_drive_as_joints: Mapped[builtins.bool] = mapped_column(
+        use_existing_column=True
+    )
+
     polymorphic_type: Mapped[str] = mapped_column(
         String(255), nullable=False, use_existing_column=True
     )
@@ -11611,6 +11615,10 @@ class MultiSimSynchronizerDAO(
         ForeignKey(ModelChangeCallbackDAO.database_id),
         primary_key=True,
         use_existing_column=True,
+    )
+
+    export_omni_drive_as_joints: Mapped[builtins.bool] = mapped_column(
+        use_existing_column=True
     )
 
     entity_converter: Mapped[TypeType] = mapped_column(

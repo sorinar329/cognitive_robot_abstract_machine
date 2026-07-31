@@ -19,6 +19,15 @@ from experiments.montessori.world import (
     robot_installed,
 )
 from semantic_digital_twin.robots.hsrb import HSRB
+from semantic_digital_twin.robots.minimal_robot import MinimalRobot
+from semantic_digital_twin.spatial_types.spatial_types import Point3
+from semantic_digital_twin.world import World
+from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
+from semantic_digital_twin.world_description.connections import FixedConnection
+from semantic_digital_twin.spatial_types.spatial_types import (
+    HomogeneousTransformationMatrix,
+)
+from semantic_digital_twin.world_description.world_entity import Body
 from semantic_digital_twin.semantic_annotations.semantic_annotations import Floor, Table
 
 
@@ -312,3 +321,165 @@ def test_montessori_world_spawn_robot_adds_the_robot_to_the_world():
 
     assert robot is montessori.robot
     assert len(montessori.world.bodies) > body_count_before_spawn
+
+
+def test_montessori_world_floor_has_no_collision_by_default():
+    """
+    The floor carries visual geometry only unless a caller asks otherwise, because CRAM's
+    navigation reachability costmaps read any collidable geometry at ground level as an
+    obstacle blocking every standing spot.
+    """
+    montessori = MontessoriWorld()
+
+    [floor] = montessori.world.get_semantic_annotations_by_type(Floor)
+
+    assert len(floor.root.collision.shapes) == 0
+    assert len(floor.root.visual.shapes) == 1
+
+
+def test_montessori_world_can_give_the_floor_collision_to_catch_dropped_shapes():
+    """
+    A scene that does not plan with navigation costmaps can ask for a collidable floor, so
+    a shape knocked off the table lands instead of falling forever.
+
+    Without it a lost shape keeps accelerating downwards, and any goal tracking that
+    shape's pose (a reach for it, say) runs away with it rather than failing.
+    """
+    montessori = MontessoriWorld(floor_is_collidable=True)
+
+    [floor] = montessori.world.get_semantic_annotations_by_type(Floor)
+
+    assert len(floor.root.collision.shapes) == 1
+
+
+def test_montessori_world_stands_the_robot_so_its_arm_lines_up_with_a_target():
+    """
+    Asking for a stance that lines the arm up with a target y puts the arm's tool frame at
+    that y, not the base's origin.
+
+    The HSR's arm has no lateral degree of freedom -- lateral positioning is the base's
+    job -- so a stance that centres the *base* on the target leaves the tool off to one
+    side and the target out of reach without turning the base.
+    """
+    if not robot_installed(HSRB):
+        pytest.skip("hsr_description is not installed")
+
+    target_y = -0.45
+    montessori = MontessoriWorld()
+    robot = montessori.spawn_robot(HSRB, arm_aligned_with_y=target_y)
+    montessori.world.update_forward_kinematics()
+
+    tool_frame = robot.get_arms()[0].end_effector.tool_frame
+    tool_y = float(tool_frame.global_transform.to_position().y)
+
+    assert tool_y == pytest.approx(target_y, abs=1e-6)
+
+
+def test_montessori_world_stands_the_robot_clear_of_the_table():
+    """
+    An arm-aligned stance still leaves the base clear of the table.
+
+    Only matters once collision avoidance is on: a robot spawned already overlapping the
+    table starts in violation, and no motion from that stance can converge.
+    """
+    if not robot_installed(HSRB):
+        pytest.skip("hsr_description is not installed")
+
+    montessori = MontessoriWorld()
+    robot = montessori.spawn_robot(HSRB, arm_aligned_with_y=-0.45)
+    montessori.world.update_forward_kinematics()
+
+    table_box = (
+        montessori.world.get_body_by_name("table")
+        .collision.as_bounding_box_collection_in_frame(montessori.world.root)
+        .bounding_box()
+    )
+    base_box = robot.mobile_base.bounding_box
+
+    assert base_box.min_x > table_box.max_x
+
+
+def test_montessori_world_bolts_a_stationary_robot_at_its_mount_position():
+    """
+    A robot with no mobile base is merged in fixed at the position it is mounted at.
+
+    Its whole workspace is decided by that one pose, so the mount landing where it was
+    asked for is what makes reachability something a caller can reason about up front.
+    """
+    robot_world = World()
+    with robot_world.modify_world():
+        robot_root = Body(name=PrefixedName("arm_base"))
+        robot_world.add_body(robot_root)
+
+    mount_position = Point3(0.05, 0.0, 0.5125)
+    montessori = MontessoriWorld()
+    montessori.mount_stationary_robot(MinimalRobot, robot_world, mount_position)
+    montessori.world.update_forward_kinematics()
+
+    mounted_root = montessori.world.get_body_by_name("arm_base")
+    position = mounted_root.global_transform.to_position()
+
+    assert isinstance(mounted_root.parent_connection, FixedConnection)
+    assert float(position.x) == pytest.approx(float(mount_position.x))
+    assert float(position.y) == pytest.approx(float(mount_position.y))
+    assert float(position.z) == pytest.approx(float(mount_position.z))
+
+
+def test_montessori_world_turns_a_stationary_robot_to_face_its_targets():
+    """
+    A mounted robot is turned to the yaw it is mounted at.
+
+    A bolted arm cannot turn afterwards, so one mounted facing away from the shapes works
+    reaching back over itself for every grasp.
+    """
+    robot_world = World()
+    with robot_world.modify_world():
+        robot_root = Body(name=PrefixedName("arm_base"))
+        robot_world.add_body(robot_root)
+        reach_direction = Body(name=PrefixedName("arm_reach_direction"))
+        robot_world.add_connection(
+            FixedConnection(
+                parent=robot_root,
+                child=reach_direction,
+                parent_T_connection_expression=HomogeneousTransformationMatrix.from_xyz_rpy(
+                    x=1.0
+                ),
+            )
+        )
+
+    montessori = MontessoriWorld()
+    montessori.mount_stationary_robot(
+        MinimalRobot, robot_world, Point3(0.05, 0.0, 0.5125), mount_yaw=np.pi
+    )
+    montessori.world.update_forward_kinematics()
+
+    reached = montessori.world.get_body_by_name(
+        "arm_reach_direction"
+    ).global_transform.to_position()
+
+    assert float(reached.x) == pytest.approx(-0.95)
+    assert float(reached.y) == pytest.approx(0.0, abs=1e-9)
+
+
+def test_montessori_world_stands_a_mounted_robot_on_a_support():
+    """
+    A stand can be built under a mounted robot, with its top exactly at the mount height
+    and its legs reaching the floor.
+
+    A bolted arm is held wherever it is mounted whether or not anything is under it, so
+    without this the scene shows an arm floating above the floor.
+    """
+    mount_position = Point3(0.25, 0.0, 0.5125)
+    montessori = MontessoriWorld()
+
+    stand = montessori.add_robot_stand(mount_position)
+    montessori.world.update_forward_kinematics()
+
+    bounding_box = stand.root.collision.as_bounding_box_collection_in_frame(
+        montessori.world.root
+    ).bounding_box()
+
+    assert bounding_box.max_z == pytest.approx(float(mount_position.z))
+    assert bounding_box.min_z == pytest.approx(FLOOR_Z)
+    assert bounding_box.min_x < float(mount_position.x) < bounding_box.max_x
+    assert bounding_box.min_y < float(mount_position.y) < bounding_box.max_y

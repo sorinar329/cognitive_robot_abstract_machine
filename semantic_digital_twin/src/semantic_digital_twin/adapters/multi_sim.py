@@ -13,7 +13,17 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum, IntEnum, auto
 from types import NoneType
-from typing_extensions import Dict, List, Any, ClassVar, Type, Optional, Union, Set
+from typing_extensions import (
+    Dict,
+    List,
+    Any,
+    ClassVar,
+    Type,
+    Optional,
+    Tuple,
+    Union,
+    Set,
+)
 
 import numpy
 import mujoco
@@ -47,6 +57,9 @@ from semantic_digital_twin.spatial_types.spatial_types import (
 )
 from semantic_digital_twin.spatial_types.math import inverse_frame
 from semantic_digital_twin.world import World
+from semantic_digital_twin.collision_checking.collision_rules import (
+    SelfCollisionMatrixRule,
+)
 from semantic_digital_twin.world_description.connections import (
     RevoluteConnection,
     PrismaticConnection,
@@ -345,20 +358,33 @@ class KinematicStructureEntityConverter(EntityConverter, ABC):
     pos_str: str = "pos"
     quat_str: str = "quat"
 
-    def _convert(self, entity: entity_type, **kwargs) -> Dict[str, Any]:
+    def _convert(
+        self,
+        entity: entity_type,
+        export_omni_drive_as_joints: bool = False,
+        **kwargs,
+    ) -> Dict[str, Any]:
         """
         Converts a KinematicStructureEntity object to a dictionary of body properties for Multiverse simulator.
 
         :param entity: The KinematicStructureEntity object to convert.
+        :param export_omni_drive_as_joints: Whether the caller exports an
+            :class:`OmniDrive` as movable joints (see
+            :attr:`MultiSimBuilder.export_omni_drive_as_joints`), which decides whether
+            the drive's live state belongs in the static body frame or in its joints.
         :return: A dictionary of body properties, by default containing position and quaternion.
         """
 
         kinematic_structure_entity_props = EntityConverter._convert(self, entity)
         connection = entity.parent_connection
-        if isinstance(connection, (OmniDrive, DifferentialDrive)):
-            # OmniDrive/DifferentialDrive never get a simulator joint (see
-            # MultiSimBuilder._ignore_connection_types), so no joint will supply
-            # their live x/y/yaw state: bake the full pose instead.
+        drive_without_joints = isinstance(connection, DifferentialDrive) or (
+            isinstance(connection, OmniDrive) and not export_omni_drive_as_joints
+        )
+        if drive_without_joints:
+            # A drive with no simulator joint (see MultiSimBuilder._ignore_connection_types)
+            # has nothing to supply its live x/y/yaw state, so bake the full pose instead.
+            # An OmniDrive exported as planar joints (see MujocoBuilder._build_omni_drive)
+            # takes the joint path below, its static frame excluding that state.
             origin = connection.origin_as_position_quaternion()
         else:
             # The simulator joint supplies the variable part, so the static frame must
@@ -416,7 +442,7 @@ class BodyConverter(KinematicStructureEntityConverter, ABC):
         :param entity: The Body object to convert.
         :return: A dictionary of body properties, including additional mass and inertia properties.
         """
-        body_props = KinematicStructureEntityConverter._convert(self, entity)
+        body_props = KinematicStructureEntityConverter._convert(self, entity, **kwargs)
         inertial = entity.inertial
         if inertial is not None:
             mass = inertial.mass
@@ -1594,6 +1620,19 @@ class MultiSimBuilder(ABC):
     The world to be built.
     """
 
+    export_omni_drive_as_joints: bool = False
+    """
+    Whether an :class:`OmniDrive` is exported as three movable planar joints (see
+    :meth:`MujocoBuilder.omni_drive_planar_joints`) rather than being ignored, which
+    leaves its base welded at its build-time pose.
+
+    Off by default: a movable base is only wanted when the base is meant to be driven
+    around at runtime, and a robot whose base can move gives the motion solver three
+    extra degrees of freedom to hold still during a fixed-stance pick-and-place. Turn it
+    on for a scene whose base actually moves -- including one whose reaching is
+    whole-body controlled, where the solver drives the base as part of the reach.
+    """
+
     _ignore_connection_types: ClassVar[Tuple[Type, ...]] = (
         FixedConnection,
         OmniDrive,
@@ -1824,7 +1863,20 @@ class MujocoBuilder(MultiSimBuilder):
         tree = ET.parse(file_path)
         root = tree.getroot()
         for compiler_element in root.iter("compiler"):
-            compiler_element.set("inertiafromgeom", "true")
+            # "auto", not "true", so the per-body <inertial> elements written below are
+            # honoured rather than overridden, with geometry-derived inertia kept only
+            # as the fallback for bodies that declare none.
+            #
+            # TODO: this alone does not yet preserve the world model's own masses. The
+            #  spec is compiled above before any of this runs, and that compile already
+            #  replaces the mass and inertia passed to add_body with geometry-derived
+            #  ones, so body_spec.mass below is the derived value and these elements
+            #  merely re-serialize it. A robot ends up several times its real mass (an
+            #  HSR: 219kg against the 79kg its URDF declares), which is what makes its
+            #  lift joints run to their stops. Fixing it means marking the bodies'
+            #  inertials explicit on the spec before compiling, and dropping the
+            #  injection below, since the spec then emits <inertial> itself.
+            compiler_element.set("inertiafromgeom", "auto")
         for body_id, body_element in enumerate(root.findall(".//body")):
             body_spec = self.spec.bodies[body_id + 1]
             if numpy.isclose(body_spec.mass, 0.0):
@@ -1841,6 +1893,7 @@ class MujocoBuilder(MultiSimBuilder):
             texture_name = material_spec.textures[0]
             if texture_name != "":
                 material_element.set("texture", texture_name)
+        self._write_collision_exclusions(root)
         keyframe_element = ET.SubElement(root, "keyframe")
         key_element = ET.SubElement(keyframe_element, "key")
         key_element.set("name", "home")
@@ -1848,6 +1901,16 @@ class MujocoBuilder(MultiSimBuilder):
         qpos = []
         for body in self.world.bodies_topologically_sorted:
             parent_connection = body.parent_connection
+            if self.export_omni_drive_as_joints and isinstance(
+                parent_connection, OmniDrive
+            ):
+                # The drive's three planar joints, in the order they were added (see
+                # _build_omni_drive), each starting at its dof's current position.
+                qpos += [
+                    self.world.state[dof.id].position
+                    for dof, _, _ in self.omni_drive_planar_joints(parent_connection)
+                ]
+                continue
             if (
                 isinstance(parent_connection, self._ignore_connection_types)
                 or parent_connection is None
@@ -1880,6 +1943,37 @@ class MujocoBuilder(MultiSimBuilder):
                 ]
         key_element.set("qpos", " ".join(map(str, qpos)))
         tree.write(file_path, encoding="utf-8", xml_declaration=True)
+
+    def _write_collision_exclusions(self, root: "ET.Element") -> None:
+        """
+        Export the body pairs the world model exempts from collision checking as MuJoCo
+        contact exclusions.
+
+        A robot description's neighbouring links overlap by construction, so without
+        these the simulator resolves that overlap as a contact and shoves the robot out
+        of its own pose -- on an HSR the arm and torso lift get driven to their stops
+        before the simulation has settled. The world model already carries the authority
+        on which pairs may never touch (a robot loads its self-collision matrix in
+        ``_setup_collision_rules``), so this reuses it rather than inventing a second,
+        simulator-specific rule.
+
+        :param root: The scene's XML root, modified in place.
+        """
+        import xml.etree.ElementTree as ET
+
+        excluded_pairs = {
+            (check.body_a.name.name, check.body_b.name.name)
+            for rule in self.world.collision_manager.ignore_collision_rules
+            if isinstance(rule, SelfCollisionMatrixRule)
+            for check in rule.allowed_collision_pairs
+        }
+        if not excluded_pairs:
+            return
+        contact_element = ET.SubElement(root, "contact")
+        for body_a_name, body_b_name in sorted(excluded_pairs):
+            exclude_element = ET.SubElement(contact_element, "exclude")
+            exclude_element.set("body1", body_a_name)
+            exclude_element.set("body2", body_b_name)
 
     def _build_body(self, body: Body):
         self._build_mujoco_body(body=body)
@@ -2054,7 +2148,69 @@ class MujocoBuilder(MultiSimBuilder):
             material.texuniform = texture_uniform
         return material_name
 
+    # Base damping and rotor inertia given to the OmniDrive's planar joints (see
+    # _build_omni_drive), matching the wheels', so reaction forces from the arm cannot
+    # push the kinematically-driven base around between the syncs that reposition it.
+    _OMNI_DRIVE_JOINT_DAMPING: ClassVar[float] = 50.0
+    _OMNI_DRIVE_JOINT_ARMATURE: ClassVar[float] = 0.02
+
+    @staticmethod
+    def omni_drive_planar_joints(
+        connection: OmniDrive,
+    ) -> List[Tuple[DegreeOfFreedom, mujoco.mjtJoint, List[float]]]:
+        """
+        The three MuJoCo planar joints an :class:`OmniDrive` maps to, in the order their
+        ``qpos`` slots appear on the base body: a slider along x, a slider along y, and a
+        hinge about z.
+
+        A slide/hinge triple, rather than a free joint, keeps the base out of the
+        vertical and tilt directions entirely, so gravity and the arm's reaction forces
+        can never make it sink or topple -- it can only translate and turn in the plane,
+        which is all a mobile base does.
+
+        :param connection: The drive to map.
+        :return: ``(dof, joint type, axis)`` for the x slider, y slider and yaw hinge.
+        """
+        return [
+            (connection.x, mujoco.mjtJoint.mjJNT_SLIDE, [1.0, 0.0, 0.0]),
+            (connection.y, mujoco.mjtJoint.mjJNT_SLIDE, [0.0, 1.0, 0.0]),
+            (connection.yaw, mujoco.mjtJoint.mjJNT_HINGE, [0.0, 0.0, 1.0]),
+        ]
+
+    def _build_omni_drive(self, connection: OmniDrive):
+        """
+        Give the drive's base body three planar joints (see
+        :meth:`omni_drive_planar_joints`) so the world→sim sync can reposition it,
+        instead of leaving it welded at its build-time pose.
+
+        Each joint is named after its degree of freedom, so the sync resolves it by that
+        name, and carries damping and armature so the unactuated base holds still between
+        the syncs that drive it.
+
+        :param connection: The drive whose base body is made movable.
+        """
+        base_body_name = connection.child.name.name
+        base_body_spec = self._find_entity(
+            entity_type=mujoco.mjtObj.mjOBJ_BODY, entity_name=base_body_name
+        )
+        if base_body_spec is None:
+            raise MujocoEntityNotFoundError(
+                entity_name=base_body_name,
+                entity_type=mujoco.mjtObj.mjOBJ_BODY,
+            )
+        for dof, joint_type, axis in self.omni_drive_planar_joints(connection):
+            base_body_spec.add_joint(
+                name=dof.name.name,
+                type=joint_type,
+                axis=axis,
+                damping=self._OMNI_DRIVE_JOINT_DAMPING,
+                armature=self._OMNI_DRIVE_JOINT_ARMATURE,
+            )
+
     def _build_connection(self, connection: Connection):
+        if self.export_omni_drive_as_joints and isinstance(connection, OmniDrive):
+            self._build_omni_drive(connection)
+            return
         if isinstance(connection, self._ignore_connection_types):
             return
         joint_props = MujocoJointConverter.convert(connection)
@@ -2211,7 +2367,9 @@ class MujocoBuilder(MultiSimBuilder):
         """
         if body.name.name == "world":
             return
-        body_props = MujocoKinematicStructureEntityConverter.convert(body)
+        body_props = MujocoKinematicStructureEntityConverter.convert(
+            body, export_omni_drive_as_joints=self.export_omni_drive_as_joints
+        )
         for mujoco_body in body.simulator_additional_properties:
             if isinstance(mujoco_body, MujocoBody):
                 body_props["gravcomp"] = mujoco_body.gravitation_compensation_factor
@@ -2846,6 +3004,15 @@ class MultiSimSynchronizer(ModelChangeCallback, ABC):
     The spawner to spawn WorldEntity, Shape, and Connection objects in the simulator.
     """
 
+    export_omni_drive_as_joints: bool = False
+    """
+    Whether the simulated scene was built with movable drive joints (see
+    :attr:`MultiSimBuilder.export_omni_drive_as_joints`).
+
+    Must match the builder's setting: it decides whether this synchronizer drives the
+    base through those joints or leaves it alone as welded geometry.
+    """
+
     _state_callback: Optional[_MultiSimStateCallback] = field(
         init=False, default=None, repr=False
     )
@@ -3082,7 +3249,16 @@ class MujocoSynchronizer(MultiSimSynchronizer):
         Resolve the qpos address for the MuJoCo joint backing ``connection``,
         or ``None`` if the joint is not present in the model.
         """
-        joint_name = connection.name.name
+        return self._resolve_qpos_adr_by_name(connection.name.name)
+
+    def _resolve_qpos_adr_by_name(self, joint_name: str) -> Optional[int]:
+        """
+        Resolve the qpos address for the MuJoCo joint named ``joint_name``, or ``None``
+        if it is not present in the model.
+
+        By name rather than by connection, since an :class:`OmniDrive` backs three joints
+        (named after its dofs) rather than one named after the connection.
+        """
         cached_qpos_adr = self._qpos_adr_cache.get(joint_name)
         if cached_qpos_adr is not None:
             return cached_qpos_adr
@@ -3093,6 +3269,50 @@ class MujocoSynchronizer(MultiSimSynchronizer):
         qpos_adr = mj_model.jnt_qposadr[joint_id]
         self._qpos_adr_cache[joint_name] = qpos_adr
         return qpos_adr
+
+    def _hold_omni_drive(self, connection: OmniDrive) -> None:
+        """
+        Pin the drive's base to the pose the world model currently commands and stop it
+        moving, by writing each planar joint's qpos from its dof and zeroing its qvel.
+
+        Called every physics readback so the unactuated base cannot drift under contact
+        or reaction forces between the sparser world→sim writes that reposition it.
+
+        :param connection: The drive whose base is held.
+        """
+        for dof, _, _ in MujocoBuilder.omni_drive_planar_joints(connection):
+            qpos_adr = self._resolve_qpos_adr_by_name(dof.name.name)
+            if qpos_adr is None:
+                continue
+            self.simulator._mj_data.qpos[qpos_adr] = self._world.state[dof.id].position
+            dof_adr = self._resolve_dof_adr_by_name(dof.name.name)
+            if dof_adr is not None:
+                self.simulator._mj_data.qvel[dof_adr] = 0.0
+
+    def _write_omni_drive_to_qpos(self, connection: OmniDrive) -> bool:
+        """
+        Push the drive's ``x``/``y``/``yaw`` dof positions into their MuJoCo planar
+        joints (see :meth:`MujocoBuilder.omni_drive_planar_joints`), teleporting the
+        base to the pose the world model currently holds.
+
+        The base is kinematically driven, never physically simulated, so this only writes
+        into the simulator and is never read back: the planner owns where the base is.
+
+        :param connection: The drive to push.
+        :return: True if any of the three joints was moved.
+        """
+        written = False
+        for dof, _, _ in MujocoBuilder.omni_drive_planar_joints(connection):
+            qpos_adr = self._resolve_qpos_adr_by_name(dof.name.name)
+            if qpos_adr is None:
+                continue
+            current = self._world.state[dof.id].position
+            previous = self._previous_dof_positions.get(dof.id)
+            if previous is not None and current == previous:
+                continue
+            self.simulator._mj_data.qpos[qpos_adr] = current
+            written = True
+        return written
 
     def _assert_connection6dof_parent_is_world_root(
         self, connection: Connection6DoF
@@ -3115,10 +3335,15 @@ class MujocoSynchronizer(MultiSimSynchronizer):
         Resolve the qvel/dof address for the MuJoCo joint backing
         ``connection``, or ``None`` if the joint is not present in the model.
         """
+        return self._resolve_dof_adr_by_name(connection.name.name)
+
+    def _resolve_dof_adr_by_name(self, joint_name: str) -> Optional[int]:
+        """
+        Resolve the qvel/dof address for the MuJoCo joint named ``joint_name``, or
+        ``None`` if it is not present in the model.
+        """
         mj_model = self.simulator._mj_model
-        joint_id = mujoco.mj_name2id(
-            mj_model, mujoco.mjtObj.mjOBJ_JOINT, connection.name.name
-        )
+        joint_id = mujoco.mj_name2id(mj_model, mujoco.mjtObj.mjOBJ_JOINT, joint_name)
         if joint_id == -1:
             return None
         return mj_model.jnt_dofadr[joint_id]
@@ -3340,6 +3565,14 @@ class MujocoSynchronizer(MultiSimSynchronizer):
         # stale/inconsistent value, not memory corruption -- step_callback's
         # own locking already covers the crash-causing case (mj_step itself).
         for connection in self._world.connections:
+            if self.export_omni_drive_as_joints and isinstance(connection, OmniDrive):
+                # Hold the kinematically driven base at the pose the world model commands,
+                # every readback, instead of reading it back. Its planar joints are
+                # unactuated, so a manipulator arm pressing on something (e.g. reaching
+                # down to a table to grasp) would otherwise slide the whole base off its
+                # commanded pose between the sparse world→sim writes that reposition it.
+                self._hold_omni_drive(connection)
+                continue
             if isinstance(connection, MujocoBuilder._ignore_connection_types):
                 continue
             # Only the connection that owns a dof reports it back. Every connection
@@ -3456,16 +3689,30 @@ class MujocoSynchronizer(MultiSimSynchronizer):
         if dof_id in self._previous_dof_positions and current == previous:
             return False
 
-        if connection.raw_dof in self.physically_simulated_dofs:
+        physically_simulated = connection.raw_dof in self.physically_simulated_dofs
+        if not physically_simulated:
+            self.simulator._mj_data.qpos[qpos_adr] = self._joint_value(
+                connection, current
+            )
+
+        # Only the connection that owns the dof drives its actuator or advances its
+        # integrated setpoint. Every connection sharing the dof -- a mimic and the joint
+        # it mimics -- resolves to the same actuator, so letting each write ``ctrl``
+        # would leave the actuator commanding whichever sharer was iterated last (a
+        # negative-multiplier mimic drives it the wrong way outright), and letting each
+        # integrate would advance the setpoint once per sharer. The mimic's own MuJoCo
+        # joint follows through the equality constraint coupling it to the master, not
+        # through a second actuator.
+        if self._mimics_another_joint(connection):
+            return True
+
+        if physically_simulated:
             setpoint = self._integrate_desired_position(
                 connection.raw_dof,
                 commanded_increment=current - previous,
                 fallback_position=previous,
             )
         else:
-            self.simulator._mj_data.qpos[qpos_adr] = self._joint_value(
-                connection, current
-            )
             setpoint = current
         self._write_ctrl_setpoint(connection, self._joint_value(connection, setpoint))
         return True
@@ -3531,6 +3778,19 @@ class MujocoSynchronizer(MultiSimSynchronizer):
 
         with self.simulator._model_lock:
             for connection in self._world.connections:
+                if self.export_omni_drive_as_joints and isinstance(
+                    connection, OmniDrive
+                ):
+                    if self._write_omni_drive_to_qpos(connection):
+                        changed_dof_positions.update(
+                            {
+                                dof.id: self._world.state[dof.id].position
+                                for dof, _, _ in (
+                                    MujocoBuilder.omni_drive_planar_joints(connection)
+                                )
+                            }
+                        )
+                    continue
                 if isinstance(connection, MujocoBuilder._ignore_connection_types):
                     continue
                 qpos_adr = self._resolve_qpos_adr(connection)
@@ -3620,6 +3880,7 @@ class MultiSim(ABC):
         physically_simulated_dofs: Optional[Set[DegreeOfFreedom]] = None,
         sync_rate_hz: float = 30,
         reparenting_mode: ReparentingMode = ReparentingMode.WELD,
+        export_omni_drive_as_joints: bool = False,
         **kwargs,
     ):
         """
@@ -3642,8 +3903,15 @@ class MultiSim(ABC):
             feedback of where those DOFs have actually settled.
         :param reparenting_mode: How a world-model re-parent of a body (e.g. a
             grasped object onto the gripper) is reflected in the simulator.
+        :param export_omni_drive_as_joints: Whether an OmniDrive's base is movable in
+            the simulator rather than welded at its build-time pose (see
+            MultiSimBuilder.export_omni_drive_as_joints). Taken here rather than on the
+            builder alone so the synchronizer that drives that base can never disagree
+            with the scene that was built.
         """
-        self.builder_class().build_world(world=world, file_path=self.default_file_path)
+        self.builder_class(
+            export_omni_drive_as_joints=export_omni_drive_as_joints
+        ).build_world(world=world, file_path=self.default_file_path)
         self.simulator = self.simulator_class(
             file_path=self.default_file_path,
             _headless=headless,
@@ -3657,6 +3925,7 @@ class MultiSim(ABC):
             physically_simulated_dofs=physically_simulated_dofs or set(),
             sync_rate_hz=sync_rate_hz,
             reparenting_mode=reparenting_mode,
+            export_omni_drive_as_joints=export_omni_drive_as_joints,
         )
 
     def start_simulation(self, constraints: Optional[SimulatorConstraints] = None):

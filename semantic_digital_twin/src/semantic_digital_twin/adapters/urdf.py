@@ -15,7 +15,12 @@ from semantic_digital_twin.exceptions import NegativeConnectionVelocity
 from semantic_digital_twin.spatial_types.derivatives import Derivatives, DerivativeMap
 from semantic_digital_twin.spatial_types.spatial_types import (
     HomogeneousTransformationMatrix,
+    Point3,
     Vector3,
+)
+from semantic_digital_twin.world_description.inertial_properties import (
+    Inertial,
+    InertiaTensor,
 )
 from semantic_digital_twin.utils import (
     suppress_stdout_stderr,
@@ -288,12 +293,45 @@ class URDFParser:
         :return: The parsed link object.
         """
         name = PrefixedName(prefix=self.prefix, name=link.name)
-        body = Body(name=name)
+        body = Body(name=name, inertial=self.parse_inertial(link.inertial))
         visuals = self.parse_geometry(link.visuals, body)
         collisions = self.parse_geometry(link.collisions, body)
         body.visual = visuals
         body.collision = collisions
         return body
+
+    @staticmethod
+    def parse_inertial(inertial: Optional[urdfpy.Inertial]) -> Inertial:
+        """
+        Parse a URDF link's inertial properties.
+
+        Without these a body keeps :class:`Inertial`'s placeholder 1kg default, so every
+        link of a robot weighs the same and a simulator's dynamics describe a robot that
+        does not exist.
+
+        :param inertial: The link's inertial element, absent for a massless link.
+        :return: The parsed properties, or the defaults if the link declares none.
+        """
+        if inertial is None:
+            return Inertial()
+        center_of_mass = Point3()
+        if inertial.origin is not None and inertial.origin.xyz is not None:
+            center_of_mass = Point3(*(float(value) for value in inertial.origin.xyz))
+        inertia = Inertial().inertia
+        if inertial.inertia is not None:
+            inertia = InertiaTensor.from_values(
+                ixx=float(inertial.inertia.ixx),
+                iyy=float(inertial.inertia.iyy),
+                izz=float(inertial.inertia.izz),
+                ixy=float(inertial.inertia.ixy),
+                ixz=float(inertial.inertia.ixz),
+                iyz=float(inertial.inertia.iyz),
+            )
+        return Inertial(
+            mass=float(inertial.mass),
+            center_of_mass=center_of_mass,
+            inertia=inertia,
+        )
 
     @staticmethod
     def _parse_material_color(

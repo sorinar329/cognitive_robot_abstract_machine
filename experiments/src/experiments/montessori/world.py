@@ -93,6 +93,15 @@ The four ``(x, y)`` sign combinations at which a table's legs are placed, relati
 its center.
 """
 
+ROBOT_STAND_SCALE = Scale(0.3, 0.3, 0.025)
+"""
+Size of the stand a bolted robot arm sits on (see
+:meth:`MontessoriWorld.add_robot_stand`).
+
+Wide enough to carry an arm's base without reaching the table it works at, so the two
+never share a footprint.
+"""
+
 BOARD_SCALE = Scale(0.13, 0.30, 0.08)
 BOARD_POSITION = Point3(-0.4, 0.0, 0.553)
 BOARD_COLOR = Color.BEIGE()
@@ -116,9 +125,13 @@ TABLE_SHAPE_ROW_SPACING = 0.15
 Distance, along y, between adjacent loose shapes in the row on the table.
 """
 
-DEFAULT_ROBOT_STANDOFF_DISTANCE = 0.6
+DEFAULT_ROBOT_STANDOFF_DISTANCE = 0.25
 """
 Default distance the spawned robot stands in front of the Montessori table's near edge.
+
+Just enough to keep the robot's own base footprint clear of the table, so the shapes
+nearest it start inside the arm's working radius; standing further back puts even the
+closest of them out of reach before the robot has driven anywhere.
 """
 
 _SHAPE_COLORS = {
@@ -533,6 +546,18 @@ shape's cross-section from it, so the shape is a smaller copy of the hole rather
 exact fit, leaving clearance to actually pass through.
 """
 
+CUBE_EDGE_LENGTH = 0.026
+"""
+Edge length of the cube shape.
+
+The square hole is 0.032 across, so this leaves a few millimetres of clearance on every
+side -- enough that the cube drops through even when released a little off-centre or a
+few degrees rotated, which a near-exact fit would catch on the hole's edge (a cube's
+diagonal exceeds its edge, so any rotation eats the clearance fast). The other shapes get
+the same margin through :data:`SHAPE_FOOTPRINT_CLEARANCE_SCALE`; the cube is a plain
+primitive rather than a footprint-derived mesh, so its clearance is set here directly.
+"""
+
 
 def _footprint_shape_mesh(
     footprint: HoleFootprint, thickness: float, color: Color
@@ -608,11 +633,11 @@ def _shape_body(
     :param footprint: The footprint of the hole this shape is meant to be dropped
         through, used to derive the shape's cross-section (see
         :func:`_footprint_shape_mesh`) for every category except cube, disk, and
-        sphere: a cube and a disk fit through their hole at any fixed size and yaw
-        (mirroring the board's single hole of each category), and the sphere has no
-        hole at all. A cylinder's cross-section is derived like the rectangular and
-        triangular prisms', not fixed like the cube's, because the board has two
-        circular holes of different sizes (see
+        sphere: the cube (see :data:`CUBE_EDGE_LENGTH`) and the disk are plain
+        primitives sized directly against their single hole rather than derived from its
+        footprint, and the sphere has no hole at all. A cylinder's cross-section is
+        derived like the rectangular and triangular prisms', not fixed like the cube's,
+        because the board has two circular holes of different sizes (see
         :meth:`~experiments.montessori.semantics.MontessoriShape.fits_through`), so
         each cylinder shape must be sized after its own matching hole rather than a
         single shared constant.
@@ -620,7 +645,10 @@ def _shape_body(
     color = _SHAPE_COLORS[category]
     match category:
         case MontessoriShapeCategory.CUBE:
-            shape = Box(scale=Scale(0.03, 0.03, 0.03), color=color)
+            shape = Box(
+                scale=Scale(CUBE_EDGE_LENGTH, CUBE_EDGE_LENGTH, CUBE_EDGE_LENGTH),
+                color=color,
+            )
         case MontessoriShapeCategory.CYLINDER:
             shape = _footprint_shape_mesh(footprint, thickness=0.03, color=color)
         case MontessoriShapeCategory.DISK:
@@ -664,6 +692,17 @@ class MontessoriWorld:
     afterwards to add a robot, since none is spawned by default.
     """
 
+    floor_is_collidable: bool = False
+    """
+    Whether the floor carries collision geometry as well as its visual shape.
+
+    Off by default because CRAM's navigation reachability costmaps read collidable
+    geometry at ground level as an obstacle blocking every standing spot (see
+    :func:`_body_with_visual_only_shape`). Turn it on for a scene that plans no
+    navigation but is physically simulated, where a shape knocked off the table would
+    otherwise fall forever -- taking any goal that tracks its pose with it.
+    """
+
     world: World = field(init=False, default_factory=World)
     """
     The assembled semantic digital twin world.
@@ -694,6 +733,8 @@ class MontessoriWorld:
         self,
         robot_class: Type[AbstractRobot],
         standoff_distance: float = DEFAULT_ROBOT_STANDOFF_DISTANCE,
+        standing_y: float = 0.0,
+        arm_aligned_with_y: Optional[float] = None,
     ) -> AbstractRobot:
         """
         Spawn a robot of the given class standing in front of the Montessori table,
@@ -708,6 +749,12 @@ class MontessoriWorld:
         :param robot_class: The robot to spawn, e.g. :class:`~semantic_digital_twin.robots.hsrb.HSRB`.
         :param standoff_distance: How far in front of the table's near edge the robot
             stands.
+        :param standing_y: Lateral position of the *base's own origin* along the table's
+            near edge, used when ``arm_aligned_with_y`` is not given.
+        :param arm_aligned_with_y: Lateral position to line the arm's tool frame up with,
+            instead of the base origin. Prefer this for a reach target: an arm sits off
+            its base's axis (see :meth:`_arm_lateral_offset`), so centring the base on a
+            target leaves the tool beside it.
         :return: The spawned robot.
         """
         table_bounding_box = (
@@ -716,19 +763,151 @@ class MontessoriWorld:
             .bounding_box()
         )
         robot_world = URDFParser.from_file(robot_class.get_ros_file_path()).parse()
+        # Stand on whichever side of the table the loose shapes are on, facing it, so
+        # the robot starts within reach of the things it has to pick up rather than
+        # across the table from them.
+        shapes_are_past_table_center = TABLE_SHAPE_ROW_X > float(TABLE_POSITION.x)
+        if shapes_are_past_table_center:
+            standing_x = table_bounding_box.max_x + standoff_distance
+            facing_yaw = np.pi
+        else:
+            standing_x = table_bounding_box.min_x - standoff_distance
+            facing_yaw = 0.0
         with self.world.modify_world():
             drive = OmniDrive.create_with_dofs(
                 parent=self.world.root, child=robot_world.root, world=self.world
             )
             self.world.merge_world(robot_world, drive)
+        # The robot view is built before the stance is set: resolving a stance from the
+        # arm's own geometry needs the arm, and the arm only exists once the merged world
+        # has been read back as a robot.
+        self.robot = robot_class.from_world(self.world)
+        if arm_aligned_with_y is not None:
+            standing_y = arm_aligned_with_y + self._arm_lateral_offset(facing_yaw)
+        with self.world.modify_world():
             drive.origin = HomogeneousTransformationMatrix.from_xyz_rpy(
-                table_bounding_box.min_x - standoff_distance,
+                standing_x,
+                standing_y,
                 0.0,
-                0.0,
+                yaw=facing_yaw,
                 reference_frame=self.world.root,
             )
+        return self.robot
+
+    def add_robot_stand(self, mount_position: Point3) -> Table:
+        """
+        Build a stand whose top surface is exactly at ``mount_position``, for a robot
+        bolted there to sit on.
+
+        A robot mounted by :meth:`mount_stationary_robot` is held wherever it is put
+        whether or not anything supports it, so without this the scene shows an arm
+        floating above the floor.
+
+        :param mount_position: Where the robot is bolted, in the world root frame.
+        :return: The spawned stand.
+        """
+        top_z = float(mount_position.z)
+        with self.world.modify_world():
+            return self._spawn_robot_stand(mount_position, top_z)
+
+    def _spawn_robot_stand(self, mount_position: Point3, top_z: float) -> Table:
+        """
+        Build and spawn the stand itself; see :meth:`add_robot_stand`.
+
+        :param mount_position: Where the robot is bolted, in the world root frame.
+        :param top_z: Height of the stand's top surface.
+        :return: The spawned stand.
+        """
+        stand = Table(
+            name=_name("robot_stand"),
+            root=_body_with_shapes(
+                _name("robot_stand"),
+                _table_shapes(
+                    ROBOT_STAND_SCALE,
+                    top_z - ROBOT_STAND_SCALE.z / 2,
+                    TABLE_LEG_FOOTPRINT,
+                    FLOOR_Z,
+                    BOARD_COLOR,
+                ),
+            ),
+        )
+        return self._spawn(
+            stand,
+            Point3(mount_position.x, mount_position.y, top_z - ROBOT_STAND_SCALE.z / 2),
+        )
+
+    def mount_stationary_robot(
+        self,
+        robot_class: Type[AbstractRobot],
+        robot_world: World,
+        mount_position: Point3,
+        mount_yaw: float = 0.0,
+    ) -> AbstractRobot:
+        """
+        Bolt an already-parsed robot to the scene at ``mount_position`` and store it as
+        :attr:`robot`.
+
+        For an arm with no mobile base, which reaches with its arm alone: the whole task
+        has to fall inside that arm's workspace from the one pose it is bolted at, and
+        nothing about the reach depends on where a base happens to have driven.
+
+        Takes a parsed world rather than a robot class to parse, unlike
+        :meth:`spawn_robot`: a robot whose description is not a ROS package (its
+        :meth:`~semantic_digital_twin.robots.robot_parts.AbstractRobot.get_ros_file_path`
+        raising) has to be read by its caller, from whichever format it does ship in.
+
+        .. note::
+            Any actuator ``robot_world`` carries is dropped, because an actuator parsed
+            into one world cannot be merged into another. Callers that need actuators
+            add them to the merged world afterwards.
+
+        :param robot_class: The robot to read out of the merged world.
+        :param robot_world: The parsed robot, consumed by the merge.
+        :param mount_position: Where the robot's root is bolted, in the world root frame.
+        :param mount_yaw: Which way the robot is turned to face. A bolted arm cannot turn
+            afterwards, so an arm mounted facing away from its targets works reaching back
+            over itself for the whole task.
+        :return: The mounted robot.
+        """
+        with robot_world.modify_world():
+            for actuator in list(robot_world.actuators):
+                robot_world.remove_actuator(actuator)
+        with self.world.modify_world():
+            mount = FixedConnection(
+                parent=self.world.root,
+                child=robot_world.root,
+                parent_T_connection_expression=HomogeneousTransformationMatrix.from_xyz_rpy(
+                    x=mount_position.x,
+                    y=mount_position.y,
+                    z=mount_position.z,
+                    yaw=mount_yaw,
+                ),
+            )
+            self.world.merge_world(robot_world, mount)
         self.robot = robot_class.from_world(self.world)
         return self.robot
+
+    def _arm_lateral_offset(self, facing_yaw: float) -> float:
+        """
+        How far the arm's tool frame sits to the side of the base's own origin, measured
+        along the world's y axis for a base turned to ``facing_yaw``.
+
+        Read from the robot's current configuration rather than assumed: an arm whose
+        tool frame is on the base axis returns zero, and one mounted or folded to one
+        side returns the offset that a stance has to compensate for.
+
+        :param facing_yaw: Yaw the base is being placed at.
+        :return: Offset to add to a target's y to get the base's own y.
+        """
+        self.world.update_forward_kinematics()
+        tool_frame = self.robot.get_arms()[0].end_effector.tool_frame
+        offset_in_base_frame = self.world.compute_forward_kinematics_np(
+            self.robot.root, tool_frame
+        )[:3, 3]
+        return -float(
+            offset_in_base_frame[0] * np.sin(facing_yaw)
+            + offset_in_base_frame[1] * np.cos(facing_yaw)
+        )
 
     def _spawn(
         self,
@@ -792,11 +971,14 @@ class MontessoriWorld:
         return annotation
 
     def _build_floor_and_table(self) -> None:
+        floor_shape = Box(scale=FLOOR_SCALE, color=Color.GREY())
+        build_floor_body = (
+            _body_with_shape
+            if self.floor_is_collidable
+            else _body_with_visual_only_shape
+        )
         floor = Floor(
-            name=_name("floor"),
-            root=_body_with_visual_only_shape(
-                _name("floor"), Box(scale=FLOOR_SCALE, color=Color.GREY())
-            ),
+            name=_name("floor"), root=build_floor_body(_name("floor"), floor_shape)
         )
         self._spawn(floor, Point3(0.0, 0.0, FLOOR_Z - FLOOR_SCALE.z / 2))
 

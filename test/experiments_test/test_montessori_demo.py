@@ -13,6 +13,8 @@ from experiments.montessori.montessori_demo import (
     _base_degrees_of_freedom_without_hardware_interface,
     _connections_driving,
     _enable_robot_table_collision_avoidance,
+    JointServoTuning,
+    RobotActuatorTuning,
     _equip_robot_for_physical_simulation,
     _gripper_drive_degrees_of_freedom,
     _physically_simulated_degrees_of_freedom,
@@ -311,3 +313,97 @@ def test_enable_robot_table_collision_avoidance_does_not_check_the_board(
         for body in (check.body_a, check.body_b)
     }
     assert set(montessori.board.bodies_with_collision).isdisjoint(checked_bodies)
+
+
+def test_enable_robot_table_collision_avoidance_lets_the_gripper_reach_table_level(
+    montessori_with_robot,
+):
+    """
+    The end effector is exempt from the table check that the rest of the robot keeps.
+
+    A shape rests on the table, so closing around it puts the fingers at table level;
+    holding them to the standoff the arm and base need aborts the grasp on the last
+    centimetre, with the fingers already at the shape.
+    """
+    montessori = montessori_with_robot
+
+    _enable_robot_table_collision_avoidance(montessori)
+    montessori.world.collision_manager.update_collision_matrix()
+
+    gripper_bodies = {
+        body
+        for end_effector in montessori.robot.get_end_effectors()
+        for body in end_effector.bodies_with_collision
+    }
+    [table] = montessori.world.get_semantic_annotations_by_type(Table)
+    table_bodies = set(table.bodies_with_collision)
+
+    checked_pairs = {
+        frozenset((check.body_a, check.body_b))
+        for check in montessori.world.collision_manager.collision_matrix.collision_checks
+    }
+    gripper_table_pairs = {
+        pair
+        for pair in checked_pairs
+        if pair & gripper_bodies and pair & table_bodies
+    }
+    remaining_robot_bodies = set(montessori.robot.bodies_with_collision) - gripper_bodies
+    remaining_table_pairs = {
+        pair
+        for pair in checked_pairs
+        if pair & remaining_robot_bodies and pair & table_bodies
+    }
+
+    assert not gripper_table_pairs
+    assert remaining_table_pairs
+
+
+def test_equip_robot_for_physical_simulation_drives_each_joint_at_its_own_tuning(
+    montessori_with_robot,
+):
+    """
+    A robot can be equipped with the gains and force clamp its own model specifies,
+    per joint, instead of one setting shared by every joint.
+
+    A servo tuned for one robot's link inertias oscillates on another's: the arm never
+    settles on its commanded position, so a motion that merely holds still never
+    converges.
+    """
+    montessori = montessori_with_robot
+    robot = montessori.robot
+    [tuned_dof] = [
+        dof
+        for dof in robot.degrees_of_freedom_with_hardware_interface
+        if dof.name.name == "arm_lift_joint"
+    ]
+    tuning = RobotActuatorTuning(
+        default=JointServoTuning(
+            position_gain=1234.0, velocity_gain=56.0, force_range=(-7.0, 7.0)
+        ),
+        by_joint_name={
+            tuned_dof.name.name: JointServoTuning(
+                position_gain=4500.0, velocity_gain=450.0, force_range=(-87.0, 87.0)
+            )
+        },
+    )
+
+    _equip_robot_for_physical_simulation(robot, actuator_tuning=tuning)
+
+    by_dof_name = {}
+    for actuator in robot._world.actuators:
+        [mujoco_actuator] = actuator.simulator_additional_properties
+        by_dof_name[actuator.dofs[0].name.name] = mujoco_actuator
+
+    tuned = by_dof_name[tuned_dof.name.name]
+    assert tuned.gain_parameters[0] == 4500.0
+    assert tuned.bias_parameters[2] == -450.0
+    assert tuned.force_range == [-87.0, 87.0]
+
+    others = [
+        actuator
+        for name, actuator in by_dof_name.items()
+        if name != tuned_dof.name.name
+    ]
+    assert others
+    assert all(actuator.gain_parameters[0] == 1234.0 for actuator in others)
+    assert all(actuator.force_range == [-7.0, 7.0] for actuator in others)

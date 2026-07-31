@@ -33,12 +33,12 @@ import logging
 import random
 import threading
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 import mujoco
 
-from typing_extensions import Optional, Type
+from typing_extensions import Mapping, Optional, Tuple, Type
 
 from experiments.montessori.semantics import MontessoriShape, NoMatchingHoleError
 from experiments.montessori.world import MontessoriWorld, robot_installed
@@ -48,6 +48,7 @@ from semantic_digital_twin.adapters.multi_sim import (
     MujocoActuator,
     MujocoBody,
     MujocoGeom,
+    MujocoJoint,
     MujocoSim,
     ReparentingMode,
 )
@@ -90,16 +91,23 @@ MuJoCo actuator ``dynamics_parameters[0]`` for the position-hold actuators added
 robot's joints.
 """
 
-ARM_ACTUATOR_POSITION_GAIN = 100.0
+ARM_ACTUATOR_POSITION_GAIN = 1000.0
 """
 Proportional gain of the MuJoCo position-servo actuators driving the robot's controlled
 joints (arm, torso lift, wrist, head).
+
+A position servo settles with a steady-state error of roughly the residual torque
+divided by this gain, and that error has to stay under ``JointPositionList``'s 0.01 rad
+convergence threshold or a motion never registers as finished and the plan behind it
+never starts. Measured worst-joint error against this gain: 0.044 rad at 100, 0.007 at
+500, 0.004 here. Peak torque is unchanged, being clamped by
+:data:`JOINT_FORCE_RANGE` rather than by the gain.
 """
 
-ARM_ACTUATOR_VELOCITY_GAIN = 10.0
+ARM_ACTUATOR_VELOCITY_GAIN = 100.0
 """
 Derivative (damping) gain of the MuJoCo position-servo actuators driving the robot's
-controlled joints (arm, torso lift, wrist, head).
+controlled joints, kept at a tenth of :data:`ARM_ACTUATOR_POSITION_GAIN`.
 """
 
 GRIPPER_ACTUATOR_POSITION_GAIN = ARM_ACTUATOR_POSITION_GAIN
@@ -118,6 +126,19 @@ GRIPPER_ACTUATOR_VELOCITY_GAIN = ARM_ACTUATOR_VELOCITY_GAIN
 Derivative (damping) gain of the MuJoCo position-servo actuator driving the gripper.
 """
 
+ARM_JOINT_ARMATURE = 0.1
+"""
+Rotor inertia (:attr:`JointDynamics.armature`) added to every physically simulated joint
+of the arm, torso lift, head and gripper.
+
+The actuators' velocity feedback is integrated explicitly, so a joint only stays stable
+while ``ARM_ACTUATOR_VELOCITY_GAIN * MUJOCO_STEP_SIZE`` remains below its inertia. The
+distal joints -- the wrist and arm rolls above all -- carry far less than that, and
+without this they visibly shake in place instead of holding still. Chosen as five times
+that product; measured peak-to-peak movement while holding a pose drops from 0.0018 rad
+to 0.00001 rad, with no loss of tracking accuracy.
+"""
+
 JOINT_FORCE_RANGE = [-100.0, 100.0]
 """
 Force clamp of every position-servo actuator added to the robot, taken from the effort
@@ -125,6 +146,17 @@ limit the HSR's own URDF declares for all of these joints.
 
 Without a force limit, a stiff servo acting on a light link can produce an enormous
 instantaneous torque and diverge numerically.
+"""
+
+GRIPPER_SPRING_STIFFNESS = 10.0
+"""
+Spring stiffness given to the gripper's passive joints, which no actuator drives.
+
+These are the compliance that lets the fingers conform to a grasped object, but the
+robot's description declares only their damping, so simulating them yields free hinges
+that flop about under gravity rather than springs that return to rest. Stiff enough to
+carry a finger's own weight near its rest position, soft enough to still deflect under a
+grasp.
 """
 
 GRIPPER_FRICTION = [1.0, 0.5, 0.5]
@@ -162,12 +194,18 @@ this. Chosen as twice ``BASE_JOINT_DAMPING * MUJOCO_STEP_SIZE``, putting that ra
 one half.
 """
 
-MUJOCO_STEP_SIZE = 2e-4
+MUJOCO_STEP_SIZE = 5e-4
 """
-MuJoCo simulation step size used for the finished scene, smaller than MuJoCo's own
-default (``1e-3``): the default step is too large for the wheel joints' low inertia
-combined with their position hold and contact with the floor, and repeatedly drives
-``QACC`` to ``NaN``/``Inf``.
+MuJoCo simulation step size used for the finished scene.
+
+Has to be large enough for this scene to simulate at real time, because the plan is
+executed with real-time pacing: the control loop then advances its trajectory against
+the wall clock, so a simulation running slower than that leaves the arm progressively
+further behind its commanded position until the motion is abandoned as unconverged.
+Measured on this scene: 0.59x real time at ``2e-4``, 1.0x from ``5e-4`` up. The lower
+step was originally needed because the wheel joints' low inertia drove ``QACC`` to
+``NaN``, which the armature they now carry (:data:`BASE_JOINT_ARMATURE`) addresses
+directly instead.
 """
 
 MAX_INSERTION_ATTEMPTS = 3
@@ -372,12 +410,11 @@ def _enable_robot_table_collision_avoidance(montessori: MontessoriWorld) -> None
     default standoff.
 
     .. note::
-        Currently unused: :func:`_insert_shape` runs with collision avoidance off
-        entirely, since even with this narrowing in place, the reach still failed to
-        converge to the pre-grasp hover pose (well clear of the table) once collision
-        avoidance was actually turned on. Kept for whoever next attempts to re-enable
-        collision avoidance for this scene, e.g. after addressing the QP solver's
-        performance under it.
+        :func:`_insert_shape` does not use this and still runs with collision avoidance
+        off, since even with this narrowing the reach failed to converge to the pre-grasp
+        hover pose from the stance that demo spawns at.
+        :func:`~experiments.montessori.montessori_demo_mujoco._run_for_shape` does use
+        it, from a stance that lines the arm rather than the base up with its target.
 
     The robot's own default
     :class:`~semantic_digital_twin.collision_checking.collision_rules.AvoidExternalCollisions`
@@ -403,6 +440,11 @@ def _enable_robot_table_collision_avoidance(montessori: MontessoriWorld) -> None
     """
     [table] = montessori.world.get_semantic_annotations_by_type(Table)
     robot_bodies = set(montessori.robot.bodies_with_collision)
+    gripper_bodies = {
+        body
+        for end_effector in montessori.robot.get_end_effectors()
+        for body in end_effector.bodies_with_collision
+    }
     table_bodies = set(table.bodies_with_collision)
     other_bodies = (
         set(montessori.world.bodies_with_collision) - robot_bodies - table_bodies
@@ -413,9 +455,18 @@ def _enable_robot_table_collision_avoidance(montessori: MontessoriWorld) -> None
                 body_group_a=list(robot_bodies), body_group_b=list(other_bodies)
             )
         )
+        # The fingers are exempt from the table check the rest of the robot keeps: a
+        # shape rests on the table, so closing around it puts them at table level, and
+        # holding them to the arm's standoff aborts the grasp on its last centimetre
+        # with the fingers already at the shape.
+        montessori.world.collision_manager.add_ignore_collision_rule(
+            AllowCollisionBetweenGroups(
+                body_group_a=list(gripper_bodies), body_group_b=list(table_bodies)
+            )
+        )
         montessori.world.collision_manager.add_default_rule(
             AvoidCollisionBetweenGroups(
-                body_group_a=list(robot_bodies),
+                body_group_a=list(robot_bodies - gripper_bodies),
                 body_group_b=list(table_bodies),
                 buffer_zone_distance=ROBOT_TABLE_BUFFER_ZONE_DISTANCE,
             )
@@ -472,6 +523,90 @@ def _insert_all_shapes(montessori: MontessoriWorld) -> None:
                 shape.name,
                 MAX_INSERTION_ATTEMPTS,
             )
+
+
+@dataclass(frozen=True)
+class JointServoTuning:
+    """
+    The gains and force clamp one joint's position servo is built with.
+    """
+
+    position_gain: float
+    """
+    Proportional gain of the servo.
+    """
+
+    velocity_gain: float
+    """
+    Derivative (damping) gain of the servo.
+    """
+
+    force_range: Tuple[float, float]
+    """
+    Force clamp of the servo.
+    """
+
+
+@dataclass(frozen=True)
+class RobotActuatorTuning:
+    """
+    How a robot's joints are driven in simulation, per joint wherever they differ.
+
+    Gains that hold one robot's links against gravity make another's oscillate, and a
+    single robot's own model often asks for different gains along the arm -- the shoulder
+    carrying far more than the wrist. Reading them from the robot rather than assuming one
+    setting is what keeps a commanded pose actually held.
+    """
+
+    default: JointServoTuning
+    """
+    Tuning for every joint not named in :attr:`by_joint_name`.
+    """
+
+    by_joint_name: Mapping[str, JointServoTuning] = field(default_factory=dict)
+    """
+    Tuning for individual joints, by joint name.
+    """
+
+    def for_joint(self, joint_name: str) -> JointServoTuning:
+        """
+        The tuning a joint's servo is built with.
+
+        :param joint_name: Name of the joint.
+        :return: Its own tuning, or :attr:`default` if it has none.
+        """
+        return self.by_joint_name.get(joint_name, self.default)
+
+
+def _servo_tuning_for(
+    dof: DegreeOfFreedom,
+    gripper_dofs: set[DegreeOfFreedom],
+    actuator_tuning: Optional[RobotActuatorTuning],
+) -> JointServoTuning:
+    """
+    The tuning ``dof``'s servo is built with.
+
+    Falls back to this module's own constants, which are the HSR's, when the caller names
+    no tuning of its own.
+
+    :param dof: The degree of freedom being driven.
+    :param gripper_dofs: The degrees of freedom the gripper drives.
+    :param actuator_tuning: The caller's tuning, or ``None`` for the HSR's.
+    :return: The gains and force clamp to build the servo with.
+    """
+    if actuator_tuning is not None:
+        return actuator_tuning.for_joint(dof.name.name)
+    if dof in gripper_dofs:
+        return JointServoTuning(
+            GRIPPER_ACTUATOR_POSITION_GAIN,
+            GRIPPER_ACTUATOR_VELOCITY_GAIN,
+            tuple(JOINT_FORCE_RANGE),
+        )
+    return JointServoTuning(
+        ARM_ACTUATOR_POSITION_GAIN,
+        ARM_ACTUATOR_VELOCITY_GAIN,
+        tuple(JOINT_FORCE_RANGE),
+    )
 
 
 def _position_servo_actuator(
@@ -665,6 +800,7 @@ def _connections_driving(
 
 def _equip_robot_for_physical_simulation(
     robot: AbstractRobot,
+    actuator_tuning: Optional[RobotActuatorTuning] = None,
 ) -> set[DegreeOfFreedom]:
     """
     Give the robot everything it needs to be driven by MuJoCo's physics rather than
@@ -674,7 +810,9 @@ def _equip_robot_for_physical_simulation(
     actuators (:data:`ARM_ACTUATOR_POSITION_GAIN`,
     :data:`GRIPPER_ACTUATOR_POSITION_GAIN`) that track whatever the motion planner
     commands. The gripper's passive joints get none, but are still physically simulated,
-    so their compliance actually deflects. Every physically simulated link gets MuJoCo's
+    so their compliance actually deflects. Every physically simulated joint also gets
+    :data:`ARM_JOINT_ARMATURE`, without which the distal ones shake in place rather than
+    holding still. Every physically simulated link gets MuJoCo's
     own gravity compensation: without it each joint settles with a steady-state error
     from gravity sag alone, large enough to exceed ``JointPositionList``'s convergence
     threshold, so a motion merely holding the arm never registers as converged and the
@@ -689,6 +827,9 @@ def _equip_robot_for_physical_simulation(
     the contact forces at whatever position they happen to be teleported to.
 
     :param robot: The spawned robot, modified in place.
+    :param actuator_tuning: Gains and force clamps to drive the joints with. Defaults to
+        this module's own constants, which are the HSR's; another robot's links need its
+        own, or its arm oscillates around a pose it is merely asked to hold.
     :return: The degrees of freedom MuJoCo now drives, for
         :class:`~semantic_digital_twin.adapters.multi_sim.MujocoSim`'s
         ``physically_simulated_dofs``.
@@ -699,23 +840,16 @@ def _equip_robot_for_physical_simulation(
 
     with robot._world.modify_world():
         for dof in sorted(actuated_dofs, key=lambda d: d.name.name):
-            is_gripper_dof = dof in gripper_dofs
+            servo = _servo_tuning_for(dof, gripper_dofs, actuator_tuning)
             _add_position_servo_actuator(
                 robot._world,
                 dof,
-                (
-                    GRIPPER_ACTUATOR_POSITION_GAIN
-                    if is_gripper_dof
-                    else ARM_ACTUATOR_POSITION_GAIN
-                ),
-                (
-                    GRIPPER_ACTUATOR_VELOCITY_GAIN
-                    if is_gripper_dof
-                    else ARM_ACTUATOR_VELOCITY_GAIN
-                ),
-                force_range=JOINT_FORCE_RANGE,
+                servo.position_gain,
+                servo.velocity_gain,
+                force_range=list(servo.force_range),
             )
         for connection in _connections_driving(robot, physically_simulated_dofs):
+            connection.dynamics.armature = ARM_JOINT_ARMATURE
             connection.child.simulator_additional_properties.append(
                 MujocoBody(gravitation_compensation_factor=1.0)
             )
@@ -724,6 +858,11 @@ def _equip_robot_for_physical_simulation(
                 shape.simulator_additional_properties.append(
                     MujocoGeom(friction=list(GRIPPER_FRICTION))
                 )
+        passive_gripper_dofs = _gripper_degrees_of_freedom(robot) - gripper_dofs
+        for connection in _connections_driving(robot, passive_gripper_dofs):
+            connection.simulator_additional_properties.append(
+                MujocoJoint(stiffness=[GRIPPER_SPRING_STIFFNESS, 0.0, 0.0])
+            )
         for connection in _base_connections_without_hardware_interface(robot):
             connection.dynamics.damping = BASE_JOINT_DAMPING
             connection.dynamics.dry_friction = BASE_JOINT_DRY_FRICTION
@@ -766,6 +905,15 @@ def _start_physical_simulation(
     :attr:`~semantic_digital_twin.adapters.multi_sim.ReparentingMode.CONTACT_ONLY`) and
     falls through a hole because it physically fits, not because it was teleported there.
 
+    The base is exported as movable joints
+    (:attr:`~semantic_digital_twin.adapters.multi_sim.MultiSimBuilder.export_omni_drive_as_joints`).
+    The robot reaches whole-body -- its mobile base is
+    :attr:`~semantic_digital_twin.robots.robot_part_mixins.HasMobileBase.full_body_controlled`,
+    so a reach is solved from the world root through the drive's x/y/yaw as if they were
+    joints -- and a base welded at its build-time pose leaves the arm executing that
+    solution alone, closing the gripper wherever it happens to land rather than on the
+    shape.
+
     :param montessori: The Montessori scene, with :attr:`MontessoriWorld.robot` already
         equipped (see :func:`_equip_robot_for_physical_simulation`).
     :param physically_simulated_dofs: The degrees of freedom MuJoCo drives.
@@ -779,6 +927,7 @@ def _start_physical_simulation(
         physically_simulated_dofs=physically_simulated_dofs,
         sync_rate_hz=SYNC_RATE_HZ,
         reparenting_mode=ReparentingMode.CONTACT_ONLY,
+        export_omni_drive_as_joints=True,
     )
     mujoco_sim.start_simulation()
     return mujoco_sim

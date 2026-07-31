@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import logging
 import os
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field, InitVar
@@ -80,8 +81,15 @@ class MujocoSimulator(BaseSimulator):
         root = ET.parse(file_path).getroot()
         self._name = root.attrib.get("model", self.name)
         self._mj_spec: mujoco.MjSpec = mujoco.MjSpec.from_file(filename=self._file_path)
+        # AUTO, not TRUE: the scene's own <inertial> elements carry the mass and inertia
+        # of the model being simulated, and TRUE discards them and re-derives both from
+        # geometry at a default density. For a robot whose links are hollow shells that
+        # is several times its real mass (an HSR: 219kg against the 79kg its URDF
+        # declares), and the resulting dynamics no longer describe that robot -- its
+        # lift joints get driven to their stops by constraint forces alone. AUTO keeps
+        # the geometry-derived fallback for bodies that declare no inertial.
         self._mj_spec.compiler.inertiafromgeom = self.config.get(
-            "inertiafromgeom", mujoco.mjtInertiaFromGeom.mjINERTIAFROMGEOM_TRUE
+            "inertiafromgeom", mujoco.mjtInertiaFromGeom.mjINERTIAFROMGEOM_AUTO
         )
         self._mj_spec.option.integrator = self.config.get(
             "integrator", mujoco.mjtIntegrator.mjINT_RK4
@@ -120,9 +128,21 @@ class MujocoSimulator(BaseSimulator):
         mujoco.mj_resetDataKeyframe(self._mj_model, self._mj_data, 0)
 
     def start_callback(self):
-        if not self.headless:
+        if self.headless:
+            self._renderer = SimulatorRenderer()
+            return
+        try:
             self._renderer = mujoco.viewer.launch_passive(self._mj_model, self._mj_data)
-        else:
+        except Exception as viewer_error:
+            # No usable display (e.g. a headless server or a VNC session without a GL
+            # context): fall back to running without a viewer rather than aborting, since
+            # the simulation itself needs no window. Other clients (e.g. an RViz feed of
+            # the same world) still see everything.
+            logging.getLogger(__name__).warning(
+                "Could not open a MuJoCo viewer window (%s); running headless instead.",
+                viewer_error,
+            )
+            self.headless = True
             self._renderer = SimulatorRenderer()
 
     def step_callback(self):
