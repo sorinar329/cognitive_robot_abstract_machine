@@ -594,8 +594,16 @@ with ExecutionEnvironment(
             iteration_plans.append((step_label, plan))
             print(
                 f"[info] {step_label} {'stacked' if stacked else 'did NOT stack'} "
-                "(informational only -- every step is persisted regardless)"
+                "(persisted regardless)"
             )
+            if not stacked:
+                # Every later step stacks onto this cube, so continuing would
+                # only pile onto something segmind says is not there.
+                print(
+                    f"[warning] segmind does not see {step_label} -- abandoning the "
+                    f"rest of iteration {iteration}"
+                )
+                break
             time.sleep(1)
 
         for step_label, plan in iteration_plans:
