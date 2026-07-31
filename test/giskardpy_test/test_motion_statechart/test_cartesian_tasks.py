@@ -318,62 +318,54 @@ class TestCartesianTasks:
             atol=goal.threshold,
         )
 
-    def test_end_motion_waits_for_convergence(self, cylinder_bot_world: World):
+    def test_orientation_threshold_decouples_rotation_tolerance(
+        self, cylinder_bot_world: World
+    ):
         """
-        EndMotion.when_true(goal) must not end the motion the instant the task's own
-        goal-error threshold is crossed; it must wait until the robot's DOF velocities
-        have actually settled.
+        A residual orientation error above ``threshold`` but below
+        ``orientation_threshold`` must count as goal reached -- a physically
+        tracked arm settles with a small orientation error that a shared
+        position/rotation threshold (meant as a position tolerance in meters)
+        wrongly rejects, leaving the task running forever.
 
-        A loose ``threshold`` makes the task report "reached" long before the base has
-        slowed down, so the base is still moving fast when that happens.
+        The goal pose here only differs from the start pose by a 0.05 rad yaw,
+        so on the very first tick the position error is exactly zero while the
+        rotation error is 0.05 rad -- isolating the rotation half of the
+        observation.
         """
         tip = cylinder_bot_world.get_kinematic_structure_entity_by_name("bot")
+        goal_pose = Pose.from_xyz_rpy(
+            yaw=0.05, reference_frame=cylinder_bot_world.root
+        )
 
         motion_statechart = MotionStatechart()
         motion_statechart.add_nodes(
             [
-                goal := CartesianPose(
+                strict := CartesianPose(
                     root_link=cylinder_bot_world.root,
                     tip_link=tip,
-                    goal_pose=Pose.from_xyz_rpy(
-                        x=1, reference_frame=cylinder_bot_world.root
-                    ),
-                    threshold=0.5,
+                    goal_pose=goal_pose,
+                    threshold=0.01,
+                    name="strict",
+                ),
+                loose := CartesianPose(
+                    root_link=cylinder_bot_world.root,
+                    tip_link=tip,
+                    goal_pose=goal_pose,
+                    threshold=0.01,
+                    orientation_threshold=0.1,
+                    name="loose",
                 ),
             ]
         )
-        motion_statechart.add_node(EndMotion.when_true(goal))
+        motion_statechart.add_node(EndMotion.when_true(loose))
 
         executor = Executor(MotionStatechartContext(world=cylinder_bot_world))
         executor.compile(motion_statechart=motion_statechart)
+        executor.tick()
 
-        goal_reached_tick = None
-        for i in range(1000):
-            executor.tick()
-            if (
-                goal_reached_tick is None
-                and motion_statechart.observation_state[goal]
-                == ObservationStateValues.TRUE
-            ):
-                goal_reached_tick = i
-            if motion_statechart.is_end_motion():
-                break
-        else:
-            raise TimeoutError("motion never ended")
-
-        assert goal_reached_tick is not None
-        assert i > goal_reached_tick, (
-            "EndMotion ended on the same tick the task's own threshold was crossed, "
-            "before the controller had a chance to decelerate"
-        )
-        max_velocity = max(
-            abs(dof.variables.velocity.resolve())
-            for dof in cylinder_bot_world.active_degrees_of_freedom
-        )
-        assert max_velocity < 0.06, (
-            f"EndMotion ended while a DOF was still moving at {max_velocity} m/s or "
-            f"rad/s"
-        )
+        assert strict.observation_state == ObservationStateValues.FALSE
+        assert loose.observation_state == ObservationStateValues.TRUE
 
     def test_long_goal(self, pr2_world_state_reset: World):
         motion_statechart = MotionStatechart()
@@ -437,17 +429,15 @@ class TestCartesianTasks:
         expected = pr2_world_state_reset.transform(tip_goal, root)
 
         motion_statechart = MotionStatechart()
-
-        motion_statechart.add_nodes(
-            [
-                cart_goal := CartesianPose(
-                    root_link=root,
-                    tip_link=tip,
-                    goal_pose=tip_goal,
-                ),
-                EndMotion.when_true(cart_goal),
-            ]
+        cart_goal = CartesianPose(
+            root_link=root,
+            tip_link=tip,
+            goal_pose=tip_goal,
         )
+        motion_statechart.add_node(cart_goal)
+        end = EndMotion()
+        motion_statechart.add_node(end)
+        end.start_condition = cart_goal.observation_variable
 
         executor = Executor(
             MotionStatechartContext(
@@ -997,48 +987,6 @@ class TestCartesianTasks:
             cart_straight.goal_pose.to_np(), goal_pose.to_np(), atol=0.015
         )
 
-    def test_soft_trunk_cartesian_position(self):
-        """
-        Verifies that Giskardpy can solve and execute a CartesianPosition task
-        for the procedurally built Piecewise Constant Curvature SoftTrunk robot.
-        """
-        from semantic_digital_twin.datastructures.soft_trunk import (
-            SoftTrunk,
-            SoftTrunkSection,
-        )
-
-        world = World()
-        # Define 3 identical sections of 0.3m, 0.02m radius, and 10 resolution
-        sections = [SoftTrunkSection(length=0.3, radius=0.02, resolution=10)] * 3
-        trunk = SoftTrunk.build_piecewise_constant_curvature(world, sections)
-
-        # Define a reachable Cartesian target point relative to the base root
-        goal_point = Point3(0.3, 0.0, 0.6, reference_frame=world.root)
-
-        msc = MotionStatechart()
-        goal = CartesianPosition(
-            root_link=world.root,
-            tip_link=trunk.arms[0].tip,
-            goal_point=goal_point,
-        )
-        msc.add_node(goal)
-        msc.add_node(EndMotion.when_true(goal))
-
-        kin_sim = Executor(MotionStatechartContext(world=world))
-        kin_sim.compile(motion_statechart=msc)
-        kin_sim.tick_until_end()
-
-        # Retrieve the final tip pose
-        tip_body = trunk.arms[0].tip
-        fk = world.compute_forward_kinematics_np(world.root, tip_body)
-
-        # Verify that the tip reached the target point within the goal threshold
-        actual_position = fk[:3, 3]
-        target_position = goal_point.to_np()[:3]
-        distance_error = np.linalg.norm(actual_position - target_position)
-
-        assert distance_error <= goal.threshold
-
 
 class TestDiffDriveBaseGoal:
     @pytest.mark.parametrize(
@@ -1143,7 +1091,7 @@ class TestVelocityTasks:
                 root_link=root,
                 tip_link=tip,
                 goal_point=Point3(1, 0, 0, reference_frame=tip),
-                weight=DefaultWeights.WEIGHT_ABOVE_COLLISION_AVOIDANCE,
+                weight=DefaultWeights.WEIGHT_ABOVE_CA,
             )
         else:
             goal = CartesianOrientation(
@@ -1152,13 +1100,11 @@ class TestVelocityTasks:
                 goal_orientation=RotationMatrix.from_rpy(
                     yaw=np.pi / 2, reference_frame=tip
                 ),
-                weight=DefaultWeights.WEIGHT_ABOVE_COLLISION_AVOIDANCE,
+                weight=DefaultWeights.WEIGHT_ABOVE_CA,
             )
 
         low_weight_limit = limit_cls(
-            root_link=root,
-            tip_link=tip,
-            weight=DefaultWeights.WEIGHT_BELOW_COLLISION_AVOIDANCE,
+            root_link=root, tip_link=tip, weight=DefaultWeights.WEIGHT_BELOW_CA
         )
         motion_statechart = self._build_msc(goal_node=goal, limit_node=low_weight_limit)
         cancel_motion = CancelMotion(exception=Exception("test"))

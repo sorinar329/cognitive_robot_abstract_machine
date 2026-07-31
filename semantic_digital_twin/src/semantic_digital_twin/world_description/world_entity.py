@@ -309,7 +309,7 @@ class WorldEntityWithSimulatorProperties(WorldEntityWithID, HasSimulatorProperti
 
 
 @dataclass(eq=False)
-class KinematicStructureEntity(ABC, WorldEntityWithSimulatorProperties):
+class KinematicStructureEntity(WorldEntityWithSimulatorProperties, ABC):
     """
     An entity that is part of the kinematic structure of the world.
     """
@@ -928,21 +928,6 @@ class Connection(WorldEntity, HasSimulatorProperties, SubclassJSONSerializer, AB
         )
 
     @property
-    def reference_origin_expression(self) -> HomogeneousTransformationMatrix:
-        """
-        The parent-to-child transform at the reference configuration, excluding the
-        variable joint :attr:`_kinematics`.
-
-        .. note::
-            A simulator must place a body's static frame with this rather than
-            :attr:`origin_expression`: the latter depends on the current joint
-            state, which the simulator joint would then apply a second time.
-
-        :return: The constant parent-to-child transform with the joint at zero.
-        """
-        return self.parent_T_connection_expression @ self.connection_T_child_expression
-
-    @property
     def active_dofs(self) -> List[DegreeOfFreedom]:
         return []
 
@@ -989,31 +974,33 @@ class Connection(WorldEntity, HasSimulatorProperties, SubclassJSONSerializer, AB
             f"Origin can not be set for Connection: {self.__class__.__name__}"
         )
 
-    @staticmethod
-    def _as_position_quaternion(
-        parent_T_child: HomogeneousTransformationMatrix,
-    ) -> Matrix:
-        """
-        Stack a transform's translation and rotation into a single row.
-
-        :return: A 1x7 matrix of ``[x, y, z, qx, qy, qz, qw]``.
-        """
-        position = parent_T_child.to_position()[:3]
-        orientation = parent_T_child.to_quaternion()
+    def origin_as_position_quaternion(self) -> Matrix:
+        position = self.origin_expression.to_position()[:3]
+        orientation = self.origin_expression.to_quaternion()
         return Matrix.vstack([position, orientation]).T
 
-    def origin_as_position_quaternion(self) -> Matrix:
-        return self._as_position_quaternion(self.origin_expression)
-
-    def reference_origin_as_position_quaternion(self) -> Matrix:
+    def static_origin_as_position_quaternion(self) -> Matrix:
         """
-        The reference-configuration origin (see :attr:`reference_origin_expression`)
-        as a stacked position and quaternion, so a simulator can place a body's
-        static frame independently of the current joint state.
+        Like :meth:`origin_as_position_quaternion`, but excludes ``_kinematics``,
+        the connection's DOF-dependent rotation/translation.
 
-        :return: A 1x7 matrix of ``[x, y, z, qx, qy, qz, qw]``.
+        :func:`origin_as_position_quaternion` evaluates the DOF's *current*
+        value into the result, so a joint whose current position is nonzero
+        (e.g. a revolute joint whose valid range excludes zero, defaulting to
+        its nearest limit) bakes that rotation into what simulator adapters
+        treat as the child body's constant mounting pose -- double-counting
+        it once the simulator's own joint mechanism applies the same DOF's
+        rotation again at runtime. ``parent_T_connection_expression`` and
+        ``connection_T_child_expression`` are both guaranteed constant (see
+        ``__post_init__``), so composing only those two gives the true,
+        DOF-independent mounting pose.
         """
-        return self._as_position_quaternion(self.reference_origin_expression)
+        static_transform = (
+            self.parent_T_connection_expression @ self.connection_T_child_expression
+        )
+        position = static_transform.to_position()[:3]
+        orientation = static_transform.to_quaternion()
+        return Matrix.vstack([position, orientation]).T
 
     @property
     def dofs(self) -> list[DegreeOfFreedom]:

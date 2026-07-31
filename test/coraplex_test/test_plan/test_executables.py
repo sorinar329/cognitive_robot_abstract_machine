@@ -17,10 +17,11 @@ from giskardpy.motion_statechart.monitors.payload_monitors import (
 from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
 from semantic_digital_twin.spatial_types.spatial_types import Pose
 
-from coraplex.datastructures.enums import Arms, ApproachDirection, VerticalAlignment
+from coraplex.datastructures.enums import Arms, ApproachDirection, VerticalAlignment, ExecutionType
 from coraplex.datastructures.grasp import GraspDescription
-from coraplex.execution_environment import real_robot, simulated_robot
+from coraplex.execution_environment import real_robot, simulated_robot, ExecutionEnvironment
 from coraplex.plans.condition_nodes import PlanNodeStatusMonitor
+from coraplex.plans.executables import ModelChangeExecutable
 from coraplex.plans.factories import execute_single
 from coraplex.robot_plans.actions.core.pick_up import ReachAction
 
@@ -98,3 +99,91 @@ def test_motion_state_chart_simulated_execution_adds_condition_and_pause_interru
     assert len(chart.get_nodes_by_type(ThreadedPredicateMonitor)) == 2
     # abort paths for pre- and post-condition failing
     assert len(chart.get_nodes_by_type(CancelMotion)) == 2
+
+
+def test_model_change_executable_reparents_the_body(mutable_model_world):
+    """
+    ModelChangeExecutable.execute() must re-parent the body to its new parent
+    regardless of execution type: nothing else in coraplex represents "what
+    is currently held by the gripper" other than this kinematic re-parenting
+    (e.g. PlaceAction's pre-condition checks it via is_gripper_holding_something/
+    GripperIsFree), including in purely-kinematic SIMULATED runs with no
+    physics backend attached at all -- so this must not be skipped for
+    either execution type.
+    """
+    world, view, context = mutable_model_world
+    body = world.get_body_by_name("milk.stl")
+    original_parent_connection = body.parent_connection
+
+    executable = ModelChangeExecutable(context=context, body=body, new_parent=world.root)
+
+    with simulated_robot:
+        executable.execute()
+
+    assert body.parent_connection is not original_parent_connection
+    assert body.parent_connection.parent is world.root
+
+
+def _capture_pacer_real_time_factors(monkeypatch) -> list:
+    """
+    Patches coraplex.plans.executables.SimulationPacer to record the
+    real_time_factor it is constructed with on every call, while still
+    constructing a real, functional pacer.
+    """
+    import coraplex.plans.executables as executables_module
+
+    captured = []
+    original_pacer_cls = executables_module.SimulationPacer
+
+    def capturing_pacer(*args, real_time_factor=None, **kwargs):
+        captured.append(real_time_factor)
+        return original_pacer_cls(*args, real_time_factor=real_time_factor, **kwargs)
+
+    monkeypatch.setattr(executables_module, "SimulationPacer", capturing_pacer)
+    return captured
+
+
+def test_real_time_pacing_defaults_to_an_unpaced_pacer(
+    reach_action_executable, monkeypatch
+):
+    """
+    GiskardExecutable.real_time_pacing defaults to False, so
+    _execute_simulation's Ros2Executor must be constructed with
+    SimulationPacer(real_time_factor=None) (never sleeps, see
+    SimulationPacer.sleep) -- this must stay true for every existing caller
+    (dozens of plan.perform() calls across the test suite) that never
+    touches the flag, so they stay exactly as fast/unpaced as they are today.
+    """
+    captured = _capture_pacer_real_time_factors(monkeypatch)
+
+    with simulated_robot:
+        reach_action_executable.execute()
+
+    assert captured == [None], (
+        f"real_time_pacing=False (the default) should construct the pacer "
+        f"with real_time_factor=None (never sleeps), got {captured}."
+    )
+
+
+def test_real_time_pacing_enabled_wires_a_real_time_factor(
+    reach_action_executable, monkeypatch
+):
+    """
+    Enabling ExecutionEnvironment(real_time_pacing=True) must construct
+    _execute_simulation's Ros2Executor with SimulationPacer(real_time_factor=1.0),
+    pacing the tick loop towards the QP controller's own target_frequency
+    (see QPControllerConfig(target_frequency=50) in _execute_simulation) --
+    otherwise a physically-simulated DOF's actual position could race ahead
+    of Giskard's belief of where it is, regardless of sim<->world sync rate.
+    """
+    captured = _capture_pacer_real_time_factors(monkeypatch)
+
+    with ExecutionEnvironment(
+        execution_type=ExecutionType.SIMULATED, real_time_pacing=True
+    ):
+        reach_action_executable.execute()
+
+    assert captured == [1.0], (
+        f"real_time_pacing=True should construct the pacer with "
+        f"real_time_factor=1.0 (paces towards target_frequency), got {captured}."
+    )
