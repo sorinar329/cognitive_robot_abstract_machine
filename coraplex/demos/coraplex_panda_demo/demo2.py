@@ -1,12 +1,17 @@
 """
 Experimental copy of ``demo.py`` that randomizes PickUpAction/PlaceAction velocity/
 timing parameters per attempt (see ``pickup_place_parameterization.py``) instead of
-always using their fixed defaults, so that successful attempts persisted to the
-database show real variation, suitable as training data for a probabilistic model.
+always using their fixed defaults, so every attempt persisted to the database shows
+real variation, suitable as training data for a probabilistic model.
+
+Every step of every iteration is persisted unconditionally, regardless of whether the
+cube actually ended up stacked, matching ``demo.py``'s own persistence behaviour --
+success/failure is only used informationally (segmind's support report, log output),
+never to gate what gets saved.
 
 Kept as a separate file rather than modifying ``demo.py`` in place: that file reflects
 an entire session's worth of validated tuning (grasp reliability, speed, placing-release
-verification, iteration-skip logic), and this randomization is new/unvalidated.
+verification), and this randomization is new/unvalidated.
 
 No JPT training or model-based sampling happens here yet -- every attempt draws from a
 fixed Gaussian prior (see ``pickup_place_parameterization.py``). Training a model on the
@@ -244,11 +249,10 @@ def persist_plan(plan: PlanNode, iteration_index: int, step_name: str) -> None:
     Persists one stacking attempt's plan -- every action's parameters plus its recorded
     per-node status -- to the database.
 
-    Only called for steps belonging to an iteration where every cube actually ended up
-    stacked (see the main loop below) -- the database is meant to accumulate only
-    successful stacking runs, as training data for a probabilistic model, so a failed or
-    incomplete iteration's plans are never persisted at all. Persistence failures are
-    logged and swallowed so a database hiccup never aborts the run.
+    Called unconditionally for every step of every iteration, regardless of whether the
+    cube actually ended up stacked -- this demo collects every attempt's randomized
+    parameters for later analysis, success or not. Persistence failures are logged and
+    swallowed so a database hiccup never aborts the run.
     """
     try:
         database_session.add(to_dao(plan))
@@ -508,13 +512,12 @@ def attempt_stack(
     cube (or iteration) instead, re-parking the arms first so the robot starts the next
     attempt from a known configuration.
 
-    Does not persist the plan itself -- see the main loop below, which only persists a
-    whole iteration's plans once every step in it is confirmed to have actually stacked
-    (see :func:`_cube_is_stacked`), so the database only ever accumulates complete,
-    successful stacking runs suitable as training data for a probabilistic model.
+    Does not persist the plan itself -- see the main loop below, which persists every
+    step of every iteration unconditionally, regardless of whether it actually stacked.
 
     :return: The performed plan, and whether ``object_body`` actually ended up stacked
-        on ``target_body`` afterwards (see :func:`_cube_is_stacked`).
+        on ``target_body`` afterwards (see :func:`_cube_is_stacked`), for informational
+        logging only.
     """
     plan = _build_stack_plan(object_body, target_body, picking_arm)
     try:
@@ -578,7 +581,6 @@ with ExecutionEnvironment(
         time.sleep(1.5)
 
         iteration_plans: list[tuple[str, PlanNode]] = []
-        iteration_fully_stacked = True
 
         for cube_to_pick, cube_to_stack_on, step_label in [
             (box1, box, "cube1 onto cube0"),
@@ -592,32 +594,21 @@ with ExecutionEnvironment(
                     f"(limit {ITERATION_TIME_LIMIT:.0f}s), skipping remaining "
                     "attempts and moving to the next iteration"
                 )
-                iteration_fully_stacked = False
                 break
             plan, stacked = attempt_stack(cube_to_pick, cube_to_stack_on, Arms.LEFT, step_label)
             iteration_plans.append((step_label, plan))
-            if not stacked:
-                print(
-                    f"[warning] {step_label} did not end up stacked -- the rest of "
-                    f"iteration {iteration} would only stack onto/with an object that "
-                    "was never actually placed, skipping to the next iteration"
-                )
-                iteration_fully_stacked = False
-                break
+            print(
+                f"[info] {step_label} {'stacked' if stacked else 'did NOT stack'} "
+                "(informational only -- every step is persisted regardless)"
+            )
             time.sleep(1)
 
-        if iteration_fully_stacked:
-            for step_label, plan in iteration_plans:
-                persist_plan(plan, iteration, step_label)
-            print(
-                f"[database] iteration {iteration} fully stacked, persisted "
-                f"{len(iteration_plans)} step(s)"
-            )
-        else:
-            print(
-                f"[database] iteration {iteration} was not fully stacked, discarding "
-                f"its {len(iteration_plans)} step(s) (not persisted)"
-            )
+        for step_label, plan in iteration_plans:
+            persist_plan(plan, iteration, step_label)
+        print(
+            f"[database] iteration {iteration} persisted {len(iteration_plans)} "
+            "step(s) unconditionally"
+        )
 
         print_iteration_summary(iteration)
         append_support_report(iteration)
