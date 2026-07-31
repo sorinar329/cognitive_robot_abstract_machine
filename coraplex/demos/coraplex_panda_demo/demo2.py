@@ -15,6 +15,7 @@ resulting data and closing the loop is a follow-up step.
 
 import os
 import threading
+from pathlib import Path
 import time
 import numpy
 import rclpy
@@ -37,7 +38,11 @@ from pickup_place_parameterization import sample_pickup_instance, sample_place_i
 from krrood.ormatic.data_access_objects.helper import to_dao
 from krrood.ormatic.utils import create_engine
 
+from giskardpy.motion_statechart.context import MotionStatechartContext
+from segmind.detectors.base import SegmindContext
+from segmind.detectors.spatial_relation_detector_nodes import SupportDetector
 from semantic_digital_twin.adapters.mjcf import MJCFParser
+from semantic_digital_twin.world_description.world_entity import Body
 from semantic_digital_twin.adapters.multi_sim import MujocoSim, MujocoBody
 from semantic_digital_twin.adapters.ros.visualization.viz_marker import VizMarkerPublisher
 from semantic_digital_twin.robots.panda import Panda
@@ -336,10 +341,10 @@ def _build_stack_plan(object_body, target_body, picking_arm) -> PlanNode:
     # object_friction is recorded on PickUpAction purely for persistence -- the
     # action itself never applies it (it's a MuJoCo geom property, not a planner
     # goal), so it must be pushed onto the live simulator here before the pick runs.
-    multi_sim.simulator.set_geom_friction(
-        f"{object_body.name.name}_geom",
-        numpy.array([pickup_action.object_friction, 0.05, 0.0005]),
-    )
+    # multi_sim.simulator.set_geom_friction(
+    #     f"{object_body.name.name}_geom",
+    #     numpy.array([pickup_action.object_friction, 0.05, 0.0005]),
+    # )
 
     print(
         f"[params] pickup {object_body.name.name}: "
@@ -401,6 +406,95 @@ def _cube_is_stacked(object_body, target_body) -> bool:
 
     horizontal_distance = numpy.linalg.norm(object_position[:2] - target_position[:2])
     return horizontal_distance < STACK_XY_TOLERANCE
+
+
+
+# %% support verification via segmind
+
+SUPPORT_REPORT_PATH = Path(__file__).parent / "support_report.md"
+"""
+Markdown file the per-iteration support findings are appended to.
+"""
+
+segmind_context = SegmindContext()
+"""
+Shared context the support detector accumulates its findings in.
+"""
+
+support_detector = SupportDetector()
+"""
+Detects which bodies currently support which other bodies.
+"""
+
+motion_statechart_context = MotionStatechartContext(world=world)
+"""
+Gives the detector access to the world's bodies and their collision geometry.
+"""
+
+
+def expected_supports() -> list[tuple[Body, Body]]:
+    """
+    The support relations a fully built stack should have, bottom up.
+
+    The bottom cube is left out: what the scene rests it on is not part of what
+    the stacking is judged on, and it is reported among the detected supports
+    anyway.
+    """
+    return [
+        (box1, box),
+        (box2, box1),
+        (box3, box2),
+    ]
+
+
+def detected_supports() -> dict[Body, set[Body]]:
+    """
+    Every support relation segmind currently sees among the cubes.
+
+    The detector reports only relations it has not seen before, so its context
+    is cleared first to make each iteration's result independent of earlier
+    ones.
+    """
+    segmind_context.latest_support.clear()
+    support_detector.update_context_and_events(
+        motion_statechart_context, segmind_context, [box, box1, box2, box3]
+    )
+    return segmind_context.latest_support
+
+
+def append_support_report(iteration_index: int) -> None:
+    """
+    Append this iteration's support findings to :data:`SUPPORT_REPORT_PATH`.
+
+    Records segmind's verdict beside the demo's own geometric verifier for the
+    same pair, so the two can be checked against each other.
+    """
+    supports = detected_supports()
+
+    lines = [f"\n## Iteration {iteration_index}\n"]
+    lines.append("| expected support | segmind | demo verifier |")
+    lines.append("|---|---|---|")
+    for supported, supporter in expected_supports():
+        segmind_sees = supporter in supports.get(supported, set())
+        verifier = "yes" if _cube_is_stacked(supported, supporter) else "no"
+        lines.append(
+            f"| {supported.name.name} on {supporter.name.name} "
+            f"| {'yes' if segmind_sees else 'no'} | {verifier} |"
+        )
+
+    lines.append("\nAll supports segmind detected:\n")
+    if supports:
+        for supported, supporters in sorted(
+            supports.items(), key=lambda item: item[0].name.name
+        ):
+            names = ", ".join(sorted(s.name.name for s in supporters))
+            lines.append(f"- `{supported.name.name}` supported by {names}")
+    else:
+        lines.append("- none")
+
+    with SUPPORT_REPORT_PATH.open("a") as report:
+        report.write("\n".join(lines) + "\n")
+    print(f"[segmind] iteration {iteration_index} supports written to {SUPPORT_REPORT_PATH}")
 
 
 def attempt_stack(
@@ -526,6 +620,7 @@ with ExecutionEnvironment(
             )
 
         print_iteration_summary(iteration)
+        append_support_report(iteration)
 
         iteration_durations.append(time.time() - iteration_start)
         average_duration = sum(iteration_durations) / len(iteration_durations)
