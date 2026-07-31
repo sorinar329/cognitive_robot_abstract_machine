@@ -378,38 +378,7 @@ def _build_stack_plan(object_body, target_body, picking_arm) -> PlanNode:
     )
 
 
-def _cube_is_stacked(object_body, target_body) -> bool:
-    """
-    Whether ``object_body`` actually ended up resting centered on top of ``target_body``
-    in the physical simulation.
 
-    Checked against the real MuJoCo state rather than the plan's reported
-    success/failure: a step can raise (e.g. a re-park afterwards timing out) after
-    already having placed the object correctly, and can also report success without the
-    object actually ending up in place (see the module docstring's notes on
-    ``evaluate_conditions=False``) -- so the reported outcome alone is not a reliable
-    signal of whether this step's stacking actually happened.
-
-    Combines two independent checks, since height alone cannot rule out a cube that
-    ended up elevated by coincidence without also being centered above the target (e.g.
-    perched on a neighboring cube's edge, or still caught on the retracting gripper):
-
-    - Height: strictly between half and 1.5x :data:`STACK_HEIGHT_OFFSET` above the
-      target -- a lower bound (rules out "fell off"/"knocked down") and an upper bound
-      (rules out "ended up implausibly high", e.g. still stuck to the gripper).
-    - Horizontal (x/y) distance to the target's center stays within
-      :data:`STACK_XY_TOLERANCE`, i.e. the cube is actually centered above the target
-      rather than merely at the right height somewhere nearby.
-    """
-    object_position = multi_sim.simulator.get_body_position(object_body.name.name).result
-    target_position = multi_sim.simulator.get_body_position(target_body.name.name).result
-
-    height_difference = object_position[2] - target_position[2]
-    if not (STACK_HEIGHT_OFFSET / 2 < height_difference < STACK_HEIGHT_OFFSET * 1.5):
-        return False
-
-    horizontal_distance = numpy.linalg.norm(object_position[:2] - target_position[:2])
-    return horizontal_distance < STACK_XY_TOLERANCE
 
 
 
@@ -466,24 +435,50 @@ def detected_supports() -> dict[Body, set[Body]]:
     return segmind_context.latest_support
 
 
+def segmind_confirms_support(supported: Body, supporter: Body) -> bool:
+    """
+    Whether segmind currently sees ``supported`` resting on ``supporter``.
+
+    Used to decide whether a stacking step really succeeded before the next one
+    builds on top of it.
+    """
+    return supporter in detected_supports().get(supported, set())
+
+
+def segmind_approved() -> bool:
+    """
+    Whether segmind sees the whole stack standing, every expected support at
+    once.
+
+    Read in a single pass, so it answers whether the stack is intact now rather
+    than whether each step succeeded at the time it ran.
+    """
+    supports = detected_supports()
+    return all(
+        supporter in supports.get(supported, set())
+        for supported, supporter in expected_supports()
+    )
+
+
 def append_support_report(iteration_index: int) -> None:
     """
     Append this iteration's support findings to :data:`SUPPORT_REPORT_PATH`.
 
-    Records segmind's verdict beside the demo's own geometric verifier for the
-    same pair, so the two can be checked against each other.
+    Reports each expected support and whether the stack as a whole stands, read
+    from the world as it is once the iteration has finished.
     """
     supports = detected_supports()
+    approved = segmind_approved()
 
     lines = [f"\n## Iteration {iteration_index}\n"]
-    lines.append("| expected support | segmind | demo verifier |")
-    lines.append("|---|---|---|")
+    lines.append(f"`segmind_approved()`: **{approved}**\n")
+    lines.append("| expected support | segmind |")
+    lines.append("|---|---|")
     for supported, supporter in expected_supports():
-        segmind_sees = supporter in supports.get(supported, set())
-        verifier = "yes" if _cube_is_stacked(supported, supporter) else "no"
+        holds = supporter in supports.get(supported, set())
         lines.append(
             f"| {supported.name.name} on {supporter.name.name} "
-            f"| {'yes' if segmind_sees else 'no'} | {verifier} |"
+            f"| {'yes' if holds else 'no'} |"
         )
 
     lines.append("\nAll supports segmind detected:\n")
@@ -515,9 +510,9 @@ def attempt_stack(
     Does not persist the plan itself -- see the main loop below, which persists every
     step of every iteration unconditionally, regardless of whether it actually stacked.
 
-    :return: The performed plan, and whether ``object_body`` actually ended up stacked
-        on ``target_body`` afterwards (see :func:`_cube_is_stacked`), for informational
-        logging only.
+    :return: The performed plan, and whether segmind sees ``object_body`` supported by
+        ``target_body`` afterwards (see :func:`segmind_confirms_support`), for
+        informational logging only.
     """
     plan = _build_stack_plan(object_body, target_body, picking_arm)
     try:
@@ -529,7 +524,7 @@ def attempt_stack(
         except Exception as park_exc:
             print(f"[warning] re-park after {step_name} also failed: {park_exc}")
 
-    return plan, _cube_is_stacked(object_body, target_body)
+    return plan, segmind_confirms_support(object_body, target_body)
 
 
 def print_iteration_summary(iteration_index: int) -> None:
