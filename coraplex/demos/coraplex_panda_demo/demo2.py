@@ -18,7 +18,9 @@ fixed Gaussian prior (see ``pickup_place_parameterization.py``). Training a mode
 resulting data and closing the loop is a follow-up step.
 """
 
+import datetime
 import os
+import random
 import threading
 from pathlib import Path
 import time
@@ -39,11 +41,13 @@ from coraplex.plans.plan_node import PlanNode
 from coraplex.robot_plans.actions.core.robot_body import ParkArmsAction
 
 from pickup_place_parameterization import sample_pickup_instance, sample_place_instance
+from stacking_attempt_record import StackingAttemptRecord
 
 from krrood.ormatic.data_access_objects.helper import to_dao
 from krrood.ormatic.utils import create_engine
 
 from giskardpy.motion_statechart.context import MotionStatechartContext
+from physics_simulators.base_simulator import SimulatorCallbackResult
 from segmind.detectors.base import SegmindContext
 from segmind.detectors.spatial_relation_detector_nodes import SupportDetector
 from semantic_digital_twin.adapters.mjcf import MJCFParser
@@ -54,7 +58,50 @@ from semantic_digital_twin.robots.panda import Panda
 from semantic_digital_twin.spatial_types.spatial_types import Pose
 
 
-time.sleep(8)  # Wait for the launch file to start
+def verify_workspace_matches_demo() -> None:
+    """
+    Check that the workspace packages were imported from the same checkout this
+    demo file lives in.
+
+    Several checkouts of this repository can be installed in different
+    virtualenvs at once. Running the demo with the wrong interpreter loads this
+    file from one checkout and its imports from another, which surfaces much
+    later as a missing attribute on a class that plainly has it.
+    """
+    # A concrete module rather than the package: the packages here are
+    # namespace packages, whose ``__file__`` is None.
+    from physics_simulators import mujoco_simulator
+
+    demo_checkout = Path(__file__).resolve().parents[3]
+    package_checkout = Path(mujoco_simulator.__file__).resolve().parents[3]
+    if demo_checkout == package_checkout:
+        return
+    raise RuntimeError(
+        f"This demo lives in {demo_checkout} but physics_simulators was imported "
+        f"from {package_checkout}. Run it with the interpreter whose packages "
+        f"point at {demo_checkout}."
+    )
+
+
+verify_workspace_matches_demo()
+
+
+RANDOM_SEED = int(os.environ.get("DEMO_RANDOM_SEED", "42"))
+"""
+Seed for the per-attempt parameter sampling.
+
+The attempt parameters are drawn from a Gaussian prior (see
+``pickup_place_parameterization``), which without a fixed seed makes two runs of this
+file differ regardless of anything else -- including two runs on the same machine. Set
+``DEMO_RANDOM_SEED`` in the environment to vary it deliberately.
+
+..note:: This makes only the sampled *parameters* reproducible. The run as a whole is
+    not: the physics runs in its own thread and is paced against the wall clock, so how
+    much simulation happens per command still depends on how fast the machine is.
+"""
+
+random.seed(RANDOM_SEED)
+numpy.random.seed(RANDOM_SEED)
 
 execition_mode = ExecutionType.SIMULATED
 
@@ -69,7 +116,7 @@ thread = threading.Thread(target=executor.spin, daemon=True, name="rclpy-executo
 thread.start()
 
 world = MJCFParser(
-    "/home/nvasant/workspace/ros/src/manipulation_experiments/resources/generated/stacking_scene.xml"
+    "/home/sorin/dev/manipulation_experiments/resources/generated/stacking_scene.xml"
 ).parse()
 Panda.from_world(world)
 publisher = VizMarkerPublisher(_world=world, node=node).with_tf_publisher()
@@ -87,6 +134,7 @@ box = world.get_body_by_name("cube0")
 box1 = world.get_body_by_name("cube1")
 box2 = world.get_body_by_name("cube2")
 box3 = world.get_body_by_name("cube3")
+floor = world.get_body_by_name("floor")
 
 print("Perform Plan")
 
@@ -150,19 +198,15 @@ def print_positions():
     )
 
 
-def print_positions_periodically(stop_event: threading.Event):
-    while not stop_event.is_set():
-        print_positions()
-        time.sleep(0.5)
+# The position printing that used to run on its own thread here was removed: it
+# evaluated forward kinematics twice a second, and the spatial types backing that
+# are CasADi symbolics whose nodes are reference counted without thread safety.
+# Doing it alongside the main thread's motion planning corrupted a node's refcount
+# and freed it while still referenced, which surfaced hours later as a SIGSEGV in
+# casadi::SXElem::is_constant() on an unmapped address. :func:`print_positions` is
+# kept for the one call on the main thread once the run is over.
 
-
-stop_printing = threading.Event()
-printing_thread = threading.Thread(
-    target=print_positions_periodically, args=(stop_printing,), daemon=True
-)
-printing_thread.start()
-
-NUMBER_OF_ITERATIONS = 10
+NUMBER_OF_ITERATIONS = 10000
 """
 Number of times the full pickup/stack sequence is repeated, so the demo can be left
 running unattended instead of re-started by hand for every trial.
@@ -216,6 +260,15 @@ CUBE_SPAWN_ORIENTATION = numpy.array([1.0, 0.0, 0.0, 0.0])
 Spawn orientation (identity quaternion) of every cube.
 """
 
+WORKSPACE_BOUND = 5.0
+"""
+Half-extent (in meters) of the region a cube can legitimately be in, in every axis.
+
+The scene is a table-top within arm's reach, so a metre is already far outside it, while
+a diverged cube reaches thousands of metres within a single iteration -- anything between
+the two works as a divergence threshold.
+"""
+
 DATABASE_URI: str = os.environ.get(
     "CORAPLEX_PANDA_DEMO_DATABASE_URI",
     "postgresql+psycopg://semantic_digital_twin:naren@localhost:5432/coraplex_panda_demo",
@@ -232,6 +285,13 @@ only that, not ``psycopg2``, is installed in this environment.
 """
 
 
+RUN_STARTED_AT = datetime.datetime.now(datetime.timezone.utc)
+"""
+When this run started, stamped onto every attempt record so runs sharing the database
+stay separable even though their iteration numbering restarts at 1.
+"""
+
+
 def _create_database_session(database_uri: str) -> Session:
     """
     Connect to the database, create any missing tables, and return an ORM session that
@@ -240,24 +300,44 @@ def _create_database_session(database_uri: str) -> Session:
     print(f"[database] Connecting to {database_uri} ...")
     engine = create_engine(database_uri)
     Base.metadata.create_all(bind=engine, checkfirst=True)
+    StackingAttemptRecord.create_table(engine)
     print("[database] Schema verified.")
     return Session(engine)
 
 
-def persist_plan(plan: PlanNode, iteration_index: int, step_name: str) -> None:
+def persist_plan(
+    plan: PlanNode, iteration_index: int, step_name: str, simulation_diverged: bool
+) -> None:
     """
     Persists one stacking attempt's plan -- every action's parameters plus its recorded
-    per-node status -- to the database.
+    per-node status -- to the database, alongside a
+    :class:`StackingAttemptRecord` naming the iteration and step it came from.
 
     Called unconditionally for every step of every iteration, regardless of whether the
     cube actually ended up stacked -- this demo collects every attempt's randomized
-    parameters for later analysis, success or not. Persistence failures are logged and
-    swallowed so a database hiccup never aborts the run.
+    parameters for later analysis, success or not. The attempt record is what makes that
+    sliceable afterwards, in particular so attempts made while the simulation had
+    diverged can be excluded. Persistence failures are logged and swallowed so a database
+    hiccup never aborts the run.
     """
     try:
-        database_session.add(to_dao(plan))
+        plan_dao = to_dao(plan)
+        database_session.add(plan_dao)
+        database_session.flush()
+        database_session.add(
+            StackingAttemptRecord(
+                run_started_at=RUN_STARTED_AT,
+                iteration_index=iteration_index,
+                step_name=step_name,
+                plan_database_id=plan_dao.database_id,
+                simulation_diverged=simulation_diverged,
+            )
+        )
         database_session.commit()
-        print(f"[database] iteration {iteration_index} '{step_name}' persisted")
+        print(
+            f"[database] iteration {iteration_index} '{step_name}' persisted"
+            f"{' (DIVERGED)' if simulation_diverged else ''}"
+        )
     except Exception as exc:
         print(
             f"[database] failed to persist iteration {iteration_index} "
@@ -294,18 +374,68 @@ def persist_world_snapshot() -> None:
 
 def reset_cubes() -> None:
     """
-    Teleports every cube back to its spawn pose in MuJoCo, undoing the displacement from
-    the previous iteration's stacking attempts.
+    Returns every cube to its spawn pose and brings it to a standstill, undoing both the
+    displacement and the motion left over from the previous iteration's attempts.
 
-    Only position and orientation are reset -- MuJoCo exposes no safe, synchronized API
-    to reset a body's velocity, so residual velocity from the previous iteration can
-    carry over as a minor, known limitation.
+    Clearing the velocity is what makes this a recovery rather than a cosmetic reset: a
+    cube that has picked up a runaway velocity keeps it across a pose reset, so without
+    this a single diverged iteration ruins every iteration after it.
     """
     for name, position in CUBE_SPAWN_POSITIONS.items():
+        multi_sim.simulator.reset_body_velocity(body_name=name)
         multi_sim.simulator.set_body_position(body_name=name, position=position)
         multi_sim.simulator.set_body_quaternion(
             body_name=name, quaternion=CUBE_SPAWN_ORIENTATION
         )
+
+
+def diverged_cubes() -> list[str]:
+    """
+    The cubes that have left the region the scene could plausibly place them in.
+
+    An unstable contact can accelerate a cube to thousands of metres per second, which
+    shows up as a position far outside the workspace long before anything else notices.
+    """
+    escaped = []
+    for name in CUBE_SPAWN_POSITIONS:
+        position = multi_sim.simulator.get_body_position(name).result[:3]
+        outside_horizontally = (
+            abs(position[0]) > WORKSPACE_BOUND or abs(position[1]) > WORKSPACE_BOUND
+        )
+        if outside_horizontally or not -WORKSPACE_BOUND < position[2] < WORKSPACE_BOUND:
+            escaped.append(name)
+    return escaped
+
+
+class SimulationDidNotRecover(RuntimeError):
+    """
+    Raised when cubes are still outside the workspace after being reset to their spawn
+    poses and brought to rest.
+
+    Continuing past this point is what turned one diverged iteration into hundreds of
+    worthless ones: every later attempt is planned against object poses thousands of
+    metres away, and no amount of further iterations brings them back.
+    """
+
+    def __init__(self, cube_names: list[str], iteration_index: int) -> None:
+        super().__init__(
+            f"{', '.join(cube_names)} still outside the workspace after the reset at "
+            f"the start of iteration {iteration_index}; stopping rather than collecting "
+            "attempts against nonsense object poses"
+        )
+
+
+class FrictionNotApplied(RuntimeError):
+    """
+    Raised when the sampled object friction could not be pushed onto the simulator.
+
+    Friction is the strongest influence this demo has over whether a grasp holds, so an
+    unnoticed failure to apply it would quietly turn every attempt into a run at the
+    scene's default friction and make the collected data misleading.
+    """
+
+    def __init__(self, body_name: str, reason: str) -> None:
+        super().__init__(f"Could not set friction of {body_name}: {reason}")
 
 
 def _build_stack_plan(object_body, target_body, picking_arm) -> PlanNode:
@@ -345,10 +475,19 @@ def _build_stack_plan(object_body, target_body, picking_arm) -> PlanNode:
     # object_friction is recorded on PickUpAction purely for persistence -- the
     # action itself never applies it (it's a MuJoCo geom property, not a planner
     # goal), so it must be pushed onto the live simulator here before the pick runs.
-    # multi_sim.simulator.set_geom_friction(
-    #     f"{object_body.name.name}_geom",
-    #     numpy.array([pickup_action.object_friction, 0.05, 0.0005]),
-    # )
+    #
+    # Addressed through the cube's body rather than by geom name: MujocoSim rebuilds
+    # the model from the World object, and shapes carry no name of their own, so the
+    # scene file's geom names do not exist in the running model.
+    friction_result = multi_sim.simulator.set_body_friction(
+        object_body.name.name,
+        numpy.array([pickup_action.object_friction, 0.05, 0.0005]),
+    )
+    if (
+        friction_result.type
+        is not SimulatorCallbackResult.ResultType.SUCCESS_AFTER_EXECUTION_ON_DATA
+    ):
+        raise FrictionNotApplied(object_body.name.name, friction_result.info)
 
     print(
         f"[params] pickup {object_body.name.name}: "
@@ -435,14 +574,19 @@ def detected_supports() -> dict[Body, set[Body]]:
     return segmind_context.latest_support
 
 
-def segmind_confirms_support(supported: Body, supporter: Body) -> bool:
+def segmind_sees_on_floor(body: Body) -> bool:
     """
-    Whether segmind currently sees ``supported`` resting on ``supporter``.
+    Whether segmind currently sees ``body`` resting directly on the floor.
 
-    Used to decide whether a stacking step really succeeded before the next one
-    builds on top of it.
+    Used as the between-step check rather than asking whether the cube is
+    supported by the cube below it. Read right after placing, the support onto
+    the cube below reads as absent: the cube is still held while the gripper
+    lifts away and only settles onto its target a moment later, so the check
+    lands in the gap and reports a false negative. Having reached the floor is
+    unambiguous by comparison -- a cube down there is not on the stack, whenever
+    it is looked at.
     """
-    return supporter in detected_supports().get(supported, set())
+    return floor in detected_supports().get(body, set())
 
 
 def segmind_approved() -> bool:
@@ -460,18 +604,22 @@ def segmind_approved() -> bool:
     )
 
 
-def append_support_report(iteration_index: int) -> None:
+def append_support_report(iteration_index: int, simulation_diverged: bool) -> None:
     """
     Append this iteration's support findings to :data:`SUPPORT_REPORT_PATH`.
 
     Reports each expected support and whether the stack as a whole stands, read
-    from the world as it is once the iteration has finished.
+    from the world as it is once the iteration has finished. A diverged iteration
+    is marked as such, since its findings describe cubes that had left the scene
+    rather than a stack that failed to hold.
     """
     supports = detected_supports()
     approved = segmind_approved()
 
     lines = [f"\n## Iteration {iteration_index}\n"]
     lines.append(f"`segmind_approved()`: **{approved}**\n")
+    if simulation_diverged:
+        lines.append("**simulation diverged -- excluded from results**\n")
     lines.append("| expected support | segmind |")
     lines.append("|---|---|")
     for supported, supporter in expected_supports():
@@ -510,9 +658,9 @@ def attempt_stack(
     Does not persist the plan itself -- see the main loop below, which persists every
     step of every iteration unconditionally, regardless of whether it actually stacked.
 
-    :return: The performed plan, and whether segmind sees ``object_body`` supported by
-        ``target_body`` afterwards (see :func:`segmind_confirms_support`), for
-        informational logging only.
+    :return: The performed plan, and whether ``object_body`` avoided ending up on the
+        floor (see :func:`segmind_sees_on_floor`), which is what decides whether the
+        remaining steps of the iteration are still worth attempting.
     """
     plan = _build_stack_plan(object_body, target_body, picking_arm)
     try:
@@ -524,7 +672,7 @@ def attempt_stack(
         except Exception as park_exc:
             print(f"[warning] re-park after {step_name} also failed: {park_exc}")
 
-    return plan, segmind_confirms_support(object_body, target_body)
+    return plan, not segmind_sees_on_floor(object_body)
 
 
 def print_iteration_summary(iteration_index: int) -> None:
@@ -574,8 +722,12 @@ with ExecutionEnvironment(
         print(f"=== starting iteration {iteration}/{NUMBER_OF_ITERATIONS} ===")
         reset_cubes()
         time.sleep(1.5)
+        still_escaped = diverged_cubes()
+        if still_escaped:
+            raise SimulationDidNotRecover(still_escaped, iteration)
 
         iteration_plans: list[tuple[str, PlanNode]] = []
+        simulation_diverged = False
 
         for cube_to_pick, cube_to_stack_on, step_label in [
             (box1, box, "cube1 onto cube0"),
@@ -590,31 +742,45 @@ with ExecutionEnvironment(
                     "attempts and moving to the next iteration"
                 )
                 break
-            plan, stacked = attempt_stack(cube_to_pick, cube_to_stack_on, Arms.LEFT, step_label)
+            plan, stayed_off_floor = attempt_stack(
+                cube_to_pick, cube_to_stack_on, Arms.LEFT, step_label
+            )
             iteration_plans.append((step_label, plan))
             print(
-                f"[info] {step_label} {'stacked' if stacked else 'did NOT stack'} "
+                f"[info] {step_label} "
+                f"{'stayed off the floor' if stayed_off_floor else 'ended up on the FLOOR'} "
                 "(persisted regardless)"
             )
-            if not stacked:
-                # Every later step stacks onto this cube, so continuing would
-                # only pile onto something segmind says is not there.
+            escaped = diverged_cubes()
+            if escaped:
+                # Every later step would be planned against a target pose that is
+                # now thousands of metres away, and the cubes cannot come back on
+                # their own -- the next iteration's reset is what recovers them.
+                simulation_diverged = True
                 print(
-                    f"[warning] segmind does not see {step_label} -- abandoning the "
-                    f"rest of iteration {iteration}"
+                    f"[warning] simulation DIVERGED: {', '.join(escaped)} left the "
+                    f"workspace -- abandoning the rest of iteration {iteration}"
+                )
+                break
+            if not stayed_off_floor:
+                # Every later step stacks onto this cube, so continuing would
+                # only pile onto a cube that is lying on the floor.
+                print(
+                    f"[warning] segmind sees {cube_to_pick.name.name} on the floor -- "
+                    f"abandoning the rest of iteration {iteration}"
                 )
                 break
             time.sleep(1)
 
         for step_label, plan in iteration_plans:
-            persist_plan(plan, iteration, step_label)
+            persist_plan(plan, iteration, step_label, simulation_diverged)
         print(
             f"[database] iteration {iteration} persisted {len(iteration_plans)} "
             "step(s) unconditionally"
         )
 
         print_iteration_summary(iteration)
-        append_support_report(iteration)
+        append_support_report(iteration, simulation_diverged)
 
         iteration_durations.append(time.time() - iteration_start)
         average_duration = sum(iteration_durations) / len(iteration_durations)
@@ -623,7 +789,6 @@ with ExecutionEnvironment(
             f"{iteration_durations[-1]:.1f}s (average so far: {average_duration:.1f}s) ==="
         )
 
-stop_printing.set()
 print("--- final positions ---")
 print_positions()
 

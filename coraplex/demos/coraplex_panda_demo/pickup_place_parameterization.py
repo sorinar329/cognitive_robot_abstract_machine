@@ -9,14 +9,25 @@ Reuses the workspace's existing "underspecified parameters" framework
 pattern already used in
 ``coraplex.training_environments.training_environment.MoveToReachTrainingEnvironment``.
 No trained model is used yet -- every sample is drawn from a hand-specified Gaussian
-prior (centered on the currently validated defaults), truncated to a safe range. Fitting
-a real model on collected successes is a follow-up step once enough varied data exists.
+prior, truncated to a fixed range. Fitting a real model on collected data is a follow-up
+step once enough varied data exists.
+
+Each prior centers on a value that stacks reliably but is spread wide enough for its
+tails to reach the values observed to break a grasp or knock the stack over, so runs
+produce both outcomes. Priors held entirely inside the reliable band produced a
+near-100% success rate, and ones centered on the aggressive end produced none; neither
+says where the boundary lies, which a model can only learn from data containing both.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, Type
+from typing import Dict, Type
+
+from random_events.variable import Continuous, Variable
+from probabilistic_model.probabilistic_circuit.rx.probabilistic_circuit import (
+    ProbabilisticCircuit,
+)
 
 from krrood.entity_query_language.factories import a
 from krrood.entity_query_language.query.match import Match
@@ -37,8 +48,8 @@ class ParameterPrior:
     """
     A single float parameter's sampling prior: a Gaussian centered on ``mean`` with
     spread ``std``, truncated to ``[low, high]`` (the truncation is what actually bounds
-    samples to a safe range -- the Gaussian shape just biases sampling towards values
-    near the currently validated default rather than uniformly across the range).
+    the samples -- the Gaussian shape only biases how densely the range is covered,
+    concentrating samples around ``mean`` rather than spreading them uniformly).
     """
 
     mean: float
@@ -49,48 +60,82 @@ class ParameterPrior:
 
 PICKUP_PARAMETER_PRIORS: Dict[str, ParameterPrior] = {
     "pre_approach_linear_velocity": ParameterPrior(
-        mean=0.1, std=0.02, low=0.08, high=0.16
+        mean=0.115, std=0.03, low=0.06, high=0.24
     ),
-    # Raising this to 0.2 caused a large InfeasibleException failure spike earlier
-    # this session (~1/10 success); staying under 0.16 keeps clear margin below
-    # that cliff.
-    "grasp_linear_velocity": ParameterPrior(mean=0.015, std=0.007, low=0.01, high=0.03),
-    # Deliberately slow final approach (avoids shoving the cube before the
-    # gripper closes); capped at ~2x default keeps that risk bounded.
-    "grasp_closing_velocity": ParameterPrior(mean=0.08, std=0.03, low=0.05, high=0.15),
-    # Finger joint physical velocity limit is 0.2 m/s; stays comfortably below it.
-    "lift_linear_velocity": ParameterPrior(mean=0.08, std=0.03, low=0.05, high=0.15),
-    "grasp_stall_min_time": ParameterPrior(mean=0.4, std=0.15, low=0.3, high=0.8),
-    # 0.3 is this session's already-validated floor for stall detection; 0.8
-    # stays short of the old fully-conservative 1.0.
-    "object_friction": ParameterPrior(mean=1.5, std=0.4, low=0.8, high=2.2),
-    # 1.5 (sliding friction) is the cube geoms' own MJCF default; the range
-    # stays comfortably above 0 (which would make the object un-graspable)
-    # and below values MuJoCo's pyramidal friction cone starts struggling
-    # with numerically.
+    # 0.2 was observed to cause a large InfeasibleException failure spike
+    # (~1/10 success). Picks stayed reliable around 0.05-0.085, so the bulk sits
+    # there and only the far tail approaches that spike.
+    "grasp_linear_velocity": ParameterPrior(mean=0.045, std=0.035, low=0.01, high=0.22),
+    # The finger joints' physical velocity limit is 0.2 m/s, past which the
+    # fingers slam shut fast enough to punt the cube out of the grasp instead of
+    # closing on it.
+    "grasp_closing_velocity": ParameterPrior(mean=0.1, std=0.035, low=0.03, high=0.22),
+    # Lifting at 0.12 kept the stack standing while 0.18 did not, so the upper
+    # tail crosses that gap.
+    "lift_linear_velocity": ParameterPrior(mean=0.125, std=0.035, low=0.05, high=0.28),
+    # 0.3 is the validated floor for stall detection; below it the grasp is
+    # called complete before the fingers have settled on the cube.
+    "grasp_stall_min_time": ParameterPrior(mean=0.4, std=0.1, low=0.15, high=0.85),
+    # 1.5 (sliding friction) is the cube geoms' own MJCF default. Below roughly
+    # 0.3 the cube slides straight out of the fingers, which the lower tail
+    # reaches, while staying above 0 and below values MuJoCo's pyramidal
+    # friction cone starts struggling with numerically.
+    "object_friction": ParameterPrior(mean=1.2, std=0.5, low=0.15, high=2.5),
 }
 """
 Sampling prior for each of :class:`PickUpAction`'s tunable velocity/timing fields.
 """
 
 PLACE_PARAMETER_PRIORS: Dict[str, ParameterPrior] = {
+    # Transporting at 0.078 left the stack standing while 0.12 did not.
     "transport_linear_velocity": ParameterPrior(
-        mean=0.05, std=0.02, low=0.03, high=0.09
+        mean=0.08, std=0.028, low=0.03, high=0.18
     ),
+    # High values drive the cube down onto the stack hard enough to scatter what
+    # is already standing: 0.05 held, 0.08 did not.
     "placing_linear_velocity": ParameterPrior(
-        mean=0.03, std=0.015, low=0.015, high=0.06
+        mean=0.05, std=0.018, low=0.015, high=0.14
     ),
     "release_opening_velocity": ParameterPrior(
-        mean=0.05, std=0.02, low=0.03, high=0.09
+        mean=0.07, std=0.025, low=0.02, high=0.16
     ),
-    "retract_linear_velocity": ParameterPrior(mean=0.05, std=0.02, low=0.03, high=0.08),
-    # Raising this to 0.15 earlier this session caused the retreat itself to
-    # knock the just-placed cube back down (confirmed via collapsed stack
-    # heights despite reported success); 0.08 stays well short of that.
+    # The retreat itself can knock the just-placed cube back down (confirmed via
+    # collapsed stack heights despite reported success). 0.08 was safe and 0.14
+    # was not, so the upper tail crosses that gap.
+    "retract_linear_velocity": ParameterPrior(mean=0.08, std=0.03, low=0.03, high=0.2),
 }
 """
 Sampling prior for each of :class:`PlaceAction`'s tunable velocity/timing fields.
 """
+
+
+def build_prior_distribution(
+    variables_by_name: Dict[str, Variable], priors: Dict[str, ParameterPrior]
+) -> ProbabilisticCircuit:
+    """
+    Build a factorized Gaussian over ``variables_by_name``, giving every variable whose
+    name ends in a field listed in ``priors`` that field's prior.
+
+    ..warning:: :func:`fully_factorized`'s ``variances`` argument is forwarded unchanged
+        to ``GaussianDistribution(scale=...)``, which is a standard deviation rather than
+        a variance. Each prior's ``std`` is therefore passed as-is; squaring it would
+        shrink the spread to ``std**2``, which for these sub-1 values collapses the
+        sampling onto the mean.
+    """
+    means: Dict[Continuous, float] = {}
+    standard_deviations: Dict[Continuous, float] = {}
+    for name, variable in variables_by_name.items():
+        for field_name, prior in priors.items():
+            if name.endswith(field_name):
+                means[variable] = prior.mean
+                standard_deviations[variable] = prior.std
+                break
+
+    return fully_factorized(
+        means=means,
+        variances=standard_deviations,
+        variables=variables_by_name.values(),
+    )
 
 
 def _sample_instance(match_expr: Match, priors: Dict[str, ParameterPrior], domain_class: Type):
@@ -110,18 +155,7 @@ def _sample_instance(match_expr: Match, priors: Dict[str, ParameterPrior], domai
     match_expr.expression  # populate .variable before UnderspecifiedParameters
     parameters = UnderspecifiedParameters(match_expr)
 
-    means: Dict[Any, float] = {}
-    variances: Dict[Any, float] = {}
-    for name, variable in parameters.variables.items():
-        for field_name, prior in priors.items():
-            if name.endswith(field_name):
-                means[variable] = prior.mean
-                variances[variable] = prior.std**2
-                break
-
-    distribution = fully_factorized(
-        means=means, variances=variances, variables=parameters.variables.values()
-    )
+    distribution = build_prior_distribution(parameters.variables, priors)
     registry = DictRegistry({domain_class: distribution})
     model = registry.get_model(parameters)
 

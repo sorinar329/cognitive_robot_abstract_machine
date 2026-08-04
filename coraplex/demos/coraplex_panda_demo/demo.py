@@ -44,7 +44,7 @@ thread = threading.Thread(target=executor.spin, daemon=True, name="rclpy-executo
 thread.start()
 
 world = MJCFParser(
-    "/home/nvasant/workspace/ros/src/manipulation_experiments/resources/generated/stacking_scene.xml"
+    "/home/sorin/dev/manipulation_experiments/resources/generated/stacking_scene.xml"
 ).parse()
 Panda.from_world(world)
 publisher = VizMarkerPublisher(_world=world, node=node).with_tf_publisher()

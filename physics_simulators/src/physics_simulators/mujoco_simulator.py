@@ -390,6 +390,81 @@ class MujocoSimulator(BaseSimulator):
         )
 
     @BaseSimulator.simulator_callback
+    def set_body_friction(
+        self, body_name: str, friction: numpy.ndarray
+    ) -> SimulatorCallbackResult:
+        """
+        Set the contact friction (sliding, torsional, rolling) of every geom a body owns.
+
+        Addresses the geoms through their body rather than by their own names, which a
+        model compiled from a scene that left them unnamed does not have.
+
+        :param body_name: The name of the body whose geoms are affected
+        :param friction: The (sliding, torsional, rolling) friction coefficients
+        :return: A SimulatorCallbackResult indicating the success or failure of the
+            operation
+        """
+        body_id = mujoco.mj_name2id(
+            m=self._mj_model, type=mujoco.mjtObj.mjOBJ_BODY, name=body_name
+        )
+        if body_id == -1:
+            return SimulatorCallbackResult(
+                type=SimulatorCallbackResult.ResultType.FAILURE_WITHOUT_EXECUTION,
+                info=f"Body {body_name} not found",
+            )
+        body = self._mj_model.body(body_id)
+        first_geom, geom_count = int(body.geomadr[0]), int(body.geomnum[0])
+        if geom_count == 0:
+            return SimulatorCallbackResult(
+                type=SimulatorCallbackResult.ResultType.FAILURE_WITHOUT_EXECUTION,
+                info=f"Body {body_name} owns no geom to set friction on",
+            )
+        self._mj_model.geom_friction[first_geom : first_geom + geom_count] = friction
+        return SimulatorCallbackResult(
+            type=SimulatorCallbackResult.ResultType.SUCCESS_AFTER_EXECUTION_ON_DATA,
+            info=f"Set friction of body {body_name}'s {geom_count} geom(s) to {friction}",
+        )
+
+    @BaseSimulator.simulator_callback
+    def reset_body_velocity(self, body_name: str) -> SimulatorCallbackResult:
+        """
+        Bring a body to a standstill by clearing the velocity of every degree of freedom
+        it owns.
+
+        Teleporting a body with :meth:`set_body_position` leaves its velocity untouched,
+        so a body that has picked up a large velocity keeps travelling however often it
+        is put back. The solver's warm-start accelerations are cleared alongside the
+        velocity, since they would otherwise feed the previous motion back in on the next
+        step.
+
+        :param body_name: The name of the body to bring to rest
+        :return: A SimulatorCallbackResult indicating the success or failure of the
+            operation
+        """
+        body_id = mujoco.mj_name2id(
+            m=self._mj_model, type=mujoco.mjtObj.mjOBJ_BODY, name=body_name
+        )
+        if body_id == -1:
+            return SimulatorCallbackResult(
+                type=SimulatorCallbackResult.ResultType.FAILURE_WITHOUT_EXECUTION,
+                info=f"Body {body_name} not found",
+            )
+        body = self._mj_model.body(body_id)
+        first_dof, dof_count = int(body.dofadr[0]), int(body.dofnum[0])
+        if dof_count == 0:
+            return SimulatorCallbackResult(
+                type=SimulatorCallbackResult.ResultType.FAILURE_WITHOUT_EXECUTION,
+                info=f"Body {body_name} owns no degree of freedom to bring to rest",
+            )
+        degrees_of_freedom = slice(first_dof, first_dof + dof_count)
+        self._mj_data.qvel[degrees_of_freedom] = 0.0
+        self._mj_data.qacc_warmstart[degrees_of_freedom] = 0.0
+        return SimulatorCallbackResult(
+            type=SimulatorCallbackResult.ResultType.SUCCESS_AFTER_EXECUTION_ON_DATA,
+            info=f"Brought body {body_name}'s {dof_count} degree(s) of freedom to rest",
+        )
+
+    @BaseSimulator.simulator_callback
     def set_body_position(
         self, body_name: str, position: numpy.ndarray
     ) -> SimulatorCallbackResult:
