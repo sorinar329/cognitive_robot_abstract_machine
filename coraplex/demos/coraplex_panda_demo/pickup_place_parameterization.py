@@ -138,7 +138,9 @@ def build_prior_distribution(
     )
 
 
-def _sample_instance(match_expr: Match, priors: Dict[str, ParameterPrior], domain_class: Type):
+def _sample_instance(
+    match_expr: Match, priors: Dict[str, ParameterPrior], domain_class: Type
+):
     """
     Sample one concrete instance from ``match_expr``, whose fields listed in ``priors``
     are left underspecified (``...``) with range where-conditions already applied.
@@ -146,8 +148,9 @@ def _sample_instance(match_expr: Match, priors: Dict[str, ParameterPrior], domai
     Builds a factorized Gaussian prior over the underspecified variables (mean/std from
     ``priors``), truncates it to each field's declared range, and draws one sample.
 
-    :param match_expr: The underspecified match, already built via ``a(domain_class)(...)``
-        with the tunable fields set to ``...`` and range ``where`` conditions applied.
+    :param match_expr: The underspecified match, already built via
+        ``a(domain_class)(...)`` with the tunable fields set to ``...`` and range
+        ``where`` conditions applied.
     :param priors: Maps field name to its sampling prior.
     :param domain_class: The dataclass being sampled (used as the model registry key).
     :return: A fully constructed instance of ``domain_class``.
@@ -170,12 +173,18 @@ def _sample_instance(match_expr: Match, priors: Dict[str, ParameterPrior], domai
 
 
 def sample_pickup_instance(
-    object_body: Body, arm: Arms, grasp_description: GraspDescription
+    object_body: Body,
+    arm: Arms,
+    grasp_description: GraspDescription,
+    priors: Dict[str, ParameterPrior] = PICKUP_PARAMETER_PRIORS,
 ) -> PickUpAction:
     """
     Build a :class:`PickUpAction` with its 5 tunable velocity/timing fields plus the
-    target object's friction randomly sampled (see :data:`PICKUP_PARAMETER_PRIORS`),
-    everything else concrete.
+    target object's friction randomly sampled, everything else concrete.
+
+    :param priors: Sampling prior for each tunable field, by field name. Defaults to
+        :data:`PICKUP_PARAMETER_PRIORS`; pass a wider set of priors to sample outside
+        the range validated to stack reliably.
     """
     match_expr = a(PickUpAction)(
         object_designator=object_body,
@@ -204,26 +213,35 @@ def sample_pickup_instance(
     match_expr.expression
     v = match_expr.variable
     match_expr.where(
-        v.pre_approach_linear_velocity >= PICKUP_PARAMETER_PRIORS["pre_approach_linear_velocity"].low,
-        v.pre_approach_linear_velocity <= PICKUP_PARAMETER_PRIORS["pre_approach_linear_velocity"].high,
-        v.grasp_linear_velocity >= PICKUP_PARAMETER_PRIORS["grasp_linear_velocity"].low,
-        v.grasp_linear_velocity <= PICKUP_PARAMETER_PRIORS["grasp_linear_velocity"].high,
-        v.grasp_closing_velocity >= PICKUP_PARAMETER_PRIORS["grasp_closing_velocity"].low,
-        v.grasp_closing_velocity <= PICKUP_PARAMETER_PRIORS["grasp_closing_velocity"].high,
-        v.lift_linear_velocity >= PICKUP_PARAMETER_PRIORS["lift_linear_velocity"].low,
-        v.lift_linear_velocity <= PICKUP_PARAMETER_PRIORS["lift_linear_velocity"].high,
-        v.grasp_stall_min_time >= PICKUP_PARAMETER_PRIORS["grasp_stall_min_time"].low,
-        v.grasp_stall_min_time <= PICKUP_PARAMETER_PRIORS["grasp_stall_min_time"].high,
-        v.object_friction >= PICKUP_PARAMETER_PRIORS["object_friction"].low,
-        v.object_friction <= PICKUP_PARAMETER_PRIORS["object_friction"].high,
+        v.pre_approach_linear_velocity >= priors["pre_approach_linear_velocity"].low,
+        v.pre_approach_linear_velocity <= priors["pre_approach_linear_velocity"].high,
+        v.grasp_linear_velocity >= priors["grasp_linear_velocity"].low,
+        v.grasp_linear_velocity <= priors["grasp_linear_velocity"].high,
+        v.grasp_closing_velocity >= priors["grasp_closing_velocity"].low,
+        v.grasp_closing_velocity <= priors["grasp_closing_velocity"].high,
+        v.lift_linear_velocity >= priors["lift_linear_velocity"].low,
+        v.lift_linear_velocity <= priors["lift_linear_velocity"].high,
+        v.grasp_stall_min_time >= priors["grasp_stall_min_time"].low,
+        v.grasp_stall_min_time <= priors["grasp_stall_min_time"].high,
+        v.object_friction >= priors["object_friction"].low,
+        v.object_friction <= priors["object_friction"].high,
     )
-    return _sample_instance(match_expr, PICKUP_PARAMETER_PRIORS, PickUpAction)
+    return _sample_instance(match_expr, priors, PickUpAction)
 
 
-def sample_place_instance(object_body: Body, target_location: Pose, arm: Arms) -> PlaceAction:
+def sample_place_instance(
+    object_body: Body,
+    target_location: Pose,
+    arm: Arms,
+    priors: Dict[str, ParameterPrior] = PLACE_PARAMETER_PRIORS,
+) -> PlaceAction:
     """
-    Build a :class:`PlaceAction` with its 4 tunable velocity fields randomly sampled
-    (see :data:`PLACE_PARAMETER_PRIORS`), everything else concrete.
+    Build a :class:`PlaceAction` with its 4 tunable velocity fields randomly sampled,
+    everything else concrete.
+
+    :param priors: Sampling prior for each tunable field, by field name. Defaults to
+        :data:`PLACE_PARAMETER_PRIORS`; pass a wider set of priors to sample outside the
+        range validated to stack reliably.
     """
     match_expr = a(PlaceAction)(
         object_designator=object_body,
@@ -237,13 +255,13 @@ def sample_place_instance(object_body: Body, target_location: Pose, arm: Arms) -
     match_expr.expression
     v = match_expr.variable
     match_expr.where(
-        v.transport_linear_velocity >= PLACE_PARAMETER_PRIORS["transport_linear_velocity"].low,
-        v.transport_linear_velocity <= PLACE_PARAMETER_PRIORS["transport_linear_velocity"].high,
-        v.placing_linear_velocity >= PLACE_PARAMETER_PRIORS["placing_linear_velocity"].low,
-        v.placing_linear_velocity <= PLACE_PARAMETER_PRIORS["placing_linear_velocity"].high,
-        v.release_opening_velocity >= PLACE_PARAMETER_PRIORS["release_opening_velocity"].low,
-        v.release_opening_velocity <= PLACE_PARAMETER_PRIORS["release_opening_velocity"].high,
-        v.retract_linear_velocity >= PLACE_PARAMETER_PRIORS["retract_linear_velocity"].low,
-        v.retract_linear_velocity <= PLACE_PARAMETER_PRIORS["retract_linear_velocity"].high,
+        v.transport_linear_velocity >= priors["transport_linear_velocity"].low,
+        v.transport_linear_velocity <= priors["transport_linear_velocity"].high,
+        v.placing_linear_velocity >= priors["placing_linear_velocity"].low,
+        v.placing_linear_velocity <= priors["placing_linear_velocity"].high,
+        v.release_opening_velocity >= priors["release_opening_velocity"].low,
+        v.release_opening_velocity <= priors["release_opening_velocity"].high,
+        v.retract_linear_velocity >= priors["retract_linear_velocity"].low,
+        v.retract_linear_velocity <= priors["retract_linear_velocity"].high,
     )
-    return _sample_instance(match_expr, PLACE_PARAMETER_PRIORS, PlaceAction)
+    return _sample_instance(match_expr, priors, PlaceAction)
