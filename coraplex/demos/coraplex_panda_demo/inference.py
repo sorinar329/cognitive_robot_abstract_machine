@@ -497,6 +497,96 @@ def segmind_sees_on_floor(body: Body) -> bool:
     return floor in detected_supports().get(body, set())
 
 
+STACK_XY_TOLERANCE = 0.02
+"""
+Greatest horizontal distance (in meters) between a cube's center and the center of the
+cube it was stacked onto that still counts as stacked.
+
+The cubes are 50 mm, so a cube more than 20 mm off center overhangs its support by most
+of its own width and is on its way down rather than resting.
+"""
+
+STACK_Z_TOLERANCE = 0.012
+"""
+Greatest deviation (in meters) from exactly one cube height above the supporting cube's
+center that still counts as stacked.
+
+Stacked and not-stacked are 50 mm apart in height, so this separates them with a wide
+margin either side.
+"""
+
+ATTEMPT_SETTLE_DURATION = 1.5
+"""
+Real-time seconds a cube is given to fall and come to rest before an attempt is judged.
+
+Judged immediately, a cube still in the air is neither on the floor nor on the stack, and
+a check phrased as "not on the floor" calls that a success.
+"""
+
+
+def cube_edge_length(cube: Body) -> float:
+    """
+    A cube's own height, read from its collision geometry rather than assumed.
+
+    :param cube: The cube to measure.
+    """
+    bounding_box = cube.collision.as_bounding_box_collection_in_frame(
+        cube
+    ).bounding_box()
+    return float(bounding_box.max_z - bounding_box.min_z)
+
+
+def cube_is_stacked_on(cube: Body, supporting_cube: Body) -> bool:
+    """
+    Whether ``cube`` is resting squarely on top of ``supporting_cube``.
+
+    A positive assertion about where the cube actually is: one cube height above its
+    support and horizontally centered on it, both within tolerance. Asking instead
+    whether segmind fails to see the cube on the floor answers a different question --
+    every pose it cannot classify, including mid-air and wedged against the board,
+    passes that test.
+
+    :param cube: The cube that was placed.
+    :param supporting_cube: The cube it was meant to be stacked onto.
+    """
+    placed = numpy.array(cube.global_pose.to_position().evaluate()[:3], dtype=float)
+    support = numpy.array(
+        supporting_cube.global_pose.to_position().evaluate()[:3], dtype=float
+    )
+    horizontal_distance = float(numpy.linalg.norm(placed[:2] - support[:2]))
+    height_above_support = float(placed[2] - support[2])
+    return (
+        horizontal_distance <= STACK_XY_TOLERANCE
+        and abs(height_above_support - cube_edge_length(cube)) <= STACK_Z_TOLERANCE
+    )
+
+
+def verify_stacked(cube: Body, supporting_cube: Body) -> bool:
+    """
+    Judge one attempt, and report it whenever segmind judged it differently.
+
+    :param cube: The cube that was placed.
+    :param supporting_cube: The cube it was meant to be stacked onto.
+    """
+    stacked = cube_is_stacked_on(cube, supporting_cube)
+    if stacked == (not segmind_sees_on_floor(cube)):
+        return stacked
+
+    placed = numpy.array(cube.global_pose.to_position().evaluate()[:3], dtype=float)
+    support = numpy.array(
+        supporting_cube.global_pose.to_position().evaluate()[:3], dtype=float
+    )
+    print(
+        f"[warning] segmind and geometry disagree about {cube.name.name}: segmind says "
+        f"{'on the floor' if segmind_sees_on_floor(cube) else 'off the floor'}, geometry "
+        f"says {'stacked' if stacked else 'not stacked'} "
+        f"(horizontal {numpy.linalg.norm(placed[:2] - support[:2]):.4f} m, "
+        f"height above support {placed[2] - support[2]:+.4f} m, "
+        f"expected {cube_edge_length(cube):.4f} m). Going with geometry."
+    )
+    return stacked
+
+
 def segmind_approved() -> bool:
     """
     Whether segmind sees the whole stack standing, every expected support at once.
@@ -540,6 +630,90 @@ def _apply_object_friction(pickup_action: PickUpAction) -> None:
         )
 
 
+class UprightGraspDescription(GraspDescription):
+    """
+    A grasp whose approach is oriented in the world rather than in the object's own
+    frame, so it stays a top-down grasp however the object is lying.
+
+    :class:`GraspDescription` builds its pose sequence in the object's frame, so an
+    object's own rotation carries into the approach: a cube knocked onto its side turns
+    a top-down grasp into a sideways one, which the arm reaches for by bending across the
+    row and sweeping its neighbours. A cube presents the same square face whichever way
+    up it is, so nothing is lost by ignoring its rotation.
+
+    ..note:: Only sound for objects that can be grasped from any orientation. A shape
+        that must be taken by a particular feature -- a handle, a spout -- needs the
+        object-relative grasp this replaces.
+    """
+
+    def grasp_pose_sequence(self, body: Body) -> list[Pose]:
+        """
+        Overrides :meth:`GraspDescription.grasp_pose_sequence` by anchoring the sequence
+        to the world's frame at the body's position instead of to the body's own frame.
+
+        Only matters for callers that reach this method directly (``PickUpAction``'s own
+        lift, which uses it to compute the lift-off direction): the reach onto the object
+        itself does not call it at all, see :meth:`pose_sequence`.
+
+        :param body: The body being grasped.
+        """
+        return self.pose_sequence(
+            Pose(body.global_pose.to_position(), reference_frame=world.root), body
+        )
+
+    def pose_sequence(
+        self, target_T_grasp_pose: Pose, body: Body = None, reverse: bool = False
+    ) -> list[Pose]:
+        """
+        Overrides :meth:`GraspDescription.pose_sequence` by discarding whatever rotation
+        ``target_T_grasp_pose`` itself carries before composing the grasp orientation
+        onto it.
+
+        This is the method that actually matters: ``PickUpAction._grasp_attempt_plan``
+        drives ``ReachAction`` with ``target_pose=self.object_designator.global_pose`` --
+        the object's own, fully resolved pose, rotation included -- and the base
+        implementation multiplies that rotation straight into the gripper's target
+        orientation (``target_T_grasp_pose.to_rotation_matrix() @ ...``). Overriding
+        :meth:`grasp_pose_sequence` alone (as this class first did) never touches that
+        path, since ``ReachAction`` calls this method directly rather than through it --
+        the arm kept bending to reach a knocked-over cube's original top face exactly as
+        before.
+
+        Safe for every call this class actually sees: the place target this run builds
+        (see ``sample_actions``'s ``place_location``) already carries an identity
+        rotation, so there is no legitimate desired orientation being discarded here,
+        only the object's own incidental one.
+
+        :param target_T_grasp_pose: The pose of the grasp in the target frame.
+        :param body: The body of the grasp.
+        :param reverse: If the sequence should be reversed.
+        """
+        upright_target = Pose(
+            target_T_grasp_pose.to_position(),
+            reference_frame=target_T_grasp_pose.reference_frame,
+        )
+        return super().pose_sequence(upright_target, body, reverse)
+
+
+def _as_upright(grasp_description: GraspDescription) -> UprightGraspDescription:
+    """
+    The same grasp, described so its approach stays oriented in the world.
+
+    Sampling an action rebuilds its grasp description field by field as a plain
+    :class:`GraspDescription` (see ``pickup_place_parameterization``), which drops any
+    subclass handed to it, so the sampled action has to be given one back.
+
+    :param grasp_description: The grasp the sampled action came back with.
+    """
+    return UprightGraspDescription(
+        grasp_description.approach_direction,
+        grasp_description.vertical_alignment,
+        grasp_description.end_effector,
+        rotate_gripper=grasp_description.rotate_gripper,
+        manipulation_offset=grasp_description.manipulation_offset,
+    )
+
+
 def sample_actions(
     object_body: Body, target_body: Body, picking_arm: Arms
 ) -> tuple[PickUpAction, PlaceAction]:
@@ -554,7 +728,7 @@ def sample_actions(
         z=target_pose.z + STACK_HEIGHT_OFFSET,
         reference_frame=world.root,
     )
-    grasp_description = GraspDescription(
+    grasp_description = UprightGraspDescription(
         ApproachDirection.FRONT,
         VerticalAlignment.TOP,
         context.robot.get_arms()[0].end_effector,
@@ -565,6 +739,7 @@ def sample_actions(
     pickup_action = sample_pickup_instance(
         object_body, picking_arm, grasp_description, priors=WIDE_PICKUP_PARAMETER_PRIORS
     )
+    pickup_action.grasp_description = _as_upright(pickup_action.grasp_description)
     place_action = sample_place_instance(
         object_body, place_location, picking_arm, priors=WIDE_PLACE_PARAMETER_PRIORS
     )
@@ -607,15 +782,20 @@ def build_stack_plan(
 
 
 def perform_attempt(
-    pickup_action: PickUpAction, place_action: PlaceAction, step_name: str
+    pickup_action: PickUpAction,
+    place_action: PlaceAction,
+    step_name: str,
+    supporting_cube: Body,
 ) -> bool:
     """
     Build and perform one park/pick/place/park attempt, logging and swallowing any
     failure instead of letting it propagate, see ``demo2.py``'s own
     :func:`attempt_stack` for why.
 
-    :return: Whether :attr:`pickup_action.object_designator` avoided ending up on the
-        floor.
+    :param supporting_cube: The cube this attempt stacks onto, which the result is
+        judged against.
+    :return: Whether :attr:`pickup_action.object_designator` ended up stacked on
+        ``supporting_cube``.
     """
     plan = build_stack_plan(pickup_action, place_action)
     try:
@@ -627,7 +807,8 @@ def perform_attempt(
         except Exception as park_exc:
             print(f"[warning] re-park after {step_name} also failed: {park_exc}")
 
-    return not segmind_sees_on_floor(pickup_action.object_designator)
+    time.sleep(ATTEMPT_SETTLE_DURATION)
+    return verify_stacked(pickup_action.object_designator, supporting_cube)
 
 
 # %% the diagnose-and-correct loop
@@ -717,11 +898,13 @@ def attempt_cube_with_correction(
     pickup_action, place_action = sample_actions(
         cube_to_pick, cube_to_stack_on, picking_arm
     )
-    succeeded = perform_attempt(pickup_action, place_action, step_label)
+    succeeded = perform_attempt(
+        pickup_action, place_action, step_label, cube_to_stack_on
+    )
     initial_succeeded = succeeded
     print(
         f"[info] {step_label} attempt 1 "
-        f"{'stayed off the floor' if succeeded else 'ended up on the FLOOR'}"
+        f"{'is stacked' if succeeded else 'is NOT stacked'}"
     )
 
     diagnoses: list[tuple[str, RootCauseDiagnosis]] = []
@@ -750,6 +933,7 @@ def attempt_cube_with_correction(
             pickup_action,
             place_action,
             f"{step_label} (correction {correction_attempts})",
+            cube_to_stack_on,
         )
         diagnosis_outcomes.append(
             DiagnosisOutcome(
