@@ -42,6 +42,14 @@ from coraplex.datastructures.enums import (
 from coraplex.datastructures.grasp import GraspDescription
 
 from coraplex.execution_environment import ExecutionEnvironment
+
+# Not used directly (this demo never persists anything to a database) -- imported
+# purely so ormatic's DAO registry gets populated as a side effect. Without it,
+# sample_pickup_instance/sample_place_instance's underlying UnderspecifiedParameters
+# machinery fails with NoDAOFoundError the first time it tries to extract features
+# from a literal Body/GraspDescription argument, since that internally calls to_dao().
+from coraplex.orm.ormatic_interface import Base  # noqa: F401
+
 from coraplex.plans.factories import sequential
 from coraplex.plans.plan_node import PlanNode
 from coraplex.robot_plans.actions.core.pick_up import PickUpAction
@@ -142,7 +150,7 @@ thread = threading.Thread(target=executor.spin, daemon=True, name="rclpy-executo
 thread.start()
 
 world = MJCFParser(
-    "/home/sorin/dev/manipulation_experiments/resources/generated/stacking_scene.xml"
+    "/home/nvasant/workspace/ros/src/manipulation_experiments/resources/generated/stacking_scene.xml"
 ).parse()
 Panda.from_world(world)
 publisher = VizMarkerPublisher(_world=world, node=node).with_tf_publisher()
