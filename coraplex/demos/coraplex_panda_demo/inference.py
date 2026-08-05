@@ -65,6 +65,10 @@ from causal_diagnosis import (
     PLACE_MODEL_PATH,
     RootCauseDiagnosis,
 )
+from parked_arm_detection_gate import (
+    ParkedArmDetectionGate,
+    RobotArmParkDeviations,
+)
 from pickup_place_parameterization import (
     ParameterPrior,
     sample_pickup_instance,
@@ -150,7 +154,7 @@ thread = threading.Thread(target=executor.spin, daemon=True, name="rclpy-executo
 thread.start()
 
 world = MJCFParser(
-    "/home/nvasant/workspace/ros/src/manipulation_experiments/resources/generated/stacking_scene.xml"
+    "/home/sorin/dev/manipulation_experiments/resources/generated/stacking_scene.xml"
 ).parse()
 Panda.from_world(world)
 publisher = VizMarkerPublisher(_world=world, node=node).with_tf_publisher()
@@ -244,7 +248,7 @@ How many times a single cube is retried with a causally corrected sample before 
 is abandoned as a hard failure.
 """
 
-ITERATION_TIME_LIMIT = 160.0
+ITERATION_TIME_LIMIT = 120.0
 """
 Wall-clock budget (in seconds) for one iteration, checked between cubes.
 
@@ -441,6 +445,13 @@ motion_statechart_context = MotionStatechartContext(world=world)
 Gives the detector access to the world's bodies and their collision geometry.
 """
 
+detection_gate = ParkedArmDetectionGate(
+    arm=RobotArmParkDeviations(world=world, robot=context.robot)
+)
+"""
+Holds every support detection back until the arm has parked out of the way.
+"""
+
 
 def expected_supports() -> list[tuple[Body, Body]]:
     """
@@ -459,11 +470,17 @@ def expected_supports() -> list[tuple[Body, Body]]:
 
 def detected_supports() -> dict[Body, set[Body]]:
     """
-    Every support relation segmind currently sees among the cubes.
+    Every support relation segmind currently sees among the cubes, sampled once
+    :class:`ParkedArmDetectionGate` reports the arm parked and the scene settled.
 
     The detector reports only relations it has not seen before, so its context is
     cleared first to make each iteration's result independent of earlier ones.
     """
+    if not detection_gate.wait_for_parked_arm():
+        print(
+            f"[warning] the arm did not reach its park position within "
+            f"{detection_gate.arrival_timeout:.1f}s -- detecting supports anyway"
+        )
     segmind_context.latest_support.clear()
     support_detector.update_context_and_events(
         motion_statechart_context, segmind_context, [box, box1, box2, box3]
