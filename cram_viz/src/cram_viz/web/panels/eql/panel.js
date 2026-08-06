@@ -36,9 +36,9 @@ Panels.define('eql', function (root, bus) {
   let kb = null;   // /api/kb overview (presets + entity details)
 
   // %% boot
-  fetch('/api/kb').then(function (r) { return r.json(); }).then(boot).catch(function (err) {
-    kbStatus.textContent = 'KB error';
-    answerEl.innerHTML = '<div class="qerr">Failed to reach the EQL server:\n' + esc(String(err)) + '</div>';
+  fetch(SceneContext.withScene('/api/kb')).then(ResponseUtil.parseJson).then(boot).catch(function (err) {
+    kbStatus.textContent = 'EQL unavailable';
+    answerEl.innerHTML = '<div class="qerr">EQL unavailable: ' + esc(String((err && err.message) || err)) + '</div>';
   });
 
   function boot(payload) {
@@ -126,11 +126,11 @@ Panels.define('eql', function (root, bus) {
       const r = await fetch('/api/eql', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code: code }),
+        body: JSON.stringify({ code: code, scene: SceneContext.name() }),
       });
-      render(code, await r.json());
+      render(code, await ResponseUtil.parseJson(r));
     } catch (err) {
-      render(code, { ok: false, error: String(err) });
+      render(code, { ok: false, error: String((err && err.message) || err) });
     }
     running = false;
     runBtn.textContent = 'Run';

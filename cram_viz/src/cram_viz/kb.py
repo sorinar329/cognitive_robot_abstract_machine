@@ -105,19 +105,19 @@ def _read_json(path: Path) -> Any:
         return None
 
 
-def scene_dir() -> Optional[Path]:
+def scene_dir(scene_id: Optional[str] = None) -> Optional[Path]:
     """
-    Directory of the active scene bundle, or None without one.
+    Directory of the given scene bundle, or the active one when none is given.
     """
-    name = scene_name()
+    name = scene_id or scene_name()
     return paths.scenes_dir() / name if name else None
 
 
-def load_scene() -> Tuple[Dict[str, Any], Dict[str, Any]]:
+def load_scene(scene_id: Optional[str] = None) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     """
-    The active scene's (scene.json, trajectory.json), or ``({}, {})``.
+    The given scene's (scene.json, trajectory.json), or ``({}, {})``.
     """
-    directory = scene_dir()
+    directory = scene_dir(scene_id)
     if not directory:
         return {}, {}
     scene = _read_json(directory / "scene.json")
@@ -127,18 +127,18 @@ def load_scene() -> Tuple[Dict[str, Any], Dict[str, Any]]:
     return scene, trajectory if isinstance(trajectory, dict) else {}
 
 
-def load_urdf() -> Tuple[List[str], List[Dict[str, str]]]:
+def load_urdf(scene_id: Optional[str] = None) -> Tuple[List[str], List[Dict[str, str]]]:
     """
-    Parse the active scene's robot URDF into (links, joints).
+    Parse the given scene's robot URDF into (links, joints).
 
     Used by the kinematic-tree view; a regex parse suffices because the bundled URDFs
     are flat.
     """
-    scene, _ = load_scene()
+    scene, _ = load_scene(scene_id)
     robot_model = next(
         (model for model in scene.get("models", []) if model.get("robot")), None
     )
-    directory = scene_dir()
+    directory = scene_dir(scene_id)
     if not robot_model or not directory:
         return [], []
     urdf_path = directory / robot_model["urdf"]
@@ -768,19 +768,18 @@ def _side_of_name(name: str) -> Optional[ArmSide]:
 
 class KB:
     """
-    The recorded episode as EQL-queryable entities.
+    One scene's recorded episode as EQL-queryable entities.
 
-    Built once from the active scene bundle plus a static scan of the CRAM repository;
-    every attribute is a plain list of dataclass instances that EQL variables range
-    over.
+    Built from a scene bundle plus a static scan of the CRAM repository; every
+    attribute is a plain list of dataclass instances that EQL variables range over.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, scene_id: Optional[str] = None) -> None:
         """
-        Build every entity list from the active scene bundle and a static
+        Build every entity list from the given scene bundle and a static
         scan of the CRAM architecture.
         """
-        scene, trajectory = load_scene()
+        scene, trajectory = load_scene(scene_id)
         frames_per_second = scene.get("fps", 30)
         parts = (scene.get("robot") or {}).get("parts") or {}
         robot_name = (scene.get("robot") or {}).get("name", "robot")
@@ -1005,25 +1004,33 @@ class KB:
         ]
 
 
-_kb: Optional[KB] = None
+#: knowledge bases already built, keyed by resolved scene name
+_kb_cache: Dict[Optional[str], KB] = {}
 
 
-def get_kb() -> KB:
+def get_kb(scene_id: Optional[str] = None) -> KB:
     """
-    The process-wide knowledge base, built on first use.
+    The knowledge base for one scene, built on first use and cached per scene.
+
+    :param scene_id: A scene to build against, or the active scene when None.
     """
-    global _kb
-    if _kb is None:
-        _kb = KB()
-    return _kb
+    resolved = scene_id or scene_name()
+    if resolved not in _kb_cache:
+        _kb_cache[resolved] = KB(resolved)
+    return _kb_cache[resolved]
 
 
-def reset_kb() -> None:
+def reset_kb(scene_id: Optional[str] = None) -> None:
     """
-    Drop the cached KB (tests point CRAM_VIZ_SCENES at fixtures).
+    Drop the cached KB for one scene, or every scene when none is given.
+
+    Tests point ``CRAM_VIZ_SCENES``/``CRAM_VIZ_SCENE`` at fixtures and call this with no
+    argument to drop every scene the previous test may have cached.
     """
-    global _kb
-    _kb = None
+    if scene_id is None:
+        _kb_cache.clear()
+    else:
+        _kb_cache.pop(scene_id, None)
 
 
 # %% EQL session
@@ -1057,11 +1064,11 @@ EQL_FACTORIES = {
 }
 
 
-def fresh_namespace() -> Dict[str, Any]:
+def fresh_namespace(scene_id: Optional[str] = None) -> Dict[str, Any]:
     """
     A namespace for evaluating one EQL query (fresh variables each time).
     """
-    kb = get_kb()
+    kb = get_kb(scene_id)
     namespace: Dict[str, Any] = dict(EQL_FACTORIES)
     namespace.update(
         Position=Position,
@@ -1116,7 +1123,9 @@ def _jsonable(value: Any) -> Any:
     return repr(value)
 
 
-def run_query(code: str, limit: int = 200) -> Dict[str, Any]:
+def run_query(
+    code: str, limit: int = 200, scene_id: Optional[str] = None
+) -> Dict[str, Any]:
     """
     Execute an EQL query string and return a JSON-able result payload.
 
@@ -1125,8 +1134,9 @@ def run_query(code: str, limit: int = 200) -> Dict[str, Any]:
 
     :param code: The EQL query source.
     :param limit: Maximum number of result rows to return.
+    :param scene_id: The scene to query, or the active scene when None.
     """
-    namespace = fresh_namespace()
+    namespace = fresh_namespace(scene_id)
     tree = ast.parse(code, mode="exec")
     if not tree.body:
         raise ValueError("empty query")
@@ -1221,11 +1231,13 @@ def _item_row(item: Any, highlight: List[str]) -> Dict[str, Any]:
 
 
 # %% the UI graph
-def graph_payload() -> Dict[str, Any]:
+def graph_payload(scene_id: Optional[str] = None) -> Dict[str, Any]:
     """
     The knowledge-graph overview: nodes, edges, details and presets.
+
+    :param scene_id: The scene to build the graph from, or the active scene when None.
     """
-    kb = get_kb()
+    kb = get_kb(scene_id)
     nodes, edges, details = [], [], {}
 
     def add(node_id: str, label: str, group: str, lines: List[str]) -> None:
@@ -1422,7 +1434,7 @@ def graph_payload() -> Dict[str, Any]:
             link(bench_object.name, "semantic_digital_twin", "modelled in")
 
     # the executed plan tree (captured from the real PlanNode graph)
-    scene, _ = load_scene()
+    scene, _ = load_scene(scene_id)
     if scene.get("planTrees"):
         node_count = sum(_count_plan_nodes(tree) for tree in scene["planTrees"])
         add(
@@ -1454,7 +1466,7 @@ def graph_payload() -> Dict[str, Any]:
         "nodes": nodes,
         "edges": edges,
         "details": details,
-        "presets": get_presets(),
+        "presets": get_presets(scene_id),
     }
 
 
@@ -1493,21 +1505,23 @@ def _view() -> tuple:
 
 
 # %% the graph-panel tabs
-def view_payload(name: str) -> Dict[str, Any]:
+def view_payload(name: str, scene_id: Optional[str] = None) -> Dict[str, Any]:
     """
     One tab of the graph panel.
 
     ``knowledge`` is the entity graph (the default, with drill-down); the others are
     structural views of the same demo that the UI can overlay with live status from the
     bridge (see :mod:`cram_viz.live.http`, ``/plan`` and ``/chart``).
+
+    :param scene_id: The scene to build the view from, or the active scene when None.
     """
-    kb = get_kb()
+    kb = get_kb(scene_id)
     if name == "knowledge":
-        return graph_payload()
+        return graph_payload(scene_id)
     if name == "kinematics":
-        return _urdf_view(kb)
+        return _urdf_view(kb, scene_id)
     if name == "plan":
-        return _plan_view()
+        return _plan_view(scene_id)
     if name == "chart":
         return _chart_view()
     return {"ok": False, "error": "unknown view: %s" % name}
@@ -1609,15 +1623,19 @@ def _count_plan_nodes(tree: Dict[str, Any]) -> int:
     return 1 + sum(_count_plan_nodes(child) for child in tree.get("children", []))
 
 
-def expand_node(node_id: str) -> Optional[Dict[str, Any]]:
+def expand_node(
+    node_id: str, scene_id: Optional[str] = None
+) -> Optional[Dict[str, Any]]:
     """
     The inside view of a double-clicked node, or None if not drillable.
+
+    :param scene_id: The scene the node belongs to, or the active scene when None.
     """
-    kb = get_kb()
+    kb = get_kb(scene_id)
     if node_id == kb.robot.name:  # robot → full URDF kinematic tree
-        return _urdf_view(kb)
+        return _urdf_view(kb, scene_id)
     if node_id == "plan":  # → the executed plan tree
-        return _plan_view()
+        return _plan_view(scene_id)
     package = next((entry for entry in kb.packages if entry.name == node_id), None)
     if package:
         return _package_view(kb, package)
@@ -1663,7 +1681,7 @@ def shorten_action_label(label: str) -> str:
     return label.removesuffix("Action") or label
 
 
-def _plan_view() -> Dict[str, Any]:
+def _plan_view(scene_id: Optional[str] = None) -> Dict[str, Any]:
     """
     The executed plan as a tree, one node per plan node the demo ran.
 
@@ -1673,8 +1691,11 @@ def _plan_view() -> Dict[str, Any]:
     statechart. So every inner node of a recorded tree reads ``CREATED``, and
     real per-step progress only shows up while the live bridge is attached
     (it derives it from the statechart life cycle).
+
+    :param scene_id: The scene to read the plan tree from, or the active scene when
+        None.
     """
-    scene, _ = load_scene()
+    scene, _ = load_scene(scene_id)
     trees = scene.get("planTrees") or []
     nodes, edges, details, add = _view()
     counter = [0]
@@ -1733,15 +1754,17 @@ def _is_movable(joint: Dict[str, str]) -> bool:
     return joint["type"] != FIXED_JOINT_TYPE
 
 
-def _urdf_view(kb: KB) -> Dict[str, Any]:
+def _urdf_view(kb: KB, scene_id: Optional[str] = None) -> Dict[str, Any]:
     """
     The scene robot's URDF as a kinematic tree.
 
     Every link is a node, every joint an edge (parent → child); movable joints are solid
     edges, fixed ones dashed. Links are coloured by robot part from the recorded
     annotation.
+
+    :param scene_id: The scene ``kb`` was built from, or the active scene when None.
     """
-    links, joints = load_urdf()
+    links, joints = load_urdf(scene_id)
     nodes, edges, details, add = _view()
     if not links:
         return {
@@ -1752,7 +1775,7 @@ def _urdf_view(kb: KB) -> Dict[str, Any]:
             "details": {},
         }
 
-    scene, _ = load_scene()
+    scene, _ = load_scene(scene_id)
     parts = (scene.get("robot") or {}).get("parts") or {}
     link_to_part = {
         link: part for part, part_links in parts.items() for link in part_links
@@ -1996,14 +2019,16 @@ ARCH_PRESETS = [
 ]
 
 
-def get_presets() -> List[Dict[str, str]]:
+def get_presets(scene_id: Optional[str] = None) -> List[Dict[str, str]]:
     """
     Ready-made queries for the EQL panel.
 
     Scene presets are generated from the loaded scene, so they stay valid for any
     onboarded robot/environment; the architecture presets are static.
+
+    :param scene_id: The scene to generate presets for, or the active scene when None.
     """
-    kb = get_kb()
+    kb = get_kb(scene_id)
     presets = [
         {"text": "which robot is this?", "code": "the(entity(rob))"},
         {"text": "which arms does it have?", "code": "an(entity(arm))"},

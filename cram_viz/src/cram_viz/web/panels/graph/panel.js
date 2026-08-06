@@ -90,7 +90,7 @@ Panels.define('graph', function (root, bus) {
   async function drill(id) {
     if (!view.details[id]) return;
     try {
-      const r = await fetch('/api/kb/expand?node=' + encodeURIComponent(id));
+      const r = await fetch(SceneContext.withScene('/api/kb/expand?node=' + encodeURIComponent(id)));
       const p = await r.json();
       if (!p.ok) return;                       // node has no inside view
       stacks[tab].push(view);
@@ -117,9 +117,9 @@ Panels.define('graph', function (root, bus) {
       emptyEl.style.display = '';
       emptyEl.textContent = 'loading…';
       try {
-        const r = await fetch(TABS[name].url);
+        const r = await fetch(SceneContext.withScene(TABS[name].url));
         if (r.status === 404) throw new Error('this build needs the /api/kb/view route — restart the server');
-        const p = await r.json();
+        const p = await ResponseUtil.parseJson(r);
         if (!p.ok) {
           emptyEl.textContent = p.error || 'view unavailable';
           return;

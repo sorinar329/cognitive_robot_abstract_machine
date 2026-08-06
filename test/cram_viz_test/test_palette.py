@@ -1,16 +1,25 @@
 """
 Recorded and live object colours must come from one cycle.
 
-The onboarder bakes colours into a scene bundle while the bridge assigns them on
-the fly. When the two hold separate lists, an object beyond the shorter list's
-length changes colour the moment the viewer attaches to a running demo.
+The onboarder bakes colours into a scene bundle while the bridge assigns them on the
+fly. When the two hold separate lists, an object beyond the shorter list's length
+changes colour the moment the viewer attaches to a running demo.
 """
 
 import inspect
 
 from cram_viz.live import bridge
 from cram_viz.onboard import demo
-from cram_viz.palette import OBJECT_COLORS, ObjectPalette
+from cram_viz.palette import OBJECT_COLORS, ObjectPalette, css_color
+
+
+class TestCssColor:
+    def test_unit_channels_become_css_hex(self):
+        assert css_color(0.8, 0.4, 0.2) == "#cc6633"
+
+    def test_the_extremes_stay_within_range(self):
+        assert css_color(0.0, 0.0, 0.0) == "#000000"
+        assert css_color(1.0, 1.0, 1.0) == "#ffffff"
 
 
 class TestObjectPalette:
@@ -39,8 +48,8 @@ class TestOnlyOnePaletteExists:
 
     def test_both_producers_agree_beyond_the_shortest_former_list(self):
         """
-        Index 6 is where the bridge's old ten-colour list and the onboarder's old
-        six-colour list disagreed.
+        Index 6 is where the bridge's old ten-colour list and the onboarder's old six-
+        colour list disagreed.
         """
         palette = ObjectPalette()
         assert palette.color_for(6) == OBJECT_COLORS[6]

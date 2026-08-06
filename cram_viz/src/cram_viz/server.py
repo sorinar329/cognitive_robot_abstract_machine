@@ -12,6 +12,10 @@ Serves three things from one port (default 8711):
       GET  /api/kb/expand?node= drill-down subgraph for one node
       POST /api/eql             run an EQL query string
 
+Every route also takes a ``scene`` parameter (query string on the GET routes, a
+``"scene"`` key in the POST body) naming which onboarded scene to answer from; the
+active scene otherwise falls back to ``CRAM_VIZ_SCENE``/``scenes/index.json``.
+
 The API needs krrood (EQL). Without it the server still serves the viewer and
 answers API calls with ``{"ok": false, "error": ...}`` so the frontend can say
 why the knowledge panel is empty.
@@ -148,11 +152,12 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         route = self.path.split("?")[0]
         if route.startswith("/scenes/"):
             return self._serve_scene_file(route)
+        scene_id = (self._query().get("scene") or [None])[0]
         if route == "/api/kb":
-            return self._guarded(lambda: kb_module.graph_payload())
+            return self._guarded(lambda: kb_module.graph_payload(scene_id))
         if route == "/api/kb/view":
             name = (self._query().get("name") or ["knowledge"])[0]
-            return self._guarded(lambda: kb_module.view_payload(name))
+            return self._guarded(lambda: kb_module.view_payload(name, scene_id))
         if route == "/api/kb/expand":
             node = (self._query().get("node") or [""])[0]
 
@@ -160,7 +165,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 """
                 The node's subgraph, or a "not drillable" error if it has none.
                 """
-                payload = kb_module.expand_node(node)
+                payload = kb_module.expand_node(node, scene_id)
                 return payload if payload else {"ok": False, "error": "not drillable"}
 
             return self._guarded(expand)
@@ -181,7 +186,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             if not code:
                 return self._json({"ok": False, "error": "empty query"})
             with _EQL_LOCK:
-                return self._json(kb_module.run_query(code))
+                return self._json(kb_module.run_query(code, scene_id=req.get("scene")))
         except SyntaxError as ex:
             return self._json({"ok": False, "error": "SyntaxError: %s" % ex})
         except Exception as ex:

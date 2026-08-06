@@ -4,7 +4,7 @@ from coraplex.datastructures.dataclasses import Context
 from coraplex.datastructures.enums import Arms, ApproachDirection, VerticalAlignment
 from coraplex.datastructures.grasp import GraspDescription
 
-from coraplex.execution_environment import simulated_robot
+from coraplex.execution_environment import simulated_robot, simulated_robot_advanced
 from coraplex.plans.factories import sequential
 from coraplex.robot_plans.actions.composite.transporting import TransportAction
 from coraplex.robot_plans.actions.core.robot_body import ParkArmsAction, MoveTorsoAction
@@ -33,19 +33,9 @@ spoon = STLParser(
         os.path.dirname(__file__), "..", "..", "resources", "objects", "spoon.stl"
     )
 ).parse()
-bowl = STLParser(
-    os.path.join(
-        os.path.dirname(__file__), "..", "..", "resources", "objects", "bowl.stl"
-    )
-).parse()
+
 
 with world.modify_world():
-    world.merge_world_at_pose(
-        bowl,
-        HomogeneousTransformationMatrix.from_xyz_quaternion(
-            2.4, 2.2, 1, reference_frame=world.root
-        ),
-    )
     connection = FixedConnection(
         parent=world.get_body_by_name("cabinet10_drawer_top"),
         child=spoon.root,
@@ -77,7 +67,7 @@ with world.modify_world():
     world_reasoner.reason()
     world.add_semantic_annotations(
         [
-            Bowl(root=world.get_body_by_name("bowl.stl")),
+
             Spoon(root=world.get_body_by_name("spoon.stl")),
         ]
     )
@@ -89,7 +79,7 @@ with world.modify_world():
     )
 
 context.evaluate_conditions = False
-
+context.teleport_to_navigate_in_simulation = True
 plan = sequential(
     [
         ParkArmsAction(Arms.BOTH),
@@ -97,11 +87,6 @@ plan = sequential(
         TransportAction(
             world.get_body_by_name("milk.stl"),
             Pose.from_xyz_rpy(4.9, 3.3, 0.8, yaw=1.57, reference_frame=world.root),
-            Arms.LEFT,
-        ),
-        TransportAction(
-            world.get_body_by_name("bowl.stl"),
-            Pose.from_xyz_rpy(5, 3.3, 0.75, yaw=1.57, reference_frame=world.root),
             Arms.LEFT,
         ),
         TransportAction(
@@ -118,5 +103,5 @@ plan = sequential(
     context=context,
 ).plan
 
-with simulated_robot:
+with simulated_robot_advanced:
     plan.perform()

@@ -49,6 +49,7 @@ def start_visualization(world: World) -> None:
         return
     rclpy.init()
     node = rclpy.create_node("viz_marker")
+    print(world.root)
     VizMarkerPublisher(_world=world, node=node).with_tf_publisher()
 
 
@@ -120,7 +121,7 @@ def setup_world() -> World:
             parent=apartment_root, child=pr2_root, world=apartment_world
         )
         apartment_world.merge_world(pr2_sem_world, c_root_bf)
-        c_root_bf.origin = HomogeneousTransformationMatrix.from_xyz_rpy(1.5, 2.5, 0)
+        c_root_bf.origin = HomogeneousTransformationMatrix.from_xyz_rpy(1.2, 2.5, 0)
 
     apartment_world.get_body_by_name("milk.stl").parent_connection.origin = (
         HomogeneousTransformationMatrix.from_xyz_rpy(

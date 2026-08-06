@@ -2,8 +2,8 @@
 Consistency checks of the packaged frontend, plus the node-based JS tests.
 
 The asset checks keep the panel architecture honest: every asset the shell references
-must exist, every panel id in config.js must be defined by an included panel script,
-and panels must not reach outside their own DOM subtree.
+must exist, every panel id in config.js must be defined by an included panel script, and
+panels must not reach outside their own DOM subtree.
 """
 
 import re
@@ -100,6 +100,19 @@ class TestAssetConsistency:
         for panel_js in panel_scripts():
             assert "'static/" not in panel_js.read_text(), panel_js.name
 
+    def test_stage_backdrop_photo_is_opt_in(self):
+        """
+        The blurred lab-photo backdrop must not render by default; only the ``.stage-
+        bg.is-visible`` modifier (toggled from the layers panel) may reference it.
+        """
+        css = read("app.css")
+        base_rule = re.search(r"\.stage-bg\{([^}]*)\}", css)
+        assert base_rule is not None
+        assert "url(" not in base_rule.group(1)
+        visible_rule = re.search(r"\.stage-bg\.is-visible\{([^}]*)\}", css)
+        assert visible_rule is not None
+        assert "img/ai-picture.png" in visible_rule.group(1)
+
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")
 class TestJsUnits:
@@ -120,3 +133,18 @@ class TestJsUnits:
 
     def test_graph_status_rendering(self):
         self.run_node("test_graph_status.js")
+
+    def test_scene_context(self):
+        self.run_node("test_scene_context.js")
+
+    def test_scene_picker(self):
+        self.run_node("test_scene_picker.js")
+
+    def test_response_util(self):
+        self.run_node("test_response_util.js")
+
+    def test_split_resize(self):
+        self.run_node("test_split_resize.js")
+
+    def test_collada_mesh(self):
+        self.run_node("test_collada_mesh.js")

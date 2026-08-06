@@ -51,6 +51,56 @@
     localStorage.setItem(storeKey, '50');
   });
 
+  // %% resizable rows, for a slot stacking exactly two panels top/bottom
+  function makeRowResizable(slotEl) {
+    const panels = Array.prototype.filter.call(slotEl.children, el => el.classList.contains('panel'));
+    if (panels.length !== 2) return; // a third stacked panel needs its own divider math
+    const [top, bottom] = panels;
+    slotEl.style.rowGap = '4px'; /* 4 + 8px divider + 4 = former 16px gap */
+
+    const rowKey = 'splitRows:' + slotEl.dataset.slot + ':' + location.pathname.split('/').pop();
+    const rowDivider = document.createElement('div');
+    rowDivider.className = 'split-divider split-divider-row';
+    rowDivider.title = 'Drag to resize · double-click for 50/50';
+    slotEl.insertBefore(rowDivider, bottom);
+
+    function applyTop(pct) {
+      pct = Math.min(80, Math.max(15, pct));
+      top.style.flex = `0 0 ${pct}%`;
+      bottom.style.flex = '1 1 0';
+      return pct;
+    }
+
+    let topPct = parseFloat(localStorage.getItem(rowKey)) || 35;
+    applyTop(topPct);
+
+    rowDivider.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      rowDivider.setPointerCapture(e.pointerId);
+      rowDivider.classList.add('dragging');
+      const rect = slotEl.getBoundingClientRect();
+
+      function onMove(ev) {
+        topPct = applyTop((ev.clientY - rect.top) / rect.height * 100);
+      }
+      function onUp() {
+        rowDivider.classList.remove('dragging');
+        rowDivider.removeEventListener('pointermove', onMove);
+        rowDivider.removeEventListener('pointerup', onUp);
+        localStorage.setItem(rowKey, topPct.toFixed(1));
+      }
+      rowDivider.addEventListener('pointermove', onMove);
+      rowDivider.addEventListener('pointerup', onUp);
+    });
+
+    rowDivider.addEventListener('dblclick', () => {
+      topPct = applyTop(35);
+      localStorage.setItem(rowKey, '35');
+    });
+  }
+  makeRowResizable(left);
+  makeRowResizable(right);
+
   // %% maximize button on the knowledge panel
   const head = right.querySelector('.panel-head');
   if (head) {

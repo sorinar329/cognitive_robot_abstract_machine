@@ -911,6 +911,11 @@ def velocity_convergence_expression(
     ref = []
     symbols = []
     for dof in context.world.active_degrees_of_freedom:
+        if dof.limits.upper.velocity is None:
+            # No velocity limit is known for this dof (e.g. an environment joint
+            # parsed without one), so there is no maximum velocity to derive a
+            # convergence threshold from; exclude it from the convergence check.
+            continue
         velocity_limit = dof.limits.upper.velocity * joint_convergence_threshold
         velocity_limit = min(max(minimum_threshold, velocity_limit), maximum_threshold)
         ref.append(velocity_limit)

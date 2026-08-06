@@ -1,9 +1,9 @@
 """
 The colour cycle loose scene objects are drawn in.
 
-Both the onboarder (which bakes colours into a scene bundle) and the live bridge
-(which assigns them on the fly) use this one cycle, so the same object keeps its
-colour whether the viewer renders the recording or the running world.
+Both the onboarder (which bakes colours into a scene bundle) and the live bridge (which
+assigns them on the fly) use this one cycle, so the same object keeps its colour whether
+the viewer renders the recording or the running world.
 """
 
 from __future__ import annotations
@@ -25,6 +25,18 @@ OBJECT_COLORS = (
     "#6bd0c0",
     "#d0c86b",
 )
+
+
+def css_color(red: float, green: float, blue: float) -> str:
+    """
+    :param red: Red channel in ``[0, 1]``.
+    :param green: Green channel in ``[0, 1]``.
+    :param blue: Blue channel in ``[0, 1]``.
+    :return: The color as a css hex string, e.g. ``#cc6633``.
+    """
+    return "#%02x%02x%02x" % tuple(
+        min(255, max(0, round(channel * 255))) for channel in (red, green, blue)
+    )
 
 
 @dataclass(frozen=True)

@@ -6,6 +6,8 @@
  * playback / live controls and the layers overlay.
  *
  * Scene selection: ?scene=<name> URL parameter, else scenes/index.json default.
+ * The header's robot/environment dropdowns (ScenePicker) look independent but
+ * only ever resolve to a scene bundle that was actually onboarded for that pair.
  *
  * Bus events:
  *   emits    scene:part-clicked {id}   click on a robot part / object
@@ -18,8 +20,15 @@
 Panels.define('robot-scene', function (root, bus) {
   root.innerHTML =
     '<div class="panel-head">' +
-    '  <h2>Robot · scene</h2>' +
-    '  <select id="scene-select" class="scene-select" style="display:none"></select>' +
+    '  <h2>Semantic Digital Twin</h2>' +
+    '  <div class="scene-pickers">' +
+    '    <label id="robot-picker" class="scene-picker" style="display:none">Roboter:' +
+    '      <select id="robot-select" class="scene-select"></select>' +
+    '    </label>' +
+    '    <label id="environment-picker" class="scene-picker" style="display:none">Environment:' +
+    '      <select id="environment-select" class="scene-select"></select>' +
+    '    </label>' +
+    '  </div>' +
     '</div>' +
     '<div class="stage">' +
     '  <div id="stage-bg" class="stage-bg"></div>' +
@@ -30,6 +39,7 @@ Panels.define('robot-scene', function (root, bus) {
     '    <label class="lp-row"><input type="checkbox" id="lyr-objects" checked><span>Bench objects</span></label>' +
     '    <label class="lp-row"><input type="checkbox" id="lyr-labels"><span>Object labels</span></label>' +
     '    <label class="lp-row"><input type="checkbox" id="lyr-floor" checked><span>Floor shadow</span></label>' +
+    '    <label class="lp-row"><input type="checkbox" id="lyr-bg"><span>Background image</span></label>' +
     '    <div class="lp-legend" id="lp-legend"></div>' +
     '  </div>' +
     '  <div id="live-indicator" class="live-indicator">● LIVE</div>' +
@@ -39,7 +49,7 @@ Panels.define('robot-scene', function (root, bus) {
     '<div class="workflow">' +
     '  <div class="workflow-head"><span class="wf-btns">' +
     '    <button id="live-btn" class="play-btn live" style="display:none" title="Attach to the running demo (cram-viz-live bridge) — renders the live world instead of the recording">◉ Live</button>' +
-    '    <button id="play-btn" class="play-btn cram" title="Play the recorded coraplex + giskardpy motion trajectory">▶ Play robot motion</button>' +
+    '    <button id="play-btn" class="play-btn cram" title="Play the recorded coraplex + giskardpy motion trajectory">▶ Replay Recorded NEEM</button>' +
     '  </span></div>' +
     '</div>';
   function $(id) { return root.querySelector('#' + id); }
@@ -47,6 +57,7 @@ Panels.define('robot-scene', function (root, bus) {
   console.log('%c[cram_viz] robot-scene panel', 'color:#39d5c8;font-weight:bold');
   const container = $('viewer');
   const statusEl = $('viewer-status');
+  const stageBgEl = $('stage-bg');
   const SCENES = 'scenes/';
 
   //: how often the viewer asks whether a live bridge is reachable, in ms
@@ -69,16 +80,19 @@ Panels.define('robot-scene', function (root, bus) {
   renderer.toneMappingExposure = 0.95;
   container.appendChild(renderer.domElement);
 
-  // soft vertical-gradient studio backdrop
-  (function () {
+  // soft vertical-gradient studio backdrop — kept around so it can be swapped
+  // back in once the "Background image" layer (a transparent canvas over the
+  // DOM photo behind it) is switched off again
+  const studioBackdrop = (function () {
     const cv = document.createElement('canvas');
     cv.width = 2; cv.height = 256;
     const ctx = cv.getContext('2d');
     const g = ctx.createLinearGradient(0, 0, 0, 256);
     g.addColorStop(0, '#232833'); g.addColorStop(0.55, '#151922'); g.addColorStop(1, '#0c0e13');
     ctx.fillStyle = g; ctx.fillRect(0, 0, 2, 256);
-    scene3.background = new THREE.CanvasTexture(cv);
+    return new THREE.CanvasTexture(cv);
   })();
+  scene3.background = studioBackdrop;
 
   // image-based lighting (imported .dae lights are stripped on load)
   if (THREE.RoomEnvironment && THREE.PMREMGenerator) {
@@ -220,11 +234,15 @@ Panels.define('robot-scene', function (root, bus) {
       worldRoot.add(g);
       needsRender = true;
     }
-    function box(scale) {
+    // centered: recorded body poses are box centers; the bottom-origin variant
+    // stands in for a mesh (whose origin sits at its base) that failed to load
+    function box(scale, centered) {
       const s = scale || [0.06, 0.06, 0.1];
-      place(new THREE.Mesh(new THREE.BoxGeometry(s[0], s[1], s[2]).translate(0, 0, s[2] / 2), mat));
+      const geometry = new THREE.BoxGeometry(s[0], s[1], s[2]);
+      if (!centered) geometry.translate(0, 0, s[2] / 2);
+      place(new THREE.Mesh(geometry, mat));
     }
-    if (spec.box) { box(spec.box); return; }
+    if (spec.box) { box(spec.box, true); return; }
     const fmt = (spec.format || (spec.meshUrl || '').split('?')[0].split('.').pop() || '').toLowerCase();
     if (fmt === 'obj' && THREE.OBJLoader) {
       new THREE.OBJLoader().load(spec.meshUrl, function (o) {
@@ -292,8 +310,24 @@ Panels.define('robot-scene', function (root, bus) {
     const def = loader.defaultMeshLoader.bind(loader);
     loader.loadMeshCb = function (path, mgr, done) {
       if (/\.obj$/i.test(path)) {
-        new THREE.OBJLoader(mgr).load(path, function (o) { done(o); },
-          undefined, function () { done(new THREE.Object3D()); });
+        // an .obj's per-face materials (fabric/skin textures, plastic vs. screen
+        // colors) live in its companion .mtl — load that first so multi-material
+        // meshes (e.g. Garmi's body/head) don't fall back to a single flat grey.
+        const loadObj = function (materials) {
+          const objLoader = new THREE.OBJLoader(mgr);
+          if (materials) { materials.preload(); objLoader.setMaterials(materials); }
+          objLoader.load(path, function (o) { done(o); },
+            undefined, function () { done(new THREE.Object3D()); });
+        };
+        new THREE.MTLLoader(mgr).load(path.replace(/\.obj$/i, '.mtl'), loadObj,
+          undefined, function () { loadObj(null); });
+      } else if (/\.dae$/i.test(path)) {
+        // ColladaLoader auto-rotates Z_UP assets for standalone use; a URDF mesh
+        // must stay in its raw frame since the world root already applies that
+        // correction once for the whole tree — keep the unit scale, undo the rotation.
+        new THREE.ColladaLoader(mgr).load(path, function (c) {
+          done(ColladaMeshUtil.neutralizeUpAxisRotation(c.scene));
+        }, undefined, function () { done(new THREE.Object3D()); });
       } else {
         def(path, mgr, done);
       }
@@ -301,27 +335,12 @@ Panels.define('robot-scene', function (root, bus) {
     return loader;
   }
 
-  function sceneNameFromUrl() {
-    const m = /[?&]scene=([\w-]+)/.exec(window.location.search);
-    return m ? m[1] : null;
-  }
-
   fetch(SCENES + 'index.json')
     .then(function (r) { return r.ok ? r.json() : { default: null, scenes: [] }; })
     .catch(function () { return { default: null, scenes: [] }; })
     .then(function (index) {
-      const name = sceneNameFromUrl() || index.default;
-      // header dropdown: switch between all onboarded scenes
-      const sel = $('scene-select');
-      if (sel && index.scenes && index.scenes.length > 1) {
-        sel.innerHTML = index.scenes.map(function (s) {
-          return '<option value="' + s + '"' + (s === name ? ' selected' : '') + '>' + s + '</option>';
-        }).join('');
-        sel.style.display = '';
-        sel.addEventListener('change', function () {
-          window.location.search = '?scene=' + encodeURIComponent(sel.value);
-        });
-      }
+      const name = SceneContext.name() || index.default;
+      wireScenePickers(index.scenes || [], name);
       if (!name) {
         if (statusEl) statusEl.textContent = 'No scene found — run cram-viz-onboard first.';
         return;
@@ -333,9 +352,60 @@ Panels.define('robot-scene', function (root, bus) {
       if (statusEl) statusEl.textContent = 'Scene failed to load: ' + e;
     });
 
+  // header dropdowns: a robot and an environment jointly resolve to the one
+  // onboarded scene bundle recorded for that pair (ScenePicker) — there is no
+  // independent robot/environment mixing, only a lookup among what was
+  // actually recorded, so picking either one narrows the other to valid
+  // combinations and always lands on a real scene.
+  function wireScenePickers(scenes, activeName) {
+    const robotSel = $('robot-select'), envSel = $('environment-select');
+    const robotPicker = $('robot-picker'), envPicker = $('environment-picker');
+    if (!robotSel || !envSel) return;
+    const robots = ScenePicker.robots(scenes);
+    if (robots.length < 2 && ScenePicker.environments(scenes, robots[0]).length < 2) return;
+    const active = ScenePicker.describe(scenes, activeName) || {};
+    let robot = active.robot || robots[0];
+
+    // a picker with nothing to choose (one option, or none) stays visible but
+    // disabled — it disappearing/reappearing as the other picker changes
+    // would shift the header layout around under the user's cursor
+    function fillSelect(sel, values, selected) {
+      sel.innerHTML = values.map(function (v) {
+        const value = v || '';
+        const label = v || '(bench only)';
+        return '<option value="' + value + '"' + (value === (selected || '') ? ' selected' : '') + '>' + label + '</option>';
+      }).join('');
+      sel.disabled = values.length <= 1;
+    }
+
+    function navigateTo(environment) {
+      const target = ScenePicker.sceneFor(scenes, robot, environment || null);
+      if (target) window.location.search = '?scene=' + encodeURIComponent(target);
+    }
+
+    if (robotPicker) robotPicker.style.display = '';
+    if (envPicker) envPicker.style.display = '';
+    fillSelect(robotSel, robots, robot);
+    fillSelect(envSel, ScenePicker.environments(scenes, robot), active.environment);
+
+    robotSel.addEventListener('change', function () {
+      robot = robotSel.value;
+      fillSelect(envSel, ScenePicker.environments(scenes, robot), null);
+      navigateTo(envSel.value);
+    });
+    envSel.addEventListener('change', function () { navigateTo(envSel.value); });
+  }
+
   function loadScene(sc) {
     SCENE = sc;
     if (statusEl) statusEl.textContent = 'Loading ' + sc.name + '…';
+    // a bench-only scene (no environment model, e.g. tracy_lab) has no floor
+    // to rest one on — dropGroundToScene() leaves the default ground alone
+    // when it finds no environment model, so the layer has to start off here
+    const hasEnvironment = sc.models.some(function (m) { return !m.robot; });
+    ground.visible = hasEnvironment;
+    const floorToggle = $('lyr-floor');
+    if (floorToggle) floorToggle.checked = hasEnvironment;
     // robot part lookup (link -> part name)
     linkToPart = {};
     const parts = (sc.robot && sc.robot.parts) || {};
@@ -352,7 +422,11 @@ Panels.define('robot-scene', function (root, bus) {
     });
 
     (sc.objects || []).forEach(function (o) {
-      addObject({ id: o.id, key: o.key, meshUrl: sceneBase + o.mesh, color: o.color });
+      addObject({
+        id: o.id, key: o.key, color: o.color,
+        box: o.box || null,
+        meshUrl: o.mesh ? sceneBase + o.mesh : null,
+      });
     });
 
     buildMarker(sc.placeTarget);
@@ -411,23 +485,17 @@ Panels.define('robot-scene', function (root, bus) {
     while (o) { if (o.isURDFLink && o.name) return String(o.name); o = o.parent; }
     return '';
   }
-  // furniture palette, keyed on common link-name vocabulary — applies to any
-  // environment model; unmatched links keep their tamed authored look
+  // furniture palette, keyed on common link-name vocabulary via EnvironmentTheme —
+  // applies to any environment model; unmatched links keep their tamed authored look
+  const THEME_TEXTURES = { counter: WOOD_COUNTER, table: WOOD_TABLE };
   function themeEnvironment(mat, link) {
     tameMat(mat);
-    const n = link.toLowerCase();
-    if (/cooktop|hotplate|ceran|stove/.test(n)) {
-      mat.color.setHex(0x0a0b0d); mat.map = null; mat.roughness = 0.18; mat.metalness = 0.15;
-    } else if (/island_countertop|countertop|worktop/.test(n)) {
-      mat.color.setHex(0xffffff); mat.map = WOOD_COUNTER; mat.roughness = 0.55; mat.metalness = 0.02;
-    } else if (/coffee_table|table_area|bedside_table|table_top|dining/.test(n)) {
-      mat.color.setHex(0xffffff); mat.map = WOOD_TABLE; mat.roughness = 0.5; mat.metalness = 0.02;
-    } else if (/handle|tap_body|tap_handle|sink|faucet/.test(n)) {
-      mat.color.setHex(0xc6ccd4); mat.map = null; mat.roughness = 0.28; mat.metalness = 0.85;
-    } else if (/cabinet|drawer|door|wardrobe|dishwasher|oven|coffe_machine|island_back|island_waterfall|side_[ab]|fridge/.test(n)) {
-      mat.color.setHex(0x1b1d21); mat.map = null; mat.roughness = 0.42; mat.metalness = 0.12;
-    } else if (/wall/.test(n)) {
-      mat.color.setHex(0xd9d4cb); mat.map = null; mat.roughness = 0.95; mat.metalness = 0.0;
+    const look = window.EnvironmentTheme.lookOf(link);
+    if (look) {
+      mat.color.setHex(look.color);
+      mat.map = look.texture ? THEME_TEXTURES[look.texture] : null;
+      mat.roughness = look.roughness;
+      mat.metalness = look.metalness;
     }
     mat.needsUpdate = true;
   }
@@ -684,14 +752,17 @@ Panels.define('robot-scene', function (root, bus) {
   const _ray = new THREE.Raycaster();
   let _envMeshes = null;
   function envMeshes() {
-    if (_envMeshes) return _envMeshes;
-    _envMeshes = [];
-    models.forEach(function (m) {
-      if (m.robot) return;
-      m.obj.traverse(function (c) { if (c.isMesh) _envMeshes.push(c); });
-    });
-    if (ground) _envMeshes.push(ground);
-    return _envMeshes;
+    if (!_envMeshes) {
+      _envMeshes = [];
+      models.forEach(function (m) {
+        if (m.robot) return;
+        m.obj.traverse(function (c) { if (c.isMesh) _envMeshes.push(c); });
+      });
+    }
+    // read fresh each call: a hidden floor (no environment model, e.g.
+    // tracy_lab, or the "Floor shadow" layer switched off) must not still
+    // pull dragged objects down onto it
+    return ground.visible ? _envMeshes.concat(ground) : _envMeshes;
   }
   function meshBox(group) {                 // world AABB over the object's meshes only (skip label sprite)
     const box = new THREE.Box3(); box.makeEmpty();
@@ -1119,6 +1190,14 @@ Panels.define('robot-scene', function (root, bus) {
     onStepStart: function (cb) { stepCb = cb; },
     setAutoRotate: function (on) { controls.autoRotate = on; controls.autoRotateSpeed = 0.5; needsRender = true; },
     setFloorVisible: function (on) { ground.visible = on; needsRender = true; },
+    // the opaque studio gradient otherwise paints over the DOM photo behind
+    // the transparent-canvas renderer, so it has to step aside for the photo
+    // to actually show through
+    setBackgroundVisible: function (on) {
+      stageBgEl.classList.toggle('is-visible', !!on);
+      scene3.background = on ? null : studioBackdrop;
+      needsRender = true;
+    },
     setFollow: function (on) { follow = on; },
     setPropsVisible: function (on) {
       for (const n in objectMeshes) objectMeshes[n].visible = on;
@@ -1157,7 +1236,7 @@ Panels.define('robot-scene', function (root, bus) {
     if (!RobotView.hasTrajectory()) return;
     if (RobotView.isPlayingTrajectory()) {
       RobotView.stopTrajectory();
-      playBtn.classList.remove('playing'); playBtn.textContent = '▶ Play robot motion';
+      playBtn.classList.remove('playing'); playBtn.textContent = '▶ Replay Recorded NEEM';
     } else {
       RobotView.playTrajectory();
       playBtn.classList.add('playing'); playBtn.textContent = '⏸ Stop';
@@ -1165,7 +1244,7 @@ Panels.define('robot-scene', function (root, bus) {
   });
   RobotView.onStepStart(function (step) {
     if (step === '__done__') {
-      playBtn.classList.remove('playing'); playBtn.textContent = '▶ Play robot motion';
+      playBtn.classList.remove('playing'); playBtn.textContent = '▶ Replay Recorded NEEM';
       highlightObjects([]);
     }
     bus.emit('scene:step', { step: step });
@@ -1179,6 +1258,7 @@ Panels.define('robot-scene', function (root, bus) {
   bindLayer('lyr-objects', 'setPropsVisible');
   bindLayer('lyr-labels', 'setLabelsAlways');
   bindLayer('lyr-floor', 'setFloorVisible');
+  bindLayer('lyr-bg', 'setBackgroundVisible');
   RobotView.onReady(function () {
     const legend = $('lp-legend');
     const scene = RobotView.getScene();

@@ -49,6 +49,7 @@ XACRO_ERROR_TAIL = 2000
 
 #: what the bundler reads out of a URDF
 MESH_REFERENCE_PATTERN = re.compile(r'filename="([^"]+)"')
+XML_COMMENT_PATTERN = re.compile(r"<!--.*?-->", re.DOTALL)
 LINK_PATTERN = re.compile(r'<link\s+name="([^"]+)"')
 JOINT_PATTERN = re.compile(r'<joint\s+name="([^"]+)"\s+type="([^"]+)"')
 
@@ -185,12 +186,33 @@ def _copy_file(
     return True
 
 
+def _is_within(path: str, root: str) -> bool:
+    """
+    :param path: The path to test.
+    :param root: The directory that must contain it.
+    :return: Whether the path lies inside the root directory.
+    """
+    return os.path.commonpath(
+        [os.path.abspath(path), os.path.abspath(root)]
+    ) == os.path.abspath(root)
+
+
 def _copy_side_assets(
-    source_mesh: str, bundled_mesh: str, copied: Dict[str, str], missing: List[str]
+    source_mesh: str,
+    bundled_mesh: str,
+    copied: Dict[str, str],
+    missing: List[str],
+    bundle_root: str,
 ) -> None:
     """
     Copy the textures a ``.dae`` references, or the ``.mtl`` plus its textures for an
     ``.obj``.
+
+    Each reference is resolved relative to the mesh file and mirrored at that same
+    relative location next to the bundled copy, so a parent-relative reference (for
+    example ``../materials/textures/wall.png``, the Gazebo model layout) resolves in the
+    browser exactly as it did on disk. A reference that would land outside
+    ``bundle_root`` is skipped.
     """
     source_directory = os.path.dirname(source_mesh)
     bundled_directory = os.path.dirname(bundled_mesh)
@@ -220,15 +242,13 @@ def _copy_side_assets(
             for texture in TEXTURE_MAP_PATTERN.findall(material_text):
                 references.add(texture.strip())
     for reference in references:
-        relative_reference = reference.strip().lstrip("./")
-        source = os.path.join(source_directory, relative_reference)
-        if os.path.isfile(source):
-            _copy_file(
-                source,
-                os.path.join(bundled_directory, relative_reference),
-                copied,
-                missing,
-            )
+        relative_reference = reference.strip()
+        source = os.path.normpath(os.path.join(source_directory, relative_reference))
+        destination = os.path.normpath(
+            os.path.join(bundled_directory, relative_reference)
+        )
+        if os.path.isfile(source) and _is_within(destination, bundle_root):
+            _copy_file(source, destination, copied, missing)
 
 
 # %% xacro
@@ -276,14 +296,15 @@ def bundle_urdf(
     copied: Dict[str, str] = {}
     missing: List[str] = []
     rewritten = 0
-    for reference in sorted(set(MESH_REFERENCE_PATTERN.findall(urdf_text))):
+    live_text = XML_COMMENT_PATTERN.sub("", urdf_text)
+    for reference in sorted(set(MESH_REFERENCE_PATTERN.findall(live_text))):
         if not reference.lower().endswith(MESH_SUFFIXES):
             continue  # plugins (.so) and other non-geometry references
         resolved = resolve_uri(reference, hints=hints, base_dir=base_dir)
         relative_path = _bundled_relative_path(reference)
         bundled = os.path.join(out_dir, "meshes", relative_path)
         if _copy_file(resolved, bundled, copied, missing):
-            _copy_side_assets(resolved, bundled, copied, missing)
+            _copy_side_assets(resolved, bundled, copied, missing, out_dir)
         urdf_text = urdf_text.replace(
             '"%s"' % reference,
             '"meshes/%s"' % relative_path.replace(os.sep, "/"),

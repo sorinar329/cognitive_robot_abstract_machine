@@ -114,6 +114,34 @@ class TestApi:
             payload = json.loads(response.read())
         assert payload["ok"] is False and "error" in payload
 
+    def test_eql_query_targets_the_requested_scene_not_the_default(
+        self, server, fixture_second_scene
+    ):
+        """
+        Switching scenes in the viewer must be reflected by the EQL panel: a query that
+        names the second scene must answer with its robot, not the default scene's.
+        """
+        pytest.importorskip("krrood")
+        request = urllib.request.Request(
+            server + "/api/eql",
+            data=json.dumps(
+                {"code": "the(entity(rob))", "scene": fixture_second_scene}
+            ).encode(),
+            headers={"Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(request, timeout=30) as response:
+            payload = json.loads(response.read())
+        assert payload["ok"]
+        assert payload["rows"][0]["__entity__"] == "g1"
+
+    def test_kb_overview_targets_the_requested_scene_not_the_default(
+        self, server, fixture_second_scene
+    ):
+        pytest.importorskip("krrood")
+        payload = get_json(server + "/api/kb?scene=" + fixture_second_scene)
+        assert payload["ok"]
+        assert any(n["id"] == "g1" for n in payload["nodes"])
+
     def test_unknown_post_endpoint_is_json_404(self, server):
         request = urllib.request.Request(server + "/api/nope", data=b"{}")
         try:

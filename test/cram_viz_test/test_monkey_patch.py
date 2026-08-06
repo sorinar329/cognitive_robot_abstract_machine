@@ -71,3 +71,19 @@ class TestMethodPatch:
         patch.install(lambda original, self, name: original(self, name) + "!")
         patch.install(lambda original, self, name: original(self, name) + "?")
         assert greeter_class().greet("Ada") == "hello, Ada!?"
+
+    def test_uninstalling_restores_the_original_method(self, greeter_class):
+        uninstall = MethodPatch(greeter_class, "greet").install(
+            lambda original, self, name: "patched"
+        )
+        uninstall()
+        assert greeter_class().greet("Ada") == "hello, Ada"
+
+    def test_uninstalling_a_classmethod_keeps_its_calling_convention(
+        self, greeter_class
+    ):
+        uninstall = MethodPatch(greeter_class, "named").install(
+            lambda original, cls, name: "patched"
+        )
+        uninstall()
+        assert greeter_class.named("Ada") == "Ada the greeter"

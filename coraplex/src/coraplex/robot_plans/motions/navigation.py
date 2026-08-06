@@ -32,11 +32,13 @@ class MoveMotion(BaseMotion):
 
     @property
     def _motion_chart(self):
+        self.context.teleport_to_navigate_in_simulation = True
         return (
             SetOdometry(
                 base_pose=self.target.to_homogeneous_matrix(),
                 odom_connection=self.robot.root.parent_connection,
             )
+
             if GiskardExecutable.execution_type == ExecutionType.SIMULATED
             and self.context.teleport_to_navigate_in_simulation
             else CartesianPose(

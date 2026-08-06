@@ -65,3 +65,28 @@ def fixture_scene(tmp_path, monkeypatch):
     reset_knowledge_base_cache()
     yield tmp_path
     reset_knowledge_base_cache()
+
+
+@pytest.fixture()
+def fixture_second_scene(fixture_scene):
+    """
+    A second scene bundle (a different robot) alongside ``fixture_scene``.
+
+    Lets tests target a non-default scene explicitly, the way switching scenes in the
+    viewer's dropdown should.
+    """
+    scenes_dir = fixture_scene / "scenes"
+    bundle = scenes_dir / "fixture-g1"
+    bundle.mkdir(parents=True)
+    second_scene = dict(SCENE, robot=dict(SCENE["robot"], name="g1"))
+    (bundle / "scene.json").write_text(json.dumps(second_scene))
+    (bundle / "trajectory.json").write_text(json.dumps(TRAJECTORY))
+    (bundle / "robot.urdf").write_text(ROBOT_URDF_PATH.read_text())
+    (bundle / "milk.stl").write_bytes(b"solid milk\nendsolid milk\n")
+    (scenes_dir / "index.json").write_text(
+        json.dumps({"default": "fixture", "scenes": ["fixture", "fixture-g1"]})
+    )
+
+    reset_knowledge_base_cache()
+    yield "fixture-g1"
+    reset_knowledge_base_cache()

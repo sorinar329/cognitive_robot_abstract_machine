@@ -49,8 +49,8 @@ class TestQueries:
         """
         A query naming something the namespace does not define must raise.
 
-        The server turns this into a JSON error payload; the knowledge base itself
-        does not swallow it.
+        The server turns this into a JSON error payload; the knowledge base itself does
+        not swallow it.
         """
         with pytest.raises(NameError):
             kb.run_query("this is not python")
@@ -58,6 +58,29 @@ class TestQueries:
     def test_a_syntactically_invalid_query_raises(self, fixture_scene):
         with pytest.raises(SyntaxError):
             kb.run_query("definitely not python (((")
+
+
+class TestSceneSwitching:
+    def test_a_query_against_an_explicit_scene_uses_that_scene_not_the_default(
+        self, fixture_second_scene
+    ):
+        """
+        ``fixture`` (the default scene) and ``fixture-g1`` (a second bundle) name
+        different robots; asking for ``fixture-g1`` explicitly must not answer with the
+        default scene's cached robot.
+        """
+        result = kb.run_query("the(entity(rob))", scene_id=fixture_second_scene)
+        assert result["rows"][0]["__entity__"] == "g1"
+
+    def test_the_default_scenes_cached_kb_survives_building_another_scenes_kb(
+        self, fixture_second_scene
+    ):
+        default_kb = kb.get_kb()
+        assert default_kb.robot.name == "pr2"
+
+        other_kb = kb.get_kb(fixture_second_scene)
+        assert other_kb.robot.name == "g1"
+        assert kb.get_kb().robot.name == "pr2"
 
 
 class TestRecordedMeasurements:
@@ -77,7 +100,7 @@ class TestRecordedMeasurements:
         """
         scene, trajectory = kb.load_scene()
         scene["objects"][0]["height"] = 0.23
-        monkeypatch.setattr(kb, "load_scene", lambda: (scene, trajectory))
+        monkeypatch.setattr(kb, "load_scene", lambda scene_id=None: (scene, trajectory))
         kb.reset_kb()
         milk = next(entry for entry in kb.get_kb().objects if entry.name == "milk")
         assert milk.height_m == 0.23

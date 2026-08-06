@@ -13,6 +13,7 @@ from krrood.entity_query_language.factories import (
     variable,
 )
 from coraplex.config.action_conf import ActionConfig
+from coraplex.datastructures.dataclasses import Context
 from coraplex.datastructures.enums import Arms, ApproachDirection, VerticalAlignment
 from coraplex.datastructures.grasp import GraspDescription
 from coraplex.locations.base import DeferredLocation
@@ -100,6 +101,7 @@ class TransportAction(ActionDescription):
 
     @property
     def _action_plan(self) -> PlanNode:
+
         self.grasp_description = self.grasp_description or GraspDescription(
             ApproachDirection.FRONT,
             VerticalAlignment.NoAlignment,
