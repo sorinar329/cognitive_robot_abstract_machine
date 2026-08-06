@@ -12,13 +12,16 @@ This implements the same interventional-diagnosis pattern as
 ``pick_place_demo_apartment_jpt_and_causal.py`` (see git history, commit ``f1adf95ee``),
 adapted to this demo's simpler action parameters. That demo also had a directly measured
 outcome (the placed object's final position) to use as the causal circuit's ``effect``
-variable; this demo's training data has no such outcome column, only the sampled inputs
-themselves (see ``export_successful_parameters.py``). Each action's config below instead
-designates one of its own parameters as the ``effect`` -- see
-:data:`PICKUP_CAUSAL_CONFIG`/:data:`PLACE_CAUSAL_CONFIG` for which, and why. The circuit
-does not condition on that variable's value; it only needs some variable to play the
-role structurally. What actually drives diagnosis is each cause variable's own
-interventional support probability, not the effect variable's value.
+variable; this demo's training data has no such outcome column. The circuit still
+requires some variable to play the ``effect`` role structurally, but it does not condition
+on that variable's value -- what actually drives diagnosis is each cause variable's own
+interventional support probability, not the effect variable's value. Each action's config
+below uses ``step_index`` (which of the stacking steps a training row came from, recorded
+alongside the sampled parameters -- see ``training/train_jpt.py``) for that role, since it
+is not itself a tunable parameter: every one of an action's actual tunable parameters
+stays a candidate cause, and none has to be given up to satisfy the circuit's structural
+requirement. See :data:`PICKUP_CAUSAL_CONFIG`/:data:`PLACE_CAUSAL_CONFIG` for the per-
+action cause lists.
 """
 
 from __future__ import annotations
@@ -85,13 +88,27 @@ PICKUP_CAUSAL_CONFIG = CausalVariableConfig(
         "grasp_closing_velocity",
         "grasp_stall_min_time",
         "lift_linear_velocity",
+        "object_friction",
     ),
-    effect_name="object_friction",
+    effect_name="step_index",
 )
 """
-The velocity/timing parameters are what a caller chooses per attempt, so they are the
-candidate causes. ``object_friction`` is a property of the object being picked rather
-than a choice the caller makes, so it plays the ``effect`` role instead.
+Every tunable pickup parameter, including ``object_friction``, is a candidate cause --
+``object_friction`` is sampled and applied per attempt exactly like the velocity/timing
+parameters (see ``inference.py``'s ``_apply_object_friction``) and is the single strongest
+lever on whether a grasp holds, so it cannot be the excluded ``effect`` variable without
+losing the ability to correct low-friction failures (verified directly against the
+trained model). Nor can any of the five velocity/timing parameters safely take that role:
+each has its own documented failure threshold in
+``pickup_place_parameterization.py`` (for example ``pre_approach_linear_velocity`` past
+0.2 spikes ``InfeasibleException`` failures), and ``WIDE_PICKUP_PARAMETER_PRIORS`` samples
+several of them with a mean sitting at or past that threshold -- excluding one from
+correction leaves its bad draws permanently unfixed across every retry of an attempt,
+since a correction only ever replaces the one diagnosed field. ``step_index`` -- which of
+the three stacking steps a training row came from, recorded alongside each action's
+parameters purely so the tree can separate their distributions (see
+``training/train_jpt.py``) -- takes over the ``effect`` role instead: it is not a tunable
+parameter at all, so excluding it from correction costs nothing.
 """
 
 PLACE_CAUSAL_CONFIG = CausalVariableConfig(
@@ -99,13 +116,15 @@ PLACE_CAUSAL_CONFIG = CausalVariableConfig(
         "transport_linear_velocity",
         "placing_linear_velocity",
         "release_opening_velocity",
+        "retract_linear_velocity",
     ),
-    effect_name="retract_linear_velocity",
+    effect_name="step_index",
 )
 """
-``retract_linear_velocity`` is the last of :class:`PlaceAction`'s tunable speeds to take
-effect, so it plays the ``effect`` role while the three earlier ones are the candidate
-causes.
+Same reasoning as :data:`PICKUP_CAUSAL_CONFIG`: ``retract_linear_velocity`` has its own
+documented failure threshold (past 0.14 it can knock the just-placed cube back down, and
+``WIDE_PLACE_PARAMETER_PRIORS`` samples it with mean 0.17, past that threshold), so it
+stays a candidate cause; ``step_index`` plays the ``effect`` role instead.
 """
 
 

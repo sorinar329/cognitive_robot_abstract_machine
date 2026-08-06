@@ -16,6 +16,13 @@ differences:
   else about the attempt unchanged -- and segmind validates the retry the same way it
   validated the original attempt. This repeats, capped at
   :data:`MAX_CORRECTION_ATTEMPTS_PER_CUBE`, for every cube and for the stack as a whole.
+- A cube already confirmed stacked earlier in the same iteration can still be knocked
+  aside by a later cube's own approach, grasp or retreat -- most often while that later
+  cube is going through several correction retries in a row. Every attempt (initial and
+  every correction retry alike) is followed by a geometric check of every cube confirmed
+  stacked so far; one found disturbed is re-stacked on the spot, before the cube that
+  is currently being worked on is retried or the run moves on to the next one (see
+  :func:`restack_disturbed_cubes`).
 
 Run it with the interpreter whose packages point at this checkout, for example::
 
@@ -256,6 +263,18 @@ Twice ``demo2.py``'s: a cube here can go through several correction attempts, ea
 costing roughly as long as a normal attempt.
 """
 
+CUBE_PICKUP_TIME_LIMIT = 40.0
+"""
+Wall-clock budget (in seconds) for one cube's *entire* stacking step -- its initial
+attempt, every correction retry, and any re-stack of an earlier cube it disturbs along
+the way -- checked independently of, and tighter than, :data:`ITERATION_TIME_LIMIT`.
+
+A cube that has rolled out of comfortable reach fails its reach the same way on every
+attempt, and no diagnosed correction fixes "the cube is somewhere else"; left bounded
+only by the iteration's own budget, one such cube can burn through most of it retrying a
+pickup that was never going to succeed, at the expense of the cubes after it.
+"""
+
 STACK_HEIGHT_OFFSET = 0.06
 """
 Vertical offset (in meters) above a target cube's center at which a placed cube should
@@ -263,13 +282,19 @@ end up -- one cube height plus a small clearance margin.
 """
 
 CUBE_SPAWN_POSITIONS = {
-    "cube0": numpy.array([0.40, 0.10, 0.06]),
-    "cube1": numpy.array([0.40, -0.04, 0.06]),
-    "cube2": numpy.array([0.40, -0.14, 0.06]),
-    "cube3": numpy.array([0.40, -0.24, 0.06]),
+    "cube0": numpy.array([0.40, 0.10, 0.02487]),
+    "cube1": numpy.array([0.40, -0.04, 0.02487]),
+    "cube2": numpy.array([0.40, -0.14, 0.02487]),
+    "cube3": numpy.array([0.40, -0.24, 0.02487]),
 }
 """
-Spawn position of every cube, matching the scene's MJCF definition.
+Spawn position of every cube.
+
+x/y match the scene's own MJCF definition. z is the height a cube actually settles at
+under gravity, not the scene's own drop height (0.06, ~3.5cm higher) -- teleporting
+straight to the settled height, confirmed against the real simulator to produce zero
+further drift, is what makes a reset land the cube already at rest instead of dropping
+and bouncing it onto the table on every single iteration.
 """
 
 CUBE_SPAWN_ORIENTATION = numpy.array([1.0, 0.0, 0.0, 0.0])
@@ -714,6 +739,20 @@ def _as_upright(grasp_description: GraspDescription) -> UprightGraspDescription:
     )
 
 
+def pickup_grasp_description() -> UprightGraspDescription:
+    """
+    The grasp every pickup in this run is described with.
+    """
+    return UprightGraspDescription(
+        ApproachDirection.FRONT,
+        VerticalAlignment.TOP,
+        context.robot.get_arms()[0].end_effector,
+        # See demo2.py's own identical comment: rotating 90 degrees keeps the
+        # fingers' opening axis from sweeping into a neighboring cube.
+        rotate_gripper=True,
+    )
+
+
 def sample_actions(
     object_body: Body, target_body: Body, picking_arm: Arms
 ) -> tuple[PickUpAction, PlaceAction]:
@@ -728,14 +767,7 @@ def sample_actions(
         z=target_pose.z + STACK_HEIGHT_OFFSET,
         reference_frame=world.root,
     )
-    grasp_description = UprightGraspDescription(
-        ApproachDirection.FRONT,
-        VerticalAlignment.TOP,
-        context.robot.get_arms()[0].end_effector,
-        # See demo2.py's own identical comment: rotating 90 degrees keeps the
-        # fingers' opening axis from sweeping into a neighboring cube.
-        rotate_gripper=True,
-    )
+    grasp_description = pickup_grasp_description()
     pickup_action = sample_pickup_instance(
         object_body, picking_arm, grasp_description, priors=WIDE_PICKUP_PARAMETER_PRIORS
     )
@@ -750,8 +782,8 @@ def build_stack_plan(
     pickup_action: PickUpAction, place_action: PlaceAction
 ) -> PlanNode:
     """
-    Build (without performing) a park/pick/place/park plan from already-sampled actions,
-    applying the pickup's sampled friction first.
+    Build (without performing) a park/pick/park/place/park plan from already-sampled
+    actions, applying the pickup's sampled friction first.
     """
     _apply_object_friction(pickup_action)
     print(
@@ -774,6 +806,12 @@ def build_stack_plan(
         [
             ParkArmsAction(Arms.BOTH),
             pickup_action,
+            # Parks the held cube clear before transporting it to the place target,
+            # rather than crossing directly from the pickup pose to the place pose at
+            # whatever height that direct path happens to pass through -- which, once
+            # the stack has some height to it, can pass right through where the already
+            # stacked cubes are.
+            ParkArmsAction(Arms.BOTH),
             place_action,
             ParkArmsAction(Arms.BOTH),
         ],
@@ -809,6 +847,75 @@ def perform_attempt(
 
     time.sleep(ATTEMPT_SETTLE_DURATION)
     return verify_stacked(pickup_action.object_designator, supporting_cube)
+
+
+def restack_disturbed_cubes(
+    confirmed_stacks: list[tuple[Body, Body]],
+    picking_arm: Arms,
+    disturbed_by: str,
+    deadline: float,
+) -> bool:
+    """
+    Re-stack any cube in ``confirmed_stacks`` the gripper has since knocked out of place.
+
+    Called after every attempt made for a *different* cube (the initial one and every
+    correction retry alike), since any of those -- not just a failed one -- can nudge a
+    cube that was already resting correctly: the approach, the lift, and especially the
+    retreat all pass close by the rest of the stack, and a correction retry repeats that
+    close pass several times in a row. Checked geometrically (:func:`cube_is_stacked_on`)
+    rather than through segmind, for the same reason :func:`verify_stacked` is: a pose
+    segmind cannot classify is not evidence the cube is fine.
+
+    Re-stacking one cube can itself disturb whichever cube it rests on, so each is
+    re-stacked with only the pairs that precede it in ``confirmed_stacks`` (its own
+    support chain) checked afterwards, cascading downward through at most as many levels
+    as the stack has cubes.
+
+    :param confirmed_stacks: ``(supported, support)`` pairs already confirmed stacked
+        earlier in this iteration, oldest first.
+    :param picking_arm: The arm used to re-stack a disturbed cube.
+    :param disturbed_by: Name of the attempt that just ran, for the warning if a cube
+        turns out to have moved.
+    :param deadline: ``time.time()`` value beyond which a re-stack is not attempted --
+        whichever of :data:`CUBE_PICKUP_TIME_LIMIT` (for the cube whose attempt this
+        disturbance was found during) and :data:`ITERATION_TIME_LIMIT` is tighter.
+    :return: Whether every cube in ``confirmed_stacks`` is, still or again, correctly
+        stacked.
+    """
+    all_fine = True
+    for index, (supported, support) in enumerate(confirmed_stacks):
+        if cube_is_stacked_on(supported, support):
+            continue
+
+        if time.time() >= deadline:
+            print(
+                f"[warning] {supported.name.name} was knocked off {support.name.name} "
+                f"during {disturbed_by}, but the time limit is reached -- not "
+                "attempting to re-stack it"
+            )
+            all_fine = False
+            continue
+
+        print(
+            f"[warning] {supported.name.name} was knocked off {support.name.name} "
+            f"during {disturbed_by}; re-stacking it before continuing"
+        )
+        restack_outcome = attempt_cube_with_correction(
+            supported,
+            support,
+            picking_arm,
+            f"re-stack {supported.name.name} onto {support.name.name}",
+            confirmed_stacks=confirmed_stacks[:index],
+            deadline=deadline,
+        )
+        if not restack_outcome.final_succeeded:
+            print(
+                f"[warning] could not re-stack {supported.name.name} onto "
+                f"{support.name.name}"
+            )
+            all_fine = False
+
+    return all_fine
 
 
 # %% the diagnose-and-correct loop
@@ -889,12 +996,63 @@ Every causal diagnosis performed across the whole run, in the order it happened 
 
 
 def attempt_cube_with_correction(
-    cube_to_pick: Body, cube_to_stack_on: Body, picking_arm: Arms, step_label: str
+    cube_to_pick: Body,
+    cube_to_stack_on: Body,
+    picking_arm: Arms,
+    step_label: str,
+    confirmed_stacks: list[tuple[Body, Body]] | None = None,
+    deadline: float = float("inf"),
 ) -> CubeAttemptOutcome:
     """
     Attempt one cube's stacking step, diagnosing and correcting up to
     :data:`MAX_CORRECTION_ATTEMPTS_PER_CUBE` times if it fails.
+
+    Every attempt made here -- the initial one and every correction retry -- is followed
+    by :func:`restack_disturbed_cubes` checking (and, if needed, repairing) every cube in
+    ``confirmed_stacks``, since this cube's own approach, grasp or retreat can knock one
+    of them aside without this cube's own attempt failing at all. If a disturbed cube
+    cannot be repaired, retrying this one further is abandoned too: placing onto (or
+    above) a stack that is not actually intact is not worth the remaining attempts.
+
+    Re-stacking a disturbed cube is itself a full pick and place, which can just as
+    easily disturb *this* cube if it happens to rest on the one being repaired, so a
+    "succeeded" verdict from before the repair is re-checked rather than trusted.
+
+    :param cube_to_pick: The cube this step stacks.
+    :param cube_to_stack_on: The cube it is stacked onto.
+    :param picking_arm: The arm used for this step and for re-stacking any disturbed
+        cube.
+    :param step_label: Names this step in log output.
+    :param confirmed_stacks: ``(supported, support)`` pairs already confirmed stacked
+        earlier in this iteration, oldest first; none by default.
+    :param deadline: ``time.time()`` value beyond which neither a correction retry nor a
+        re-stack of a disturbed cube is attempted; unbounded by default. The caller
+        passes the tighter of :data:`CUBE_PICKUP_TIME_LIMIT` and
+        :data:`ITERATION_TIME_LIMIT` for a top-level cube, and this same value straight
+        through for any cube re-stacked as a side effect of that one.
     """
+    if confirmed_stacks is None:
+        confirmed_stacks = []
+
+    def restack_and_reverify(after: str) -> bool:
+        """
+        Repair any disturbed cube in ``confirmed_stacks``, then re-check whether this
+        step's own cube is still standing -- the repair itself may have moved it.
+
+        :return: Whether every cube in ``confirmed_stacks`` and this step's own cube are
+            now correctly stacked.
+        """
+        nonlocal succeeded
+        intact = restack_disturbed_cubes(confirmed_stacks, picking_arm, after, deadline)
+        if succeeded and intact:
+            succeeded = verify_stacked(cube_to_pick, cube_to_stack_on)
+            if not succeeded:
+                print(
+                    f"[warning] {step_label}: {cube_to_pick.name.name} came down while "
+                    "a disturbed neighbour was being re-stacked"
+                )
+        return intact
+
     pickup_action, place_action = sample_actions(
         cube_to_pick, cube_to_stack_on, picking_arm
     )
@@ -906,11 +1064,17 @@ def attempt_cube_with_correction(
         f"[info] {step_label} attempt 1 "
         f"{'is stacked' if succeeded else 'is NOT stacked'}"
     )
+    stack_intact = restack_and_reverify(f"{step_label} attempt 1")
 
     diagnoses: list[tuple[str, RootCauseDiagnosis]] = []
     correction_attempts = 0
 
-    while not succeeded and correction_attempts < MAX_CORRECTION_ATTEMPTS_PER_CUBE:
+    while (
+        not succeeded
+        and stack_intact
+        and correction_attempts < MAX_CORRECTION_ATTEMPTS_PER_CUBE
+        and time.time() < deadline
+    ):
         diagnosis_start_time = time.time()
         diagnosis_entry = diagnose_cube_failure(pickup_action, place_action)
         diagnosis_duration = time.time() - diagnosis_start_time
@@ -929,11 +1093,9 @@ def attempt_cube_with_correction(
             pickup_action, place_action, action_name, diagnosis
         )
         correction_attempts += 1
+        correction_label = f"{step_label} (correction {correction_attempts})"
         succeeded = perform_attempt(
-            pickup_action,
-            place_action,
-            f"{step_label} (correction {correction_attempts})",
-            cube_to_stack_on,
+            pickup_action, place_action, correction_label, cube_to_stack_on
         )
         diagnosis_outcomes.append(
             DiagnosisOutcome(
@@ -948,13 +1110,20 @@ def attempt_cube_with_correction(
             f"[info] {step_label} correction {correction_attempts} "
             f"{'stayed off the floor' if succeeded else 'ended up on the FLOOR'}"
         )
+        stack_intact = restack_and_reverify(correction_label)
+
+    if not stack_intact:
+        print(
+            f"[warning] {step_label}: abandoning further retries, the stack it builds "
+            "on is no longer intact"
+        )
 
     return CubeAttemptOutcome(
         step_label=step_label,
         initial_succeeded=initial_succeeded,
         correction_attempts=correction_attempts,
         diagnoses=diagnoses,
-        final_succeeded=succeeded,
+        final_succeeded=succeeded and stack_intact,
     )
 
 
@@ -988,17 +1157,92 @@ class SimulationDidNotRecover(RuntimeError):
         )
 
 
+RESET_POSITION_TOLERANCE = 0.01
+"""
+Greatest distance (in meters) a cube may end up from its own spawn position and still
+count as having actually respawned.
+"""
+
+MAX_RESET_ATTEMPTS = 3
+"""
+How many times :func:`reset_cubes` retries teleporting a cube that did not actually end
+up at its spawn position, before giving up on it and logging a warning.
+"""
+
+RESET_SETTLE_DURATION = 0.5
+"""
+Real-time seconds a just-teleported cube is given to settle before its position is
+checked against its spawn point.
+"""
+
+
+def cubes_not_at_spawn() -> list[str]:
+    """
+    Names of cubes whose current *horizontal* position is not within
+    :data:`RESET_POSITION_TOLERANCE` of their own spawn point.
+
+    Only x/y is checked: even though :data:`CUBE_SPAWN_POSITIONS`' z is now the settled
+    resting height rather than a drop height, small numerical settle noise or a cube
+    resting fractionally differently than the reference measurement could still make an
+    exact z comparison brittle. x/y is what actually says which spawn slot a cube is in,
+    and is unaffected by any of that.
+
+    A teleport (``MujocoSimulator.set_body_position``) reports success purely from having
+    written the position, not from the cube actually staying there once physics resumes:
+    something already occupying that space -- most plausibly the arm itself, left
+    wherever the previous iteration's last attempt happened to end, not necessarily clear
+    of the spawn row -- can shove a freshly teleported cube straight back out on the very
+    next physics step. Checked geometrically after the fact rather than trusted, for the
+    same reason :func:`cube_is_stacked_on` is.
+    """
+    out_of_place = []
+    for name, spawn_position in CUBE_SPAWN_POSITIONS.items():
+        position = numpy.array(
+            multi_sim.simulator.get_body_position(name).result[:3], dtype=float
+        )
+        horizontal_distance = numpy.linalg.norm(position[:2] - spawn_position[:2])
+        if horizontal_distance > RESET_POSITION_TOLERANCE:
+            out_of_place.append(name)
+    return out_of_place
+
+
 def reset_cubes() -> None:
     """
-    Returns every cube to its spawn pose and brings it to a standstill, see
-    ``demo2.py``'s own :func:`reset_cubes`.
+    Returns every cube to its spawn pose and brings it to a standstill, verifying (and,
+    if needed, retrying) that it actually took effect rather than trusting it.
+
+    The arm is parked first, best-effort: a hard iteration abandonment (a diverged
+    simulation, a cube that never got stacked, an uncaught exception) can leave it
+    anywhere, including hovering right over a cube's spawn point, which would defeat the
+    teleport below the moment physics resumes.
     """
-    for name, position in CUBE_SPAWN_POSITIONS.items():
-        multi_sim.simulator.reset_body_velocity(body_name=name)
-        multi_sim.simulator.set_body_position(body_name=name, position=position)
-        multi_sim.simulator.set_body_quaternion(
-            body_name=name, quaternion=CUBE_SPAWN_ORIENTATION
+    try:
+        sequential([ParkArmsAction(Arms.BOTH)], context=context).perform()
+    except Exception as park_exc:
+        print(f"[warning] could not park the arm before resetting cubes: {park_exc}")
+
+    out_of_place: list[str] = []
+    for attempt in range(1, MAX_RESET_ATTEMPTS + 1):
+        for name, position in CUBE_SPAWN_POSITIONS.items():
+            multi_sim.simulator.reset_body_velocity(body_name=name)
+            multi_sim.simulator.set_body_position(body_name=name, position=position)
+            multi_sim.simulator.set_body_quaternion(
+                body_name=name, quaternion=CUBE_SPAWN_ORIENTATION
+            )
+        time.sleep(RESET_SETTLE_DURATION)
+
+        out_of_place = cubes_not_at_spawn()
+        if not out_of_place:
+            return
+        print(
+            f"[warning] reset attempt {attempt}/{MAX_RESET_ATTEMPTS}: "
+            f"{', '.join(out_of_place)} did not settle at spawn -- retrying"
         )
+
+    print(
+        f"[warning] {', '.join(out_of_place)} still not at spawn after "
+        f"{MAX_RESET_ATTEMPTS} reset attempts; continuing anyway"
+    )
 
 
 def append_inference_report(
@@ -1125,6 +1369,8 @@ with ExecutionEnvironment(
 
         cube_outcomes: list[CubeAttemptOutcome] = []
         simulation_diverged = False
+        confirmed_stacks: list[tuple[Body, Body]] = []
+        iteration_deadline = iteration_start + ITERATION_TIME_LIMIT
 
         for cube_to_pick, cube_to_stack_on, step_label in [
             (box1, box, "cube1 onto cube0"),
@@ -1140,11 +1386,24 @@ with ExecutionEnvironment(
                 )
                 break
 
+            # A cube that has rolled out of reach fails the same way on every retry, so
+            # its own step gets a tighter budget than the rest of the iteration -- never
+            # more than CUBE_PICKUP_TIME_LIMIT, and never more of the iteration's own
+            # budget than is actually left.
+            cube_deadline = min(
+                iteration_deadline, time.time() + CUBE_PICKUP_TIME_LIMIT
+            )
             outcome = attempt_cube_with_correction(
-                cube_to_pick, cube_to_stack_on, Arms.LEFT, step_label
+                cube_to_pick,
+                cube_to_stack_on,
+                Arms.LEFT,
+                step_label,
+                confirmed_stacks=confirmed_stacks,
+                deadline=cube_deadline,
             )
             cube_outcomes.append(outcome)
             if outcome.final_succeeded:
+                confirmed_stacks.append((cube_to_pick, cube_to_stack_on))
                 if outcome.correction_attempts:
                     corrected_success_count += 1
             else:
