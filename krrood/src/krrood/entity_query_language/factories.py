@@ -27,6 +27,7 @@ from krrood.entity_query_language.core.base_expressions import (
     TruthValueOperator,
     OperationResult,
 )
+from krrood.entity_query_language.core.helpers import _resolve_domain
 from krrood.entity_query_language.core.mapped_variable import (
     FlatVariable,
     CanBehaveLikeAVariable,
@@ -37,7 +38,6 @@ from krrood.entity_query_language.core.variable import (
     Literal,
     ExternallySetVariable,
 )
-from krrood.entity_query_language.cache_data import InstanceFilteredDomain
 from krrood.entity_query_language.enums import DomainSource
 from krrood.entity_query_language.exceptions import UnsupportedExpressionTypeForDistinct
 from krrood.entity_query_language.operators.aggregators import (
@@ -138,20 +138,10 @@ def variable(
       but by another evaluator (e.g., EQL To SQL converter in Ormatic).
     :return: A Variable that can be queried for.
     """
-    # Determine the domain source
-    if is_iterable(domain):
-        domain = InstanceFilteredDomain(type_, domain)
-    elif domain is None and issubclass(type_, Symbol):
-        domain = SymbolGraph().get_instances_of_type(type_)
-    else:
-        domain = domain
-
-    result = Variable(
+    return Variable(
         _type_=type_,
-        _domain_=domain,
+        _domain_=_resolve_domain(type_, domain),
     )
-
-    return result
 
 
 def deduced_variable(
@@ -792,8 +782,6 @@ def distinct(
     match expression:
         case Query():
             return expression.distinct(*on)
-        case ResultQuantifier():
-            return expression._child_.distinct(*on)
         case Selectable():
             return entity(expression).distinct(*on)
         case _:
@@ -1064,17 +1052,17 @@ class IsClass(Predicate):
     Whether an object is a class.
     """
 
-    obj: Any
+    object: Any
     """
     The object checked.
     """
 
     def __call__(self) -> bool:
-        return isclass(self.obj)
+        return isclass(self.object)
 
     @classmethod
     def _verbalization_fragment_(cls, fields: RenderedFields) -> VerbalizationFragment:
-        """:return: the clause *"<obj> is a class"* — a custom fragment because the name-based
+        """:return: the clause *"<object> is a class"* — a custom fragment because the name-based
         reading drops the complement's article (*"… is class"*)."""
         # Imported locally to avoid the core -> verbalization import cycle (as Triple does).
         from krrood.entity_query_language.verbalization.vocabulary.parts_of_speech import (
@@ -1083,7 +1071,7 @@ class IsClass(Predicate):
             Noun,
         )
 
-        return clause(Noun(fields["obj"]), Copula(), Noun("class"))
+        return clause(Noun(fields["object"]), Copula(), Noun("class"))
 
 
 is_class = symbolic_callable_to_function(IsClass)
@@ -1095,13 +1083,13 @@ class RuntimeType(SymbolicFunction):
     The runtime class of an object, as a value operation.
     """
 
-    obj: Any
+    object: Any
     """
     The object whose runtime class is read.
     """
 
     def __call__(self) -> Type:
-        return self.obj.__class__
+        return self.object.__class__
 
     @classmethod
     def _verbalization_fragment_(cls, fields):
@@ -1113,3 +1101,14 @@ class RuntimeType(SymbolicFunction):
 
 
 type_ = symbolic_callable_to_function(RuntimeType)
+
+
+@symbolic_function
+def type_(obj: Any):
+    """
+    Determines the type of the given object.
+
+    :param obj: The object whose type is to be determined.
+    :return: The type of the given object.
+    """
+    return type(obj)

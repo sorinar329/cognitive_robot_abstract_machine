@@ -76,6 +76,12 @@ jobs:
           bazel build //test:test_all
           bazel test //test:test_all
 
+      - name: Install node
+        # cram_viz's frontend unit tests run under `node --test`; without node on PATH
+        # test_web_assets.py skips them instead of executing them.
+        if: ${{inputs.lib == 'cram_viz'}}
+        run: sudo apt-get install -y nodejs
+
       - name: Run tests
         run: |
           source /opt/ros/cram-env/bin/activate
@@ -83,6 +89,13 @@ jobs:
           echo "PYTHONPATH: $PYTHONPATH"
           if [[ "${{ inputs.lib }}" == "probabilistic_model" ]]; then
             export QT_QPA_PLATFORM=offscreen
+          fi
+          # The MuJoCo video-recorder tests render offscreen; xvfb provides a display, so MuJoCo
+          # would otherwise pick its windowed GLFW backend and fail to create a context on the
+          # runner. EGL renders headlessly. Must be set before Python imports mujoco, which locks
+          # the GL backend at import, so it cannot be done from inside the test process.
+          if [[ "${{ inputs.lib }}" == "semantic_digital_twin" ]]; then
+            export MUJOCO_GL=egl
           fi
           python -m pytest -n auto cognitive_robot_abstract_machine/test/${{ inputs.lib }}_test
 
