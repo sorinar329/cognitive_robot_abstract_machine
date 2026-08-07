@@ -278,15 +278,15 @@ Vertical offset (in meters) above a target cube's center at which a placed cube 
 end up -- one cube height plus a small clearance margin.
 """
 
-CARRYING_PARK_JOINT_VELOCITY = 0.3
+CARRYING_PARK_JOINT_VELOCITY = 0.1
 """
 Joint velocity (in rad/s) for the park move between pickup and place, i.e. the one made
 while the gripper is actually holding a cube. See ``demo3.py``'s own identical constant
 for why this is slower than :class:`ParkArmsAction`'s own default -- that default is
 deliberately fast for a park made with an empty gripper, and the same speed can jerk a
-cube, held by nothing but friction, right out of the fingers -- and for why this value
-is a further cut past 1.0 rad/s rather than settled on: tune it again if it is still too
-fast (or needlessly slow) once tried here too.
+cube, held by nothing but friction, right out of the fingers -- and for why this value is
+a further cut past 1.0 and 0.3 rad/s rather than settled on: tune it again if it is still
+too fast (or needlessly slow) once tried here too.
 """
 
 CUBE_SPAWN_POSITIONS = {

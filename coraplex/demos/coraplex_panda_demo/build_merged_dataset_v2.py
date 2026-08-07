@@ -21,6 +21,7 @@ Run it with the interpreter whose packages point at this checkout, for example::
 from __future__ import annotations
 
 import dataclasses
+import datetime
 import re
 from pathlib import Path
 from typing import Optional
@@ -200,22 +201,34 @@ class IncompleteDataset(RuntimeError):
         )
 
 
-def read_iteration_outcomes(report_path: Optional[Path]) -> dict[int, bool]:
+def read_iteration_outcomes(
+    report_path: Optional[Path],
+) -> dict[tuple[datetime.datetime, int], bool]:
     """
     Read whether each iteration ended with the whole stack standing.
 
     :param report_path: The run's report, or ``None`` if it was not kept.
-    :return: Maps iteration number to whether segmind approved the stack. Empty when
-        there is no report.
+    :return: Maps ``(run_started_at, iteration_index)`` to whether segmind approved the
+        stack. Empty when there is no report.
+
+    Keyed by ``(run_started_at, iteration_index)`` rather than bare iteration number:
+    unlike ``build_merged_dataset.py``'s own archived sources, each of which held exactly
+    one continuous run, ``demo3.py`` can write several separate runs into the same
+    database (its own database is not re-archived between invocations), and their
+    iteration numbering each restarts at 1. ``demo3.py``'s report heading carries
+    ``run_started_at`` for exactly this reason -- see its own ``append_support_report``.
     """
     if report_path is None or not report_path.exists():
         return {}
     content = report_path.read_text(errors="replace")
     matches = re.findall(
-        r"## Iteration (\d+)\s*\n\s*`segmind_approved\(\)`: \*\*(True|False)\*\*",
+        r"## Run (\S+) Iteration (\d+)\s*\n\s*`segmind_approved\(\)`: \*\*(True|False)\*\*",
         content,
     )
-    return {int(iteration): approved == "True" for iteration, approved in matches}
+    return {
+        (datetime.datetime.fromisoformat(run_started_at), int(iteration)): approved == "True"
+        for run_started_at, iteration, approved in matches
+    }
 
 
 def collect_attempts(source: SourceRun) -> list[dict]:
@@ -226,6 +239,10 @@ def collect_attempts(source: SourceRun) -> list[dict]:
     ``step_index`` and ``steps_attempted`` together say where an attempt sat in its
     iteration and whether the iteration was cut short, which is what distinguishes a step
     that was never reached from one that ran.
+
+    Grouped by ``(run_started_at, iteration_index)`` rather than bare iteration number --
+    see :func:`read_iteration_outcomes` for why bare iteration number is not enough to
+    tell two different runs' attempts apart in ``demo3.py``'s database.
     """
     engine = create_engine(f"{POSTGRES_PREFIX}/{source.database}")
     with engine.connect() as connection:
@@ -234,24 +251,23 @@ def collect_attempts(source: SourceRun) -> list[dict]:
         ).mappings().all()
 
     outcomes = read_iteration_outcomes(source.report_path)
-    steps_per_iteration: dict[int, int] = {}
+    steps_per_iteration: dict[tuple[datetime.datetime, int], int] = {}
     for row in rows:
-        steps_per_iteration[row["iteration_index"]] = (
-            steps_per_iteration.get(row["iteration_index"], 0) + 1
-        )
+        key = (row["run_started_at"], row["iteration_index"])
+        steps_per_iteration[key] = steps_per_iteration.get(key, 0) + 1
 
     attempts = []
-    seen_in_iteration: dict[int, int] = {}
+    seen_in_iteration: dict[tuple[datetime.datetime, int], int] = {}
     for row in rows:
-        iteration = row["iteration_index"]
-        seen_in_iteration[iteration] = seen_in_iteration.get(iteration, 0) + 1
+        key = (row["run_started_at"], row["iteration_index"])
+        seen_in_iteration[key] = seen_in_iteration.get(key, 0) + 1
         attempts.append(
             {
                 **dict(row),
                 "source_database": source.database,
-                "step_index": seen_in_iteration[iteration],
-                "steps_attempted": steps_per_iteration[iteration],
-                "iteration_stacked": outcomes.get(iteration),
+                "step_index": seen_in_iteration[key],
+                "steps_attempted": steps_per_iteration[key],
+                "iteration_stacked": outcomes.get(key),
             }
         )
     return attempts
@@ -295,8 +311,9 @@ def build_successful_subset() -> None:
         ).mappings().all()
 
     engine = create_dataset_database(SUCCESSFUL_DATABASE)
-    with engine.begin() as connection:
-        connection.execute(dataset_insert(), [dict(row) for row in rows])
+    if rows:
+        with engine.begin() as connection:
+            connection.execute(dataset_insert(), [dict(row) for row in rows])
 
     with engine.connect() as connection:
         iterations = connection.execute(

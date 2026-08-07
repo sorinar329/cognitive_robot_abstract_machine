@@ -218,7 +218,7 @@ def print_positions():
 # casadi::SXElem::is_constant() on an unmapped address. :func:`print_positions` is
 # kept for the one call on the main thread once the run is over.
 
-NUMBER_OF_ITERATIONS = 10000
+NUMBER_OF_ITERATIONS = 50
 """
 Number of times the full pickup/stack sequence is repeated, so the demo can be left
 running unattended instead of re-started by hand for every trial.
@@ -246,7 +246,7 @@ Vertical offset (in meters) above a target cube's center at which a placed cube 
 end up -- one cube height plus a small clearance margin.
 """
 
-CARRYING_PARK_JOINT_VELOCITY = 0.3
+CARRYING_PARK_JOINT_VELOCITY = 0.1
 """
 Joint velocity (in rad/s) for the park move between pickup and place, i.e. the one made
 while the gripper is actually holding a cube.
@@ -255,11 +255,16 @@ while the gripper is actually holding a cube.
 normally happens with an empty gripper and nothing at risk of being shaken loose. The
 cube here is held by nothing but friction (see this demo's own docstring on
 ``MujocoSim(mirror_attachments=False)``), so a fast move can jerk it out of the fingers.
-:class:`~coraplex.robot_plans.motions.robot_body.MoveJointsMotion`'s own baseline of
-1.0 rad/s (the speed :class:`ParkArmsAction`'s docstring says 2.0 was raised above) was
-tried first and confirmed, by the developer running this demo, to still shake the cube
-loose -- this is a further cut, not yet itself confirmed against the real simulator, so
-tune it again if it is still too fast (or needlessly slow) once tried.
+Two earlier values were tried and confirmed, by the developer running this demo, to
+still shake the cube loose: :class:`~coraplex.robot_plans.motions.robot_body.MoveJointsMotion`'s
+own 1.0 rad/s baseline (the speed :class:`ParkArmsAction`'s docstring says 2.0 was raised
+above), then 0.3 rad/s. A 50-iteration run at 0.3 rad/s reached only 4% full-stack
+success against ``demo2.py``'s 74% on the same parameter ranges (see this run's own
+comparison in conversation, not reproduced here), with per-step reach-height rate falling
+sharply on later, taller steps -- consistent with this park still being too fast rather
+than the sampling ranges (identical to ``demo2.py``'s) being at fault. This is a further
+cut, not yet itself confirmed against the real simulator, so tune it again if it is still
+too fast (or needlessly slow) once tried.
 """
 
 STACK_XY_TOLERANCE = 0.03
@@ -696,11 +701,18 @@ def append_support_report(iteration_index: int, simulation_diverged: bool) -> No
     from the world as it is once the iteration has finished. A diverged iteration
     is marked as such, since its findings describe cubes that had left the scene
     rather than a stack that failed to hold.
+
+    The heading carries :data:`RUN_STARTED_AT` alongside ``iteration_index``: unlike the
+    v1 demos, where each archived database held exactly one continuous run, this file's
+    database can accumulate several separate runs, whose iteration numbering each
+    restarts at 1 -- without the run timestamp, ``build_merged_dataset_v2.py`` cannot
+    tell two different runs' "iteration 6" apart and would attribute one run's outcome
+    to the other's rows.
     """
     supports = detected_supports()
     approved = segmind_approved()
 
-    lines = [f"\n## Iteration {iteration_index}\n"]
+    lines = [f"\n## Run {RUN_STARTED_AT.isoformat()} Iteration {iteration_index}\n"]
     lines.append(f"`segmind_approved()`: **{approved}**\n")
     if simulation_diverged:
         lines.append("**simulation diverged -- excluded from results**\n")
