@@ -1,32 +1,29 @@
 """
-Closed-loop stacking with JPT-guided sampling and causal failure diagnosis.
+Second-generation copy of ``inference.py``, closed-loop stacking with JPT-guided sampling
+and causal failure diagnosis against the models ``training/train_jpt2.py`` fits.
 
-Structured like ``demo2.py`` -- same world, simulation and segmind setup -- but with two
-differences:
+Structured exactly like ``inference.py`` -- same world, simulation, segmind setup and
+diagnose-and-correct loop -- with two differences:
 
-- Every attempt is sampled from *wider* priors than ``demo2.py``'s (see
-  :data:`WIDE_PICKUP_PARAMETER_PRIORS`/:data:`WIDE_PLACE_PARAMETER_PRIORS`), deliberately
-  reaching further into the ranges noted in ``pickup_place_parameterization.py`` to break
-  a grasp or knock the stack over, so failures happen often enough for diagnosis to have
-  something to work with.
-- When segmind reports a cube ended up on the floor instead of stacked, the trained JPTs'
-  causal circuit (see ``causal_diagnosis.py``) diagnoses which parameter of that attempt
-  is least consistent with successful attempts, explains why, and proposes a corrected
-  value for it. The same cube is retried with that one parameter corrected -- everything
-  else about the attempt unchanged -- and segmind validates the retry the same way it
-  validated the original attempt. This repeats, capped at
-  :data:`MAX_CORRECTION_ATTEMPTS_PER_CUBE`, for every cube and for the stack as a whole.
-- A cube already confirmed stacked earlier in the same iteration can still be knocked
-  aside by a later cube's own approach, grasp or retreat -- most often while that later
-  cube is going through several correction retries in a row. Every attempt (initial and
-  every correction retry alike) is followed by a geometric check of every cube confirmed
-  stacked so far; one found disturbed is re-stacked on the spot, before the cube that
-  is currently being worked on is retried or the run moves on to the next one (see
-  :func:`restack_disturbed_cubes`).
+- The arm parks between the pickup and the place on every attempt, including every
+  corrective retry, instead of crossing directly from the pickup pose to the place pose.
+  ``inference.py`` itself notes why that park matters (its own comment on
+  ``build_stack_plan``: once the stack has some height, the direct crossing can pass
+  right through where the already-stacked cubes are) but currently has it disabled; a
+  corrective retry repeats that same crossing several times in a row, which is exactly
+  where a collision with an already-stacked cube is most likely. ``demo3.py`` collects
+  its training data with this same park in place, so the diagnoser here is trained on
+  attempts shaped like the ones it corrects.
+- Diagnosis is done against ``causal_diagnosis_v2``'s trees, whose causal circuit uses
+  ``object_final_z`` -- the height the picked cube actually settled at -- as the effect
+  variable instead of ``step_index``. See ``causal_diagnosis_v2.py``'s own docstring for
+  why that makes ``object_friction`` a candidate cause on the same footing as every other
+  tunable parameter, with nothing spent on a structural role that carries no information
+  about success.
 
 Run it with the interpreter whose packages point at this checkout, for example::
 
-    /home/sorin/.virtualenvs/cram2-env/bin/python inference.py
+    /home/sorin/.virtualenvs/cram2-env/bin/python inference2.py
 """
 
 import dataclasses
@@ -63,7 +60,7 @@ from coraplex.robot_plans.actions.core.pick_up import PickUpAction
 from coraplex.robot_plans.actions.core.placing import PlaceAction
 from coraplex.robot_plans.actions.core.robot_body import ParkArmsAction
 
-from causal_diagnosis import (
+from causal_diagnosis_v2 import (
     ActionCausalDiagnoser,
     NoRecommendationAvailable,
     PICKUP_CAUSAL_CONFIG,
@@ -138,7 +135,7 @@ place_diagnoser = ActionCausalDiagnoser(PLACE_MODEL_PATH, PLACE_CAUSAL_CONFIG)
 Diagnoses failed placements against the trained :class:`PlaceAction` parameter tree.
 """
 
-RANDOM_SEED = int(os.environ.get("INFERENCE_RANDOM_SEED", "42"))
+RANDOM_SEED = int(os.environ.get("INFERENCE2_RANDOM_SEED", "42"))
 """
 Seed for the per-attempt parameter sampling, see ``demo2.py``'s own
 :data:`RANDOM_SEED` for why this only makes the sampled parameters -- not the run as a
@@ -240,11 +237,11 @@ def print_positions():
     )
 
 
-NUMBER_OF_ITERATIONS = int(os.environ.get("INFERENCE_NUMBER_OF_ITERATIONS", "20"))
+NUMBER_OF_ITERATIONS = int(os.environ.get("INFERENCE2_NUMBER_OF_ITERATIONS", "20"))
 """
 Number of times the full pickup/stack sequence is repeated.
 
-Much smaller than ``demo2.py``'s: this demo illustrates the diagnose-and-correct loop
+Much smaller than ``demo3.py``'s: this demo illustrates the diagnose-and-correct loop
 rather than collecting a large training dataset, and wide priors make every iteration
 slower (a failed cube can trigger several correction attempts before moving on).
 """
@@ -259,7 +256,7 @@ ITERATION_TIME_LIMIT = 120.0
 """
 Wall-clock budget (in seconds) for one iteration, checked between cubes.
 
-Twice ``demo2.py``'s: a cube here can go through several correction attempts, each
+Twice ``demo3.py``'s: a cube here can go through several correction attempts, each
 costing roughly as long as a normal attempt.
 """
 
@@ -279,6 +276,17 @@ STACK_HEIGHT_OFFSET = 0.06
 """
 Vertical offset (in meters) above a target cube's center at which a placed cube should
 end up -- one cube height plus a small clearance margin.
+"""
+
+CARRYING_PARK_JOINT_VELOCITY = 0.3
+"""
+Joint velocity (in rad/s) for the park move between pickup and place, i.e. the one made
+while the gripper is actually holding a cube. See ``demo3.py``'s own identical constant
+for why this is slower than :class:`ParkArmsAction`'s own default -- that default is
+deliberately fast for a park made with an empty gripper, and the same speed can jerk a
+cube, held by nothing but friction, right out of the fingers -- and for why this value
+is a further cut past 1.0 rad/s rather than settled on: tune it again if it is still too
+fast (or needlessly slow) once tried here too.
 """
 
 CUBE_SPAWN_POSITIONS = {
@@ -450,9 +458,12 @@ def apply_correction(
 
 # %% support verification via segmind
 
-INFERENCE_REPORT_PATH = Path(__file__).parent / "inference_report.md"
+INFERENCE_REPORT_PATH = Path(__file__).parent / "inference_report_v2.md"
 """
 Markdown file the per-iteration diagnosis-and-correction findings are appended to.
+
+Its own file, separate from ``inference.py``'s ``inference_report.md``: the two runs are
+diagnosed against different models and are not comparable iteration-for-iteration.
 """
 
 segmind_context = SegmindContext()
@@ -810,8 +821,12 @@ def build_stack_plan(
             # rather than crossing directly from the pickup pose to the place pose at
             # whatever height that direct path happens to pass through -- which, once
             # the stack has some height to it, can pass right through where the already
-            # stacked cubes are.
-            #ParkArmsAction(Arms.BOTH),
+            # stacked cubes are. Kept enabled here (see this module's own docstring),
+            # matching how demo3.py collects the training data this run diagnoses
+            # against. Slowed to CARRYING_PARK_JOINT_VELOCITY for the same reason
+            # demo3.py's does: at full speed this move jerks the cube -- held by
+            # nothing but friction -- right out of the fingers.
+            ParkArmsAction(Arms.BOTH, joint_velocity=CARRYING_PARK_JOINT_VELOCITY),
             place_action,
             ParkArmsAction(Arms.BOTH),
         ],
