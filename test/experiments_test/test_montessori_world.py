@@ -10,6 +10,7 @@ from experiments.montessori.semantics import (
 )
 from experiments.montessori.world import (
     BOARD_SCALE,
+    DISK_TABLE_OVERHANG_FRACTION,
     FLOOR_Z,
     SHAPE_FOOTPRINT_CLEARANCE_SCALE,
     TABLE_POSITION,
@@ -276,7 +277,10 @@ def test_montessori_world_places_loose_shapes_resting_on_the_table():
 
         # the shape's lowest point rests exactly on the table's surface
         assert float(position.z) + lowest_local_z == pytest.approx(table_top_z)
-        assert float(position.x) == TABLE_SHAPE_ROW_X
+        # the disk is shifted off the row, toward the table's edge (see
+        # test_disk_shape_overhangs_the_table_edge_for_horizontal_grasping)
+        if shape.shape_category is not MontessoriShapeCategory.DISK:
+            assert float(position.x) == TABLE_SHAPE_ROW_X
         assert table_min_y <= float(position.y) <= table_max_y
         y_positions.append(float(position.y))
 
@@ -311,7 +315,26 @@ def test_movable_loose_shapes_still_rest_on_the_table():
         position = shape.global_transform.to_position()
         lowest_local_z = shape.root.collision.combined_mesh.bounds[0][2]
         assert float(position.z) + lowest_local_z == pytest.approx(table_top_z)
-        assert float(position.x) == pytest.approx(TABLE_SHAPE_ROW_X)
+        if shape.shape_category is not MontessoriShapeCategory.DISK:
+            assert float(position.x) == pytest.approx(TABLE_SHAPE_ROW_X)
+
+
+def test_disk_shape_overhangs_the_table_edge_for_horizontal_grasping():
+    montessori = MontessoriWorld()
+    montessori.world.update_forward_kinematics()
+
+    [disk] = [
+        shape
+        for shape in montessori.world.get_semantic_annotations_by_type(MontessoriShape)
+        if shape.shape_category == MontessoriShapeCategory.DISK
+    ]
+    position = disk.root.global_transform.to_position()
+    bounds = disk.root.collision.combined_mesh.bounds
+    extent_x = bounds[1][0] - bounds[0][0]
+    table_near_edge_x = float(TABLE_POSITION.x) + TABLE_SCALE.x / 2
+
+    overhang = float(position.x) + extent_x / 2 - table_near_edge_x
+    assert overhang == pytest.approx(DISK_TABLE_OVERHANG_FRACTION * extent_x)
 
 
 def test_montessori_world_creates_one_table_and_one_floor():

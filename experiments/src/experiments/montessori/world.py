@@ -123,6 +123,18 @@ TABLE_SHAPE_ROW_SPACING = 0.07
 Distance, along y, between adjacent loose shapes in the row on the table.
 """
 
+DISK_TABLE_OVERHANG_FRACTION = 0.2
+"""
+Fraction of the disk shape's own diameter left protruding past the table's near edge
+when it is spawned.
+
+Lying flat on the table, the disk can only be grasped from directly above, which
+cannot then be lowered through its own hole edge-on; letting part of it hang past the
+table's edge leaves a rim a gripper can approach from the side and grasp horizontally
+instead. The overhang stays well under half the disk's diameter, so its center of mass
+remains over the table and it rests flat rather than tipping off.
+"""
+
 DEFAULT_ROBOT_STANDOFF_DISTANCE = 0.6
 """
 Default distance the spawned robot stands in front of the Montessori table's near edge.
@@ -996,8 +1008,13 @@ class MontessoriWorld:
             shape_class = MONTESSORI_SHAPE_CLASSES[category]
             shape = shape_class(name=_name(shape_key), root=body)
             y = TABLE_SHAPE_ROW_START_Y + index * TABLE_SHAPE_ROW_SPACING
+            position = (
+                self._table_edge_overhang_position(body, y)
+                if category is MontessoriShapeCategory.DISK
+                else self._resting_position_on_table(body, y)
+            )
             spawn = self._spawn_free_body if self.shapes_are_movable else self._spawn
-            spawn(shape, self._resting_position_on_table(body, y))
+            spawn(shape, position)
 
     @staticmethod
     def _resting_position_on_table(body: Body, y: float) -> Point3:
@@ -1008,3 +1025,19 @@ class MontessoriWorld:
         lowest_local_z = body.collision.combined_mesh.bounds[0][2]
         table_top_z = float(TABLE_POSITION.z) + TABLE_SCALE.z / 2
         return Point3(TABLE_SHAPE_ROW_X, y, table_top_z - lowest_local_z)
+
+    @staticmethod
+    def _table_edge_overhang_position(body: Body, y: float) -> Point3:
+        """
+        Position, at ``y``, at which ``body`` rests on the table shifted so
+        :data:`DISK_TABLE_OVERHANG_FRACTION` of its own extent along x protrudes past
+        the table's near edge (the short edge nearest the row of loose shapes), for a
+        shape a gripper must approach from the side rather than from above.
+        """
+        local_bounds = body.collision.combined_mesh.bounds
+        lowest_local_z = local_bounds[0][2]
+        extent_x = local_bounds[1][0] - local_bounds[0][0]
+        table_near_edge_x = float(TABLE_POSITION.x) + TABLE_SCALE.x / 2
+        table_top_z = float(TABLE_POSITION.z) + TABLE_SCALE.z / 2
+        x = table_near_edge_x - extent_x / 2 + DISK_TABLE_OVERHANG_FRACTION * extent_x
+        return Point3(x, y, table_top_z - lowest_local_z)
