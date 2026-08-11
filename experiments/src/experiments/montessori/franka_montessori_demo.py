@@ -66,11 +66,14 @@ from experiments.montessori.sorting_results import (
     ShapeInsertionResult,
     SortingIterationResult,
 )
-from experiments.montessori.world import MontessoriWorld
-from segmind.datastructures.events import InsertionEvent, PickUpEvent
+from experiments.montessori.world import FLOOR_Z, MontessoriWorld
+from segmind.datastructures.event_plotter import EventPlotter
+from segmind.datastructures.events import DetectionEvent, InsertionEvent, PickUpEvent
 from semantic_digital_twin.robots.panda import Panda
 from semantic_digital_twin.spatial_types.spatial_types import Point3
 from semantic_digital_twin.utils import rclpy_installed
+from cramera.live.runner import start
+
 
 if TYPE_CHECKING:
     # coraplex.datastructures.dataclasses and the ROS adapters below all pull in
@@ -85,6 +88,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+start()
 DEFAULT_DATABASE_URI = "sqlite:///franka_montessori_sorting_results.db"
 """
 Database URI used when neither ``--database-uri`` nor
@@ -121,7 +125,7 @@ arm shake rather than hold still near a commanded pose.
 MUJOCO_INTEGRATOR = mujoco.mjtIntegrator.mjINT_IMPLICITFAST
 """
 Numerical integrator MuJoCo advances the physics with, matching
-``coraplex_panda_demo/stacking_scene.xml``'s own ``<option integrator="implicitfast"
+``coraplex_panda_demo/panda.xml``'s own ``<option integrator="implicitfast"
 />`` (:class:`~physics_simulators.mujoco_simulator.MujocoSimulator` otherwise falls back
 to its own ``RK4`` default regardless of what a scene declares).
 
@@ -140,7 +144,15 @@ overhead it saves, but produced an unreliable/wedged grasp and, once, a run that
 converged -- the controller needs joint state read back at least as often as it commands.
 """
 
-SKIPPED_SHAPE_CATEGORIES = frozenset({MontessoriShapeCategory.DISK})
+SKIPPED_SHAPE_CATEGORIES = frozenset(
+    {
+        MontessoriShapeCategory.DISK,
+        MontessoriShapeCategory.SPHERE,
+        MontessoriShapeCategory.CYLINDER,
+        MontessoriShapeCategory.RECTANGULAR_PRISM,
+        MontessoriShapeCategory.TRIANGULAR_PRISM,
+    }
+)
 """
 Shape categories the demo leaves where they are.
 
@@ -220,6 +232,46 @@ def _mount_position(montessori: MontessoriWorld) -> Point3:
         0.0,
         table_bounding_box.max_z,
     )
+
+
+def _add_physical_floor_collision(multi_sim: MujocoSim) -> None:
+    """
+    Add a real MuJoCo collision plane at floor height to ``multi_sim``'s own compiled
+    model, without touching :mod:`experiments.montessori.world`'s shared semantic
+    world.
+
+    That world's own :class:`~semantic_digital_twin.semantic_annotations.semantic_anno
+    tations.Floor` is built visual-only on purpose (see ``_body_with_visual_only_shape``
+    in :mod:`experiments.montessori.world`), because CRAM's navigation costmaps --
+    needed by :mod:`~experiments.montessori.montessori_demo`'s HSRB original, which
+    shares this same world -- treat any collidable geometry at ground level as an
+    obstacle blocking every standing spot. This demo has no mobile base and so no
+    costmap to protect; without a real floor collider here, a shape that misses during
+    pick-and-place falls straight through and free-falls until MuJoCo's own stepper
+    segfaults once its position/velocity become numerically extreme.
+
+    :param multi_sim: The simulation to add the floor collision plane to; may be
+        running or not yet started.
+    :raises RuntimeError: If MuJoCo rejects the plane geom.
+    """
+    from physics_simulators.base_simulator import SimulatorCallbackResult
+
+    result = multi_sim.simulator.add_entity(
+        entity_name="physical_floor_collision",
+        entity_type="geom",
+        entity_properties={
+            "type": mujoco.mjtGeom.mjGEOM_PLANE,
+            "size": [0, 0, 1],
+            "pos": [0.0, 0.0, FLOOR_Z],
+            "contype": 1,
+            "conaffinity": 1,
+        },
+    )
+    if (
+        result.type
+        != SimulatorCallbackResult.ResultType.SUCCESS_AFTER_EXECUTION_ON_MODEL
+    ):
+        raise RuntimeError(f"Failed to add floor collision plane: {result.info}")
 
 
 def _build_insert_action(
@@ -429,7 +481,9 @@ def _insert_shape_or_none(
 
 
 def _log_segmind_verdict(
-    shape: MontessoriShape, ground_truth_fell_through: Optional[bool], monitor: MontessoriEventMonitor
+    shape: MontessoriShape,
+    ground_truth_fell_through: Optional[bool],
+    monitor: MontessoriEventMonitor,
 ) -> None:
     """
     Log segmind's own pick-up/insertion verdict for ``shape`` next to the ground truth
@@ -454,7 +508,10 @@ def _log_segmind_verdict(
     logger.info(
         "DEBUG segmind raw events for %s: %s",
         shape.name,
-        [(type(e).__name__, getattr(e, "with_object", None), e.timestamp) for e in events],
+        [
+            (type(e).__name__, getattr(e, "with_object", None), e.timestamp)
+            for e in events
+        ],
     )
     logger.info(
         "segmind for %s: pick-up detected=%s, insertion detected=%s "
@@ -471,6 +528,7 @@ def _insert_all_shapes(
     context,
     max_shapes: Optional[int] = None,
     only_shape: Optional[str] = None,
+    events_plot_path: Optional[str] = None,
 ) -> list[ShapeInsertionResult]:
     """
     Have the Panda pick up and insert every loose shape that has a matching hole into
@@ -496,10 +554,16 @@ def _insert_all_shapes(
         never even reaches them), so the scene matches a full run; only the robot's
         insertion attempts are limited, for isolating one shape's own tuning without a
         full run's time cost.
+    :param events_plot_path: If given, save every attempted shape's segmind events
+        (concatenated in attempt order) as an HTML timeline to this path via
+        :class:`~segmind.datastructures.event_plotter.EventPlotter`, once every shape
+        has been attempted. Only saved, never shown interactively. ``None`` (the
+        default) skips plotting entirely.
     :return: One :class:`~experiments.montessori.sorting_results.ShapeInsertionResult` per actually attempted shape, in
         attempt order; a skipped shape has no entry.
     """
     results: list[ShapeInsertionResult] = []
+    all_events: list[DetectionEvent] = []
     attempted = 0
     for shape in montessori.world.get_semantic_annotations_by_type(MontessoriShape):
         if shape.shape_category in SKIPPED_SHAPE_CATEGORIES:
@@ -542,7 +606,8 @@ def _insert_all_shapes(
                 break
 
         event_monitor.stop()
-        _log_segmind_verdict(shape, fell_through, event_monitor)
+        all_events.extend(event_monitor.events)
+        # _log_segmind_verdict(shape, fell_through, event_monitor)
 
         if fell_through is None:
             logger.warning(
@@ -563,6 +628,9 @@ def _insert_all_shapes(
         results.append(
             ShapeInsertionResult(shape_key=shape_key, outcome=outcome, plan=action.plan)
         )
+
+    if events_plot_path is not None:
+        EventPlotter().plot(all_events, show=False, save_path=events_plot_path)
 
     return results
 
@@ -658,6 +726,17 @@ def _parse_arguments() -> argparse.Namespace:
             "DEFAULT_DATABASE_URI), overridable via FRANKA_MONTESSORI_SORTING_DATABASE_URI."
         ),
     )
+    parser.add_argument(
+        "--plot-events-path",
+        type=str,
+        default=None,
+        help=(
+            "Save every attempted shape's segmind events from one full sort as an "
+            "HTML timeline to this path, once sorting finishes. With --iterations "
+            "greater than one, each iteration gets its own file, suffixed with its "
+            "iteration number. Not plotted by default."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -679,7 +758,7 @@ def _open_results_session(database_uri: str) -> Session:
 
 
 def _build_world_and_sort(
-    node, arguments: argparse.Namespace
+    node, arguments: argparse.Namespace, events_plot_path: Optional[str] = None
 ) -> tuple[
     list[ShapeInsertionResult],
     MujocoSim,
@@ -693,6 +772,8 @@ def _build_world_and_sort(
     :param node: The ROS 2 node TF/marker publishing runs against.
     :param arguments: Parsed command-line arguments selecting the world layout, viewer,
         RViz publishing, and shape-attempt limits.
+    :param events_plot_path: Forwarded to :func:`_insert_all_shapes`; where to save this
+        sort's segmind events timeline, or ``None`` to skip plotting.
     :return: This run's per-shape results (see :func:`_insert_all_shapes`), and the live
         simulation and publishers, left running for the caller to stop once it is done
         with them.
@@ -747,6 +828,7 @@ def _build_world_and_sort(
         sync_rate_hz=SYNC_RATE_HZ,
         integrator=MUJOCO_INTEGRATOR,
     )
+    #_add_physical_floor_collision(multi_sim)
     context = Context(
         montessori.world,
         robot,
@@ -772,6 +854,7 @@ def _build_world_and_sort(
         context,
         max_shapes=arguments.max_shapes,
         only_shape=arguments.only_shape,
+        events_plot_path=events_plot_path,
     )
     return results, multi_sim, tf_publisher, viz_marker_publisher
 
@@ -835,6 +918,26 @@ def _log_iteration_summary(iteration_results: list[SortingIterationResult]) -> N
         )
 
 
+def _events_plot_path_for_iteration(
+    base_path: Optional[str], iteration: int, iteration_count: int
+) -> Optional[str]:
+    """
+    Where to save one iteration's segmind events plot, so a multi-iteration run's
+    plots don't overwrite each other.
+
+    :param base_path: Path passed via ``--plot-events-path``; ``None`` if plotting is
+        off, in which case this always returns ``None``.
+    :param iteration: This iteration's 1-based recorded index (see
+        :attr:`~argparse.Namespace.start_iteration`).
+    :param iteration_count: How many iterations this run performs in total; a run of
+        exactly one keeps ``base_path`` unchanged instead of suffixing it.
+    """
+    if base_path is None or iteration_count == 1:
+        return base_path
+    stem, extension = os.path.splitext(base_path)
+    return f"{stem}_{iteration}{extension}"
+
+
 def main() -> None:
     """
     Build the Montessori world, bolt the Panda next to it, visualize it in RViz, and
@@ -882,7 +985,7 @@ def main() -> None:
     multi_sim = None
     tf_publisher = None
     viz_marker_publisher = None
-#    results_session = _open_results_session(arguments.database_uri)
+    #    results_session = _open_results_session(arguments.database_uri)
     logger.info("Recording results to '%s'.", arguments.database_uri)
     try:
         for iteration in range(
@@ -895,15 +998,20 @@ def main() -> None:
                     iteration,
                     arguments.start_iteration + arguments.iterations - 1,
                 )
+            events_plot_path = _events_plot_path_for_iteration(
+                arguments.plot_events_path, iteration, arguments.iterations
+            )
             shape_results, multi_sim, tf_publisher, viz_marker_publisher = (
-                _build_world_and_sort(node, arguments)
+                _build_world_and_sort(
+                    node, arguments, events_plot_path=events_plot_path
+                )
             )
             iteration_result = SortingIterationResult(
                 iteration=iteration, shape_results=shape_results
             )
             iteration_results.append(iteration_result)
-            #results_session.add(to_dao(iteration_result))
-            #results_session.commit()
+            # results_session.add(to_dao(iteration_result))
+            # results_session.commit()
 
             if keep_simulation_running:
                 break
@@ -926,7 +1034,7 @@ def main() -> None:
     except KeyboardInterrupt:
         pass
     finally:
-        #results_session.close()
+        # results_session.close()
         if multi_sim is not None:
             multi_sim.stop_simulation()
         if viz_marker_publisher is not None:

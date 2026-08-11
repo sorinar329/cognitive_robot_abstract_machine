@@ -21,7 +21,7 @@ from semantic_digital_twin.world_description.world_entity import Body
 
 pytestmark = pytest.mark.skipif(
     not PANDA_SCENE_PATH.exists(),
-    reason="coraplex_panda_demo/stacking_scene.xml is not present",
+    reason="coraplex_panda_demo/panda.xml is not present",
 )
 
 MOUNT_POSITION = Point3(0.25, 0.0, 0.5)

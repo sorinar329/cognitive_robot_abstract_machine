@@ -22,7 +22,23 @@ class EventPlotter:
     A class responsible for plotting events from a timeline.
     """
 
-    def plot(self, events: List[DetectionEvent], show: bool = True, save_path: Optional[str] = None) -> None:
+    event_bar_width_seconds: float = 0.1
+    """
+    Width, in seconds, given to each event's bar on the timeline.
+
+    Events are instantaneous, not intervals, so there is no real duration to plot; a
+    zero width was tried first, but `plotly.express.timeline` renders a zero-width bar
+    as invisible, which made every plot look empty despite holding real data. A small
+    fixed width keeps each event visible without the bar reading as an interval with an
+    actual end time.
+    """
+
+    def plot(
+        self,
+        events: List[DetectionEvent],
+        show: bool = True,
+        save_path: Optional[str] = None,
+    ) -> None:
         """
         Plot the given events in a timeline.
 
@@ -49,29 +65,36 @@ class EventPlotter:
         """
         data_dict = defaultdict(list)
         for event in events:
-            data_dict['event'].append(event.__class__.__name__)
-            data_dict['start'].append(event.timestamp.timestamp())
-            data_dict['end'].append(event.timestamp.timestamp())
+            data_dict["event"].append(event.__class__.__name__)
+            data_dict["start"].append(event.timestamp.timestamp())
+            data_dict["end"].append(
+                event.timestamp.timestamp() + self.event_bar_width_seconds
+            )
 
             if isinstance(event, EventWithTrackedObjects):
-                object_name = ", ".join([str(obj.name) for obj in event.tracked_objects])
-                with_object_name = str(event.with_object.name) if event.with_object is not None else None
+                object_name = ", ".join(
+                    [str(obj.name) for obj in event.tracked_objects]
+                )
+                with_object_name = (
+                    str(event.with_object.name)
+                    if event.with_object is not None
+                    else None
+                )
             else:
                 object_name = "None"
                 with_object_name = None
-            data_dict['object'].append(object_name)
-            data_dict['with_object'].append(with_object_name)
+            data_dict["object"].append(object_name)
+            data_dict["with_object"].append(with_object_name)
 
         return data_dict
-
 
     def _create_dataframe(self, data_dict: dict) -> pd.DataFrame:
         """
         Create a pandas DataFrame and normalize timestamps.
         """
-        min_start = min(data_dict['start'])
-        data_dict['start'] = [x - min_start for x in data_dict['start']]
-        data_dict['end'] = [x - min_start for x in data_dict['end']]
+        min_start = min(data_dict["start"])
+        data_dict["start"] = [x - min_start for x in data_dict["start"]]
+        data_dict["end"] = [x - min_start for x in data_dict["end"]]
         return pd.DataFrame(data_dict)
 
     def _create_figure(self, df: pd.DataFrame) -> px.timeline:
@@ -80,16 +103,16 @@ class EventPlotter:
         """
         fig = px.timeline(
             df,
-            x_start=pd.to_datetime(df['start'], unit='s'),
-            x_end=pd.to_datetime(df['end'], unit='s'),
-            y='event',
-            color='event',
-            hover_data={'object': True, 'with_object': True},
-            title="Events Timeline"
+            x_start=pd.to_datetime(df["start"], unit="s"),
+            x_end=pd.to_datetime(df["end"], unit="s"),
+            y="event",
+            color="event",
+            hover_data={"object": True, "with_object": True},
+            title="Events Timeline",
         )
 
-        fig.update_xaxes(tickformat='%S')
-        fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor='LightPink')
+        fig.update_xaxes(tickformat="%S")
+        fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor="LightPink")
         fig.update_layout(
             font_family="Courier New",
             font_color="black",
@@ -106,10 +129,11 @@ class EventPlotter:
         """
         Save the plot to an HTML file.
         """
-        if not os.path.exists(dirname(save_path)):
-            os.makedirs(dirname(save_path))
-        if not save_path.endswith('.html'):
-            save_path += '.html'
+        directory = dirname(save_path)
+        if directory and not os.path.exists(directory):
+            os.makedirs(directory)
+        if not save_path.endswith(".html"):
+            save_path += ".html"
         file_path = abspath(save_path)
         fig.write_html(file_path)
         logger.debug(f"Plot saved to {file_path}")
