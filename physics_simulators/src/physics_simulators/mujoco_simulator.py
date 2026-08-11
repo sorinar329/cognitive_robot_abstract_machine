@@ -83,6 +83,9 @@ class MujocoSimulator(BaseSimulator):
         self._mj_spec.compiler.inertiafromgeom = self.config.get(
             "inertiafromgeom", mujoco.mjtInertiaFromGeom.mjINERTIAFROMGEOM_TRUE
         )
+        self._mj_spec.compiler.balanceinertia = self.config.get(
+            "balanceinertia", False
+        )
         self._mj_spec.option.integrator = self.config.get(
             "integrator", mujoco.mjtIntegrator.mjINT_RK4
         )
