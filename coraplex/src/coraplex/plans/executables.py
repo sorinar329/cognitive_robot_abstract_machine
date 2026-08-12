@@ -19,6 +19,7 @@ from giskardpy.motion_statechart.goals.collision_avoidance import (
 from giskardpy.motion_statechart.goals.templates import Sequence
 from giskardpy.motion_statechart.graph_node import EndMotion, Task
 from giskardpy.motion_statechart.motion_statechart import MotionStatechart
+from giskardpy.executor import NoPacing, SimulationPacer
 from giskardpy.qp.qp_controller_config import QPControllerConfig
 from giskardpy.ros_executor import Ros2Executor
 from krrood.entity_query_language.factories import evaluate_condition
@@ -116,6 +117,19 @@ class GiskardExecutable(Executable):
     Whether an :class:`~giskardpy.motion_statechart.goals.collision_avoidance.ExternalCo
     llisionAvoidance` is added to the motion state chart, managed by
     :py:class:`pycram.motion_executor.ExecutionEnvironment`.
+    """
+
+    real_time_pacing: ClassVar[bool] = False
+    """
+    Whether the simulated tick loop is paced to wall-clock time instead of running as
+    fast as the QP solve allows, managed by
+    :py:class:`~coraplex.execution_environment.ExecutionEnvironment`.
+    """
+
+    max_ticks_per_motion_mapping: ClassVar[int] = 2000
+    """
+    Per-motion tick budget for the simulated tick loop, managed by
+    :py:class:`~coraplex.execution_environment.ExecutionEnvironment`.
     """
 
     _current_motion_state_chart: MotionStatechart = field(init=False, default=None)
@@ -316,12 +330,20 @@ class GiskardExecutable(Executable):
                 ),
             ),
             ros_node=self.context.ros_node,
+            pacer=(
+                SimulationPacer(real_time_factor=1.0)
+                if GiskardExecutable.real_time_pacing
+                else NoPacing()
+            ),
         )
         motion_state_chart = self.motion_state_chart
         executor.compile(motion_state_chart)
 
         counter = 0
-        while counter < len(self.motion_mappings) * 2000:
+        while (
+            counter
+            < len(self.motion_mappings) * GiskardExecutable.max_ticks_per_motion_mapping
+        ):
             # Interrupting and pausing are handled inside the motion state chart by
             # per-task monitors (see motion_state_chart): an interrupt ends the
             # motion via EndMotion, a pause holds the active task via its
@@ -332,6 +354,7 @@ class GiskardExecutable(Executable):
                 continue
 
             executor.tick()
+            executor.pacer.sleep()
             counter += 1
             if executor.motion_statechart.is_end_motion():
                 break

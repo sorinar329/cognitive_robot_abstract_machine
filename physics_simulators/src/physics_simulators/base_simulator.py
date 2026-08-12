@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 
 import atexit
+import contextlib
 import logging
 import time
 from dataclasses import dataclass, field
 from enum import Enum
 from functools import partial
-from threading import Thread
+from threading import Thread, RLock
 from typing import Optional, List, Any, Callable, Union, ClassVar
 
 
@@ -69,6 +70,19 @@ class SimulatorRenderer:
         Update the renderer.
         """
         pass
+
+    def lock(self):
+        """
+        Context manager synchronizing model/data access with the renderer's own
+        rendering thread, if it has one.
+
+        A no-op here (headless has no rendering thread to race with);
+        subclasses backed by a real, actively-rendering viewer (e.g.
+        MujocoRenderer) must override this with their viewer's own lock, since
+        that thread reads the live model/data independently of anything
+        :class:`BaseSimulator` itself does.
+        """
+        return contextlib.nullcontext()
 
     def close(self):
         """
@@ -148,17 +162,22 @@ class SimulatorCallback:
         is of type SimulatorCallbackResult and if the first argument is of type
         BaseSimulator.
 
+        Acquires the simulator's ``_model_lock`` around the callback so it cannot
+        race with an in-flight physics step on the background stepping thread
+        (see :attr:`BaseSimulator._model_lock`).
+
         :param render: Whether to trigger rendering, used for modification on the
             simulator.
         :param kwargs: Additional keyword arguments for the callback function.
         :return: The result of the callback function.
         """
-        result = self._call(*args, **kwargs)
-        if not isinstance(result, SimulatorCallbackResult):
-            raise TypeError("Callback function must return SimulatorCallbackResult")
         simulator = args[0]
         if not isinstance(simulator, BaseSimulator):
             raise TypeError("First argument must be of type BaseSimulator")
+        with simulator._model_lock:
+            result = self._call(*args, **kwargs)
+        if not isinstance(result, SimulatorCallbackResult):
+            raise TypeError("Callback function must return SimulatorCallbackResult")
         if render:
             simulator.renderer.sync()
         return result
@@ -178,7 +197,35 @@ class BaseSimulator:
 
     _step_size: float = field(default=1e-3, repr=False)
 
+    _real_time_factor: float = field(default=1.0, repr=False, kw_only=True)
+    """
+    Speed of the simulation clock relative to the wall clock: 1.0 paces
+    simulation_time 1:1 with real time, 0.5 runs at half speed (slow motion),
+    2.0 at double speed. Only slows/speeds up how :meth:`run` throttles
+    itself; it does not change ``step_size`` or physics accuracy.
+    """
+
     _callbacks: List[SimulatorCallback] = field(default_factory=list, repr=False)
+
+    _model_lock: RLock = field(
+        init=False, repr=False, compare=False, default_factory=RLock
+    )
+    """
+    Guards every access to the simulator's live model/data that either steps the
+    physics or otherwise reads/mutates it from outside the stepping thread.
+
+    The physics runs in a background thread (:meth:`step_callback`) while
+    everything else -- model-mutating callbacks (:meth:`add_entity`), simple state
+    reads (``get_body_position``), and the world->sim state-change callback that
+    pushes commanded positions into the live simulator -- runs on other threads.
+    All of them read/write the same underlying model/data, so without this lock
+    they can race with an in-flight step, corrupting it. ``pause()`` alone only
+    flips a state flag and does not wait for an in-flight step to finish, so this
+    lock provides the actual mutual exclusion. :meth:`simulator_callback` acquires
+    it around every callback automatically; subclasses must acquire it themselves
+    around any other direct access to the live model/data (see
+    :meth:`step_callback`).
+    """
 
     config: dict = field(default_factory=dict)
     """
@@ -342,6 +389,15 @@ class BaseSimulator:
                         if self.current_simulation_time == 0.0:
                             self.reset()
                         self.step()
+                        # step() never blocks, so without this the loop steps
+                        # as fast as the CPU allows instead of at step_size
+                        # per simulated second; sleep off however far the
+                        # simulation clock has pulled ahead of the real clock.
+                        ahead_by = self.current_simulation_time / self.real_time_factor - (
+                            self.current_real_time - self.start_real_time
+                        )
+                        if ahead_by > 0:
+                            time.sleep(ahead_by)
 
                     case SimulatorState.PAUSED:
                         self.pause_callback()
@@ -554,6 +610,10 @@ class BaseSimulator:
     @property
     def step_size(self) -> float:
         return self._step_size
+
+    @property
+    def real_time_factor(self) -> float:
+        return self._real_time_factor
 
     @property
     def state(self) -> SimulatorState:

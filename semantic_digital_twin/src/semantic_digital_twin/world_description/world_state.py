@@ -328,16 +328,16 @@ class WorldState(MutableMapping[UUID, WorldStateEntryView]):
 
     def add_degree_of_freedom(self, dof: DegreeOfFreedom):
         """
-        Adds a degree of freedom to the world state, initializing its position to 0 or
-        the nearest limit.
+        Adds a degree of freedom to the world state, initializing its position to 0, or
+        to the nearest limit if 0 is outside them.
         """
         with self.world_lock:
             dof.create_variables()
 
             lower = dof.limits.lower.position
             upper = dof.limits.upper.position
-            initial_position = 0
 
+            initial_position = 0
             if lower is not None:
                 initial_position = max(lower, initial_position)
             if upper is not None:

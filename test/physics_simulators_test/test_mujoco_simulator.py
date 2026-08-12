@@ -619,3 +619,176 @@ class TestMujocoSimulatorComplex:
                     sim.stop()
                 except Exception:
                     pass
+
+
+class TestFrictionSetThroughOwningBody:
+    """
+    Exercises addressing friction through the body that owns the geoms rather than
+    through a geom name.
+
+    A world rebuilt from a :class:`~semantic_digital_twin.world.World` object names its
+    geoms after the shape's type and object id, since shapes carry no name of their own,
+    so the names the original scene file used are gone. Bodies keep their names, which
+    makes the body the only stable handle onto a geom's friction.
+    """
+
+    scene = """
+    <mujoco model="friction_through_body">
+      <worldbody>
+        <body name="cube">
+          <geom type="box" size="0.02 0.02 0.02" friction="1.5 0.05 0.0005"/>
+          <geom type="box" size="0.01 0.01 0.01" pos="0 0 0.05" friction="1.5 0.05 0.0005"/>
+        </body>
+        <body name="marker">
+          <inertial mass="0.1" pos="0 0 0" diaginertia="0.001 0.001 0.001"/>
+        </body>
+      </worldbody>
+      <keyframe>
+        <key name="home"/>
+      </keyframe>
+    </mujoco>
+    """
+    """
+    A scene whose geoms are deliberately unnamed, reproducing what a rebuilt world looks
+    like, plus a body carrying no geom at all.
+    """
+
+    @pytest.fixture
+    def simulator(self, tmp_path):
+        scene_path = tmp_path / "friction_through_body.xml"
+        scene_path.write_text(self.scene)
+        return MujocoSimulator(
+            _headless=True, _step_size=1e-3, file_path=str(scene_path)
+        )
+
+    def test_sets_friction_of_every_geom_of_the_body(self, simulator):
+        result = simulator.set_body_friction("cube", numpy.array([0.2, 0.05, 0.0005]))
+
+        assert (
+            result.type
+            is SimulatorCallbackResult.ResultType.SUCCESS_AFTER_EXECUTION_ON_DATA
+        )
+        body_id = mujoco.mj_name2id(
+            m=simulator._mj_model, type=mujoco.mjtObj.mjOBJ_BODY, name="cube"
+        )
+        body = simulator._mj_model.body(body_id)
+        first_geom, geom_count = int(body.geomadr[0]), int(body.geomnum[0])
+        assert geom_count == 2
+        for geom_id in range(first_geom, first_geom + geom_count):
+            assert simulator._mj_model.geom_friction[geom_id] == pytest.approx(
+                [0.2, 0.05, 0.0005]
+            )
+
+    def test_unnamed_geoms_are_unreachable_by_geom_name(self, simulator):
+        """
+        The geoms this scene's ``cube`` owns carry no name, so the scene-file name a
+        caller would reach for does not resolve -- the reason friction has to be set
+        through the body.
+        """
+        result = simulator.set_geom_friction(
+            "cube_geom", numpy.array([0.2, 0.05, 0.0005])
+        )
+
+        assert (
+            result.type is SimulatorCallbackResult.ResultType.FAILURE_WITHOUT_EXECUTION
+        )
+
+    def test_unknown_body_reports_failure(self, simulator):
+        result = simulator.set_body_friction(
+            "not_a_body", numpy.array([0.2, 0.05, 0.0005])
+        )
+
+        assert (
+            result.type is SimulatorCallbackResult.ResultType.FAILURE_WITHOUT_EXECUTION
+        )
+
+    def test_body_without_geoms_reports_failure(self, simulator):
+        """
+        Reported as a failure rather than a silent no-op: a caller asking for friction on
+        a body that has no contact geometry is asking for something that cannot happen.
+        """
+        result = simulator.set_body_friction("marker", numpy.array([0.2, 0.05, 0.0005]))
+
+        assert (
+            result.type is SimulatorCallbackResult.ResultType.FAILURE_WITHOUT_EXECUTION
+        )
+
+
+class TestBodyVelocityReset:
+    """
+    Exercises clearing a body's velocity, which teleporting it back to a start pose does
+    not do.
+
+    A body that has picked up a large velocity keeps it across any number of position
+    resets, so a simulation that has diverged once stays diverged until the velocity
+    itself is cleared.
+    """
+
+    scene = """
+    <mujoco model="velocity_reset">
+      <worldbody>
+        <body name="cube" pos="0 0 1">
+          <freejoint/>
+          <geom type="box" size="0.02 0.02 0.02"/>
+        </body>
+        <body name="anchor">
+          <geom type="box" size="0.1 0.1 0.01"/>
+        </body>
+      </worldbody>
+      <keyframe>
+        <key name="home" qpos="0 0 1 1 0 0 0"/>
+      </keyframe>
+    </mujoco>
+    """
+    """
+    A freely moving body whose velocity can be set, plus a body bolted to the world that
+    owns no degree of freedom at all.
+    """
+
+    @pytest.fixture
+    def simulator(self, tmp_path):
+        scene_path = tmp_path / "velocity_reset.xml"
+        scene_path.write_text(self.scene)
+        return MujocoSimulator(
+            _headless=True, _step_size=1e-3, file_path=str(scene_path)
+        )
+
+    def test_clears_the_velocity_of_a_moving_body(self, simulator):
+        simulator._mj_data.qvel[:] = 5.0
+
+        result = simulator.reset_body_velocity("cube")
+
+        assert (
+            result.type
+            is SimulatorCallbackResult.ResultType.SUCCESS_AFTER_EXECUTION_ON_DATA
+        )
+        assert simulator._mj_data.qvel == pytest.approx(numpy.zeros(6))
+
+    def test_position_reset_alone_leaves_the_body_moving(self, simulator):
+        """
+        The reason a velocity reset is needed at all: putting the body back where it
+        started leaves it travelling just as fast as before.
+        """
+        simulator._mj_data.qvel[:] = 5.0
+
+        simulator.set_body_position("cube", numpy.array([0.0, 0.0, 1.0]))
+
+        assert simulator._mj_data.qvel[:3] == pytest.approx([5.0, 5.0, 5.0])
+
+    def test_unknown_body_reports_failure(self, simulator):
+        result = simulator.reset_body_velocity("not_a_body")
+
+        assert (
+            result.type is SimulatorCallbackResult.ResultType.FAILURE_WITHOUT_EXECUTION
+        )
+
+    def test_body_without_degrees_of_freedom_reports_failure(self, simulator):
+        """
+        A body welded to the world cannot carry a velocity, so asking to clear one is a
+        mistake worth reporting rather than a silent success.
+        """
+        result = simulator.reset_body_velocity("anchor")
+
+        assert (
+            result.type is SimulatorCallbackResult.ResultType.FAILURE_WITHOUT_EXECUTION
+        )

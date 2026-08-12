@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from coraplex.robot_plans.actions.base import ActionDescription
     from semantic_digital_twin.robots.robot_parts import AbstractRobot
     from semantic_digital_twin.world_description.world_entity import (
+        Body,
         KinematicStructureEntity,
         SemanticAnnotation,
     )
@@ -152,6 +153,37 @@ class MotionDidNotFinish(PlanFailure):
 
     def error_message(self) -> str:
         return f"Motion did not finish, following motions failed: {self.failed_motions}"
+
+    def suggest_correction(self) -> str:
+        return ""
+
+
+@dataclass
+class GraspVerificationFailed(PlanFailure):
+    """
+    Raised when a grasp's closing motion finished but the object was not detected
+    between the gripper's fingers afterwards (see
+    :func:`~semantic_digital_twin.reasoning.robot_predicates.is_body_in_gripper`), even
+    after retrying -- the object most likely slipped out of the fingers instead of being
+    held.
+    """
+
+    object_designator: Body
+    """
+    The object the grasp attempt(s) tried and failed to pick up.
+    """
+
+    attempts: int
+    """
+    How many grasp attempts were made before giving up.
+    """
+
+    def error_message(self) -> str:
+        return (
+            f"Failed to grasp {self.object_designator} after {self.attempts} "
+            f"attempt(s): the object was not detected between the gripper's fingers "
+            f"once closing finished."
+        )
 
     def suggest_correction(self) -> str:
         return ""

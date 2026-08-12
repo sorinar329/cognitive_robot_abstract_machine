@@ -236,6 +236,30 @@ class TestBaseSimulator:
 
         assert simulator.state is SimulatorState.STOPPED
 
+    def test_simulation_time_is_paced_to_real_time(self, simulator_factory):
+        """
+        The RUNNING loop must not race ahead of the wall clock: step() itself
+        never blocks, so without an explicit throttle a simulator with a tiny
+        step_size steps as fast as the CPU allows, racking up far more
+        simulation_time than real time actually elapsed.
+        """
+        simulator = simulator_factory(step_size=1e-4)
+        self._assert_initialized(simulator)
+
+        simulator.start()
+        real_start = time.time()
+        time.sleep(2.0)
+        real_elapsed = time.time() - real_start
+        simulation_time = simulator.current_simulation_time
+        simulator.stop()
+
+        assert simulation_time / real_elapsed < 2.0, (
+            f"Simulation ran {simulation_time / real_elapsed:.1f}x faster than "
+            f"real time (simulation_time={simulation_time}, "
+            f"real_elapsed={real_elapsed}); the RUNNING loop is not paced to "
+            "the wall clock."
+        )
+
     def test_making_functions(self, simulator_factory):
         result_1 = SimulatorCallbackResult(
             type=SimulatorCallbackResult.ResultType.SUCCESS_WITHOUT_EXECUTION,
