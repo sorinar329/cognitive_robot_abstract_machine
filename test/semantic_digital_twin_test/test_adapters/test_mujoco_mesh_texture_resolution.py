@@ -11,6 +11,7 @@ recognise that case and return ``None`` instead of raising.
 from dataclasses import dataclass
 
 import PIL.Image
+from typing_extensions import Optional
 
 from semantic_digital_twin.adapters.multi_sim import MujocoMeshConverter
 
@@ -24,9 +25,9 @@ class FakeMaterial:
     name: str
     """The material's name, sometimes itself a texture file path."""
 
-    image: PIL.Image.Image
+    image: Optional[PIL.Image.Image]
     """
-    The material's image.
+    The material's image, or ``None`` for an untextured (plain-colored) material.
     """
 
 
@@ -72,6 +73,17 @@ def test_returns_none_for_a_programmatically_generated_texture_with_no_backing_f
     assert (
         MujocoMeshConverter._resolve_texture_file_path(material, str(tmp_path)) is None
     )
+
+
+def test_returns_none_when_material_has_no_image(tmp_path):
+    """
+    An untextured (plain-colored) material's ``image`` is ``None`` rather than a
+    :class:`PIL.Image.Image`; encountered on some of the apartment environment's own
+    meshes (e.g. its kitchen sink and tap fixtures).
+    """
+    material = FakeMaterial(name="material_0", image=None)
+
+    assert MujocoMeshConverter._resolve_texture_file_path(material, str(tmp_path)) is None
 
 
 def test_resolves_texture_named_relative_to_its_mesh(tmp_path):

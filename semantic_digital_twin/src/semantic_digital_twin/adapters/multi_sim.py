@@ -1376,10 +1376,14 @@ class MujocoMeshConverter(MujocoGeomConverter, MeshConverter):
 
         :param material: The trimesh material (``TextureVisuals.material``) to resolve.
         :param mesh_directory: Directory of the mesh file the material came from.
-        :return: The texture's file path, or ``None`` if the texture is a programmatically
-            generated image (for example a flat "glass" material) with no backing file.
+        :return: The texture's file path, or ``None`` if the material carries no image at
+            all (an untextured, plain-colored material) or the texture is a
+            programmatically generated image (for example a flat "glass" material) with
+            no backing file.
         """
         image = material.image
+        if image is None:
+            return None
         candidates = [material.name, image.info.get("file_path", "")]
         if isinstance(image, PIL.ImageFile.ImageFile):
             candidates.append(image.filename)
