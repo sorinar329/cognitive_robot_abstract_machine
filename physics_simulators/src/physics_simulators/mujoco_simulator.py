@@ -84,7 +84,7 @@ class MujocoSimulator(BaseSimulator):
             "inertiafromgeom", mujoco.mjtInertiaFromGeom.mjINERTIAFROMGEOM_TRUE
         )
         self._mj_spec.option.integrator = self.config.get(
-            "integrator", mujoco.mjtIntegrator.mjINT_RK4
+            "integrator", self._mj_spec.option.integrator
         )
         self._mj_spec.option.noslip_iterations = int(
             self.config.get("noslip_iterations", 0)

@@ -496,6 +496,17 @@ class TestMujocoSimulator:
             result.type is SimulatorCallbackResult.ResultType.FAILURE_WITHOUT_EXECUTION
         )
 
+    def test_respects_the_scene_s_declared_integrator_by_default(self, simulator):
+        """
+        ``mjx_single_cube_no_mesh.xml`` declares ``integrator="implicitfast"``; with no
+        ``integrator`` override passed via ``config``, the compiled model must keep that
+        choice rather than silently falling back to MuJoCo's own RK4 default.
+        """
+        assert (
+            simulator._mj_model.opt.integrator
+            == mujoco.mjtIntegrator.mjINT_IMPLICITFAST
+        )
+
 
 class TestMujocoSimulatorComplex:
     file_path = os.path.join(resources_path, "mjx_single_cube_no_mesh.xml")
