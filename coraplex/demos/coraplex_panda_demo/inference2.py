@@ -84,6 +84,10 @@ from physics_simulators.base_simulator import SimulatorCallbackResult
 from segmind.detectors.base import SegmindContext
 from segmind.detectors.spatial_relation_detector_nodes import SupportDetector
 from semantic_digital_twin.adapters.mjcf import MJCFParser
+from semantic_digital_twin.datastructures.definitions import (
+    GripperState,
+    StaticJointState,
+)
 from semantic_digital_twin.world_description.world_entity import Body
 from semantic_digital_twin.adapters.multi_sim import MujocoSim, MujocoBody
 from semantic_digital_twin.adapters.ros.visualization.viz_marker import (
@@ -421,7 +425,8 @@ def diagnose_cube_failure(
     if not candidates:
         return None
     return min(
-        candidates, key=lambda candidate: candidate[1].observed_support_probability
+        candidates,
+        key=lambda candidate: candidate[1].primary.observed_support_probability,
     )
 
 
@@ -430,30 +435,48 @@ def apply_correction(
     place_action: PlaceAction,
     action_name: str,
     diagnosis: RootCauseDiagnosis,
+    cube_to_stack_on: Body,
 ) -> tuple[PickUpAction, PlaceAction]:
     """
-    Build the corrected retry's actions: ``diagnosis``'s parameter replaced on whichever
-    action it was diagnosed against, everything else unchanged from the failed attempt.
+    Build the corrected retry's actions: every one of ``diagnosis.corrections`` applied
+    at once to whichever action it was diagnosed against, plus a freshly re-read place
+    target, everything else unchanged from the failed attempt.
+
+    Applying every correction together, not just the primary one, is what actually
+    fixes a failure with more than one bad parameter: retrying with only the single
+    most-anomalous value corrected leaves the other equally-bad ones untouched, so the
+    retry keeps failing (and burns through
+    :data:`~inference2.MAX_CORRECTION_ATTEMPTS_PER_CUBE` one parameter at a time instead
+    of fixing the actual combination) -- see :meth:`ActionCausalDiagnoser.diagnose`'s own
+    docstring for how ``corrections`` is decided.
+
+    The target refresh happens unconditionally, not only when ``action_name`` is
+    ``"place"``: whichever action gets corrected, the retry still performs the *same*
+    place afterward, and ``place_action.target_location`` was baked in as a fixed pose
+    back when this cube's step began (see :func:`_current_place_location`) -- if the
+    failed attempt this is correcting nudged ``cube_to_stack_on`` on its way down, the
+    uncorrected target would carry that staleness into the retry too.
 
     :param pickup_action: The failed attempt's pickup.
     :param place_action: The failed attempt's place.
     :param action_name: Which action ``diagnosis`` was diagnosed against, ``"pickup"``
         or ``"place"``.
     :param diagnosis: The diagnosis to apply.
+    :param cube_to_stack_on: The cube this step places onto, read fresh for the
+        refreshed target.
     """
+    corrected_values = {
+        correction.variable_name: correction.corrected_value
+        for correction in diagnosis.corrections
+    }
     if action_name == "pickup":
-        return (
-            dataclasses.replace(
-                pickup_action, **{diagnosis.variable_name: diagnosis.corrected_value}
-            ),
-            place_action,
-        )
-    return (
-        pickup_action,
-        dataclasses.replace(
-            place_action, **{diagnosis.variable_name: diagnosis.corrected_value}
-        ),
+        pickup_action = dataclasses.replace(pickup_action, **corrected_values)
+    else:
+        place_action = dataclasses.replace(place_action, **corrected_values)
+    place_action = dataclasses.replace(
+        place_action, target_location=_current_place_location(cube_to_stack_on)
     )
+    return pickup_action, place_action
 
 
 # %% support verification via segmind
@@ -626,10 +649,36 @@ def verify_stacked(cube: Body, supporting_cube: Body) -> bool:
 def segmind_approved() -> bool:
     """
     Whether segmind sees the whole stack standing, every expected support at once.
+
+    An independent reading from :func:`full_stack_intact`: it trusts segmind's own
+    contact-based detection alone, sampled once at the end of the iteration, rather than
+    the per-cube geometric check (:func:`cube_is_stacked_on`) each step's own
+    SUCCESS/HARD FAILURE line is decided from. Report both together (see
+    :func:`append_inference_report`) rather than only this one -- segmind's detector can
+    miss a support that geometry still confirms (the same disagreement
+    :func:`verify_stacked` already resolves in geometry's favor per step, just not
+    surfaced here before), so this alone flipping to ``False`` does not mean any cube
+    actually came down.
     """
     supports = detected_supports()
     return all(
         supporter in supports.get(supported, set())
+        for supported, supporter in expected_supports()
+    )
+
+
+def full_stack_intact() -> bool:
+    """
+    Whether every expected support currently holds, judged the same way each cube's own
+    step already was: geometrically, via :func:`cube_is_stacked_on`.
+
+    This is the verdict :func:`append_inference_report` and the main loop's success
+    count are based on -- not :func:`segmind_approved` alone -- so the reported "full
+    stack" outcome is always consistent with the per-cube SUCCESS/HARD FAILURE lines
+    directly above it in the same report, instead of occasionally contradicting them.
+    """
+    return all(
+        cube_is_stacked_on(supported, supporter)
         for supported, supporter in expected_supports()
     )
 
@@ -750,17 +799,74 @@ def _as_upright(grasp_description: GraspDescription) -> UprightGraspDescription:
     )
 
 
-def pickup_grasp_description() -> UprightGraspDescription:
+def _rotate_gripper_away_from(object_body: Body, target_body: Body) -> bool:
     """
-    The grasp every pickup in this run is described with.
+    Whether the pickup grasp should roll 90 degrees so its fingers' opening axis stays
+    perpendicular to the horizontal direction from ``object_body`` to ``target_body``,
+    rather than swept toward it.
+
+    ``demo2.py``'s/``demo3.py``'s fixed ``rotate_gripper=True`` keeps the opening axis
+    off the spawn row, which runs along y (see their own identical comment) -- correct
+    only because every pickup there starts from that row. Here a cube can be retried
+    after being knocked out of the row by an earlier failed attempt, landing close to
+    the stack or the cube it is meant to stack onto (``target_body``, which for the
+    first step is the bottom/support cube); the fixed roll then has even odds of
+    sweeping the fingers straight into whichever cube is now nearby instead of away from
+    it. Reading both cubes' current x/y position and rolling away from whichever
+    direction ``target_body`` actually is keeps the same protection in the ordinary
+    spawn-row case (the row runs along y, so this resolves to the same ``True`` demo3.py
+    hardcodes) while also covering the knocked-out-of-row case that a fixed choice
+    cannot.
+
+    :param object_body: The cube about to be picked, at its current position.
+    :param target_body: The cube it is being stacked onto -- the nearest known
+        obstacle this pickup should keep the fingers' sweep clear of.
+    """
+    object_position = numpy.array(
+        object_body.global_pose.to_position().evaluate()[:2], dtype=float
+    )
+    target_position = numpy.array(
+        target_body.global_pose.to_position().evaluate()[:2], dtype=float
+    )
+    toward_target = target_position - object_position
+    return bool(abs(toward_target[1]) >= abs(toward_target[0]))
+
+
+def pickup_grasp_description(
+    object_body: Body, target_body: Body
+) -> UprightGraspDescription:
+    """
+    The grasp this pickup is described with, its 90-degree roll chosen from
+    ``object_body``'s and ``target_body``'s current positions -- see
+    :func:`_rotate_gripper_away_from`.
     """
     return UprightGraspDescription(
         ApproachDirection.FRONT,
         VerticalAlignment.TOP,
         context.robot.get_arms()[0].end_effector,
-        # See demo2.py's own identical comment: rotating 90 degrees keeps the
-        # fingers' opening axis from sweeping into a neighboring cube.
-        rotate_gripper=True,
+        rotate_gripper=_rotate_gripper_away_from(object_body, target_body),
+    )
+
+
+def _current_place_location(target_body: Body) -> Pose:
+    """
+    :param target_body: The cube being stacked onto.
+    :return: A place target directly above ``target_body``'s *current* position, one
+        cube height higher.
+
+    Reads ``target_body.global_pose`` fresh on every call rather than once per cube
+    step: ``target_body`` can be nudged by a collision during this same step's own
+    earlier attempts (or, for the bottom cube, by an entirely different step's attempt
+    -- nothing re-verifies it the way :func:`restack_disturbed_cubes` does for cubes in
+    ``confirmed_stacks``), and a stale target then aims every later retry at where the
+    cube *used to be* rather than where it now is.
+    """
+    target_pose = target_body.global_pose
+    return Pose.from_xyz_rpy(
+        x=target_pose.x,
+        y=target_pose.y,
+        z=target_pose.z + STACK_HEIGHT_OFFSET,
+        reference_frame=world.root,
     )
 
 
@@ -771,14 +877,8 @@ def sample_actions(
     Sample a fresh pickup/place pair from the wide priors, for stacking ``object_body``
     centered above ``target_body``, one cube height higher.
     """
-    target_pose = target_body.global_pose
-    place_location = Pose.from_xyz_rpy(
-        x=target_pose.x,
-        y=target_pose.y,
-        z=target_pose.z + STACK_HEIGHT_OFFSET,
-        reference_frame=world.root,
-    )
-    grasp_description = pickup_grasp_description()
+    place_location = _current_place_location(target_body)
+    grasp_description = pickup_grasp_description(object_body, target_body)
     pickup_action = sample_pickup_instance(
         object_body, picking_arm, grasp_description, priors=WIDE_PICKUP_PARAMETER_PRIORS
     )
@@ -1105,7 +1205,7 @@ def attempt_cube_with_correction(
         )
 
         pickup_action, place_action = apply_correction(
-            pickup_action, place_action, action_name, diagnosis
+            pickup_action, place_action, action_name, diagnosis, cube_to_stack_on
         )
         correction_attempts += 1
         correction_label = f"{step_label} (correction {correction_attempts})"
@@ -1221,6 +1321,51 @@ def cubes_not_at_spawn() -> list[str]:
     return out_of_place
 
 
+def reset_robot() -> None:
+    """
+    Bring the arm and gripper to a standstill and teleport them straight to a
+    known-good park/open configuration, independent of whatever state the previous
+    iteration left them in.
+
+    :func:`reset_cubes` only ever teleports the cubes. The arm's and gripper's own
+    joints are physically simulated too (see ``physically_simulated_dofs`` above), and
+    nothing resets *their* velocity, solver warm-start acceleration, or position
+    between iterations. A violent collision (a knocked cube, a wedged gripper) leaves
+    that residual state behind, and every later iteration then starts from it -- this is
+    why, once one collision happens, the robot keeps failing to reach, "dancing", or
+    leaving the gripper stuck shut for every iteration after, not just the one the
+    collision happened in, even though the cubes themselves come back to their spawn
+    position correctly every time.
+
+    A Giskard-planned park (:func:`reset_cubes`'s own best-effort ``ParkArmsAction``) is
+    not a substitute: Giskard's own controller can be exactly what a collision left
+    wedged, so a controller-driven park can itself fail silently, which is why that call
+    is wrapped in a warning rather than trusted. Teleporting the joints directly here
+    does not depend on the controller at all, so it recovers even when that park can't.
+    """
+    for connection in list(arm.active_connections) + list(gripper.active_connections):
+        multi_sim.simulator.reset_body_velocity(body_name=connection.child.name.name)
+
+    park_state = arm.get_joint_state_by_type(StaticJointState.PARK)
+    open_state = gripper.get_joint_state_by_type(GripperState.OPEN)
+    joint_values = {
+        connection.name.name: value
+        for connection, value in (
+            list(zip(park_state.connections, park_state.target_values))
+            + list(zip(open_state.connections, open_state.target_values))
+        )
+    }
+    result = multi_sim.simulator.set_joints_values(joint_values)
+    if result.type not in (
+        SimulatorCallbackResult.ResultType.SUCCESS_WITHOUT_EXECUTION,
+        SimulatorCallbackResult.ResultType.SUCCESS_AFTER_EXECUTION_ON_DATA,
+    ):
+        print(
+            "[warning] could not teleport the robot to its park/open configuration: "
+            f"{result.info}"
+        )
+
+
 def reset_cubes() -> None:
     """
     Returns every cube to its spawn pose and brings it to a standstill, verifying (and,
@@ -1229,7 +1374,9 @@ def reset_cubes() -> None:
     The arm is parked first, best-effort: a hard iteration abandonment (a diverged
     simulation, a cube that never got stacked, an uncaught exception) can leave it
     anywhere, including hovering right over a cube's spawn point, which would defeat the
-    teleport below the moment physics resumes.
+    teleport below the moment physics resumes. Call :func:`reset_robot` before this, not
+    after: it clears whatever wedged/moving state the arm was actually in, which is what
+    lets this best-effort park succeed reliably instead of occasionally failing silently.
     """
     try:
         sequential([ParkArmsAction(Arms.BOTH)], context=context).perform()
@@ -1268,11 +1415,27 @@ def append_inference_report(
     """
     Append this iteration's diagnosis-and-correction findings to
     :data:`INFERENCE_REPORT_PATH`.
+
+    Reports both full-stack verdicts, not just segmind's: :func:`full_stack_intact` (the
+    same geometric check each cube's own SUCCESS/HARD FAILURE line below is decided
+    from) and :func:`segmind_approved` (segmind's independent, contact-based reading).
+    They usually agree; printing both, flagged whenever they don't, is what makes the
+    disagreement visible in the report itself instead of a console warning easy to miss
+    -- see :func:`full_stack_intact`'s own docstring for why the geometric one, not
+    segmind's, is what the rest of this run treats as ground truth.
     """
-    stack_approved = segmind_approved()
+    geometry_approved = full_stack_intact()
+    segmind_verdict = segmind_approved()
 
     lines = [f"\n## Iteration {iteration_index}\n"]
-    lines.append(f"`segmind_approved()` (full stack): **{stack_approved}**\n")
+    lines.append(f"`full_stack_intact()` (geometry, ground truth): **{geometry_approved}**\n")
+    lines.append(f"`segmind_approved()` (segmind's own reading): **{segmind_verdict}**\n")
+    if geometry_approved != segmind_verdict:
+        lines.append(
+            "**disagreement**: segmind's contact-based detection missed (or wrongly "
+            "saw) a support geometry confirms is otherwise fine -- see "
+            "`full_stack_intact()`'s docstring; going with geometry.\n"
+        )
     if simulation_diverged:
         lines.append("**simulation diverged -- excluded from results**\n")
 
@@ -1376,6 +1539,7 @@ with ExecutionEnvironment(
     for iteration in range(1, NUMBER_OF_ITERATIONS + 1):
         iteration_start = time.time()
         print(f"=== starting iteration {iteration}/{NUMBER_OF_ITERATIONS} ===")
+        reset_robot()
         reset_cubes()
         time.sleep(1.5)
         still_escaped = diverged_cubes()
@@ -1447,7 +1611,7 @@ with ExecutionEnvironment(
 
         print_iteration_summary(iteration)
         append_inference_report(iteration, cube_outcomes, simulation_diverged)
-        if not simulation_diverged and segmind_approved():
+        if not simulation_diverged and full_stack_intact():
             successful_iterations += 1
 
         iteration_durations.append(time.time() - iteration_start)

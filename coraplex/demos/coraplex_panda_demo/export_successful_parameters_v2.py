@@ -4,13 +4,16 @@ Second-generation copy of ``export_successful_parameters.py``, turning
 probability tree can be learned from.
 
 Structured exactly like ``export_successful_parameters.py``, with one addition: every
-action's learning columns now include ``object_final_z`` -- the height the step's picked
-cube actually settled at (see ``stacking_attempt_record_v2.py``) -- alongside its sampled
-velocity/friction parameters. This is what lets ``causal_diagnosis_v2.py`` use a directly
-measured outcome as the causal circuit's effect variable instead of ``step_index``, which
-carries no information about whether an attempt actually succeeded (see
-``causal_diagnosis.py``'s own docstring for why ``step_index`` had to be spent on that
-role in the first place).
+action's learning columns now include every cube's final z position (see
+:data:`CUBE_FINAL_Z_COLUMNS`) -- not just the height the step's picked cube actually
+settled at -- alongside its sampled velocity/friction parameters. This is what lets
+``causal_diagnosis_v2.py`` use the whole stack's state, the demo's actual goal, as the
+causal circuit's effect role instead of ``step_index``, which carries no information
+about whether an attempt actually succeeded (see ``causal_diagnosis.py``'s own docstring
+for why ``step_index`` had to be spent on that role in the first place). Registering
+every cube rather than only the acted-upon one lets diagnosis catch a step that knocked
+an already-stacked cube loose while still placing its own -- a failure the acted-upon
+cube's own height alone cannot see.
 
 Run it with the interpreter whose packages point at this checkout, for example::
 
@@ -38,11 +41,22 @@ Database holding only the attempts from iterations that fully stacked, as built 
 ``build_merged_dataset_v2.py``.
 """
 
-OBJECT_FINAL_Z_COLUMN = "object_final_z"
+CUBE_FINAL_Z_COLUMNS: List[str] = [
+    "cube0_final_z",
+    "cube1_final_z",
+    "cube2_final_z",
+    "cube3_final_z",
+]
 """
-Height the step's picked cube actually settled at, once its attempt (and any earlier
-step's attempts) had finished -- the outcome ``causal_diagnosis_v2.py`` uses as the
-causal circuit's effect variable, in place of ``STEP_COLUMN``.
+Every cube's own final z position, once the step's attempt (and any earlier step's
+attempts) had finished -- the outcome ``causal_diagnosis_v2.py`` registers as the causal
+circuit's effect variables, in place of ``STEP_COLUMN``.
+
+All four, not just the step's picked cube, so diagnosis can also see a step that
+disturbed a cube it was not directly acting on (see this module's own docstring). For an
+early step, the columns for cubes not yet placed just carry their spawn height -- a
+near-constant across attempts that a diagnosis naturally treats as uninformative next to
+the columns that do vary.
 """
 
 PICKUP_PARAMETER_COLUMNS: List[str] = [
@@ -52,13 +66,14 @@ PICKUP_PARAMETER_COLUMNS: List[str] = [
     "grasp_closing_velocity",
     "grasp_stall_min_time",
     "lift_linear_velocity",
-    OBJECT_FINAL_Z_COLUMN,
+    *CUBE_FINAL_Z_COLUMNS,
 ]
 """
 ``PickUpAction``'s sampled fields, named exactly as the action names them and ordered as
 they take effect: the object's friction is applied before the pick, then the arm
-approaches, grasps, closes, waits for the grasp to settle and lifts. :data:`OBJECT_FINAL_Z_COLUMN`
-is appended last since it is the step's outcome rather than one of its inputs.
+approaches, grasps, closes, waits for the grasp to settle and lifts.
+:data:`CUBE_FINAL_Z_COLUMNS` is appended last since it is the step's outcome rather than
+one of its inputs.
 """
 
 PLACE_PARAMETER_COLUMNS: List[str] = [
@@ -66,7 +81,7 @@ PLACE_PARAMETER_COLUMNS: List[str] = [
     "placing_linear_velocity",
     "release_opening_velocity",
     "retract_linear_velocity",
-    OBJECT_FINAL_Z_COLUMN,
+    *CUBE_FINAL_Z_COLUMNS,
 ]
 """
 ``PlaceAction``'s sampled fields, named exactly as the action names them and ordered as
@@ -80,7 +95,7 @@ PARAMETER_COLUMNS: List[str] = [
 Every sampled parameter of an attempt plus its outcome, in the order the robot moves
 through them.
 
-``OBJECT_FINAL_Z_COLUMN`` appears in both :data:`PICKUP_PARAMETER_COLUMNS` and
+``CUBE_FINAL_Z_COLUMNS`` appears in both :data:`PICKUP_PARAMETER_COLUMNS` and
 :data:`PLACE_PARAMETER_COLUMNS`; ``dict.fromkeys`` de-duplicates it here so the combined
 SQL selection below asks for each column once.
 """
@@ -92,7 +107,7 @@ ones above it.
 
 Kept in the learning data for the same reason ``export_successful_parameters.py`` keeps
 it -- the three steps face a stack of a different height -- even though
-:data:`OBJECT_FINAL_Z_COLUMN`, not this, now plays the causal circuit's effect role.
+:data:`CUBE_FINAL_Z_COLUMNS`, not this, now plays the causal circuit's effect role.
 Typed as an integer, which ``infer_variables_from_dataframe`` turns into an ``Integer``
 variable the tree can split on.
 """
@@ -103,22 +118,19 @@ METADATA_COLUMNS: List[str] = [
     "iteration_index",
     "step_index",
     "step_name",
-    "cube0_final_z",
-    "cube1_final_z",
-    "cube2_final_z",
-    "cube3_final_z",
 ]
 """
-Columns identifying where an attempt came from, plus every cube's own final z position
-for tracing a row back to what actually happened in its iteration.
+Columns identifying where an attempt came from, for tracing a row back to what iteration
+and step it came from.
 
 Kept out of the learning data except for :data:`STEP_COLUMN`: the rest are identifiers
 rather than parameters the tree should learn a distribution over.
 ``iteration_index`` stays out on purpose even though it is an integer -- splitting on it
 would let a tree separate runs by when they happened rather than by how they were
-parameterized. The per-cube z positions are bookkeeping here for the same reason: only
-the acted-upon cube's own height (:data:`OBJECT_FINAL_Z_COLUMN`) is a parameter of the
-step being learned; the other three cubes' heights describe a different step entirely.
+parameterized. Every cube's own final z position used to be bookkeeping here too; it now
+lives in :data:`CUBE_FINAL_Z_COLUMNS` instead, since diagnosis needs the whole stack's
+state, not just the acted-upon cube's, to catch a step that disturbed a cube it was not
+directly placing.
 """
 
 

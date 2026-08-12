@@ -63,6 +63,10 @@ from physics_simulators.base_simulator import SimulatorCallbackResult
 from segmind.detectors.base import SegmindContext
 from segmind.detectors.spatial_relation_detector_nodes import SupportDetector
 from semantic_digital_twin.adapters.mjcf import MJCFParser
+from semantic_digital_twin.datastructures.definitions import (
+    GripperState,
+    StaticJointState,
+)
 from semantic_digital_twin.world_description.world_entity import Body
 from semantic_digital_twin.adapters.multi_sim import MujocoSim, MujocoBody
 from semantic_digital_twin.adapters.ros.visualization.viz_marker import VizMarkerPublisher
@@ -218,7 +222,7 @@ def print_positions():
 # casadi::SXElem::is_constant() on an unmapped address. :func:`print_positions` is
 # kept for the one call on the main thread once the run is over.
 
-NUMBER_OF_ITERATIONS = 50
+NUMBER_OF_ITERATIONS = 400
 """
 Number of times the full pickup/stack sequence is repeated, so the demo can be left
 running unattended instead of re-started by hand for every trial.
@@ -452,6 +456,46 @@ def persist_world_snapshot() -> None:
         database_session.rollback()
 
 
+def reset_robot() -> None:
+    """
+    Bring the arm and gripper to a standstill and teleport them straight to a
+    known-good park/open configuration, independent of whatever state the previous
+    iteration left them in.
+
+    :func:`reset_cubes` only ever teleports the cubes. The arm's and gripper's own
+    joints are physically simulated too (see ``physically_simulated_dofs`` above), and
+    nothing resets *their* velocity, solver warm-start acceleration, or position between
+    iterations -- so a violent collision (a knocked cube, a wedged gripper) leaves that
+    residual state behind for every iteration after it, unnoticed since it need not send
+    a cube outside :data:`WORKSPACE_BOUND` (which is all ``simulation_diverged`` checks
+    for) to still make the robot fail to reach, "dance", or leave the gripper stuck shut
+    -- silently degrading every attempt persisted from then on. See
+    ``inference2.py``'s own identical :func:`reset_robot` for how this was found; ported
+    here since this run's persisted attempts are training data, not just a demo.
+    """
+    for connection in list(arm.active_connections) + list(gripper.active_connections):
+        multi_sim.simulator.reset_body_velocity(body_name=connection.child.name.name)
+
+    park_state = arm.get_joint_state_by_type(StaticJointState.PARK)
+    open_state = gripper.get_joint_state_by_type(GripperState.OPEN)
+    joint_values = {
+        connection.name.name: value
+        for connection, value in (
+            list(zip(park_state.connections, park_state.target_values))
+            + list(zip(open_state.connections, open_state.target_values))
+        )
+    }
+    result = multi_sim.simulator.set_joints_values(joint_values)
+    if result.type not in (
+        SimulatorCallbackResult.ResultType.SUCCESS_WITHOUT_EXECUTION,
+        SimulatorCallbackResult.ResultType.SUCCESS_AFTER_EXECUTION_ON_DATA,
+    ):
+        print(
+            "[warning] could not teleport the robot to its park/open configuration: "
+            f"{result.info}"
+        )
+
+
 def reset_cubes() -> None:
     """
     Returns every cube to its spawn pose and brings it to a standstill, undoing both the
@@ -459,7 +503,8 @@ def reset_cubes() -> None:
 
     Clearing the velocity is what makes this a recovery rather than a cosmetic reset: a
     cube that has picked up a runaway velocity keeps it across a pose reset, so without
-    this a single diverged iteration ruins every iteration after it.
+    this a single diverged iteration ruins every iteration after it. Call
+    :func:`reset_robot` before this too -- this function only ever touches the cubes.
     """
     for name, position in CUBE_SPAWN_POSITIONS.items():
         multi_sim.simulator.reset_body_velocity(body_name=name)
@@ -828,6 +873,7 @@ with ExecutionEnvironment(
     for iteration in range(1, NUMBER_OF_ITERATIONS + 1):
         iteration_start = time.time()
         print(f"=== starting iteration {iteration}/{NUMBER_OF_ITERATIONS} ===")
+        reset_robot()
         reset_cubes()
         time.sleep(1.5)
         still_escaped = diverged_cubes()
