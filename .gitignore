@@ -160,3 +160,7 @@ class_diagram.pdf
 # Personal, per-user Claude Code memory (populated by .claude/hooks/session-start.sh
 # from the claude/personal-notes branch). Never committed on any branch.
 CLAUDE.local.md
+
+# Panda meshes downloaded on demand by panda_mesh_assets.PandaMeshAssets, from
+# mujoco_menagerie. Several tens of megabytes, so never committed.
+coraplex/demos/coraplex_panda_demo/franka/assets/

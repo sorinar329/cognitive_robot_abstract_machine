@@ -78,6 +78,7 @@ from pickup_place_parameterization import (
     sample_pickup_instance,
     sample_place_instance,
 )
+from panda_mesh_assets import PandaMeshAssets
 
 from giskardpy.motion_statechart.context import MotionStatechartContext
 from physics_simulators.base_simulator import SimulatorCallbackResult
@@ -161,9 +162,14 @@ executor.add_node(node)
 thread = threading.Thread(target=executor.spin, daemon=True, name="rclpy-executor")
 thread.start()
 
-world = MJCFParser(
-    "/home/sorin/dev/manipulation_experiments/resources/generated/stacking_scene.xml"
-).parse()
+STACKING_SCENE_PATH = Path(__file__).parent / "stacking_scene.xml"
+"""
+The scene this demo stacks cubes in -- see ``panda_mesh_assets.py`` for how its
+Panda meshes get onto disk.
+"""
+
+PandaMeshAssets(scene=STACKING_SCENE_PATH).download_if_missing()
+world = MJCFParser(str(STACKING_SCENE_PATH)).parse()
 Panda.from_world(world)
 publisher = VizMarkerPublisher(_world=world, node=node).with_tf_publisher()
 
