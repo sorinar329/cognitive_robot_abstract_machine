@@ -303,6 +303,10 @@ def _build_stack_plan(object_body, target_body, picking_arm) -> PlanNode:
                     # (dot product 0.0).
                     rotate_gripper=True,
                 ),
+                # A grasped object physically stops the fingers before their
+                # nominal fully-closed target; without this the CLOSE motion
+                # never registers done and aborts before the lift is attempted.
+                tolerate_grasp_stall=True,
             ),
             PlaceAction(object_body, place_location, picking_arm),
             ParkArmsAction(Arms.BOTH),

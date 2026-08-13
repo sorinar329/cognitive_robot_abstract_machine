@@ -26,6 +26,10 @@ from coraplex.exceptions import GraspVerificationFailed
 from coraplex.plans.factories import sequential, execute_single
 from coraplex.querying.predicates import GripperIsFree
 from coraplex.robot_plans.actions.base import ActionDescription
+from coraplex.robot_plans.mixins import (
+    HasGraspDetectionThreshold,
+    ReachTuningParameters,
+)
 from coraplex.robot_plans.motions.gripper import (
     MoveGripperMotion,
     MoveToolCenterPointMotion,
@@ -33,22 +37,16 @@ from coraplex.robot_plans.motions.gripper import (
 from coraplex.view_manager import ViewManager
 from semantic_digital_twin.datastructures.definitions import GripperState
 from semantic_digital_twin.reasoning.predicates import allclose
-from semantic_digital_twin.reasoning.robot_predicates import is_body_in_gripper
+from semantic_digital_twin.reasoning.robot_predicates import is_body_gripped
 from semantic_digital_twin.robots.robot_part_mixins import HasMobileBase
 from semantic_digital_twin.spatial_types.spatial_types import Pose
 from semantic_digital_twin.world_description.world_entity import Body
 
 logger = logging.getLogger(__name__)
 
-GRASP_DETECTION_THRESHOLD: float = 0.9
-"""
-Minimum fraction of sampled rays between the gripper's fingers that must hit an object
-for it to be considered grasped/held (see
-:func:`~semantic_digital_twin.reasoning.robot_predicates.is_body_in_gripper`).
-"""
 
 @dataclass
-class ReachAction(ActionDescription):
+class ReachAction(ActionDescription, ReachTuningParameters, HasGraspDetectionThreshold):
     """
     Let the robot reach a specific pose.
     """
@@ -78,29 +76,10 @@ class ReachAction(ActionDescription):
     Whether the grasp pose sequence should be approached in reverse order.
     """
 
-    pre_approach_linear_velocity: Optional[float] = None
-    """
-    Explicit linear reference velocity (in m/s) for the initial pre-pose approach.
-
-    ``None`` keeps the default velocity.
-    """
-
-    final_approach_linear_velocity: Optional[float] = None
-    """
-    Explicit linear reference velocity (in m/s) for the final approach onto the target
-    pose.
-
-    Slower final approaches reduce the chance of the fingers brushing and displacing the
-    object before the grasp closes. ``None`` keeps the default velocity.
-    """
-
     open_gripper_at_pre_pose: bool = False
     """
-    Whether to open the gripper once the pre-pose is reached, instead of leaving it as-
-    is for the whole reach.
-
-    Used by :class:`PickUpAction` so the gripper is already open going into the (slower)
-    final approach.
+    Whether to open the gripper once the pre-pose is reached, used by
+    :class:`PickUpAction` to open before its slower final approach.
     """
 
     @property
@@ -113,7 +92,7 @@ class ReachAction(ActionDescription):
                 target_pre_pose,
                 self.arm,
                 allow_gripper_collision=False,
-                reference_linear_velocity=self.pre_approach_linear_velocity,
+                max_linear_velocity=self.pre_approach_linear_velocity,
             ),
         ]
         if self.open_gripper_at_pre_pose:
@@ -126,7 +105,7 @@ class ReachAction(ActionDescription):
                 self.arm,
                 allow_gripper_collision=False,
                 movement_type=MovementType.CARTESIAN,
-                reference_linear_velocity=self.final_approach_linear_velocity,
+                max_linear_velocity=self.final_approach_linear_velocity,
             )
         )
         return sequential(children=children)
@@ -166,8 +145,11 @@ class ReachAction(ActionDescription):
         """
         end_effector = ViewManager.get_end_effector_view(kwargs["arm"], context.robot)
         return or_(
-            is_body_in_gripper(variable_from(kwargs["object_designator"]), end_effector)
-            > GRASP_DETECTION_THRESHOLD,
+            is_body_gripped(
+                variable_from(kwargs["object_designator"]),
+                end_effector,
+                threshold=kwargs["grasp_detection_threshold"],
+            ),
             allclose(
                 variable_from(kwargs["object_designator"]).global_pose.to_position(),
                 variable_from(end_effector.tool_frame).global_pose.to_position(),
@@ -177,7 +159,7 @@ class ReachAction(ActionDescription):
 
 
 @dataclass
-class PickUpAction(ActionDescription):
+class PickUpAction(ActionDescription, HasGraspDetectionThreshold):
     """
     Let the robot pick up an object.
     """
@@ -245,8 +227,8 @@ class PickUpAction(ActionDescription):
     grasp_stall_min_time: float = 0.3
     """
     Minimum stall dwell time (in seconds, see
-    :attr:`~coraplex.robot_plans.motions.gripper.MoveGripperMotion.stall_min_time`) for
-    the CLOSE motion.
+    :attr:`~coraplex.robot_plans.mixins.GripperStallToleranceParameters.stall_minimum_time`)
+    for the CLOSE motion.
 
     Cut down from :class:`JointPositionList`'s default of 1.0s -- that default is a
     generous margin over the ~0.1-0.3s it actually takes the fingers to ramp up and make
@@ -272,22 +254,38 @@ class PickUpAction(ActionDescription):
     """
     How many times to attempt reach+close before giving up on this object.
 
-    Each attempt is verified afterwards via.
+    Each attempt is verified afterwards via
+    :func:`~semantic_digital_twin.reasoning.robot_predicates.is_body_gripped` -- catches
+    the object slipping out instead of being held (whether from a marginal grip or a
+    stall detected slightly before full contact) and retries instead of silently
+    continuing to lift/transport/place an empty gripper. Raised from 2 to 3: a single
+    retry sometimes hit the same marginal grip twice in a row, while a fresh third
+    attempt (re-approaching from scratch, at whatever the object's position now is)
+    usually succeeds.
+    """
 
-    :func:`~semantic_digital_twin.reasoning.robot_predicates.is_body_in_gripper`
-    -- catches the object slipping out instead of being held (whether from a
-    marginal grip or a stall detected slightly before full contact) and
-    retries instead of silently continuing to lift/transport/place an empty
-    gripper. Raised from 2 to 3: a single retry sometimes hit the same marginal
-    grip twice in a row, while a fresh third attempt (re-approaching from
-    scratch, at whatever the object's position now is) usually succeeds.
+    tolerate_grasp_stall: bool = False
+    """
+    Whether the CLOSE motion's completion also tolerates a stalled grasp (see
+    :attr:`~coraplex.robot_plans.motions.gripper.MoveGripperMotion.tolerate_stall`).
+
+    Opt-in rather than always on: building the stall monitor needs a velocity variable
+    for every one of the gripper's connections, which is not guaranteed for every robot
+    -- it crashes on Tracy's real-execution gripper, whose connections do not all have
+    one.
     """
 
     def _grasp_attempt_plan(self) -> PlanNode:
+        """
+        :return: One reach-and-close attempt at grasping :attr:`object_designator`,
+            without lifting it.
+        """
         return sequential(
             children=[
+                # defining the target_pose relative to the object ensures it stays correct even if the object pose is
+                # updated after defining the goal
                 ReachAction(
-                    target_pose=self.object_designator.global_pose,
+                    target_pose=Pose(reference_frame=self.object_designator),
                     object_designator=self.object_designator,
                     arm=self.arm,
                     grasp_description=self.grasp_description,
@@ -300,7 +298,8 @@ class PickUpAction(ActionDescription):
                     gripper=self.arm,
                     target_opening=self.grasp_opening,
                     finger_velocity=self.grasp_closing_velocity,
-                    stall_min_time=self.grasp_stall_min_time,
+                    stall_minimum_time=self.grasp_stall_min_time,
+                    tolerate_stall=self.tolerate_grasp_stall,
                 ),
                 # Temporarily disabled to isolate whether a genuinely physical
                 # grasp (real contact/friction) survives the lift on its own,
@@ -323,14 +322,15 @@ class PickUpAction(ActionDescription):
             self.arm,
             allow_gripper_collision=True,
             movement_type=MovementType.TRANSLATION,
-            reference_linear_velocity=self.lift_linear_velocity,
+            max_linear_velocity=self.lift_linear_velocity,
         )
 
     def _grasp_succeeded(self) -> bool:
         end_effector = ViewManager.get_end_effector_view(self.arm, self.robot)
-        return (
-            is_body_in_gripper(self.object_designator, end_effector)
-            > GRASP_DETECTION_THRESHOLD
+        return is_body_gripped(
+            self.object_designator,
+            end_effector,
+            threshold=self.grasp_detection_threshold,
         )
 
     def execute(self) -> Any:
@@ -402,8 +402,11 @@ class PickUpAction(ActionDescription):
         )
         return or_(
             not_(GripperIsFree(end_effector)),
-            is_body_in_gripper(variable_from(kwargs["object_designator"]), end_effector)
-            > GRASP_DETECTION_THRESHOLD,
+            is_body_gripped(
+                variable_from(kwargs["object_designator"]),
+                end_effector,
+                threshold=kwargs["grasp_detection_threshold"],
+            ),
         )
 
 

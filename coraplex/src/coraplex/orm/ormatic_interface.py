@@ -60,12 +60,10 @@ import coraplex.robot_plans.motions.navigation
 import coraplex.robot_plans.motions.robot_body
 import coraplex.training_environments.training_environment
 import coraplex.view_manager
-import coraplex.visualization
 import datetime
 import enum
 import giskardpy.data_types.exceptions
 import giskardpy.executor
-import giskardpy.middleware.ros2.behavior_tree_config
 import giskardpy.middleware.ros2.exceptions
 import giskardpy.middleware.ros2.giskard
 import giskardpy.middleware.ros2.python_interface
@@ -82,7 +80,6 @@ import giskardpy.motion_statechart.context
 import giskardpy.motion_statechart.debug_expression_publisher
 import giskardpy.motion_statechart.debug_expression_trajectory
 import giskardpy.motion_statechart.exceptions
-import giskardpy.motion_statechart.goals.align_to_push_door
 import giskardpy.motion_statechart.goals.cartesian_goals
 import giskardpy.motion_statechart.goals.collision_avoidance
 import giskardpy.motion_statechart.goals.open_close
@@ -126,7 +123,6 @@ import giskardpy.qp.qp_data_symbolic
 import giskardpy.qp.qp_debugger
 import giskardpy.ros2_tools.force_torque_filter_node
 import giskardpy.ros_executor
-import giskardpy.tree.behaviors.publish_debug_expressions
 import krrood.adapters.json_serializer
 import krrood.ormatic.custom_types
 import krrood.ormatic.data_access_objects.alternative_mappings
@@ -6249,33 +6245,6 @@ class ViewManagerDAO(Base, DataAccessObject[coraplex.view_manager.ViewManager]):
     )
 
 
-class GraphVisualizerDAO(
-    Base, DataAccessObject[coraplex.visualization.GraphVisualizer]
-):
-    __tablename__ = "GraphVisualizerDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        Integer, primary_key=True, use_existing_column=True
-    )
-
-    start: Mapped[typing.Optional[builtins.int]] = mapped_column(
-        use_existing_column=True
-    )
-    title: Mapped[builtins.str] = mapped_column(
-        sqlalchemy.sql.sqltypes.Text, use_existing_column=True
-    )
-    width: Mapped[builtins.int] = mapped_column(use_existing_column=True)
-    height: Mapped[builtins.int] = mapped_column(use_existing_column=True)
-    update_interval: Mapped[builtins.int] = mapped_column(use_existing_column=True)
-
-    attributes: Mapped[typing.List[builtins.str]] = mapped_column(
-        JSON, nullable=False, use_existing_column=True
-    )
-    layout: Mapped[coraplex.datastructures.enums.VisualizationLayout] = mapped_column(
-        krrood.ormatic.custom_types.PolymorphicEnumType,
-        nullable=False,
-        use_existing_column=True,
-    )
 
 
 class FunctionMappingDAO(
@@ -6559,120 +6528,12 @@ class SimulationPacerDAO(
     }
 
 
-class BehaviorTreeConfigDAO(
-    Base,
-    DataAccessObject[giskardpy.middleware.ros2.behavior_tree_config.BehaviorTreeConfig],
-):
-    __tablename__ = "BehaviorTreeConfigDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        Integer, primary_key=True, use_existing_column=True
-    )
-
-    tree_tick_rate: Mapped[builtins.float] = mapped_column(use_existing_column=True)
-    debug_mode: Mapped[builtins.bool] = mapped_column(use_existing_column=True)
-    add_gantt_chart_plotter: Mapped[builtins.bool] = mapped_column(
-        use_existing_column=True
-    )
-    add_goal_graph_plotter: Mapped[builtins.bool] = mapped_column(
-        use_existing_column=True
-    )
-    add_trajectory_plotter: Mapped[builtins.bool] = mapped_column(
-        use_existing_column=True
-    )
-    add_debug_trajectory_plotter: Mapped[builtins.bool] = mapped_column(
-        use_existing_column=True
-    )
-    add_debug_marker_publisher: Mapped[builtins.bool] = mapped_column(
-        use_existing_column=True
-    )
-    add_trajectory_visualizer: Mapped[builtins.bool] = mapped_column(
-        use_existing_column=True
-    )
-    add_debug_trajectory_visualizer: Mapped[builtins.bool] = mapped_column(
-        use_existing_column=True
-    )
-
-    polymorphic_type: Mapped[str] = mapped_column(
-        String(255), nullable=False, use_existing_column=True
-    )
-
-    add_qp_data_publisher_id: Mapped[int] = mapped_column(
-        ForeignKey("QPDataPublisherConfigDAO.database_id", use_alter=True),
-        nullable=True,
-        use_existing_column=True,
-    )
-
-    add_qp_data_publisher: Mapped[QPDataPublisherConfigDAO] = relationship(
-        "QPDataPublisherConfigDAO",
-        uselist=False,
-        foreign_keys=[add_qp_data_publisher_id],
-        post_update=True,
-    )
-
-    __mapper_args__ = {
-        "polymorphic_on": "polymorphic_type",
-        "polymorphic_identity": "BehaviorTreeConfigDAO",
-    }
 
 
-class ClosedLoopBTConfigDAO(
-    BehaviorTreeConfigDAO,
-    DataAccessObject[giskardpy.middleware.ros2.behavior_tree_config.ClosedLoopBTConfig],
-):
-    __tablename__ = "ClosedLoopBTConfigDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        ForeignKey(BehaviorTreeConfigDAO.database_id),
-        primary_key=True,
-        use_existing_column=True,
-    )
-
-    __mapper_args__ = {
-        "polymorphic_identity": "ClosedLoopBTConfigDAO",
-        "inherit_condition": database_id == BehaviorTreeConfigDAO.database_id,
-        "polymorphic_load": "selectin",
-    }
 
 
-class OpenLoopBTConfigDAO(
-    BehaviorTreeConfigDAO,
-    DataAccessObject[giskardpy.middleware.ros2.behavior_tree_config.OpenLoopBTConfig],
-):
-    __tablename__ = "OpenLoopBTConfigDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        ForeignKey(BehaviorTreeConfigDAO.database_id),
-        primary_key=True,
-        use_existing_column=True,
-    )
-
-    __mapper_args__ = {
-        "polymorphic_identity": "OpenLoopBTConfigDAO",
-        "inherit_condition": database_id == BehaviorTreeConfigDAO.database_id,
-        "polymorphic_load": "selectin",
-    }
 
 
-class StandAloneBTConfigDAO(
-    BehaviorTreeConfigDAO,
-    DataAccessObject[giskardpy.middleware.ros2.behavior_tree_config.StandAloneBTConfig],
-):
-    __tablename__ = "StandAloneBTConfigDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        ForeignKey(BehaviorTreeConfigDAO.database_id),
-        primary_key=True,
-        use_existing_column=True,
-    )
-
-    publish_world_state: Mapped[builtins.bool] = mapped_column(use_existing_column=True)
-
-    __mapper_args__ = {
-        "polymorphic_identity": "StandAloneBTConfigDAO",
-        "inherit_condition": database_id == BehaviorTreeConfigDAO.database_id,
-        "polymorphic_load": "selectin",
-    }
 
 
 class ExecutionExceptionDAO(
@@ -6837,25 +6698,6 @@ class FollowJointTrajectoryErrorDAO(
     }
 
 
-class FollowJointTrajectoryServerRequiresPlanningModeErrorDAO(
-    SetupExceptionDAO,
-    DataAccessObject[
-        giskardpy.middleware.ros2.exceptions.FollowJointTrajectoryServerRequiresPlanningModeError
-    ],
-):
-    __tablename__ = "FollowJointTrajectoryServerRequiresPlanningModeErrorDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        ForeignKey(SetupExceptionDAO.database_id),
-        primary_key=True,
-        use_existing_column=True,
-    )
-
-    __mapper_args__ = {
-        "polymorphic_identity": "FollowJointTrajectoryServerRequiresPlanningModeErrorDAO",
-        "inherit_condition": database_id == SetupExceptionDAO.database_id,
-        "polymorphic_load": "selectin",
-    }
 
 
 class FollowJointTrajectory_GOAL_TOLERANCE_VIOLATEDDAO(
@@ -6994,11 +6836,6 @@ class GiskardDAO(Base, DataAccessObject[giskardpy.middleware.ros2.giskard.Giskar
         nullable=True,
         use_existing_column=True,
     )
-    behavior_tree_config_id: Mapped[int] = mapped_column(
-        ForeignKey("BehaviorTreeConfigDAO.database_id", use_alter=True),
-        nullable=True,
-        use_existing_column=True,
-    )
     qp_controller_config_id: Mapped[int] = mapped_column(
         ForeignKey("QPControllerConfigDAO.database_id", use_alter=True),
         nullable=True,
@@ -7009,12 +6846,6 @@ class GiskardDAO(Base, DataAccessObject[giskardpy.middleware.ros2.giskard.Giskar
         "WorldConfigDAO",
         uselist=False,
         foreign_keys=[world_config_id],
-        post_update=True,
-    )
-    behavior_tree_config: Mapped[BehaviorTreeConfigDAO] = relationship(
-        "BehaviorTreeConfigDAO",
-        uselist=False,
-        foreign_keys=[behavior_tree_config_id],
         post_update=True,
     )
     qp_controller_config: Mapped[QPControllerConfigDAO] = relationship(
@@ -8526,76 +8357,6 @@ class TryInOrderDAO(
     }
 
 
-class AlignToPushDoorDAO(
-    GoalDAO,
-    DataAccessObject[
-        giskardpy.motion_statechart.goals.align_to_push_door.AlignToPushDoor
-    ],
-):
-    __tablename__ = "AlignToPushDoorDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        ForeignKey(GoalDAO.database_id), primary_key=True, use_existing_column=True
-    )
-
-    reference_linear_velocity: Mapped[builtins.float] = mapped_column(
-        use_existing_column=True
-    )
-    reference_angular_velocity: Mapped[builtins.float] = mapped_column(
-        use_existing_column=True
-    )
-    weight: Mapped[builtins.float] = mapped_column(use_existing_column=True)
-
-    root_link_id: Mapped[int] = mapped_column(
-        ForeignKey("BodyDAO.database_id", use_alter=True),
-        nullable=True,
-        use_existing_column=True,
-    )
-    tip_link_id: Mapped[int] = mapped_column(
-        ForeignKey("BodyDAO.database_id", use_alter=True),
-        nullable=True,
-        use_existing_column=True,
-    )
-    door_object_id: Mapped[int] = mapped_column(
-        ForeignKey("BodyDAO.database_id", use_alter=True),
-        nullable=True,
-        use_existing_column=True,
-    )
-    door_handle_id: Mapped[int] = mapped_column(
-        ForeignKey("BodyDAO.database_id", use_alter=True),
-        nullable=True,
-        use_existing_column=True,
-    )
-    tip_gripper_axis_id: Mapped[int] = mapped_column(
-        ForeignKey("Vector3MappingDAO.database_id", use_alter=True),
-        nullable=True,
-        use_existing_column=True,
-    )
-
-    root_link: Mapped[BodyDAO] = relationship(
-        "BodyDAO", uselist=False, foreign_keys=[root_link_id], post_update=True
-    )
-    tip_link: Mapped[BodyDAO] = relationship(
-        "BodyDAO", uselist=False, foreign_keys=[tip_link_id], post_update=True
-    )
-    door_object: Mapped[BodyDAO] = relationship(
-        "BodyDAO", uselist=False, foreign_keys=[door_object_id], post_update=True
-    )
-    door_handle: Mapped[BodyDAO] = relationship(
-        "BodyDAO", uselist=False, foreign_keys=[door_handle_id], post_update=True
-    )
-    tip_gripper_axis: Mapped[Vector3MappingDAO] = relationship(
-        "Vector3MappingDAO",
-        uselist=False,
-        foreign_keys=[tip_gripper_axis_id],
-        post_update=True,
-    )
-
-    __mapper_args__ = {
-        "polymorphic_identity": "AlignToPushDoorDAO",
-        "inherit_condition": database_id == GoalDAO.database_id,
-        "polymorphic_load": "selectin",
-    }
 
 
 class ExternalCollisionAvoidanceDAO(
@@ -9704,228 +9465,14 @@ class VectorsAlignedDAO(
     }
 
 
-class FeatureMonitorDAO(
-    MotionStatechartNodeDAO,
-    DataAccessObject[
-        giskardpy.motion_statechart.monitors.feature_monitors.FeatureMonitor
-    ],
-):
-    __tablename__ = "FeatureMonitorDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        ForeignKey(MotionStatechartNodeDAO.database_id),
-        primary_key=True,
-        use_existing_column=True,
-    )
-
-    tip_link_id: Mapped[int] = mapped_column(
-        ForeignKey("BodyDAO.database_id", use_alter=True),
-        nullable=True,
-        use_existing_column=True,
-    )
-    root_link_id: Mapped[int] = mapped_column(
-        ForeignKey("BodyDAO.database_id", use_alter=True),
-        nullable=True,
-        use_existing_column=True,
-    )
-
-    tip_link: Mapped[BodyDAO] = relationship(
-        "BodyDAO", uselist=False, foreign_keys=[tip_link_id], post_update=True
-    )
-    root_link: Mapped[BodyDAO] = relationship(
-        "BodyDAO", uselist=False, foreign_keys=[root_link_id], post_update=True
-    )
-
-    __mapper_args__ = {
-        "polymorphic_identity": "FeatureMonitorDAO",
-        "inherit_condition": database_id == MotionStatechartNodeDAO.database_id,
-        "polymorphic_load": "selectin",
-    }
 
 
-class AngleMonitorDAO(
-    FeatureMonitorDAO,
-    DataAccessObject[
-        giskardpy.motion_statechart.monitors.feature_monitors.AngleMonitor
-    ],
-):
-    __tablename__ = "AngleMonitorDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        ForeignKey(FeatureMonitorDAO.database_id),
-        primary_key=True,
-        use_existing_column=True,
-    )
-
-    lower_angle: Mapped[builtins.float] = mapped_column(use_existing_column=True)
-    upper_angle: Mapped[builtins.float] = mapped_column(use_existing_column=True)
-
-    reference_vector_id: Mapped[int] = mapped_column(
-        ForeignKey("Vector3MappingDAO.database_id", use_alter=True),
-        nullable=True,
-        use_existing_column=True,
-    )
-    tip_vector_id: Mapped[int] = mapped_column(
-        ForeignKey("Vector3MappingDAO.database_id", use_alter=True),
-        nullable=True,
-        use_existing_column=True,
-    )
-
-    reference_vector: Mapped[Vector3MappingDAO] = relationship(
-        "Vector3MappingDAO",
-        uselist=False,
-        foreign_keys=[reference_vector_id],
-        post_update=True,
-    )
-    tip_vector: Mapped[Vector3MappingDAO] = relationship(
-        "Vector3MappingDAO",
-        uselist=False,
-        foreign_keys=[tip_vector_id],
-        post_update=True,
-    )
-
-    __mapper_args__ = {
-        "polymorphic_identity": "AngleMonitorDAO",
-        "inherit_condition": database_id == FeatureMonitorDAO.database_id,
-        "polymorphic_load": "selectin",
-    }
 
 
-class DistanceMonitorDAO(
-    FeatureMonitorDAO,
-    DataAccessObject[
-        giskardpy.motion_statechart.monitors.feature_monitors.DistanceMonitor
-    ],
-):
-    __tablename__ = "DistanceMonitorDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        ForeignKey(FeatureMonitorDAO.database_id),
-        primary_key=True,
-        use_existing_column=True,
-    )
-
-    lower_limit: Mapped[builtins.float] = mapped_column(use_existing_column=True)
-    upper_limit: Mapped[builtins.float] = mapped_column(use_existing_column=True)
-
-    reference_point_id: Mapped[int] = mapped_column(
-        ForeignKey("Point3MappingDAO.database_id", use_alter=True),
-        nullable=True,
-        use_existing_column=True,
-    )
-    tip_point_id: Mapped[int] = mapped_column(
-        ForeignKey("Point3MappingDAO.database_id", use_alter=True),
-        nullable=True,
-        use_existing_column=True,
-    )
-
-    reference_point: Mapped[Point3MappingDAO] = relationship(
-        "Point3MappingDAO",
-        uselist=False,
-        foreign_keys=[reference_point_id],
-        post_update=True,
-    )
-    tip_point: Mapped[Point3MappingDAO] = relationship(
-        "Point3MappingDAO", uselist=False, foreign_keys=[tip_point_id], post_update=True
-    )
-
-    __mapper_args__ = {
-        "polymorphic_identity": "DistanceMonitorDAO",
-        "inherit_condition": database_id == FeatureMonitorDAO.database_id,
-        "polymorphic_load": "selectin",
-    }
 
 
-class HeightMonitorDAO(
-    FeatureMonitorDAO,
-    DataAccessObject[
-        giskardpy.motion_statechart.monitors.feature_monitors.HeightMonitor
-    ],
-):
-    __tablename__ = "HeightMonitorDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        ForeignKey(FeatureMonitorDAO.database_id),
-        primary_key=True,
-        use_existing_column=True,
-    )
-
-    lower_limit: Mapped[builtins.float] = mapped_column(use_existing_column=True)
-    upper_limit: Mapped[builtins.float] = mapped_column(use_existing_column=True)
-
-    reference_point_id: Mapped[int] = mapped_column(
-        ForeignKey("Point3MappingDAO.database_id", use_alter=True),
-        nullable=True,
-        use_existing_column=True,
-    )
-    tip_point_id: Mapped[int] = mapped_column(
-        ForeignKey("Point3MappingDAO.database_id", use_alter=True),
-        nullable=True,
-        use_existing_column=True,
-    )
-
-    reference_point: Mapped[Point3MappingDAO] = relationship(
-        "Point3MappingDAO",
-        uselist=False,
-        foreign_keys=[reference_point_id],
-        post_update=True,
-    )
-    tip_point: Mapped[Point3MappingDAO] = relationship(
-        "Point3MappingDAO", uselist=False, foreign_keys=[tip_point_id], post_update=True
-    )
-
-    __mapper_args__ = {
-        "polymorphic_identity": "HeightMonitorDAO",
-        "inherit_condition": database_id == FeatureMonitorDAO.database_id,
-        "polymorphic_load": "selectin",
-    }
 
 
-class PerpendicularMonitorDAO(
-    FeatureMonitorDAO,
-    DataAccessObject[
-        giskardpy.motion_statechart.monitors.feature_monitors.PerpendicularMonitor
-    ],
-):
-    __tablename__ = "PerpendicularMonitorDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        ForeignKey(FeatureMonitorDAO.database_id),
-        primary_key=True,
-        use_existing_column=True,
-    )
-
-    threshold: Mapped[builtins.float] = mapped_column(use_existing_column=True)
-
-    reference_normal_id: Mapped[int] = mapped_column(
-        ForeignKey("Vector3MappingDAO.database_id", use_alter=True),
-        nullable=True,
-        use_existing_column=True,
-    )
-    tip_normal_id: Mapped[int] = mapped_column(
-        ForeignKey("Vector3MappingDAO.database_id", use_alter=True),
-        nullable=True,
-        use_existing_column=True,
-    )
-
-    reference_normal: Mapped[Vector3MappingDAO] = relationship(
-        "Vector3MappingDAO",
-        uselist=False,
-        foreign_keys=[reference_normal_id],
-        post_update=True,
-    )
-    tip_normal: Mapped[Vector3MappingDAO] = relationship(
-        "Vector3MappingDAO",
-        uselist=False,
-        foreign_keys=[tip_normal_id],
-        post_update=True,
-    )
-
-    __mapper_args__ = {
-        "polymorphic_identity": "PerpendicularMonitorDAO",
-        "inherit_condition": database_id == FeatureMonitorDAO.database_id,
-        "polymorphic_load": "selectin",
-    }
 
 
 class JointPositionReachedDAO(
@@ -12683,29 +12230,6 @@ class Ros2ExecutorDAO(
     }
 
 
-class QPDataPublisherConfigDAO(
-    Base,
-    DataAccessObject[
-        giskardpy.tree.behaviors.publish_debug_expressions.QPDataPublisherConfig
-    ],
-):
-    __tablename__ = "QPDataPublisherConfigDAO"
-
-    database_id: Mapped[builtins.int] = mapped_column(
-        Integer, primary_key=True, use_existing_column=True
-    )
-
-    publish_lb: Mapped[builtins.bool] = mapped_column(use_existing_column=True)
-    publish_ub: Mapped[builtins.bool] = mapped_column(use_existing_column=True)
-    publish_lbA: Mapped[builtins.bool] = mapped_column(use_existing_column=True)
-    publish_ubA: Mapped[builtins.bool] = mapped_column(use_existing_column=True)
-    publish_bE: Mapped[builtins.bool] = mapped_column(use_existing_column=True)
-    publish_Ax: Mapped[builtins.bool] = mapped_column(use_existing_column=True)
-    publish_Ex: Mapped[builtins.bool] = mapped_column(use_existing_column=True)
-    publish_xdot: Mapped[builtins.bool] = mapped_column(use_existing_column=True)
-    publish_weights: Mapped[builtins.bool] = mapped_column(use_existing_column=True)
-    publish_g: Mapped[builtins.bool] = mapped_column(use_existing_column=True)
-    publish_debug: Mapped[builtins.bool] = mapped_column(use_existing_column=True)
 
 
 class FBXGlobalSettingsDAO(

@@ -775,14 +775,24 @@ class UprightGraspDescription(GraspDescription):
         rotation, so there is no legitimate desired orientation being discarded here,
         only the object's own incidental one.
 
+        Re-anchoring to ``world.root`` (rather than keeping
+        ``target_T_grasp_pose``'s own reference frame) matters just as much as zeroing
+        the local rotation: for a pickup, that reference frame is the object body
+        itself (see ``PickUpAction._grasp_attempt_plan``'s
+        ``Pose(reference_frame=self.object_designator)``), so the base class's own
+        ``target = target_T_grasp_pose.reference_frame`` would still anchor the result
+        to the object's rotated frame and reintroduce the very rotation just zeroed
+        out once resolved to world coordinates -- invisible for an upright cube, but
+        exactly the "reaches from the side/behind instead of the top" bug seen once a
+        cube had been knocked onto its side.
+
         :param target_T_grasp_pose: The pose of the grasp in the target frame.
         :param body: The body of the grasp.
         :param reverse: If the sequence should be reversed.
         """
-        upright_target = Pose(
-            target_T_grasp_pose.to_position(),
-            reference_frame=target_T_grasp_pose.reference_frame,
-        )
+        world = target_T_grasp_pose.reference_frame._world
+        world_pose = world.transform(target_T_grasp_pose, world.root)
+        upright_target = Pose(world_pose.to_position(), reference_frame=world.root)
         return super().pose_sequence(upright_target, body, reverse)
 
 

@@ -120,7 +120,7 @@ class ParkArmsAction(ActionDescription):
             MoveJointsMotion(
                 names=joint_names,
                 positions=joint_poses,
-                max_velocity=self.joint_velocity,
+                max_joint_velocity=self.joint_velocity,
             )
         )
 

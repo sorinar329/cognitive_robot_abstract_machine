@@ -189,6 +189,10 @@ def sample_pickup_instance(
     match_expr = a(PickUpAction)(
         object_designator=object_body,
         arm=arm,
+        # A grasped object physically stops the fingers before their nominal
+        # fully-closed target; without this the CLOSE motion never registers
+        # done and MotionDidNotFinish aborts before the lift is ever attempted.
+        tolerate_grasp_stall=True,
         # Decomposed field-by-field (matching the pattern used in
         # MoveToReachTrainingEnvironment.setup_plan) rather than passed as one
         # already-built GraspDescription: passing the whole object as a single

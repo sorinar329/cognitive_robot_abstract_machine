@@ -368,9 +368,7 @@ class GiskardExecutable(Executable):
             if executor.motion_statechart.is_end_motion():
                 break
 
-        # TODO: giskardpy/executor.py's rename of this method to public hasn't been
-        # merged yet - flip back to the public name once it has.
-        executor._set_velocity_acceleration_jerk_to_zero()
+        executor.set_velocity_acceleration_jerk_to_zero()
         executor.motion_statechart.cleanup_nodes(context=executor.context)
         executor.context.cleanup()
 
