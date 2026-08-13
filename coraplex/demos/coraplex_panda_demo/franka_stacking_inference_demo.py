@@ -50,7 +50,7 @@ from coraplex.execution_environment import ExecutionEnvironment
 # sample_pickup_instance/sample_place_instance's underlying UnderspecifiedParameters
 # machinery fails with NoDAOFoundError the first time it tries to extract features
 # from a literal Body/GraspDescription argument, since that internally calls to_dao().
-from coraplex.orm.ormatic_interface import Base  # noqa: F401
+
 
 from coraplex.plans.factories import sequential
 from coraplex.plans.plan_node import PlanNode
