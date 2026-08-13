@@ -68,21 +68,36 @@ class PlaceAction(ActionDescription, PlaceTuningParameters, HasGraspDetectionThr
     :func:`~semantic_digital_twin.reasoning.robot_predicates.is_body_gripped`).
     """
 
+    detach_from_gripper: bool = field(default=True, kw_only=True)
+    """
+    Whether :attr:`object_designator` is kinematically re-parented back onto the world
+    via :class:`~coraplex.plans.attachment_nodes.DetachNode` during retraction.
+
+    Set this to ``False`` alongside :attr:`~coraplex.robot_plans.actions.core.pick_up.Pi
+    ckUpAction.attach_to_gripper` set the same way, for an object whose pose is driven
+    entirely by real contact/friction in a physics simulator rather than by this
+    kinematic re-parenting -- see that attribute's own docstring for why mixing the two
+    can fling the object.
+    """
+
     def _retract_plan(self, retract_pose: Pose) -> PlanNode:
         """
         :return: The plan that re-parents the placed object back to the world and
             retracts the end effector away from it.
         """
-        return sequential(
-            [
-                DetachNode(body=self.object_designator, new_parent=self.world.root),
-                MoveToolCenterPointMotion(
-                    retract_pose,
-                    self.arm,
-                    max_linear_velocity=self.retract_linear_velocity,
-                ),
-            ],
+        children = []
+        if self.detach_from_gripper:
+            children.append(
+                DetachNode(body=self.object_designator, new_parent=self.world.root)
+            )
+        children.append(
+            MoveToolCenterPointMotion(
+                retract_pose,
+                self.arm,
+                max_linear_velocity=self.retract_linear_velocity,
+            )
         )
+        return sequential(children)
 
     @property
     def _action_plan(self) -> PlanNode:

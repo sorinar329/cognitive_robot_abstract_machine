@@ -1399,6 +1399,15 @@ class EndMotion(TerminalNode):
     Upper bound for the per-degree-of-freedom velocity threshold.
     """
 
+    minimum_settle_seconds: float = field(default=1.0, kw_only=True)
+    """
+    Minimum simulated seconds of trajectory time that must elapse before convergence is
+    reported, passed straight through to :func:`velocity_convergence_expression`'s own
+    ``minimum_time``. A caller whose plan chains many short motions in sequence pays this
+    once per motion, so it is worth lowering for such a caller as long as the velocity
+    thresholds above still gate on the degrees of freedom actually having settled.
+    """
+
     def build_artifacts(self, context: MotionStatechartContext) -> NodeArtifacts:
         """
         Reports "done" only once the world has actually settled, so the motion isn't
@@ -1413,6 +1422,7 @@ class EndMotion(TerminalNode):
             joint_convergence_threshold=self.joint_convergence_threshold,
             minimum_threshold=self.minimum_threshold,
             maximum_threshold=self.maximum_threshold,
+            minimum_time=self.minimum_settle_seconds,
         )
         return NodeArtifacts(observation=observation)
 

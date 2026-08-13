@@ -192,39 +192,55 @@ class PickUpAction(
     one.
     """
 
+    attach_to_gripper: bool = True
+    """
+    Whether :attr:`object_designator` is kinematically re-parented onto the gripper via
+    :class:`~coraplex.plans.attachment_nodes.AttachNode` once grasped.
+
+    Set this to ``False`` for an object whose pose is instead driven entirely by real
+    contact/friction in a physics simulator: kinematically welding it to the gripper on
+    top of that gives it two disagreeing poses (Giskard's belief, fixed relative to the
+    gripper, and the physics engine's own contact-driven one), and reconciling them at
+    the attach/detach transition can snap the object hard enough to fling it clear of
+    the gripper -- pair with :attr:`~coraplex.robot_plans.actions.core.placing.PlaceActi
+    on.detach_from_gripper` set the same way for the object's later placement.
+    """
+
     def _grasp_attempt_plan(self) -> PlanNode:
         """
         :return: One reach-and-close attempt at grasping :attr:`object_designator`,
             without lifting it.
         """
-        return sequential(
-            children=[
-                # defining the target_pose relative to the object ensures it stays correct even if the object pose is
-                # updated after defining the goal
-                ReachAction(
-                    target_pose=Pose(reference_frame=self.object_designator),
-                    object_designator=self.object_designator,
-                    arm=self.arm,
-                    grasp_description=self.grasp_description,
-                    pre_approach_linear_velocity=self.pre_approach_linear_velocity,
-                    final_approach_linear_velocity=self.final_approach_linear_velocity,
-                    open_gripper_at_pre_pose=True,
-                ),
-                MoveGripperMotion(
-                    motion=GripperState.CLOSE,
-                    gripper=self.arm,
-                    finger_velocity=self.grasp_closing_velocity,
-                    stall_minimum_time=self.grasp_stall_minimum_time,
-                    tolerate_stall=self.tolerate_grasp_stall,
-                ),
+        children = [
+            # defining the target_pose relative to the object ensures it stays correct even if the object pose is
+            # updated after defining the goal
+            ReachAction(
+                target_pose=Pose(reference_frame=self.object_designator),
+                object_designator=self.object_designator,
+                arm=self.arm,
+                grasp_description=self.grasp_description,
+                pre_approach_linear_velocity=self.pre_approach_linear_velocity,
+                final_approach_linear_velocity=self.final_approach_linear_velocity,
+                open_gripper_at_pre_pose=True,
+            ),
+            MoveGripperMotion(
+                motion=GripperState.CLOSE,
+                gripper=self.arm,
+                finger_velocity=self.grasp_closing_velocity,
+                stall_minimum_time=self.grasp_stall_minimum_time,
+                tolerate_stall=self.tolerate_grasp_stall,
+            ),
+        ]
+        if self.attach_to_gripper:
+            children.append(
                 AttachNode(
                     body=self.object_designator,
                     new_parent=ViewManager.get_end_effector_view(
                         self.arm, self.robot
                     ).tool_frame,
-                ),
-            ],
-        )
+                )
+            )
+        return sequential(children=children)
 
     @property
     def _action_plan(self) -> PlanNode:

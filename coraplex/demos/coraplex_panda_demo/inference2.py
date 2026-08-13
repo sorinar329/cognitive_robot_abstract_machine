@@ -171,7 +171,7 @@ thread.start()
 
 STACKING_SCENE_PATH: str = os.environ.get(
     "STACKING_SCENE_PATH",
-    "/home/nvasant/workspace/ros/src/manipulation_experiments/resources/generated/stacking_scene.xml",
+    "/home/sony/workspace/cognitive_robot_abstract_machine/coraplex/demos/coraplex_panda_demo/stacking_scene.xml",
 )
 """
 Path to the MJCF scene this demo loads. Override via the ``STACKING_SCENE_PATH``
@@ -918,9 +918,25 @@ def sample_actions(
         object_body, picking_arm, grasp_description, priors=WIDE_PICKUP_PARAMETER_PRIORS
     )
     pickup_action.grasp_description = _as_upright(pickup_action.grasp_description)
+    # PickUpAction.tolerate_grasp_stall defaults to False, so CLOSE only completes by
+    # reaching its literal fully-closed joint target -- unreachable once a cube is
+    # actually between the fingers, so the close hangs until the tick budget times out
+    # and the recovery park then yanks whatever the fingers were holding. This demo
+    # always closes onto an object, so it should always tolerate the stall that grasp
+    # produces, same as MoveGripperMotion did unconditionally for CLOSE before
+    # tolerate_stall became a separate, opt-in field.
+    pickup_action.tolerate_grasp_stall = True
+    # This demo's cubes are driven entirely by MuJoCo contact/friction, never
+    # kinematically teleported, so PickUpAction.attach_to_gripper's default (True)
+    # gives a held cube two disagreeing poses -- Giskard's belief, welded to the
+    # gripper, and MuJoCo's own contact-driven one -- and reconciling them at the
+    # attach/detach transition (most visibly on release) can snap the cube hard enough
+    # to fling it. See that attribute's own docstring.
+    pickup_action.attach_to_gripper = False
     place_action = sample_place_instance(
         object_body, place_location, picking_arm, priors=WIDE_PLACE_PARAMETER_PRIORS
     )
+    place_action.detach_from_gripper = False
     return pickup_action, place_action
 
 
@@ -1652,8 +1668,28 @@ with ExecutionEnvironment(
     execution_type=execition_mode,
     collision_avoidance=False,
     real_time_pacing=True,
-    # See demo2.py's own identical comment on this budget.
-    max_ticks_per_motion_mapping=250,
+    # demo2.py's own identical comment sized this at 250 (5s) to sit "comfortably
+    # above how long a successful [motion] actually takes at the tuned
+    # approach/lift/transport speeds" -- true when EndMotion ended the instant its
+    # trigger condition fired. Now that EndMotion also waits for the driven degrees of
+    # freedom to actually settle (see end_motion_minimum_settle_seconds below), a
+    # grasp that only converges once contact with the cube has stopped generating
+    # residual velocity can need more than 5s to legitimately finish, and running out
+    # of budget here raises MotionDidNotFinish mid-grasp -- which perform_attempt
+    # recovers from by parking the arm immediately, yanking whatever the fingers were
+    # still holding right out of them. Tripled to give that settling genuine room
+    # while still capping a truly stuck attempt (see demo2.py's own comment on why
+    # that cap matters) well under CUBE_PICKUP_TIME_LIMIT.
+    max_ticks_per_motion_mapping=750,
+    # EndMotion's own default (1.0) makes every single motion in the plan -- every
+    # park, reach, grasp close, lift, and retract -- wait a full simulated second past
+    # its own convergence before the next one starts, on top of whatever that
+    # convergence itself takes. This plan chains many short motions per cube, so that
+    # adds up to most of an iteration's wall-clock time without buying this demo
+    # anything: the velocity thresholds EndMotion still checks are what actually
+    # guards against a motion ending while the arm (or gripper) is still moving, this
+    # only trims the fixed minimum wait once that check has already passed.
+    end_motion_minimum_settle_seconds=0.1,
 ):
     for iteration in range(1, NUMBER_OF_ITERATIONS + 1):
         iteration_start = time.time()

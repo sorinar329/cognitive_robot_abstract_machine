@@ -132,6 +132,13 @@ class GiskardExecutable(Executable):
     :py:class:`~coraplex.execution_environment.ExecutionEnvironment`.
     """
 
+    end_motion_minimum_settle_seconds: ClassVar[float] = 1.0
+    """
+    :py:attr:`~giskardpy.motion_statechart.graph_node.EndMotion.minimum_settle_seconds`
+    applied to every motion state chart's :class:`EndMotion`, managed by
+    :py:class:`~coraplex.execution_environment.ExecutionEnvironment`.
+    """
+
     _current_motion_state_chart: MotionStatechart = field(init=False, default=None)
     """
     Currently build motion state chart, internal only for managing the building the msc.
@@ -177,7 +184,9 @@ class GiskardExecutable(Executable):
         if GiskardExecutable.collision_avoidance:
             self._current_motion_state_chart.add_node(ExternalCollisionAvoidance())
 
-        end_motion = EndMotion()
+        end_motion = EndMotion(
+            minimum_settle_seconds=GiskardExecutable.end_motion_minimum_settle_seconds
+        )
         end_motion.start_condition = end_trigger
         self._current_motion_state_chart.add_node(end_motion)
         return self._current_motion_state_chart

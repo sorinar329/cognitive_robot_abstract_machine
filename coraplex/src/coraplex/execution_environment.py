@@ -76,13 +76,30 @@ class ExecutionEnvironment:
     environments.
     """
 
+    end_motion_minimum_settle_seconds: Optional[float] = None
+    """
+    Minimum simulated seconds each motion state chart's
+    :class:`~giskardpy.motion_statechart.graph_node.EndMotion` waits for its degrees of
+    freedom to converge, applied to every motion state chart created within this
+    environment. ``None`` leaves
+    :py:attr:`~coraplex.plans.executables.GiskardExecutable.end_motion_minimum_settle_seconds`
+    unchanged.
+    """
+
+    previous_end_motion_minimum_settle_seconds: float = field(init=False, default=0)
+    """
+    Settle-seconds value before entering this environment, used for nested
+    environments.
+    """
+
     def __enter__(self):
         """
         Entering function for 'with' scope, saves the previously set
         :py:attr:`~pycram.plans.executables.GiskardExecutable.execution_type`,
         :py:attr:`~pycram.plans.executables.GiskardExecutable.collision_avoidance`,
         :py:attr:`~pycram.plans.executables.GiskardExecutable.real_time_pacing`,
-        and :py:attr:`~pycram.plans.executables.GiskardExecutable.max_ticks_per_motion_mapping`
+        :py:attr:`~pycram.plans.executables.GiskardExecutable.max_ticks_per_motion_mapping`,
+        and :py:attr:`~pycram.plans.executables.GiskardExecutable.end_motion_minimum_settle_seconds`
         and sets them to the values of this environment.
         """
         self.previous_type = GiskardExecutable.execution_type
@@ -91,12 +108,19 @@ class ExecutionEnvironment:
         self.previous_max_ticks_per_motion_mapping = (
             GiskardExecutable.max_ticks_per_motion_mapping
         )
+        self.previous_end_motion_minimum_settle_seconds = (
+            GiskardExecutable.end_motion_minimum_settle_seconds
+        )
         GiskardExecutable.execution_type = self.execution_type
         GiskardExecutable.collision_avoidance = self.collision_avoidance
         GiskardExecutable.real_time_pacing = self.real_time_pacing
         if self.max_ticks_per_motion_mapping is not None:
             GiskardExecutable.max_ticks_per_motion_mapping = (
                 self.max_ticks_per_motion_mapping
+            )
+        if self.end_motion_minimum_settle_seconds is not None:
+            GiskardExecutable.end_motion_minimum_settle_seconds = (
+                self.end_motion_minimum_settle_seconds
             )
 
     def __exit__(self, _type, value, traceback):
@@ -105,7 +129,8 @@ class ExecutionEnvironment:
         :py:attr:`~pycram.plans.executables.GiskardExecutable.execution_type`,
         :py:attr:`~pycram.plans.executables.GiskardExecutable.collision_avoidance`,
         :py:attr:`~pycram.plans.executables.GiskardExecutable.real_time_pacing`,
-        and :py:attr:`~pycram.plans.executables.GiskardExecutable.max_ticks_per_motion_mapping`
+        :py:attr:`~pycram.plans.executables.GiskardExecutable.max_ticks_per_motion_mapping`,
+        and :py:attr:`~pycram.plans.executables.GiskardExecutable.end_motion_minimum_settle_seconds`
         to the previously used values.
         """
         GiskardExecutable.execution_type = self.previous_type
@@ -113,6 +138,9 @@ class ExecutionEnvironment:
         GiskardExecutable.real_time_pacing = self.previous_real_time_pacing
         GiskardExecutable.max_ticks_per_motion_mapping = (
             self.previous_max_ticks_per_motion_mapping
+        )
+        GiskardExecutable.end_motion_minimum_settle_seconds = (
+            self.previous_end_motion_minimum_settle_seconds
         )
 
     def __call__(self, collision_avoidance: bool = False):
