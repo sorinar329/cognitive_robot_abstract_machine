@@ -282,6 +282,23 @@ class WorldState(MutableMapping[UUID, WorldStateEntryView]):
     def jerks(self) -> np.ndarray:
         return self.get_derivative(Derivatives.jerk)
 
+    def column_indices(self, dofs: List[DegreeOfFreedom]) -> List[int]:
+        """
+        Retrieve the columns of the given degrees of freedom in the state data.
+
+        Lets callers that repeatedly read the same degrees of freedom fetch a whole
+        derivative row and index into it, instead of looking every dof up by id.
+
+        ..note:: The columns are only valid until a degree of freedom is added to or
+            removed from the state, which re-lays-out the data.
+        :raises DofNotInWorldStateError: If a degree of freedom is not part of the state.
+        """
+        with self.world_lock:
+            for dof in dofs:
+                if dof.id not in self._index:
+                    raise DofNotInWorldStateError(dof.id)
+            return [self._index[dof.id] for dof in dofs]
+
     def get_derivative(self, derivative: Derivatives) -> np.ndarray:
         """
         Retrieve the data for a whole derivative row.
@@ -311,16 +328,16 @@ class WorldState(MutableMapping[UUID, WorldStateEntryView]):
 
     def add_degree_of_freedom(self, dof: DegreeOfFreedom):
         """
-        Adds a degree of freedom to the world state, initializing its position to 0, or
-        to the nearest limit if 0 is outside them.
+        Adds a degree of freedom to the world state, initializing its position to 0 or
+        the nearest limit.
         """
         with self.world_lock:
             dof.create_variables()
 
             lower = dof.limits.lower.position
             upper = dof.limits.upper.position
-
             initial_position = 0
+
             if lower is not None:
                 initial_position = max(lower, initial_position)
             if upper is not None:
