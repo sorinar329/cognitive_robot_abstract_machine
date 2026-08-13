@@ -128,3 +128,6 @@ class TestJsUnits:
 
     def test_activity_panel(self):
         self.run_node("test_activity_panel.js")
+
+    def test_posterior_tab(self):
+        self.run_node("test_posterior_tab.js")

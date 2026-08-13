@@ -49,13 +49,13 @@ class InteractiveChartView(QChartView):
     A custom QChartView that supports zooming and resetting.
     """
 
-    parent: InitVar[Optional[QWidget]] = None
+    parent_widget: InitVar[Optional[QWidget]] = None
     """
     The parent widget.
     """
 
-    def __post_init__(self, parent: Optional[QWidget]):
-        super().__init__(parent)
+    def __post_init__(self, parent_widget: Optional[QWidget]):
+        super().__init__(parent_widget)
         self.setRubberBand(QChartView.RectangleRubberBand)
         self.setRenderHint(QPainter.RenderHint.Antialiasing)
 
@@ -77,7 +77,7 @@ class ProbabilisticModelPlotWidget(QWidget):
     A widget for plotting 1D probabilistic models using QtCharts.
     """
 
-    parent: InitVar[Optional[QWidget]] = None
+    parent_widget: InitVar[Optional[QWidget]] = None
     """
     The parent widget.
     """
@@ -92,8 +92,8 @@ class ProbabilisticModelPlotWidget(QWidget):
     The chart view that displays the plot.
     """
 
-    def __post_init__(self, parent: Optional[QWidget]):
-        super().__init__(parent)
+    def __post_init__(self, parent_widget: Optional[QWidget]):
+        super().__init__(parent_widget)
         self.layout = QVBoxLayout(self)
         self.chart_view = InteractiveChartView()
         self.chart_view.setStyleSheet("background: transparent;")

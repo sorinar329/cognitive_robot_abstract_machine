@@ -4,10 +4,18 @@ End-to-end tests of the HTTP server: static frontend, scenes and JSON API.
 
 import importlib
 import json
+import shutil
 import threading
 import urllib.request
+from pathlib import Path
 
 import pytest
+
+MODEL_QUERY_FIXTURE = Path(__file__).parent / "dataset" / "model_query_circuit.json"
+"""
+Two independent uniform variables, x on [0, 1] and y on [0, 2] -- shared with
+test_model_query.py.
+"""
 
 
 @pytest.fixture()
@@ -123,6 +131,68 @@ class TestApi:
             status, body = err.code, err.read()
         assert status == 404
         assert json.loads(body)["ok"] is False
+
+
+def post_json(url, body):
+    request = urllib.request.Request(
+        url,
+        data=json.dumps(body).encode(),
+        headers={"Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(request, timeout=10) as response:
+        return response.status, json.loads(response.read())
+
+
+class TestModelQueryApi:
+    @pytest.fixture()
+    def server(self, fixture_scene, server):
+        """
+        The real server, with the fixture circuit published where it looks for models.
+        """
+        pytest.importorskip("probabilistic_model")
+        models_directory = fixture_scene / "models"
+        models_directory.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(
+            MODEL_QUERY_FIXTURE, models_directory / MODEL_QUERY_FIXTURE.name
+        )
+        return server
+
+    def test_posterior_without_evidence_answers_every_query_variable(self, server):
+        status, body = post_json(
+            server + "/api/model/posterior",
+            {"model": "model_query", "queryVariables": ["x", "y"], "evidence": []},
+        )
+        assert status == 200
+        assert set(body["variables"].keys()) == {"x", "y"}
+        assert body["variables"]["x"]["expectation"] == pytest.approx(0.5, abs=0.05)
+
+    def test_posterior_with_evidence_narrows_the_distribution(self, server):
+        status, body = post_json(
+            server + "/api/model/posterior",
+            {
+                "model": "model_query",
+                "queryVariables": ["x"],
+                "evidence": [{"variable": "x", "minimum": 0.2, "maximum": 0.4}],
+            },
+        )
+        assert status == 200
+        assert body["variables"]["x"]["expectation"] == pytest.approx(0.3, abs=0.05)
+
+    def test_unknown_variable_is_a_json_error(self, server):
+        status, body = post_json(
+            server + "/api/model/posterior",
+            {"model": "model_query", "queryVariables": ["not_real"], "evidence": []},
+        )
+        assert status == 200
+        assert body["ok"] is False and "UnknownModelVariable" in body["error"]
+
+    def test_missing_query_variables_is_a_json_error(self, server):
+        status, body = post_json(
+            server + "/api/model/posterior",
+            {"model": "model_query", "queryVariables": [], "evidence": []},
+        )
+        assert status == 200
+        assert body["ok"] is False
 
 
 class TestStartInBackground:

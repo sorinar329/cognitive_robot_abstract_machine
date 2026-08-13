@@ -11,10 +11,12 @@ Serves three things from one port (default 8711):
       GET  /api/knowledge/view?name=   one graph tab (knowledge/kinematics/plan/chart)
       GET  /api/knowledge/expand?node= drill-down subgraph for one node
       POST /api/eql             run an EQL query string
+      POST /api/model/posterior evidence-conditioned posterior for one or more
+                                 variables of a causal-diagnosis model (Posterior tab)
 
-The API needs krrood (EQL). Without it the server still serves the viewer and
-answers API calls with ``{"ok": false, "error": ...}`` so the frontend can say
-why the knowledge panel is empty.
+The knowledge-graph API needs krrood (EQL); the model-query API needs
+probabilistic_model. Without either, the server still serves the viewer and answers
+that API's calls with ``{"ok": false, "error": ...}`` so the frontend can say why.
 
     cramera            # console script
     python -m cramera.server [port]
@@ -60,10 +62,35 @@ except (
     EQL_AVAILABLE = False
     traceback.print_exc()
 
+try:
+    from cramera.live.model_query import (
+        EvidenceConstraint,
+        EvidenceHasZeroProbability,
+        ModelQueryService,
+        UnknownModelVariable,
+    )
+
+    MODEL_QUERY_AVAILABLE = True
+except ImportError:  # pragma: no cover - depends on the environment
+    MODEL_QUERY_AVAILABLE = False
+    logger.warning(
+        "probabilistic_model not importable — serving the viewer without the "
+        "model-query API"
+    )
+
 
 _EQL_LOCK = threading.Lock()
 """
 Krrood's SymbolGraph singleton is not threadsafe; queries are serialized.
+"""
+
+_MODEL_QUERY_SERVICE = (
+    ModelQueryService(models_directory=paths.models_directory())
+    if MODEL_QUERY_AVAILABLE
+    else None
+)
+"""
+Shared across requests so a model, once loaded, is not re-parsed on every query.
 """
 
 
@@ -75,6 +102,13 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     NO_EQL_MESSAGE: ClassVar[str] = "krrood/EQL not available in this environment"
     """
     What every API route answers with when krrood is not importable.
+    """
+
+    NO_MODEL_QUERY_MESSAGE: ClassVar[str] = (
+        "probabilistic_model not available in this environment"
+    )
+    """
+    What the model-query route answers with when probabilistic_model is not importable.
     """
 
     def __init__(self, *args, **kwargs):
@@ -204,22 +238,62 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
     def do_POST(self) -> None:
         """
-        Execute an EQL query (the only write-ish endpoint).
+        Route the write-ish endpoints: an EQL query, or a model-posterior query.
         """
-        if self.path.split("?")[0] != "/api/eql":
-            return self._send_error("unknown endpoint", 404)
+        route = self.path.split("?")[0]
+        if route == "/api/eql":
+            return self._run_eql_query()
+        if route == "/api/model/posterior":
+            return self._run_model_posterior_query()
+        return self._send_error("unknown endpoint", 404)
+
+    def _request_body(self) -> Dict[str, Any]:
+        """
+        The current request's JSON body, or ``{}`` if it is empty.
+        """
+        length = int(self.headers.get("Content-Length") or 0)
+        return json.loads(self.rfile.read(length) or b"{}")
+
+    def _run_eql_query(self) -> None:
+        """
+        Execute an EQL query against the active scene's knowledge base.
+        """
         if not EQL_AVAILABLE:
             return self._send_error(self.NO_EQL_MESSAGE)
         try:
-            length = int(self.headers.get("Content-Length") or 0)
-            request_body = json.loads(self.rfile.read(length) or b"{}")
-            code = (request_body.get("code") or "").strip()
+            code = (self._request_body().get("code") or "").strip()
             if not code:
                 return self._send_error("empty query")
             with _EQL_LOCK:
                 return self._send_json(EqlSession.of_active_scene().run(code))
         except Exception as error:
             # a SyntaxError from the query is named by its own type, like any other
+            return self._send_exception(error)
+
+    def _run_model_posterior_query(self) -> None:
+        """
+        Answer a Posterior-tab query: distribution data for one or more query variables,
+        conditioned on the request's evidence.
+        """
+        if not MODEL_QUERY_AVAILABLE:
+            return self._send_error(self.NO_MODEL_QUERY_MESSAGE)
+        try:
+            body = self._request_body()
+            model_name = str(body.get("model") or "")
+            query_variables = list(body.get("queryVariables") or [])
+            evidence = [
+                EvidenceConstraint.from_payload(entry)
+                for entry in body.get("evidence") or []
+            ]
+            if not model_name or not query_variables:
+                return self._send_error("model and queryVariables are required")
+            payload = _MODEL_QUERY_SERVICE.posterior(
+                model_name, evidence, query_variables
+            )
+            return self._send_json({"variables": payload})
+        except (UnknownModelVariable, EvidenceHasZeroProbability) as error:
+            return self._send_exception(error)
+        except FileNotFoundError as error:
             return self._send_exception(error)
 
     def _send_error(self, message: str, code: int = 200) -> None:

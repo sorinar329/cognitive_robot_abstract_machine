@@ -37,7 +37,7 @@ body{
 .slot>.panel{flex:1;min-height:0}
 .slot>.panel-eql{flex:0 1 auto;min-height:150px}
 .slot>.panel-activity{flex:0 1 auto;min-height:150px;max-height:38%}
-.slot>.panel-graph{flex:1 1 0}
+.slot>.panel-graph{flex:1 1 0;min-height:300px}
 .panel-error{margin:auto;color:var(--danger);font-size:13px;padding:20px;text-align:center}
 .panel{
   background:linear-gradient(180deg,var(--panel),var(--panel2));
@@ -270,6 +270,57 @@ body.graph-full-open{overflow:hidden}
   font:inherit;font-size:12.5px;padding:6px 9px;cursor:pointer;margin-right:10px;
 }
 .scene-select:hover,.scene-select:focus{border-color:var(--accent);outline:none}
+
+/* %% posterior (PDF/CDF/mode/expectation of a causal-diagnosis model variable) */
+.posterior-view{position:absolute;inset:34px 0 0;display:flex;flex-direction:column;padding:14px 16px;gap:10px}
+.posterior-nav{display:flex;align-items:center;justify-content:center;gap:16px}
+.posterior-nav button{
+  background:#141821;border:1px solid #37404f;border-radius:4px;color:#c8d1e0;
+  font:inherit;font-size:15px;line-height:1;padding:7px 14px;cursor:pointer;transition:.15s
+}
+.posterior-nav button:hover:not(:disabled){background:#1c222d;color:#fff;border-color:var(--accent)}
+.posterior-nav button:disabled{opacity:.35;cursor:default}
+.posterior-title{font-size:14px;font-weight:700;color:var(--ink);min-width:220px;text-align:center}
+.posterior-chart{flex:1;min-height:0;display:flex;align-items:center;justify-content:center}
+.posterior-svg{width:100%;height:100%;max-height:100%}
+.posterior-axis{stroke:var(--line2);stroke-width:1}
+.posterior-tick{font:11px var(--mono);fill:var(--faint)}
+.posterior-pdf{fill:none;stroke:var(--accent);stroke-width:2}
+.posterior-cdf{fill:none;stroke:var(--accent2);stroke-width:2}
+.posterior-expectation{stroke:var(--warn);stroke-width:2;stroke-dasharray:5,4}
+.posterior-mode{fill:none;stroke:var(--danger);stroke-width:2}
+.posterior-legend{display:flex;justify-content:center;gap:18px;flex-wrap:wrap}
+.posterior-legend-item{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--muted)}
+.posterior-legend-swatch{width:16px;height:3px;border-radius:2px;display:inline-block}
+.posterior-legend-swatch.posterior-pdf{background:var(--accent)}
+.posterior-legend-swatch.posterior-cdf{background:var(--accent2)}
+.posterior-legend-swatch.posterior-expectation{background:var(--warn)}
+.posterior-legend-swatch.posterior-mode{background:var(--danger)}
+.posterior-evidence{
+  border:1px solid #37404f;border-radius:6px;padding:10px 12px;display:flex;
+  flex-direction:column;gap:8px;background:#12151d
+}
+.posterior-evidence-header{
+  display:flex;align-items:center;justify-content:space-between;
+  font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em
+}
+.posterior-evidence-rows{display:flex;flex-direction:column;gap:6px}
+.posterior-evidence-row{display:flex;align-items:center;gap:6px}
+.posterior-evidence-row select,.posterior-evidence-row input{
+  background:#141821;border:1px solid #37404f;border-radius:4px;color:#c8d1e0;
+  font:inherit;font-size:12px;padding:5px 7px
+}
+.posterior-evidence-variable{flex:2;min-width:0}
+.posterior-evidence-min,.posterior-evidence-max{flex:1;min-width:0}
+.posterior-evidence-remove,.posterior-evidence-header button,.posterior-evidence-actions button{
+  background:#141821;border:1px solid #37404f;border-radius:4px;color:#c8d1e0;
+  font:inherit;font-size:12px;padding:5px 10px;cursor:pointer;transition:.15s
+}
+.posterior-evidence-remove:hover,.posterior-evidence-header button:hover,
+.posterior-evidence-actions button:hover{background:#1c222d;color:#fff;border-color:var(--accent)}
+.posterior-evidence-remove{padding:3px 8px;line-height:1}
+.posterior-evidence-actions{display:flex;align-items:center;gap:10px}
+.posterior-evidence-status{font-size:11px;color:var(--faint)}
 
 /* %% activity feed */
 .activity-feed{padding:12px 14px;overflow:auto;flex:1;min-height:0;display:flex;flex-direction:column;gap:10px}

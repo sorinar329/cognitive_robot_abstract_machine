@@ -49,6 +49,17 @@ function makeRoot() {
     '#gt-live': makeElement(),
     '#graph': makeElement(),
     '#legend': makeElement(),
+    '#posterior-view': makeElement(),
+    '#posterior-title': makeElement(),
+    '#posterior-chart': makeElement(),
+    '#posterior-legend': makeElement(),
+    '#posterior-prev': makeElement(),
+    '#posterior-next': makeElement(),
+    '#posterior-evidence-rows': makeElement(),
+    '#posterior-evidence-add': makeElement(),
+    '#posterior-calculate': makeElement(),
+    '#posterior-reset': makeElement(),
+    '#posterior-evidence-status': makeElement(),
   };
   const buttons = ['knowledge', 'kinematics', 'plan', 'chart'].map(makeButton);
   byId['#graph-tabs'] = { querySelectorAll() { return buttons; } };

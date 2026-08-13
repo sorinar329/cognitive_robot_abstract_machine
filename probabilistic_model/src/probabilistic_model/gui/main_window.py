@@ -29,7 +29,7 @@ class MainWindow(QMainWindow):
     The initial probabilistic model (optional).
     """
 
-    parent: InitVar[Optional[QWidget]] = None
+    parent_widget: InitVar[Optional[QWidget]] = None
     """
     The parent widget.
     """
@@ -69,8 +69,8 @@ class MainWindow(QMainWindow):
     The action group for toolbar navigation.
     """
 
-    def __post_init__(self, parent: Optional[QWidget]):
-        super().__init__(parent)
+    def __post_init__(self, parent_widget: Optional[QWidget]):
+        super().__init__(parent_widget)
         self.setWindowTitle("Probabilistic Model GUI")
         self.resize(1000, 700)
 

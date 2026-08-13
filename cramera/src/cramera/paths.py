@@ -68,6 +68,20 @@ def scenes_directory() -> Path:
     return data_directory() / "scenes"
 
 
+def models_directory() -> Path:
+    """
+    Directory holding ``<name>_circuit.json`` files for the model-query API.
+
+    Search order: the ``CRAMERA_MODELS`` environment variable, then
+    ``~/.cramera/models``. Populated by whatever exported a demo's models -- for the
+    panda stacking demo, ``coraplex/demos/coraplex_panda_demo/training/export_posterior_plots.py``.
+    """
+    configured = _configured_path("CRAMERA_MODELS")
+    if configured:
+        return configured
+    return data_directory() / "models"
+
+
 def architecture_root() -> Path:
     """
     The CRAM repository whose packages/classes the knowledge graph shows.

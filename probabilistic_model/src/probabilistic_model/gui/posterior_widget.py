@@ -34,7 +34,7 @@ class PosteriorWidget(QWidget):
     The model controller.
     """
 
-    parent: InitVar[Optional[QWidget]] = None
+    parent_widget: InitVar[Optional[QWidget]] = None
     """
     The parent widget.
     """
@@ -112,8 +112,8 @@ class PosteriorWidget(QWidget):
     The widget that renders the distribution plots.
     """
 
-    def __post_init__(self, parent: Optional[QWidget]):
-        super().__init__(parent)
+    def __post_init__(self, parent_widget: Optional[QWidget]):
+        super().__init__(parent_widget)
         self.init_ui()
 
     def init_ui(self):
