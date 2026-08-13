@@ -1809,11 +1809,26 @@ class MujocoBuilder(MultiSimBuilder):
                 or parent_connection is None
             ):
                 continue
-            qpos += [
-                self.world.state[dof.id].position
-                for dof in parent_connection.active_dofs
-                + parent_connection.passive_dofs
-            ]
+            if isinstance(parent_connection, Connection6DoF):
+                # Mujoco has no static body frame separate from a free joint's qpos --
+                # unlike a hinge/slide, whose body pos/quat stays a fixed offset that
+                # qpos then rotates/slides against, a free joint's qpos *is* the whole
+                # parent-to-child pose, and mj_resetDataKeyframe overwrites it outright
+                # rather than adding to the body's spec pos/quat. The DOFs' own raw
+                # state is 0 here unless the connection has since been moved (its
+                # spawn offset lives in parent_T_connection_expression instead, which
+                # this keyframe has no slot for), so the keyframe must carry the
+                # connection's full current pose, not the bare per-DOF values.
+                px, py, pz, qx, qy, qz, qw = (
+                    parent_connection.origin_as_position_quaternion().evaluate()[0]
+                )
+                qpos += [px, py, pz, qw, qx, qy, qz]
+            else:
+                qpos += [
+                    self.world.state[dof.id].position
+                    for dof in parent_connection.active_dofs
+                    + parent_connection.passive_dofs
+                ]
         key_element.set("qpos", " ".join(map(str, qpos)))
         tree.write(file_path, encoding="utf-8", xml_declaration=True)
 
