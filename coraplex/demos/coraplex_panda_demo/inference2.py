@@ -171,7 +171,7 @@ thread.start()
 
 STACKING_SCENE_PATH: str = os.environ.get(
     "STACKING_SCENE_PATH",
-    "/home/nvasant/workspace/ros/src/manipulation_experiments/resources/generated/stacking_scene.xml",
+    "/home/sorin/cram2/cognitive_robot_abstract_machine/coraplex/demos/coraplex_panda_demo/stacking_scene.xml",
 )
 """
 Path to the MJCF scene this demo loads. Override via the ``STACKING_SCENE_PATH``

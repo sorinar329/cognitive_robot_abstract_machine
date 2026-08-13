@@ -423,7 +423,7 @@ class ModelChangeExecutable(Executable):
     """
 
     giskard_idle_settle_delta: timedelta = field(
-        default=timedelta(seconds=0.3), kw_only=True
+        default=timedelta(seconds=0.0), kw_only=True
     )
     """
     Time to wait after publishing the model change on the real robot.
