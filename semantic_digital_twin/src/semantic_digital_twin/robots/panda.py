@@ -25,8 +25,9 @@ from semantic_digital_twin.world_description.world_entity import (
 
 @dataclass(eq=False)
 class PandaLeftFinger(Finger):
-    """The Panda's fingers have no separate fingertip link, so root and tip are
-    the same body."""
+    """
+    The Panda's fingers have no separate fingertip link, so root and tip are the same body.
+    """
 
     def setup_hardware_interfaces(self):
         pass
@@ -138,9 +139,8 @@ class PandaArm(Arm[PandaGripper]):
 
 @dataclass(eq=False)
 class Panda(AbstractRobot, HasOneArm[PandaArm]):
-    """The Franka Emika Panda arm, as used in the stacking demo.
-
-    https://franka.de/
+    """
+    The Franka Emika Panda arm, as used in the stacking demo. https://franka.de/
     """
 
     @classmethod
