@@ -193,3 +193,24 @@ def test_xacro():
     assert len(world.kinematic_structure_entities) > 0
     assert len(world.connections) > 0
     assert world.root.name.name == "base_footprint"
+
+
+# %% joint axes that are not exactly aligned with a cardinal direction
+
+
+def test_a_non_axis_aligned_joint_axis_keeps_its_fractional_components():
+    """
+    A joint whose ``axis`` is not exactly ``0``/``1``/``-1`` on every component (e.g. one
+    exported from CAD, like the iCub3's shoulder joints) must keep its real, fractional
+    values rather than being rounded down to the nearest integer -- which, for a
+    component smaller than 1 in magnitude, rounds every one of them to zero and leaves
+    the connection with a degenerate, zero-length axis.
+    """
+    urdf_path = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)),
+        "dataset",
+        "synthetic_non_axis_aligned_joint_robot.urdf",
+    )
+    world = URDFParser.from_file(file_path=urdf_path).parse()
+    axis = world.get_connection_by_name("tilted_joint").axis.to_np().flatten()[:3]
+    assert np.allclose(axis, [0.6, 0.8, 0.0])

@@ -33,13 +33,13 @@ import logging
 import random
 import threading
 import time
-from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import mujoco
 
 from typing_extensions import Optional, Type
 
+from experiments.montessori.insertion_attempt_result import InsertionAttemptResult
 from experiments.montessori.semantics import MontessoriShape, NoMatchingHoleError
 from experiments.montessori.world import MontessoriWorld, robot_installed
 from krrood.entity_query_language.backends import ProbabilisticBackend
@@ -166,27 +166,6 @@ def _random_horizontal_jitter() -> Point3:
         random.uniform(-RETRY_HORIZONTAL_JITTER, RETRY_HORIZONTAL_JITTER),
         0.0,
     )
-
-
-@dataclass(frozen=True)
-class InsertionAttemptResult:
-    """
-    Outcome of a single :func:`_insert_shape` call.
-    """
-
-    target_horizontal_offset: Point3
-    """
-    The horizontal offset the attempt was actually released at (see :attr:`~experiments.
-    montessori.insert_shape_action.InsertMontessoriShapeAction.target_horizontal_offset`
-    ), whether given by the caller or generated internally.
-    """
-
-    fell_through_hole: bool
-    """
-    Whether the shape actually fell through its hole after settling; see :meth:`~experim
-    ents.montessori.insert_shape_action.InsertMontessoriShapeAction.has_fallen_through_h
-    ole`.
-    """
 
 
 def _insert_shape(
@@ -426,7 +405,9 @@ def _insert_all_shapes(montessori: MontessoriWorld, headless: bool) -> None:
                 attempt,
                 MAX_INSERTION_ATTEMPTS,
             )
-            result = _insert_shape_or_none(shape, montessori, context, headless, attempt)
+            result = _insert_shape_or_none(
+                shape, montessori, context, headless, attempt
+            )
             if result is not None and result.fell_through_hole:
                 break
         else:
@@ -776,7 +757,17 @@ def main() -> None:
 
     mujoco_sim = None
     if montessori.robot is not None and ros_active:
-        import experiments.orm.ormatic_interface  # type: ignore
+        # Not for persistence -- nothing here is ever saved to a database. Giskard's
+        # underspecified-query resolution (navigating to a standing pose before each
+        # reach) turns every literal it encounters, e.g. Body/Point3, into a DAO to
+        # featurize it, and needs ORMatic's mappings registered for that before it can
+        # run at all. semantic_digital_twin's own interface is enough for that; the
+        # wider experiments.orm.ormatic_interface additionally maps every other class in
+        # the whole experiments package, including some (e.g. PredicateVocabulary's
+        # tuple[PredicateNameRule, ...] field, unrelated to anything here) SQLAlchemy
+        # cannot map at all, breaking the whole registry -- and this import -- the
+        # moment it is ever touched.
+        import semantic_digital_twin.orm.ormatic_interface  # type: ignore
 
         _insert_all_shapes(montessori, headless=arguments.headless)
         logger.info("Sorting done; starting the MuJoCo simulation.")

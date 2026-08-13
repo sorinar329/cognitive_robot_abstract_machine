@@ -1,18 +1,23 @@
 """
-Build the Montessori shape-sorting world and have a table-mounted Franka Emika Panda
-sort every loose shape into its matching hole -- the same narrative as
-:mod:`experiments.montessori.montessori_demo`'s HSRB-driven original, but reaching with
-its arm alone (see
-:meth:`~experiments.montessori.world.MontessoriWorld.mount_stationary_robot`; the Panda
-has no mobile base to navigate) and holding each shape by the gripper's own contact
-friction throughout the whole run, rather than kinematically teleporting it and settling
-it afterwards (see :mod:`experiments.montessori.franka_panda_equipment`).
+Build the Montessori shape-sorting world and have an iCub3, standing fixed on the floor
+beside the table, sort every loose shape into its matching hole -- the humanoid
+counterpart to :mod:`experiments.montessori.franka_montessori_demo`'s table-mounted
+Panda, reaching with one arm alone (see
+:meth:`~experiments.montessori.world.MontessoriWorld.mount_stationary_robot`) rather
+than navigating to it. Mounted as
+:class:`~semantic_digital_twin.robots.icub3.ICub3FixedBase`, not
+:class:`~semantic_digital_twin.robots.icub3.ICub3`: the latter's mobile base makes
+action planning navigate to a resolved standing offset before every reach, which never
+converges for a base that is bolted down rather than actually drivable (see
+:class:`~semantic_digital_twin.robots.icub3.ICub3FixedBase`'s own docstring), the same
+way the Panda's own fixed base has nothing to navigate with.
 
-Run with (the ``experiments`` package must be importable)::
+Run with (the ``experiments`` package must be importable, and the ``iai_icub_description``
+ROS package built and sourced -- see :func:`~experiments.montessori.world.robot_installed`)::
 
-    python -m experiments.montessori.franka_montessori_demo
-    python -m experiments.montessori.franka_montessori_demo --viewer
-    python -m experiments.montessori.franka_montessori_demo --iterations 100
+    python -m experiments.montessori.icub_montessori_demo
+    python -m experiments.montessori.icub_montessori_demo --viewer
+    python -m experiments.montessori.icub_montessori_demo --iterations 100
 
 Every run's per-shape results are collected, one :class:`~experiments.montessori.sorting_results.SortingIterationResult` (with
 its :class:`~experiments.montessori.sorting_results.ShapeInsertionResult` rows) per
@@ -34,7 +39,6 @@ from collections import Counter, defaultdict
 from typing import TYPE_CHECKING
 
 import mujoco
-import numpy as np
 from typing_extensions import Optional
 
 from experiments.montessori.event_monitoring import (
@@ -45,8 +49,10 @@ from experiments.montessori.franka_panda_equipment import (
     BOARD_FRICTION,
     apply_contact_friction,
     apply_montessori_grasp_contact_parameters,
-    equip_panda_for_physical_simulation,
-    parse_panda,
+)
+from experiments.montessori.icub_equipment import (
+    equip_icub_for_physical_simulation,
+    parse_icub,
 )
 from experiments.montessori.semantics import (
     MontessoriShape,
@@ -58,9 +64,9 @@ from experiments.montessori.sorting_results import (
     ShapeInsertionResult,
     SortingIterationResult,
 )
-from experiments.montessori.world import MontessoriWorld
+from experiments.montessori.world import FLOOR_Z, MontessoriWorld
 from segmind.datastructures.events import InsertionEvent, PickUpEvent
-from semantic_digital_twin.robots.panda import Panda
+from semantic_digital_twin.robots.icub3 import ICub3FixedBase
 from semantic_digital_twin.spatial_types.spatial_types import Point3
 from semantic_digital_twin.utils import rclpy_installed
 
@@ -77,59 +83,66 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-NODE_NAME = "franka_montessori_demo"
+NODE_NAME = "icub_montessori_demo"
 """
 Name of the ROS 2 node this demo's visualization runs against.
 """
 
-MOUNT_STANDOFF_DISTANCE = 0.35
+MOUNT_STANDOFF_DISTANCE = 0.15
 """
 How far past the montessori table's near edge (the short edge nearest the loose-shape
-row) the Panda is bolted.
+row) the iCub3 stands.
 
-Close enough that every shape in the row and the shape-sorting board sit well inside the
-Panda's own ~0.855 m reach from a single, unmoving stance; far enough that the Panda's
-own base and the table never share a footprint.
+Not :data:`~experiments.montessori.franka_montessori_demo.MOUNT_STANDOFF_DISTANCE`'s own
+0.35m: that value is tuned for the Panda, which is bolted directly at table height (see
+:func:`~experiments.montessori.franka_montessori_demo._mount_position`) and so only ever
+has to reach horizontally. The iCub3 instead stands on the floor (see
+:func:`_mount_position`) with its shoulders roughly half a meter above this low table's
+own top, so every reach also has to cover that vertical drop on top of the horizontal
+standoff -- at 0.35m, every insertion's Cartesian goal came back QP-infeasible (out of
+reach) in practice; halving the standoff (with the horizontal distance to the board and
+shape row shrinking by the same amount as the robot itself moves closer) brought it back
+within reach. Still only a first-pass estimate, not verified against every shape's own
+reach.
+"""
+
+MOUNT_YAW = math.pi
+"""
+Which way the iCub3 is turned to face once bolted (see :func:`_mount_position`),
+matching the Panda's own ``mount_yaw=np.pi`` at the same table edge (see
+:func:`~experiments.montessori.franka_montessori_demo._build_world_and_sort`): standing
+past the table's near ``max_x`` edge, the iCub3 has to turn a half-turn from its URDF
+neutral (assumed, like the Panda's, to face ``+x``) to face back toward the table along
+``-x``.
 """
 
 MUJOCO_STEP_SIZE = 1e-4
 """
-Physics step size, matching ``coraplex_panda_demo/demo.py``'s own exactly.
+Physics step size, matching :data:`~experiments.montessori.franka_montessori_demo.MUJOCO_STEP_SIZE`.
 
-The Panda's position-servo actuators (see
-:mod:`experiments.montessori.franka_panda_equipment`) use the same gains that demo
-tunes for this step size; a coarser step under the same gains was observed to make the
-arm shake rather than hold still near a commanded pose.
+No iCub3-specific tuning exists yet; kept at the Panda's own value since
+:data:`~experiments.montessori.icub_equipment.ARM_JOINT_SERVO_TUNING`'s gains are of the
+same order of magnitude and a coarser step was, for the Panda, observed to make a
+high-gain servo shake rather than hold still (see that constant's own docstring).
 """
 
 MUJOCO_INTEGRATOR = mujoco.mjtIntegrator.mjINT_IMPLICITFAST
 """
 Numerical integrator MuJoCo advances the physics with, matching
-``coraplex_panda_demo/stacking_scene.xml``'s own ``<option integrator="implicitfast"
-/>`` (:class:`~physics_simulators.mujoco_simulator.MujocoSimulator` otherwise falls back
-to its own ``RK4`` default regardless of what a scene declares).
-
-RK4's four force evaluations per step measured about four times slower here than
-``implicitfast``, with no observed difference in insertion outcomes.
+:data:`~experiments.montessori.franka_montessori_demo.MUJOCO_INTEGRATOR`.
 """
 
 SYNC_RATE_HZ = 100
 """
 Rate at which the physically simulated joints' real, physics-driven positions are read
-back into the world model.
-
-Kept above the 50 Hz control loop rate (see :attr:`~coraplex.plans.executables.GiskardExecutable._build_pacer`'s
-``target_frequency``): lowering it to 30 Hz was tried for the extra Python-side sync
-overhead it saves, but produced an unreliable/wedged grasp and, once, a run that never
-converged -- the controller needs joint state read back at least as often as it commands.
+back into the world model, matching
+:data:`~experiments.montessori.franka_montessori_demo.SYNC_RATE_HZ`'s own reasoning.
 """
 
 SKIPPED_SHAPE_CATEGORIES = frozenset({MontessoriShapeCategory.DISK})
 """
-Shape categories the demo leaves where they are.
-
-Checked before anything else about a shape, so a listed category is passed over even
-where the board has a matching hole for it.
+Shape categories the demo leaves where they are, matching
+:data:`~experiments.montessori.franka_montessori_demo.SKIPPED_SHAPE_CATEGORIES`.
 """
 
 MAX_INSERTION_ATTEMPTS = 3
@@ -142,57 +155,44 @@ SHAPE_SETTLE_DURATION = 2.0
 """
 Real-time seconds a just-released shape is given to physically fall and come to rest
 before it is checked whether it made it through its hole.
-
-The simulation keeps running throughout (see :mod:`~experiments.montessori.franka_panda_equipment`);
-this is a settling wait, not a separate physics pass.
 """
 
 MINIMUM_PICKUP_DISPLACEMENT = 0.03
 """
 Minimum distance (in meters) a shape must have moved between just before its
 :class:`~experiments.montessori.insert_shape_action.InsertMontessoriShapeAction` starts
-and right after it finishes, for the pickup to be considered real (see
-:func:`_insert_shape`).
-
-A grasp that silently fails to actually close on the shape (rather than raising) has
-been observed to let the rest of the action run to completion anyway, with the shape
-left exactly where it started the whole time -- indistinguishable, without this check,
-from a shape that really was picked up, carried to the hole, and simply didn't fall
-through. A real pickup lifts the shape and carries it toward the hole, decimeters away,
-so this threshold only needs to rule out the shape having simply not moved at all.
+and right after it finishes, for the pickup to be considered real; see
+:data:`~experiments.montessori.franka_montessori_demo.MINIMUM_PICKUP_DISPLACEMENT`'s own
+docstring for why this check exists.
 """
 
 TCP_POSITION_THRESHOLD = 0.007
 """
 Position tolerance in meters used for every
-:class:`~coraplex.robot_plans.motions.gripper.MoveToolCenterPointMotion` in this demo
-(see :attr:`~coraplex.datastructures.dataclasses.MotionToleranceConfig.default_tcp_posit
-ion_threshold`), in place of Giskard's own tighter default (0.005m).
-
-A physically simulated, PD-tracked arm settles with some residual error rather than
-converging exactly onto a goal; the tight default was observed to have the arm hover and
-make small corrections near the placing pose for a long time before the goal finally
-registered as reached, rather than actually improving placement accuracy. 0.01 cut that
-hovering down, but also let one release land far enough off to miss and tumble a shape
-that had never missed before; splitting the difference between the two.
+:class:`~coraplex.robot_plans.motions.gripper.MoveToolCenterPointMotion` in this demo,
+matching :data:`~experiments.montessori.franka_montessori_demo.TCP_POSITION_THRESHOLD`
+as a first-pass value pending iCub3-specific tuning.
 """
 
 TCP_ORIENTATION_THRESHOLD = 0.03
 """
 Orientation tolerance in rad used for every
-:class:`~coraplex.robot_plans.motions.gripper.MoveToolCenterPointMotion` in this demo
-(see :attr:`~coraplex.datastructures.dataclasses.MotionToleranceConfig.tool_orientation_
-threshold`), loosened for the same reason as :data:`TCP_POSITION_THRESHOLD`.
+:class:`~coraplex.robot_plans.motions.gripper.MoveToolCenterPointMotion` in this demo,
+matching :data:`~experiments.montessori.franka_montessori_demo.TCP_ORIENTATION_THRESHOLD`.
 """
 
 
 def _mount_position(montessori: MontessoriWorld) -> Point3:
     """
-    Where to bolt the Panda: past the table's near edge, at table height, centered on
-    the table's long axis so every shape in the row and the board are within reach
-    either way.
+    Where to bolt the iCub3: past the table's near edge (the short edge nearest the
+    loose-shape row), centered on the table's long axis, standing on the floor -- the
+    same ``max_x``-edge site :func:`~experiments.montessori.franka_montessori_demo._mount_position`
+    bolts the Panda to (see :data:`MOUNT_STANDOFF_DISTANCE`), except at floor height
+    (:data:`~experiments.montessori.world.FLOOR_Z`) rather than table height, since the
+    iCub3 has legs to stand on the floor with instead of being bolted directly at the
+    table's own height.
 
-    :param montessori: The Montessori scene the Panda is being mounted next to.
+    :param montessori: The Montessori scene the iCub3 is being mounted next to.
     """
     table_bounding_box = (
         montessori.world.get_body_by_name("table")
@@ -202,7 +202,7 @@ def _mount_position(montessori: MontessoriWorld) -> Point3:
     return Point3(
         table_bounding_box.max_x + MOUNT_STANDOFF_DISTANCE,
         0.0,
-        table_bounding_box.max_z,
+        FLOOR_Z,
     )
 
 
@@ -214,38 +214,28 @@ def _build_insert_action(
     """
     Build (without executing) the plan that inserts ``shape`` into its matching hole.
 
-    Built once per attempt, before :func:`_insert_shape` runs it, so a caller keeps a
-    reference to the attempted plan even if that run raises (see
-    :func:`_insert_shape_or_none`).
+    Unlike :func:`~experiments.montessori.franka_montessori_demo._build_insert_action`,
+    no explicit :class:`~coraplex.datastructures.grasp.GraspDescription` is built: that
+    function's ``rotate_gripper=True`` works around a Panda-specific wrist-resolution
+    quirk (see its own docstring), which is not known to apply to the iCub3's hand, so
+    the action's own default grasp resolution is used instead, matching
+    :mod:`experiments.montessori.montessori_demo`'s own HSRB call site.
 
     :param shape: The shape to insert; must have a matching hole.
-    :param montessori: The Montessori scene, with the Panda already mounted and
-        equipped (see :func:`~experiments.montessori.franka_panda_equipment.equip_panda_for_physical_simulation`),
+    :param montessori: The Montessori scene, with the iCub3 already mounted and
+        equipped (see :func:`~experiments.montessori.icub_equipment.equip_icub_for_physical_simulation`),
         inside a running simulation.
     :param target_horizontal_offset: Horizontal offset to release the shape at; the
         hole's exact center is used if not given.
     """
-    from coraplex.datastructures.enums import ApproachDirection, Arms, VerticalAlignment
-    from coraplex.datastructures.grasp import GraspDescription
-    from coraplex.view_manager import ViewManager
+    from coraplex.datastructures.enums import Arms
     from experiments.montessori.insert_shape_action import InsertMontessoriShapeAction
 
     offset = target_horizontal_offset or Point3(0.0, 0.0, 0.0)
     return InsertMontessoriShapeAction(
         montessori_shape=shape,
         board=montessori.board,
-        arm=Arms.RIGHT,
-        # rotate_gripper: the Panda's wrist otherwise resolves the top-down grasp to a
-        # 45-degree orientation from which its Cartesian descent never converges;
-        # rotating it a quarter turn lines the fingers up with the shape (unnecessary
-        # for the HSR, whose gripper geometry differs, so the action does not do this by
-        # default).
-        grasp_description=GraspDescription(
-            ApproachDirection.FRONT,
-            VerticalAlignment.TOP,
-            ViewManager.get_end_effector_view(Arms.RIGHT, montessori.robot),
-            rotate_gripper=True,
-        ),
+        arm=Arms.LEFT,
         target_horizontal_offset=offset,
     )
 
@@ -257,34 +247,16 @@ def _insert_shape(
 ) -> bool:
     """
     Run ``action``, then let the shape physically settle under gravity and contacts
-    before checking whether it made it through.
-
-    Runs with Giskard's collision avoidance off, matching
-    :func:`~experiments.montessori.montessori_demo._insert_shape`'s own reasoning for
-    the HSRB: the board's CoACD collision decomposition gives the QP solver far more
-    simultaneous distance constraints than this pick-and-place needs.
+    before checking whether it made it through; identical in structure to
+    :func:`~experiments.montessori.franka_montessori_demo._insert_shape`, see that
+    function's own docstring for the reasoning behind each step.
 
     :param action: The insertion plan to run, built by :func:`_build_insert_action`.
-    :param montessori: The Montessori scene, with the Panda already mounted and
-        equipped (see :func:`~experiments.montessori.franka_panda_equipment.equip_panda_for_physical_simulation`),
-        inside a running simulation.
+    :param montessori: The Montessori scene, with the iCub3 already mounted and
+        equipped, inside a running simulation.
     :param context: The CRAM execution context to run the insertion action in.
     :raises BodyUnfetchable: If the shape moved less than :data:`MINIMUM_PICKUP_DISPLACEMENT`
         over the whole insertion, i.e. the grasp silently failed to pick it up at all.
-
-        ``is_body_gripped`` can't be checked directly after pickup instead: doing so needs
-        either a real mid-plan checkpoint (``CodeNode`` doesn't work -- its callback fires
-        during plan *construction*, not at its position in real execution order) or
-        splitting the pickup and place halves into two separate ``execute_single`` calls,
-        which breaks :class:`~coraplex.robot_plans.actions.core.placing.PlaceAction`'s own
-        lookup of the grasp it should place with -- resolved via
-        ``plan_node.get_previous_node_by_designator_type(PickUpAction)`` within a single
-        plan graph, so a fresh, separate plan for the place half never finds it, silently
-        falling back to a generic (not our real top-down) grasp. Checking ``evaluate_conditions=True``
-        (making :attr:`~coraplex.robot_plans.actions.core.placing.PlaceAction.pre_condition`,
-        which already does this ``is_body_gripped`` check, run) was tried too, but that
-        re-enables ``ReachAction``/``PickUpAction``'s ``IsObjectReachableBy`` precondition
-        along with it, which hung for 5+ minutes on the very first pickup.
     :return: Whether the shape actually fell through its hole after settling.
     """
     from coraplex.datastructures.enums import ExecutionType
@@ -298,16 +270,9 @@ def _insert_shape(
         execution_type=ExecutionType.SIMULATED,
         collision_avoidance=False,
         real_time_pacing=False,
-        # A full insertion (pick, place, three ParkArms) was observed to need
-        # roughly 1250 ticks total across its 12 motion mappings; this budget stays
-        # a comfortable multiple of that per mapping while bounding a stuck motion
-        # to a fraction of the default (2000 * 12 ticks).
         max_ticks_per_motion_mapping=300,
     ):
         node = execute_single(action, context=context)
-        # Temporary diagnostic: simulated-time span of the whole pick+place action, as
-        # a proxy for how much the arm hovers/corrects near its Cartesian goals rather
-        # than converging directly onto them.
         insertion_start_time = context.simulation_clock()
         node.perform()
         insertion_duration = context.simulation_clock() - insertion_start_time
@@ -330,8 +295,6 @@ def _insert_shape(
     if displacement < MINIMUM_PICKUP_DISPLACEMENT:
         raise BodyUnfetchable(body=shape.root, arm=action.arm)
 
-    # Temporary diagnostic: where the shape actually is right after physical
-    # release, before settling has a chance to slide/tip it further.
     hole = montessori.board.hole_for(shape)
     hole_position = hole.root.global_transform.to_position()
     release_position = shape.root.global_transform.to_position()
@@ -347,9 +310,6 @@ def _insert_shape(
     )
 
     logger.info("Letting %s settle.", shape.name)
-    # Temporary diagnostic: sample position through the settle window instead of
-    # only before/after, to tell a real physics freeze apart from a stale
-    # world-model/visualization read.
     sample_count = 10
     sample_interval = SHAPE_SETTLE_DURATION / sample_count
     for sample_index in range(sample_count):
@@ -377,10 +337,11 @@ def _insert_shape_or_none(
 ) -> tuple[Optional[bool], InsertMontessoriShapeAction]:
     """
     Attempt one insertion via :func:`_insert_shape`, returning ``None`` instead of
-    letting a retryable failure propagate.
+    letting a retryable failure propagate; identical in structure to
+    :func:`~experiments.montessori.franka_montessori_demo._insert_shape_or_none`.
 
     :param shape: The shape to insert; must have a matching hole.
-    :param montessori: The Montessori scene, with the Panda already mounted and
+    :param montessori: The Montessori scene, with the iCub3 already mounted and
         equipped, inside a running simulation.
     :param context: The CRAM execution context to run the insertion action in.
     :param attempt: This attempt's 1-based index, used only for the log message.
@@ -419,9 +380,8 @@ def _log_segmind_verdict(
 ) -> None:
     """
     Log segmind's own pick-up/insertion verdict for ``shape`` next to the ground truth
-    :meth:`~experiments.montessori.insert_shape_action.InsertMontessoriShapeAction.has_fallen_through_hole`
-    already computed for it, for comparison while segmind's detectors are still new to
-    this scene.
+    already computed for it; identical to
+    :func:`~experiments.montessori.franka_montessori_demo._log_segmind_verdict`.
 
     :param shape: The shape ``monitor`` was tracking.
     :param ground_truth_fell_through: What :func:`_insert_shape` determined by direct
@@ -436,14 +396,6 @@ def _log_segmind_verdict(
     insertion_detected = any(
         isinstance(event, InsertionEvent) and event.tracked_object is shape.root
         for event in events
-    )
-    logger.info(
-        "DEBUG segmind raw events for %s: %s",
-        shape.name,
-        [
-            (type(e).__name__, getattr(e, "with_object", None), e.timestamp)
-            for e in events
-        ],
     )
     logger.info(
         "segmind for %s: pick-up detected=%s, insertion detected=%s "
@@ -462,29 +414,16 @@ def _insert_all_shapes(
     only_shape: Optional[str] = None,
 ) -> list[ShapeInsertionResult]:
     """
-    Have the Panda pick up and insert every loose shape that has a matching hole into
-    the shape-sorting board, skipping any that don't (e.g. the sphere) and any whose
-    category is listed in :data:`SKIPPED_SHAPE_CATEGORIES`.
+    Have the iCub3 pick up and insert every loose shape that has a matching hole into
+    the shape-sorting board; identical in structure to
+    :func:`~experiments.montessori.franka_montessori_demo._insert_all_shapes`.
 
-    Each shape gets one insertion, whether or not it actually drops through: a shape left
-    resting on the board is reported and left there. Only an attempt that never ran --
-    the grasp or the motion failed before the shape was released -- is repeated, up to
-    :data:`MAX_INSERTION_ATTEMPTS` times, since it says nothing about the shape either
-    way. Such a retry picks the shape up from wherever it physically ended up, which is
-    not necessarily where it started.
-
-    :param montessori: The Montessori scene, with the Panda already mounted and
+    :param montessori: The Montessori scene, with the iCub3 already mounted and
         equipped, inside a running simulation.
     :param context: The CRAM execution context to run every insertion action in.
-    :param max_shapes: Stop after this many shapes have actually been attempted
-        (skipped shapes don't count), for fast iteration while tuning parameters on a
-        single shape. ``None`` attempts every shape.
+    :param max_shapes: Stop after this many shapes have actually been attempted.
     :param only_shape: Attempt only the shape whose name (with the trailing ``_shape``
-        removed, e.g. ``"square_hole"``) equals this, skipping every other shape. Every
-        other shape still sits in the world (unlike a lower :attr:`max_shapes`, which
-        never even reaches them), so the scene matches a full run; only the robot's
-        insertion attempts are limited, for isolating one shape's own tuning without a
-        full run's time cost.
+        removed) equals this, skipping every other shape.
     :return: One :class:`~experiments.montessori.sorting_results.ShapeInsertionResult` per actually attempted shape, in
         attempt order; a skipped shape has no entry.
     """
@@ -593,15 +532,6 @@ def _parse_arguments() -> argparse.Namespace:
         help="Don't publish TF/visualization markers to RViz; publishes by default.",
     )
     parser.add_argument(
-        "--world2",
-        action="store_true",
-        help=(
-            "Use experiments.montessori.world2's layout (board directly ahead of the "
-            "robot, loose shapes on a separate stand to its side) instead of the "
-            "default single-table layout."
-        ),
-    )
-    parser.add_argument(
         "--iterations",
         type=int,
         default=1,
@@ -619,10 +549,7 @@ def _parse_arguments() -> argparse.Namespace:
         help=(
             "1-based index recorded on the first iteration's SortingIterationResult, "
             "counting up from there; only the recorded index is affected, not how "
-            "many iterations actually run. Lets a caller that restarts this process "
-            "every few iterations keep recorded iteration numbers globally unique "
-            "and increasing across restarts instead of every restart re-numbering "
-            "from 1."
+            "many iterations actually run."
         ),
     )
     parser.add_argument(
@@ -630,9 +557,7 @@ def _parse_arguments() -> argparse.Namespace:
         action="store_true",
         help=(
             "Exit as soon as sorting finishes instead of idling afterwards, even with "
-            "--iterations 1. Useful for scripted/batched single-iteration runs (e.g. "
-            "under an external timeout) that have no --viewer to inspect; idles by "
-            "default so a single-iteration run stays inspectable."
+            "--iterations 1."
         ),
     )
     return parser.parse_args()
@@ -645,12 +570,12 @@ def _build_world_and_sort(node, arguments: argparse.Namespace) -> tuple[
     Optional[VizMarkerPublisher],
 ]:
     """
-    Build a fresh Montessori world, bolt and equip the Panda next to it, start its
+    Build a fresh Montessori world, bolt and equip the iCub3 next to it, start its
     physics simulation, and have it sort every loose shape into the board once.
 
     :param node: The ROS 2 node TF/marker publishing runs against.
-    :param arguments: Parsed command-line arguments selecting the world layout, viewer,
-        RViz publishing, and shape-attempt limits.
+    :param arguments: Parsed command-line arguments selecting the viewer, RViz
+        publishing, and shape-attempt limits.
     :return: This run's per-shape results (see :func:`_insert_all_shapes`), and the live
         simulation and publishers, left running for the caller to stop once it is done
         with them.
@@ -662,19 +587,12 @@ def _build_world_and_sort(node, arguments: argparse.Namespace) -> tuple[
         VizMarkerPublisher,
     )
 
-    if arguments.world2:
-        from experiments.montessori.world2 import MontessoriWorld2, ROBOT_MOUNT_POSITION
-
-        montessori = MontessoriWorld2(shapes_are_movable=True)
-        mount_position = ROBOT_MOUNT_POSITION
-    else:
-        montessori = MontessoriWorld(shapes_are_movable=True)
-        mount_position = _mount_position(montessori)
-    montessori.add_robot_stand(mount_position)
+    montessori = MontessoriWorld(shapes_are_movable=True)
+    mount_position = _mount_position(montessori)
     robot = montessori.mount_stationary_robot(
-        Panda, parse_panda(), mount_position, mount_yaw=np.pi
+        ICub3FixedBase, parse_icub(), mount_position, mount_yaw=MOUNT_YAW
     )
-    physically_simulated_dofs = equip_panda_for_physical_simulation(robot)
+    physically_simulated_dofs = equip_icub_for_physical_simulation(robot)
     apply_montessori_grasp_contact_parameters(
         montessori.world.get_semantic_annotations_by_type(MontessoriShape)
     )
@@ -695,11 +613,6 @@ def _build_world_and_sort(node, arguments: argparse.Namespace) -> tuple[
         world=montessori.world,
         headless=not arguments.viewer,
         step_size=MUJOCO_STEP_SIZE,
-        # None: run as fast as the CPU allows rather than throttled to wall-clock
-        # real time, matching franka_pickup_smoke_test.py's own reasoning;
-        # real_time_pacing paces against context.simulation_clock (set below to this
-        # simulation's own clock) so the sorting still completes correctly. --viewer
-        # stays real-time so the run is actually watchable.
         real_time_factor=None if not arguments.viewer else 1.0,
         physically_simulated_dofs=physically_simulated_dofs,
         sync_rate_hz=SYNC_RATE_HZ,
@@ -710,12 +623,6 @@ def _build_world_and_sort(node, arguments: argparse.Namespace) -> tuple[
         robot,
         ros_node=node,
         update_world_model_attachment=False,
-        # IsObjectReachableBy (PickUpAction/ReachAction's pre_condition) runs a full
-        # simulated IK/collision-avoidance reach on a deep-copied world; re-enabling
-        # evaluate_conditions to get PlaceAction's own gripped-check for free was tried,
-        # but that check is still too unreliable even with the shapes' now-more-central
-        # table row -- it hung for 5+ minutes on the very first pickup. Our own
-        # is_body_gripped check in _insert_shape covers the same thing without it.
         evaluate_conditions=False,
         motion_tolerances=MotionToleranceConfig(
             default_tcp_position_threshold=TCP_POSITION_THRESHOLD,
@@ -737,16 +644,8 @@ def _build_world_and_sort(node, arguments: argparse.Namespace) -> tuple[
 def _reclaim_native_heap_fragmentation() -> None:
     """
     Collect Python cycles, then ask glibc to release freed-but-unreturned heap back to
-    the OS.
-
-    Each rebuilt world's MuJoCo model/data and Bullet collision shapes (see
-    :class:`~semantic_digital_twin.collision_checking.pybullet_collision_detector.BulletCollisionDetector`)
-    free their native allocations correctly, but glibc's allocator keeps the
-    resulting holes in its own arenas rather than returning them to the OS, so RSS
-    climbs by ~150-230MB per iteration of a long ``--iterations`` run until the
-    process is OOM-killed even though no Python object leaks. ``malloc_trim`` reclaims
-    that fragmented-but-freed memory; ``gc.collect()`` runs first so any Python-level
-    garbage is freed (and its native backing memory released) before trimming.
+    the OS; identical to
+    :func:`~experiments.montessori.franka_montessori_demo._reclaim_native_heap_fragmentation`.
     """
     gc.collect()
     ctypes.CDLL(None).malloc_trim(0)
@@ -795,18 +694,10 @@ def _log_iteration_summary(iteration_results: list[SortingIterationResult]) -> N
 
 def main() -> None:
     """
-    Build the Montessori world, bolt the Panda next to it, visualize it in RViz, and
-    have it sort the loose shapes into the board.
-
-    Runs once and keeps the live simulation running until interrupted by default; with
-    :attr:`~argparse.Namespace.iterations` greater than one, or with
-    :attr:`~argparse.Namespace.exit_after_sorting` set, instead exits as soon as
-    sorting finishes (rebuilding the whole world and rerunning the sort between
-    iterations, then logging a per-shape success-rate summary, if there is more than
-    one).
+    Build the Montessori world, bolt the iCub3 next to it, visualize it in RViz, and
+    have it sort the loose shapes into the board; identical in structure to
+    :func:`~experiments.montessori.franka_montessori_demo.main`.
     """
-    # force: the CRAM/Giskard stack configures the root logger on import, which would
-    # otherwise swallow this script's own reporting.
     logging.basicConfig(level=logging.INFO, format="%(message)s", force=True)
     arguments = _parse_arguments()
 
@@ -825,11 +716,6 @@ def main() -> None:
     spinner = threading.Thread(target=executor.spin, daemon=True, name="rclpy-executor")
     spinner.start()
 
-    # keep_simulation_running: matches the original single-run behavior of leaving the
-    # simulation live for inspection (e.g. via --viewer) once sorting finishes, rather
-    # than immediately tearing it down to rebuild for a next iteration; only sensible
-    # when there is no next iteration to rebuild for, and skipped outright by
-    # --exit-after-sorting for scripted single-iteration runs.
     keep_simulation_running = (
         arguments.iterations == 1 and not arguments.exit_after_sorting
     )

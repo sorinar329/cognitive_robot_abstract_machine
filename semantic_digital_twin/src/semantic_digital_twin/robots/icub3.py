@@ -558,3 +558,38 @@ class ICub3(AbstractRobot, HasTorso[ICub3Torso], HasMobileBase[ICub3MobileBase])
     @classmethod
     def _get_root_body_name(cls) -> str:
         return "base_footprint"
+
+
+@dataclass(eq=False)
+class ICub3FixedBase(AbstractRobot, HasTorso[ICub3Torso]):
+    """
+    The ICub3, bolted to one fixed stance instead of standing on its own drivable
+    mobile base.
+
+    Same body, arms, hands, and torso as :class:`ICub3`, just without
+    :class:`~semantic_digital_twin.robots.robot_part_mixins.HasMobileBase`: action
+    planning (e.g. :class:`~coraplex.robot_plans.actions.core.pick_up.PickUpAction`
+    inside :class:`~experiments.montessori.insert_shape_action.InsertMontessoriShapeAction`)
+    branches on ``isinstance(robot, HasMobileBase)`` to decide whether it first has to
+    navigate to a resolved standing offset before reaching, regardless of whether that
+    robot's mobile base is actually connected to anything drivable in the current
+    world -- for a scene that mounts the ICub3 with a
+    :class:`~semantic_digital_twin.world_description.connections.FixedConnection`
+    rather than an :class:`~semantic_digital_twin.world_description.connections.OmniDrive`
+    (see :func:`~experiments.montessori.world.mount_stationary_robot`), that branch
+    tries to navigate a base that cannot move, the same way it would break for the
+    :class:`~semantic_digital_twin.robots.panda.Panda`. This class opts back into the
+    other branch, reaching with its arm alone from wherever it is bolted, matching the
+    Panda's own no-mobile-base reach.
+    """
+
+    def _setup_collision_rules(self):
+        pass
+
+    @classmethod
+    def get_ros_file_path(cls) -> str:
+        return ICub3.get_ros_file_path()
+
+    @classmethod
+    def _get_root_body_name(cls) -> str:
+        return "base_footprint"
