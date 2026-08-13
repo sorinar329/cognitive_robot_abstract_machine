@@ -191,6 +191,11 @@ def sample_pickup_instance(
     match_expr = a(PickUpAction)(
         object_designator=object_body,
         arm=arm,
+        # A grasp is done once the fingers stop moving against the object, not once
+        # they reach their nominal fully-closed target -- an object of any real size
+        # blocks full closure, so without this every attempt runs out its tick budget
+        # and raises MotionDidNotFinish instead of completing the grasp.
+        tolerate_grasp_stall=True,
         # Decomposed field-by-field (matching the pattern used in
         # MoveToReachTrainingEnvironment.setup_plan) rather than passed as one
         # already-built GraspDescription: passing the whole object as a single

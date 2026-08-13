@@ -1707,6 +1707,17 @@ with ExecutionEnvironment(
             else:
                 hard_failure_count += 1
 
+            # Published as each cube's outcome lands, not just once the whole
+            # iteration finishes -- a single cube's pickup+place(+corrections) can
+            # itself take a minute or more, so waiting for the iteration to end would
+            # leave the activity panel looking stuck on "not live" for that long.
+            publish_iteration_activity(
+                iteration,
+                cube_outcomes,
+                simulation_diverged,
+                time.time() - iteration_start,
+            )
+
             escaped = diverged_cubes()
             if escaped:
                 # See demo2.py's own identical comment: every later step would be

@@ -1,0 +1,626 @@
+<robot name="panda">
+  <link name="link0">
+    <visual>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0.000000 0.000000 0.000000" />
+      <geometry>
+        <mesh filename="meshes/_local/link0_0.obj" />
+      </geometry>
+      <material name="">
+        <color rgba="0.901961 0.921569 0.929412 1.000000" />
+      </material>
+    </visual>
+    <visual>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0.000000 0.000000 0.000000" />
+      <geometry>
+        <mesh filename="meshes/_local/link0_1.obj" />
+      </geometry>
+      <material name="">
+        <color rgba="0.250000 0.250000 0.250000 1.000000" />
+      </material>
+    </visual>
+    <visual>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0.000000 0.000000 0.000000" />
+      <geometry>
+        <mesh filename="meshes/_local/link0_2.obj" />
+      </geometry>
+      <material name="">
+        <color rgba="0.901961 0.921569 0.929412 1.000000" />
+      </material>
+    </visual>
+    <visual>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0.000000 0.000000 0.000000" />
+      <geometry>
+        <mesh filename="meshes/_local/link0_3.obj" />
+      </geometry>
+      <material name="">
+        <color rgba="0.250000 0.250000 0.250000 1.000000" />
+      </material>
+    </visual>
+    <visual>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0.000000 0.000000 0.000000" />
+      <geometry>
+        <mesh filename="meshes/_local/link0_4.obj" />
+      </geometry>
+      <material name="">
+        <color rgba="0.901961 0.921569 0.929412 1.000000" />
+      </material>
+    </visual>
+    <visual>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0.000000 0.000000 0.000000" />
+      <geometry>
+        <mesh filename="meshes/_local/link0_5.obj" />
+      </geometry>
+      <material name="">
+        <color rgba="0.250000 0.250000 0.250000 1.000000" />
+      </material>
+    </visual>
+    <visual>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0.000000 0.000000 0.000000" />
+      <geometry>
+        <mesh filename="meshes/_local/link0_7.obj" />
+      </geometry>
+      <material name="">
+        <color rgba="1.000000 1.000000 1.000000 1.000000" />
+      </material>
+    </visual>
+    <visual>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0.000000 0.000000 0.000000" />
+      <geometry>
+        <mesh filename="meshes/_local/link0_8.obj" />
+      </geometry>
+      <material name="">
+        <color rgba="1.000000 1.000000 1.000000 1.000000" />
+      </material>
+    </visual>
+    <visual>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0.000000 0.000000 0.000000" />
+      <geometry>
+        <mesh filename="meshes/_local/link0_9.obj" />
+      </geometry>
+      <material name="">
+        <color rgba="0.250000 0.250000 0.250000 1.000000" />
+      </material>
+    </visual>
+    <visual>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0.000000 0.000000 0.000000" />
+      <geometry>
+        <mesh filename="meshes/_local/link0_10.obj" />
+      </geometry>
+      <material name="">
+        <color rgba="0.901961 0.921569 0.929412 1.000000" />
+      </material>
+    </visual>
+    <visual>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0.000000 0.000000 0.000000" />
+      <geometry>
+        <mesh filename="meshes/_local/link0_11.obj" />
+      </geometry>
+      <material name="">
+        <color rgba="1.000000 1.000000 1.000000 1.000000" />
+      </material>
+    </visual>
+  </link>
+  <link name="link1">
+    <visual>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0.000000 0.000000 0.000000" />
+      <geometry>
+        <mesh filename="meshes/_local/link1.obj" />
+      </geometry>
+      <material name="">
+        <color rgba="1.000000 1.000000 1.000000 1.000000" />
+      </material>
+    </visual>
+  </link>
+  <link name="link2">
+    <visual>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0.000000 0.000000 0.000000" />
+      <geometry>
+        <mesh filename="meshes/_local/link2.obj" />
+      </geometry>
+      <material name="">
+        <color rgba="1.000000 1.000000 1.000000 1.000000" />
+      </material>
+    </visual>
+  </link>
+  <link name="link3">
+    <visual>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0.000000 0.000000 0.000000" />
+      <geometry>
+        <mesh filename="meshes/_local/link3_0.obj" />
+      </geometry>
+      <material name="">
+        <color rgba="1.000000 1.000000 1.000000 1.000000" />
+      </material>
+    </visual>
+    <visual>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0.000000 0.000000 0.000000" />
+      <geometry>
+        <mesh filename="meshes/_local/link3_1.obj" />
+      </geometry>
+      <material name="">
+        <color rgba="1.000000 1.000000 1.000000 1.000000" />
+      </material>
+    </visual>
+    <visual>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0.000000 0.000000 0.000000" />
+      <geometry>
+        <mesh filename="meshes/_local/link3_2.obj" />
+      </geometry>
+      <material name="">
+        <color rgba="1.000000 1.000000 1.000000 1.000000" />
+      </material>
+    </visual>
+    <visual>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0.000000 0.000000 0.000000" />
+      <geometry>
+        <mesh filename="meshes/_local/link3_3.obj" />
+      </geometry>
+      <material name="">
+        <color rgba="0.250000 0.250000 0.250000 1.000000" />
+      </material>
+    </visual>
+  </link>
+  <link name="link4">
+    <visual>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0.000000 0.000000 0.000000" />
+      <geometry>
+        <mesh filename="meshes/_local/link4_0.obj" />
+      </geometry>
+      <material name="">
+        <color rgba="1.000000 1.000000 1.000000 1.000000" />
+      </material>
+    </visual>
+    <visual>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0.000000 0.000000 0.000000" />
+      <geometry>
+        <mesh filename="meshes/_local/link4_1.obj" />
+      </geometry>
+      <material name="">
+        <color rgba="1.000000 1.000000 1.000000 1.000000" />
+      </material>
+    </visual>
+    <visual>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0.000000 0.000000 0.000000" />
+      <geometry>
+        <mesh filename="meshes/_local/link4_2.obj" />
+      </geometry>
+      <material name="">
+        <color rgba="0.250000 0.250000 0.250000 1.000000" />
+      </material>
+    </visual>
+    <visual>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0.000000 0.000000 0.000000" />
+      <geometry>
+        <mesh filename="meshes/_local/link4_3.obj" />
+      </geometry>
+      <material name="">
+        <color rgba="1.000000 1.000000 1.000000 1.000000" />
+      </material>
+    </visual>
+  </link>
+  <link name="link5">
+    <visual>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0.000000 0.000000 0.000000" />
+      <geometry>
+        <mesh filename="meshes/_local/link5_0.obj" />
+      </geometry>
+      <material name="">
+        <color rgba="0.250000 0.250000 0.250000 1.000000" />
+      </material>
+    </visual>
+    <visual>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0.000000 0.000000 0.000000" />
+      <geometry>
+        <mesh filename="meshes/_local/link5_1.obj" />
+      </geometry>
+      <material name="">
+        <color rgba="1.000000 1.000000 1.000000 1.000000" />
+      </material>
+    </visual>
+    <visual>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0.000000 0.000000 0.000000" />
+      <geometry>
+        <mesh filename="meshes/_local/link5_2.obj" />
+      </geometry>
+      <material name="">
+        <color rgba="1.000000 1.000000 1.000000 1.000000" />
+      </material>
+    </visual>
+  </link>
+  <link name="link6">
+    <visual>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0.000000 0.000000 0.000000" />
+      <geometry>
+        <mesh filename="meshes/_local/link6_0.obj" />
+      </geometry>
+      <material name="">
+        <color rgba="0.901961 0.921569 0.929412 1.000000" />
+      </material>
+    </visual>
+    <visual>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0.000000 0.000000 0.000000" />
+      <geometry>
+        <mesh filename="meshes/_local/link6_1.obj" />
+      </geometry>
+      <material name="">
+        <color rgba="1.000000 1.000000 1.000000 1.000000" />
+      </material>
+    </visual>
+    <visual>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0.000000 0.000000 0.000000" />
+      <geometry>
+        <mesh filename="meshes/_local/link6_2.obj" />
+      </geometry>
+      <material name="">
+        <color rgba="0.250000 0.250000 0.250000 1.000000" />
+      </material>
+    </visual>
+    <visual>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0.000000 0.000000 0.000000" />
+      <geometry>
+        <mesh filename="meshes/_local/link6_3.obj" />
+      </geometry>
+      <material name="">
+        <color rgba="1.000000 1.000000 1.000000 1.000000" />
+      </material>
+    </visual>
+    <visual>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0.000000 0.000000 0.000000" />
+      <geometry>
+        <mesh filename="meshes/_local/link6_4.obj" />
+      </geometry>
+      <material name="">
+        <color rgba="1.000000 1.000000 1.000000 1.000000" />
+      </material>
+    </visual>
+    <visual>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0.000000 0.000000 0.000000" />
+      <geometry>
+        <mesh filename="meshes/_local/link6_5.obj" />
+      </geometry>
+      <material name="">
+        <color rgba="1.000000 1.000000 1.000000 1.000000" />
+      </material>
+    </visual>
+    <visual>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0.000000 0.000000 0.000000" />
+      <geometry>
+        <mesh filename="meshes/_local/link6_6.obj" />
+      </geometry>
+      <material name="">
+        <color rgba="1.000000 1.000000 1.000000 1.000000" />
+      </material>
+    </visual>
+    <visual>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0.000000 0.000000 0.000000" />
+      <geometry>
+        <mesh filename="meshes/_local/link6_7.obj" />
+      </geometry>
+      <material name="">
+        <color rgba="0.039216 0.541176 0.780392 1.000000" />
+      </material>
+    </visual>
+    <visual>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0.000000 0.000000 0.000000" />
+      <geometry>
+        <mesh filename="meshes/_local/link6_8.obj" />
+      </geometry>
+      <material name="">
+        <color rgba="0.039216 0.541176 0.780392 1.000000" />
+      </material>
+    </visual>
+    <visual>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0.000000 0.000000 0.000000" />
+      <geometry>
+        <mesh filename="meshes/_local/link6_9.obj" />
+      </geometry>
+      <material name="">
+        <color rgba="0.250000 0.250000 0.250000 1.000000" />
+      </material>
+    </visual>
+    <visual>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0.000000 0.000000 0.000000" />
+      <geometry>
+        <mesh filename="meshes/_local/link6_10.obj" />
+      </geometry>
+      <material name="">
+        <color rgba="0.250000 0.250000 0.250000 1.000000" />
+      </material>
+    </visual>
+    <visual>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0.000000 0.000000 0.000000" />
+      <geometry>
+        <mesh filename="meshes/_local/link6_11.obj" />
+      </geometry>
+      <material name="">
+        <color rgba="1.000000 1.000000 1.000000 1.000000" />
+      </material>
+    </visual>
+    <visual>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0.000000 0.000000 0.000000" />
+      <geometry>
+        <mesh filename="meshes/_local/link6_12.obj" />
+      </geometry>
+      <material name="">
+        <color rgba="0.000000 1.000000 0.000000 1.000000" />
+      </material>
+    </visual>
+    <visual>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0.000000 0.000000 0.000000" />
+      <geometry>
+        <mesh filename="meshes/_local/link6_13.obj" />
+      </geometry>
+      <material name="">
+        <color rgba="1.000000 1.000000 1.000000 1.000000" />
+      </material>
+    </visual>
+    <visual>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0.000000 0.000000 0.000000" />
+      <geometry>
+        <mesh filename="meshes/_local/link6_14.obj" />
+      </geometry>
+      <material name="">
+        <color rgba="0.250000 0.250000 0.250000 1.000000" />
+      </material>
+    </visual>
+    <visual>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0.000000 0.000000 0.000000" />
+      <geometry>
+        <mesh filename="meshes/_local/link6_15.obj" />
+      </geometry>
+      <material name="">
+        <color rgba="0.250000 0.250000 0.250000 1.000000" />
+      </material>
+    </visual>
+    <visual>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0.000000 0.000000 0.000000" />
+      <geometry>
+        <mesh filename="meshes/_local/link6_16.obj" />
+      </geometry>
+      <material name="">
+        <color rgba="1.000000 1.000000 1.000000 1.000000" />
+      </material>
+    </visual>
+  </link>
+  <link name="link7">
+    <visual>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0.000000 0.000000 0.000000" />
+      <geometry>
+        <mesh filename="meshes/_local/link7_0.obj" />
+      </geometry>
+      <material name="">
+        <color rgba="1.000000 1.000000 1.000000 1.000000" />
+      </material>
+    </visual>
+    <visual>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0.000000 0.000000 0.000000" />
+      <geometry>
+        <mesh filename="meshes/_local/link7_1.obj" />
+      </geometry>
+      <material name="">
+        <color rgba="0.250000 0.250000 0.250000 1.000000" />
+      </material>
+    </visual>
+    <visual>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0.000000 0.000000 0.000000" />
+      <geometry>
+        <mesh filename="meshes/_local/link7_2.obj" />
+      </geometry>
+      <material name="">
+        <color rgba="0.250000 0.250000 0.250000 1.000000" />
+      </material>
+    </visual>
+    <visual>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0.000000 0.000000 0.000000" />
+      <geometry>
+        <mesh filename="meshes/_local/link7_3.obj" />
+      </geometry>
+      <material name="">
+        <color rgba="0.250000 0.250000 0.250000 1.000000" />
+      </material>
+    </visual>
+    <visual>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0.000000 0.000000 0.000000" />
+      <geometry>
+        <mesh filename="meshes/_local/link7_4.obj" />
+      </geometry>
+      <material name="">
+        <color rgba="0.250000 0.250000 0.250000 1.000000" />
+      </material>
+    </visual>
+    <visual>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0.000000 0.000000 0.000000" />
+      <geometry>
+        <mesh filename="meshes/_local/link7_5.obj" />
+      </geometry>
+      <material name="">
+        <color rgba="0.250000 0.250000 0.250000 1.000000" />
+      </material>
+    </visual>
+    <visual>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0.000000 0.000000 0.000000" />
+      <geometry>
+        <mesh filename="meshes/_local/link7_6.obj" />
+      </geometry>
+      <material name="">
+        <color rgba="0.250000 0.250000 0.250000 1.000000" />
+      </material>
+    </visual>
+    <visual>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0.000000 0.000000 0.000000" />
+      <geometry>
+        <mesh filename="meshes/_local/link7_7.obj" />
+      </geometry>
+      <material name="">
+        <color rgba="1.000000 1.000000 1.000000 1.000000" />
+      </material>
+    </visual>
+  </link>
+  <link name="attachment" />
+  <link name="/hand">
+    <visual>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0.000000 0.000000 0.000000" />
+      <geometry>
+        <mesh filename="meshes/_local/hand_0.obj" />
+      </geometry>
+      <material name="">
+        <color rgba="0.901961 0.921569 0.929412 1.000000" />
+      </material>
+    </visual>
+    <visual>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0.000000 0.000000 0.000000" />
+      <geometry>
+        <mesh filename="meshes/_local/hand_1.obj" />
+      </geometry>
+      <material name="">
+        <color rgba="0.250000 0.250000 0.250000 1.000000" />
+      </material>
+    </visual>
+    <visual>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0.000000 0.000000 0.000000" />
+      <geometry>
+        <mesh filename="meshes/_local/hand_2.obj" />
+      </geometry>
+      <material name="">
+        <color rgba="0.250000 0.250000 0.250000 1.000000" />
+      </material>
+    </visual>
+    <visual>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0.000000 0.000000 0.000000" />
+      <geometry>
+        <mesh filename="meshes/_local/hand_3.obj" />
+      </geometry>
+      <material name="">
+        <color rgba="1.000000 1.000000 1.000000 1.000000" />
+      </material>
+    </visual>
+    <visual>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0.000000 0.000000 0.000000" />
+      <geometry>
+        <mesh filename="meshes/_local/hand_4.obj" />
+      </geometry>
+      <material name="">
+        <color rgba="0.901961 0.921569 0.929412 1.000000" />
+      </material>
+    </visual>
+  </link>
+  <link name="/right_finger">
+    <visual>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0.000000 0.000000 0.000000" />
+      <geometry>
+        <mesh filename="meshes/_local/finger_0.obj" />
+      </geometry>
+      <material name="">
+        <color rgba="0.901961 0.921569 0.929412 1.000000" />
+      </material>
+    </visual>
+    <visual>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0.000000 0.000000 0.000000" />
+      <geometry>
+        <mesh filename="meshes/_local/finger_1.obj" />
+      </geometry>
+      <material name="">
+        <color rgba="0.250000 0.250000 0.250000 1.000000" />
+      </material>
+    </visual>
+  </link>
+  <link name="/left_finger">
+    <visual>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0.000000 0.000000 0.000000" />
+      <geometry>
+        <mesh filename="meshes/_local/finger_0.obj" />
+      </geometry>
+      <material name="">
+        <color rgba="0.901961 0.921569 0.929412 1.000000" />
+      </material>
+    </visual>
+    <visual>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0.000000 0.000000 0.000000" />
+      <geometry>
+        <mesh filename="meshes/_local/finger_1.obj" />
+      </geometry>
+      <material name="">
+        <color rgba="0.250000 0.250000 0.250000 1.000000" />
+      </material>
+    </visual>
+  </link>
+  <link name="/tool_frame" />
+  <joint name="joint1" type="revolute">
+    <parent link="link0" />
+    <child link="link1" />
+    <origin xyz="0.000000 0.000000 0.333000" rpy="0.000000 0.000000 0.000000" />
+    <axis xyz="0.000000 0.000000 1.000000" />
+    <limit lower="-2.897300" upper="2.897300" effort="100.0" velocity="1.0" />
+  </joint>
+  <joint name="joint2" type="revolute">
+    <parent link="link1" />
+    <child link="link2" />
+    <origin xyz="0.000000 0.000000 0.000000" rpy="-1.570796 0.000000 0.000000" />
+    <axis xyz="0.000000 0.000000 1.000000" />
+    <limit lower="-1.762800" upper="1.762800" effort="100.0" velocity="1.0" />
+  </joint>
+  <joint name="joint3" type="revolute">
+    <parent link="link2" />
+    <child link="link3" />
+    <origin xyz="0.000000 -0.316000 0.000000" rpy="1.570796 0.000000 0.000000" />
+    <axis xyz="0.000000 0.000000 1.000000" />
+    <limit lower="-2.897300" upper="2.897300" effort="100.0" velocity="1.0" />
+  </joint>
+  <joint name="joint4" type="revolute">
+    <parent link="link3" />
+    <child link="link4" />
+    <origin xyz="0.082500 0.000000 0.000000" rpy="1.570796 0.000000 0.000000" />
+    <axis xyz="0.000000 0.000000 1.000000" />
+    <limit lower="-3.071800" upper="-0.069800" effort="100.0" velocity="1.0" />
+  </joint>
+  <joint name="joint5" type="revolute">
+    <parent link="link4" />
+    <child link="link5" />
+    <origin xyz="-0.082500 0.384000 0.000000" rpy="-1.570796 0.000000 0.000000" />
+    <axis xyz="0.000000 0.000000 1.000000" />
+    <limit lower="-2.897300" upper="2.897300" effort="100.0" velocity="1.0" />
+  </joint>
+  <joint name="joint6" type="revolute">
+    <parent link="link5" />
+    <child link="link6" />
+    <origin xyz="0.000000 0.000000 0.000000" rpy="1.570796 0.000000 0.000000" />
+    <axis xyz="0.000000 0.000000 1.000000" />
+    <limit lower="-0.017500" upper="3.752500" effort="100.0" velocity="1.0" />
+  </joint>
+  <joint name="joint7" type="revolute">
+    <parent link="link6" />
+    <child link="link7" />
+    <origin xyz="0.088000 0.000000 0.000000" rpy="1.570796 0.000000 0.000000" />
+    <axis xyz="0.000000 0.000000 1.000000" />
+    <limit lower="-2.897300" upper="2.897300" effort="100.0" velocity="1.0" />
+  </joint>
+  <joint name="link7_T_attachment" type="fixed">
+    <parent link="link7" />
+    <child link="attachment" />
+    <origin xyz="0.000000 0.000000 0.107000" rpy="0.000000 0.000000 2.356196" />
+  </joint>
+  <joint name="attachment_T_/hand" type="fixed">
+    <parent link="attachment" />
+    <child link="/hand" />
+    <origin xyz="0.000000 0.000000 0.000000" rpy="0.000000 0.000000 0.000000" />
+  </joint>
+  <joint name="/finger_joint2" type="prismatic">
+    <parent link="/hand" />
+    <child link="/right_finger" />
+    <origin xyz="0.000000 0.000000 0.058400" rpy="0.000000 0.000000 3.141593" />
+    <axis xyz="0.000000 1.000000 0.000000" />
+    <limit lower="0.000000" upper="0.040000" effort="100.0" velocity="1.0" />
+  </joint>
+  <joint name="/finger_joint1" type="prismatic">
+    <parent link="/hand" />
+    <child link="/left_finger" />
+    <origin xyz="0.000000 0.000000 0.058400" rpy="0.000000 0.000000 0.000000" />
+    <axis xyz="0.000000 1.000000 0.000000" />
+    <limit lower="0.000000" upper="0.040000" effort="100.0" velocity="1.0" />
+  </joint>
+  <joint name="/hand_T_/tool_frame" type="fixed">
+    <parent link="/hand" />
+    <child link="/tool_frame" />
+    <origin xyz="0.000000 0.000000 0.103400" rpy="0.000000 0.000000 0.000000" />
+  </joint>
+</robot>

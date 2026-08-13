@@ -326,6 +326,12 @@ def _build_stack_plan(object_body, target_body, picking_arm) -> PlanNode:
                     # (dot product 0.0).
                     rotate_gripper=True,
                 ),
+                # A grasp is done once the fingers stop moving against the object,
+                # not once they reach their nominal fully-closed target -- an object
+                # of any real size blocks full closure, so without this the attempt
+                # runs out its tick budget and raises MotionDidNotFinish instead of
+                # completing the grasp.
+                tolerate_grasp_stall=True,
             ),
             PlaceAction(object_body, place_location, picking_arm),
             ParkArmsAction(Arms.BOTH),
