@@ -7,7 +7,8 @@ HTTP endpoints of the live bridge (default port 8765).
                   partAnnotations}
     GET /state   {sequenceNumber, frames: {prefixed_joint: position},
                   base: pose, objects: {mesh_key: pose}}
-    GET /objects geometry catalog (mesh served via /mesh?key=)
+    GET /objects  geometry catalog (mesh served via /mesh?key=)
+    GET /activity {entries: [demo-defined JSON, oldest first]}
     GET /plan    {signature, nodes: [{id, parent, kind, label, status, derived}]}
     GET /chart   {signature, title,
                   nodes: [{id, parent, name, class_name, life_cycle, observation}],
@@ -92,6 +93,8 @@ class BridgeRequestHandler(BaseHTTPRequestHandler):
             return self._send_json(self.bridge.get_chart())
         if self.path.startswith("/objects"):
             return self._send_json({"objects": self.bridge.object_catalog()})
+        if self.path.startswith("/activity"):
+            return self._send_json({"entries": self.bridge.activity_log()})
         if self.path.startswith("/mesh"):
             return self._send_mesh()
         if self.path.startswith("/info"):

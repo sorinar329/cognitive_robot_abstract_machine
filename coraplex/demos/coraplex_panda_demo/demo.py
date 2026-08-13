@@ -35,6 +35,12 @@ from semantic_digital_twin.adapters.ros.visualization.viz_marker import (
 from semantic_digital_twin.robots.panda import Panda
 from semantic_digital_twin.spatial_types.spatial_types import Pose
 
+from cramera.live.runner import start as start_live_viz
+from cramera.server import start_in_background as start_viz_frontend
+
+start_viz_frontend()
+start_live_viz()
+
 time.sleep(8)  # Wait for the launch file to start
 
 execition_mode = ExecutionType.SIMULATED

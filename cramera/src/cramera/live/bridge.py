@@ -604,6 +604,11 @@ class Bridge:
     Decimal places object sizes are rounded to before publishing.
     """
 
+    ACTIVITY_LOG_LIMIT: ClassVar[int] = 200
+    """
+    How many of the most recent :meth:`log_activity` entries are retained.
+    """
+
     world: Optional[World] = None
     """
     The executing world, captured by the tick hook on its first call.
@@ -637,6 +642,11 @@ class Bridge:
     chart_state: ChartSnapshot = field(default_factory=ChartSnapshot)
     """
     The newest motion-statechart snapshot (see :meth:`observe_chart`).
+    """
+
+    _activity_log: List[Dict[str, Any]] = field(default_factory=list)
+    """
+    Structured events a demo has pushed via :meth:`log_activity`, oldest first.
     """
 
     _connections: List[ActiveConnection1DOF] = field(default_factory=list)
@@ -819,6 +829,24 @@ class Bridge:
         self._bodies = bodies
         self._build_object_metadata(bodies)
 
+    def log_activity(self, entry: Dict[str, Any]) -> None:
+        """
+        Publish one structured event for the viewer's activity panel.
+
+        Generic on purpose: the bridge does not know what a demo's events mean, only
+        that each is a JSON-serializable dict the panel renders as given. A demo calls
+        this directly (there is no hook for it, unlike :attr:`world`/:attr:`robot`),
+        typically once per higher-level unit of work -- an iteration of a trial loop,
+        for instance -- rather than once per tick.
+
+        :param entry: The event to publish.
+        """
+        with self._lock:
+            self._activity_log.append(entry)
+            overflow = len(self._activity_log) - self.ACTIVITY_LOG_LIMIT
+            if overflow > 0:
+                del self._activity_log[:overflow]
+
     # %% what the HTTP layer reads
     def object_catalog(self) -> List[Dict[str, Any]]:
         """
@@ -826,6 +854,14 @@ class Bridge:
         """
         with self._lock:
             return [asdict(entry) for entry in self.object_metadata]
+
+    def activity_log(self) -> List[Dict[str, Any]]:
+        """
+        :return: Every activity-log entry :meth:`log_activity` still retains, oldest
+            first.
+        """
+        with self._lock:
+            return list(self._activity_log)
 
     def object_keys(self) -> List[str]:
         """
@@ -972,10 +1008,16 @@ class Bridge:
         if self.robot is not None:
             bodies[ROBOT_BASE_KEY] = self.robot.root
         try:
-            # loose objects by convention: bodies named like mesh files
+            # loose objects: bodies named like mesh files (URDF-loaded demos'
+            # own naming convention), or free-floating bodies outside the robot
+            # (MJCF-loaded demos name their objects by scene role, e.g.
+            # "cube0", not by mesh file). A fixed-base robot's own body tree
+            # never sits behind a free connection, so the second check does
+            # not also catch robot links.
             for body in world.bodies:
                 basename = str(body.name).split("/")[-1]
-                if MeshFormat.of_path(basename) is not None:
+                is_free_floating = isinstance(body.parent_connection, Connection6DoF)
+                if MeshFormat.of_path(basename) is not None or is_free_floating:
                     bodies[basename] = body
         except Exception as error:
             # boundary guard: the world is mid-modification (a body is being spawned

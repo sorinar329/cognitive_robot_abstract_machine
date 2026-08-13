@@ -139,6 +139,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         try:
             return self._send_json(handler())
         except Exception as error:
+            logger.exception("API handler failed for %s", self.path)
             return self._send_exception(error)
 
     # %% scene bundles (generated data, lives outside the package)
@@ -247,6 +248,34 @@ def make_server(port: int = 0) -> socketserver.ThreadingTCPServer:
     """
     socketserver.TCPServer.allow_reuse_address = True
     return socketserver.ThreadingTCPServer(("127.0.0.1", port), Handler)
+
+
+def start_in_background(
+    port: int = DEFAULT_PORT,
+) -> Optional[socketserver.ThreadingTCPServer]:
+    """
+    Start the viewer, scenes and JSON API server on a daemon thread.
+
+    Meant to be called from a demo file alongside
+    :func:`cramera.live.runner.start`, so a single ``python3 demo.py`` brings up
+    both the frontend and the live bridge. Safe to call from more than one demo
+    process: if the port is already bound -- by an earlier call in this process,
+    by ``cramera`` running in a separate terminal, or by another demo process --
+    this logs that and returns ``None`` instead of failing the caller.
+
+    :param port: Port to listen on.
+    :return: The running server, or ``None`` if the port was already taken.
+    """
+    try:
+        server = make_server(port)
+    except OSError:
+        logger.info("cramera frontend already running at http://localhost:%d/", port)
+        return None
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    logger.info(
+        "cramera frontend running at http://localhost:%d/", server.server_address[1]
+    )
+    return server
 
 
 def main(arguments: Optional[List[str]] = None) -> None:

@@ -77,6 +77,34 @@ class TestEpisodeKnowledgeBase:
         assert any(c.name == "Plan" for c in fresh_knowledge_base.classes)
 
 
+class TestBuildObjectsPlaceTarget:
+    """
+    ``_build_objects``'s handling of ``scene["placeTarget"]`` -- exercised directly
+    since a malformed one must not take the whole knowledge base down with it.
+    """
+
+    def test_the_current_position_key_is_read(self):
+        scene = {"placeTarget": {"position": [1.0, 2.0], "z": 0.5}}
+        [place_area] = EpisodeKnowledgeBase._build_objects(scene)
+        assert place_area.position.to_np().flatten()[:3].tolist() == [1.0, 2.0, 0.5]
+
+    def test_the_legacy_pos_key_from_older_bundles_is_still_read(self):
+        """
+        Ready-made bundles from the separate cram2/cram-scenes repo were written by an
+        older onboarder that called this field ``pos``, not ``position``.
+        """
+        scene = {"placeTarget": {"pos": [1.0, 2.0], "z": 0.5}}
+        [place_area] = EpisodeKnowledgeBase._build_objects(scene)
+        assert place_area.position.to_np().flatten()[:3].tolist() == [1.0, 2.0, 0.5]
+
+    def test_a_target_with_neither_key_is_skipped_not_raised_on(self):
+        scene = {"placeTarget": {"z": 0.5}}
+        assert EpisodeKnowledgeBase._build_objects(scene) == []
+
+    def test_no_place_target_at_all_is_skipped(self):
+        assert EpisodeKnowledgeBase._build_objects({}) == []
+
+
 class TestArchitectureScanner:
     def test_scan_returns_real_entities_without_an_intermediate_dict(
         self, fixture_scene
@@ -182,7 +210,9 @@ class TestArmSideInference:
         )
         EpisodeKnowledgeBase.reset()
         center_arm = next(
-            arm for arm in EpisodeKnowledgeBase.of_active_scene().arms if arm.name == "center_arm"
+            arm
+            for arm in EpisodeKnowledgeBase.of_active_scene().arms
+            if arm.name == "center_arm"
         )
         assert center_arm.side is None
 
@@ -269,7 +299,9 @@ class TestRecordedMeasurements:
         )
         EpisodeKnowledgeBase.reset()
         milk = next(
-            entry for entry in EpisodeKnowledgeBase.of_active_scene().objects if entry.name == "milk"
+            entry
+            for entry in EpisodeKnowledgeBase.of_active_scene().objects
+            if entry.name == "milk"
         )
         assert milk.height_metres == 0.23
 

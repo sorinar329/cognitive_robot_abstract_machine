@@ -85,6 +85,17 @@ class TestReadOnlyEndpoints:
             "partAnnotations": [],
         }
 
+    def test_activity_reflects_a_fresh_bridge(self, server):
+        assert get_json(server + "/activity") == {"entries": []}
+
+    def test_activity_reflects_the_injected_bridges_log(self, server, bridge):
+        bridge.log_activity({"iteration": 1, "fullStackIntact": True})
+        bridge.log_activity({"iteration": 2, "fullStackIntact": False})
+        assert get_json(server + "/activity")["entries"] == [
+            {"iteration": 1, "fullStackIntact": True},
+            {"iteration": 2, "fullStackIntact": False},
+        ]
+
     def test_unknown_get_path_is_404(self, server):
         with pytest.raises(urllib.error.HTTPError) as error:
             get(server + "/nope")

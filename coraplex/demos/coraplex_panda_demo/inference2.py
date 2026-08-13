@@ -63,6 +63,7 @@ from coraplex.robot_plans.actions.core.robot_body import ParkArmsAction
 from causal_diagnosis_v2 import (
     ActionCausalDiagnoser,
     NoRecommendationAvailable,
+    ParameterCorrection,
     PICKUP_CAUSAL_CONFIG,
     PLACE_CAUSAL_CONFIG,
     PICKUP_MODEL_PATH,
@@ -96,6 +97,10 @@ from semantic_digital_twin.adapters.ros.visualization.viz_marker import (
 from semantic_digital_twin.robots.panda import Panda
 from semantic_digital_twin.spatial_types.spatial_types import Pose
 
+from cramera.live.bridge import BRIDGE
+from cramera.live.runner import start as start_live_viz
+from cramera.server import start_in_background as start_viz_frontend
+
 
 def verify_workspace_matches_demo() -> None:
     """
@@ -123,6 +128,9 @@ def verify_workspace_matches_demo() -> None:
 
 
 verify_workspace_matches_demo()
+
+start_viz_frontend()
+start_live_viz()
 
 
 # %% causal diagnosers, built once from the trained JPTs -- before the ROS/MuJoCo setup
@@ -1491,6 +1499,86 @@ def append_inference_report(
     print(f"[report] iteration {iteration_index} written to {INFERENCE_REPORT_PATH}")
 
 
+def _correction_payload(correction: ParameterCorrection) -> dict:
+    """
+    :return: ``correction`` as the JSON-serializable shape the viewer's activity panel
+        reads (see ``cramera/web/panels/activity/panel.js``).
+    """
+    return {
+        "variableName": correction.variable_name,
+        "observedValue": correction.observed_value,
+        "observedSupportProbability": correction.observed_support_probability,
+        "correctedValue": correction.corrected_value,
+        "correctedSupportProbability": correction.corrected_support_probability,
+    }
+
+
+def _diagnosis_payload(action_name: str, diagnosis: RootCauseDiagnosis) -> dict:
+    """
+    :param action_name: Which action ``diagnosis`` was diagnosed against, ``"pickup"``
+        or ``"place"``.
+    :return: ``diagnosis`` as the JSON-serializable shape the viewer's activity panel
+        reads.
+    """
+    return {
+        "actionName": action_name,
+        "effectVariable": diagnosis.effect_variable_name,
+        "primary": _correction_payload(diagnosis.primary),
+        "alsoCorrected": [
+            _correction_payload(correction) for correction in diagnosis.corrections[1:]
+        ],
+    }
+
+
+def _cube_outcome_payload(outcome: CubeAttemptOutcome) -> dict:
+    """
+    :return: ``outcome`` as the JSON-serializable shape the viewer's activity panel
+        reads.
+    """
+    return {
+        "stepLabel": outcome.step_label,
+        "finalSucceeded": outcome.final_succeeded,
+        "correctionAttempts": outcome.correction_attempts,
+        "diagnoses": [
+            _diagnosis_payload(action_name, diagnosis)
+            for action_name, diagnosis in outcome.diagnoses
+        ],
+    }
+
+
+def publish_iteration_activity(
+    iteration_index: int,
+    cube_outcomes: list[CubeAttemptOutcome],
+    simulation_diverged: bool,
+    duration_seconds: float,
+) -> None:
+    """
+    Push this iteration's outcome to the live bridge, for the viewer's activity panel.
+
+    Always called, live viewer attached or not: :meth:`Bridge.log_activity` only
+    appends to an in-memory list, so this costs nothing the demo itself relies on, and
+    a viewer that attaches partway through a run still sees every earlier iteration.
+
+    :param iteration_index: The iteration this outcome is for.
+    :param cube_outcomes: Every cube's outcome from this iteration, see
+        :func:`append_inference_report`.
+    :param simulation_diverged: Whether a cube left the workspace during this
+        iteration.
+    :param duration_seconds: How long this iteration took, wall-clock.
+    """
+    BRIDGE.log_activity(
+        {
+            "iteration": iteration_index,
+            "totalIterations": NUMBER_OF_ITERATIONS,
+            "durationSeconds": duration_seconds,
+            "simulationDiverged": simulation_diverged,
+            "fullStackIntact": full_stack_intact(),
+            "segmindApproved": segmind_approved(),
+            "cubes": [_cube_outcome_payload(outcome) for outcome in cube_outcomes],
+        }
+    )
+
+
 def diagnosis_summary_lines(outcomes: list[DiagnosisOutcome]) -> list[str]:
     """
     :param outcomes: Every diagnosis performed during the run, see
@@ -1642,6 +1730,9 @@ with ExecutionEnvironment(
 
         print_iteration_summary(iteration)
         append_inference_report(iteration, cube_outcomes, simulation_diverged)
+        publish_iteration_activity(
+            iteration, cube_outcomes, simulation_diverged, time.time() - iteration_start
+        )
         if not simulation_diverged and full_stack_intact():
             successful_iterations += 1
 

@@ -33,6 +33,7 @@ import os
 import runpy
 import shutil
 import sys
+import tempfile
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -484,9 +485,7 @@ class Recorder:
         """
         if next(serialized_count) >= max_nodes:
             return None
-        designator = (
-            node.designator if isinstance(node, DescribesAnAction) else None
-        )
+        designator = node.designator if isinstance(node, DescribesAnAction) else None
         entry = {
             "kind": type(node).__name__,
             "label": (
@@ -513,7 +512,6 @@ class Recorder:
             if child
         ]
         return entry
-
 
 
 # %% post-processing the recording
@@ -807,9 +805,7 @@ class SceneBuilder:
     """
 
     @staticmethod
-    def _nearest_kept_frame(
-        downsampled_index: Dict[int, int], raw_index: int
-    ) -> int:
+    def _nearest_kept_frame(downsampled_index: Dict[int, int], raw_index: int) -> int:
         """
         The downsampled index closest to a raw frame index.
 
@@ -862,11 +858,19 @@ class SceneBuilder:
         segments = []
         for raw_segment in RecordingAnalysis(self.recorder).derive_segments():
             segment = dict(raw_segment)
-            segment["start"] = self._nearest_kept_frame(downsampled_index, raw_segment["start"])
-            segment["end"] = self._nearest_kept_frame(downsampled_index, raw_segment["end"])
+            segment["start"] = self._nearest_kept_frame(
+                downsampled_index, raw_segment["start"]
+            )
+            segment["end"] = self._nearest_kept_frame(
+                downsampled_index, raw_segment["end"]
+            )
             if "attach" in segment:
-                segment["attach"] = self._nearest_kept_frame(downsampled_index, raw_segment["attach"])
-                segment["detach"] = self._nearest_kept_frame(downsampled_index, raw_segment["detach"])
+                segment["attach"] = self._nearest_kept_frame(
+                    downsampled_index, raw_segment["attach"]
+                )
+                segment["detach"] = self._nearest_kept_frame(
+                    downsampled_index, raw_segment["detach"]
+                )
             segments.append(segment)
         # a scene with two transports of the same object would otherwise name both steps
         # identically, and the viewer keys its playback captions on the step name
@@ -1117,7 +1121,24 @@ def main() -> None:
     step = args.step or max(1, len(recorder.frames) // TARGET_BUNDLE_FRAMES)
     output_directory = os.path.join(args.out, args.name)
     os.makedirs(output_directory, exist_ok=True)
-    scene = SceneBuilder(recorder, args.name, output_directory, step).build()
+
+    with tempfile.TemporaryDirectory(prefix="cramera-export-") as export_directory:
+        if not recorder.urdf_sources:
+            # The world was not built through URDFParser (e.g. an MJCF-loaded demo),
+            # so the asset hooks above never captured a source file to bundle. Export
+            # the robot's already-resolved geometry directly instead, into a directory
+            # of its own -- not output_directory -- so SceneBuilder's own bundling
+            # step below still does the actual copy into the scene, exactly as it
+            # would for a captured source.
+            from cramera.onboard.world_urdf_export import export_robot_urdf
+
+            exported = export_robot_urdf(
+                recorder.world, recorder.robot, Path(export_directory)
+            )
+            if exported is not None:
+                recorder.urdf_sources.append(str(exported))
+                log("no URDF source was captured — exported one from the world model")
+        scene = SceneBuilder(recorder, args.name, output_directory, step).build()
     SceneBuilder._update_scene_index(Path(args.out) / "index.json", args.name)
 
     log("scene '%s' written to %s" % (args.name, output_directory))

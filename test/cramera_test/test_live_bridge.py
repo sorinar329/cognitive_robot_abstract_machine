@@ -26,7 +26,10 @@ from semantic_digital_twin.spatial_types import (
     RotationMatrix,
 )
 from semantic_digital_twin.world import World
-from semantic_digital_twin.world_description.connections import Connection6DoF
+from semantic_digital_twin.world_description.connections import (
+    Connection6DoF,
+    FixedConnection,
+)
 from semantic_digital_twin.world_description.degree_of_freedom import DegreeOfFreedom
 from semantic_digital_twin.world_description.geometry import Box, Scale
 from semantic_digital_twin.world_description.shape_collection import ShapeCollection
@@ -412,6 +415,37 @@ def make_free_floating_object() -> Tuple[World, Connection6DoF, Body]:
     return world, connection, obj
 
 
+class TestLooseObjectDetection:
+    """
+    ``bind`` treats a body as a loose object if its name looks like a mesh file (URDF-
+    loaded demos' own naming convention) or it hangs off a free (``Connection6DoF``)
+    connection instead (MJCF-loaded demos, whose object bodies are named by scene role,
+    e.g. ``cube0``, not by mesh file).
+    """
+
+    def test_a_free_floating_body_without_a_mesh_like_name_is_detected(self):
+        world, _connection, _body = make_free_floating_object()
+
+        bridge = Bridge()
+        bridge.world = world
+        bridge.bind()
+
+        assert bridge.object_keys() == ["milk"]
+
+    def test_a_fixed_body_without_a_mesh_like_name_is_not_detected(self):
+        world = World()
+        root = Body(name=PrefixedName("world"))
+        floor = Body(name=PrefixedName("floor"))
+        with world.modify_world():
+            world.add_connection(FixedConnection(parent=root, child=floor))
+
+        bridge = Bridge()
+        bridge.world = world
+        bridge.bind()
+
+        assert bridge.object_keys() == []
+
+
 class TestApplyMove:
     """
     ``_apply_move`` writes a viewer drag into a free-floating object's connection.
@@ -468,6 +502,29 @@ class TestApplyMove:
 
 
 # %% what the HTTP layer reads
+class TestActivityLog:
+    """
+    ``log_activity`` is what a demo calls directly (there is no hook for it) to push a
+    structured event, e.g. one trial iteration's outcome, for the viewer's activity
+    panel.
+    """
+
+    def test_entries_are_kept_in_the_order_they_were_logged(self):
+        bridge = Bridge()
+        bridge.log_activity({"iteration": 1})
+        bridge.log_activity({"iteration": 2})
+        assert bridge.activity_log() == [{"iteration": 1}, {"iteration": 2}]
+
+    def test_the_log_is_bounded_to_the_most_recent_entries(self):
+        bridge = Bridge()
+        for iteration in range(Bridge.ACTIVITY_LOG_LIMIT + 5):
+            bridge.log_activity({"iteration": iteration})
+        kept = bridge.activity_log()
+        assert len(kept) == Bridge.ACTIVITY_LOG_LIMIT
+        assert kept[0] == {"iteration": 5}
+        assert kept[-1] == {"iteration": Bridge.ACTIVITY_LOG_LIMIT + 4}
+
+
 class TestViewerAccessors:
     def test_object_keys_exclude_the_robot_base(self):
         bridge = Bridge()

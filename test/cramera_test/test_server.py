@@ -123,3 +123,34 @@ class TestApi:
             status, body = err.code, err.read()
         assert status == 404
         assert json.loads(body)["ok"] is False
+
+
+class TestStartInBackground:
+    """
+    ``start_in_background`` is what a demo file calls to bring the frontend up
+    alongside the live bridge; it needs its own coverage since :data:`server`
+    builds its server with ``make_server`` directly instead.
+    """
+
+    def test_serves_the_viewer_on_a_background_thread(self, fixture_scene):
+        from cramera import server as server_module
+
+        importlib.reload(server_module)
+        httpd = server_module.start_in_background(port=0)
+        try:
+            status, body = get("http://localhost:%d/" % httpd.server_address[1])
+            assert status == 200
+            assert b"CRAM Visualization" in body
+        finally:
+            httpd.shutdown()
+
+    def test_second_call_on_the_same_port_is_a_no_op(self, fixture_scene):
+        from cramera import server as server_module
+
+        importlib.reload(server_module)
+        first = server_module.start_in_background(port=0)
+        try:
+            second = server_module.start_in_background(port=first.server_address[1])
+            assert second is None
+        finally:
+            first.shutdown()

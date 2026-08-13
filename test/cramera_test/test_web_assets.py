@@ -125,3 +125,6 @@ class TestJsUnits:
 
     def test_graph_panel(self):
         self.run_node("test_graph_panel.js")
+
+    def test_activity_panel(self):
+        self.run_node("test_activity_panel.js")

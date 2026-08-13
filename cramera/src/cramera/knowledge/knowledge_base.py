@@ -54,8 +54,8 @@ class EpisodeKnowledgeBase:
         """
         Drop the cached instance so the next access rebuilds it.
 
-        Needed whenever the active scene changes, which is what tests do when they
-        point ``CRAMERA_SCENES`` at a fixture.
+        Needed whenever the active scene changes, which is what tests do when they point
+        ``CRAMERA_SCENES`` at a fixture.
         """
         cls._instance = None
 
@@ -111,8 +111,13 @@ class EpisodeKnowledgeBase:
                     position=Point3(*[round(value, 3) for value in entry["spawn"][:3]]),
                 )
             )
-        if scene.get("placeTarget"):
-            target = scene["placeTarget"]
+        target = scene.get("placeTarget")
+        # "position" is the current key; "pos" is what older onboarders (including
+        # ready-made bundles from the separate cram2/cram-scenes repo) wrote it as.
+        # Either way, a target with neither is skipped rather than raised on, so one
+        # stale or malformed field never takes the whole knowledge base down with it.
+        target_position = (target or {}).get("position") or (target or {}).get("pos")
+        if target and target_position:
             objects.append(
                 BenchObject(
                     name="place_area",
@@ -120,8 +125,8 @@ class EpisodeKnowledgeBase:
                     label="Place area",
                     height_metres=0.0,  # a target area on a surface, not a solid
                     position=Point3(
-                        round(target["position"][0], 3),
-                        round(target["position"][1], 3),
+                        round(target_position[0], 3),
+                        round(target_position[1], 3),
                         target.get("z", 0),
                     ),
                 )
@@ -232,7 +237,6 @@ class EpisodeKnowledgeBase:
             lookups.
         :param place_area: The scene's place-area object, if any.
         """
-
         episodes = []
         for index, segment in enumerate(scene.get("segments") or []):
             picks = objects_by_id.get(segment.get("picks"))
@@ -376,4 +380,3 @@ class EpisodeKnowledgeBase:
         if "right" in lowered or lowered.startswith("r_"):
             return Arms.RIGHT
         return None
-
