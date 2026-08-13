@@ -8,7 +8,12 @@ from typing_extensions import List, Optional
 import krrood.symbolic_math.symbolic_math as sm
 from giskardpy.motion_statechart.context import MotionStatechartContext
 from giskardpy.motion_statechart.data_types import ObservationStateValues
-from giskardpy.motion_statechart.graph_node import MotionStatechartNode, NodeArtifacts
+from giskardpy.motion_statechart.exceptions import EmptyDegreesOfFreedomError
+from giskardpy.motion_statechart.graph_node import (
+    MotionStatechartNode,
+    NodeArtifacts,
+    velocity_convergence_expression,
+)
 from giskardpy.utils.decorators import dataclass
 from krrood.symbolic_math.symbolic_math import FloatVariable
 from semantic_digital_twin.world_description.degree_of_freedom import DegreeOfFreedom
@@ -70,6 +75,8 @@ def local_minimum_expression(
     return sm.trinary_logic_and(
         traj_longer_than_min_time, sm.logic_all(sm.abs(vel_symbols) < ref)
     )
+from krrood.symbolic_math.symbolic_math import FloatVariable
+from semantic_digital_twin.world_description.degree_of_freedom import DegreeOfFreedom
 
 
 @dataclass
@@ -91,7 +98,7 @@ class ThreadedPayloadMonitor(MotionStatechartNode, ABC):
         pass
 
 
-@dataclass
+@dataclass(repr=False, eq=False)
 class LocalMinimumReached(MotionStatechartNode):
     """
     Checks if the robot has reached a local minimum in the trajectory, by checking if

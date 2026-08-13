@@ -14,12 +14,13 @@ from coraplex.robot_plans import MoveManipulatorMotion
 from krrood.entity_query_language.factories import variable_from
 from semantic_digital_twin.reasoning.predicates import allclose
 from semantic_digital_twin.robots.robot_parts import EndEffector
-from semantic_digital_twin.spatial_types.spatial_types import Pose
+from semantic_digital_twin.spatial_types.spatial_types import Pose, Vector3
 from coraplex.datastructures.enums import AxisIdentifier, Arms
 
 from coraplex.datastructures.trajectory import PoseTrajectory
 from coraplex.plans.factories import execute_single, sequential
 from coraplex.robot_plans.actions.base import ActionDescription, DescriptionType
+from coraplex.robot_plans.mixins import HasMaxJointVelocity
 from coraplex.robot_plans.motions.gripper import (
     MoveGripperMotion,
     MoveTCPWaypointsMotion,
@@ -93,7 +94,7 @@ class SetGripperAction(ActionDescription):
 
 
 @dataclass
-class ParkArmsAction(ActionDescription):
+class ParkArmsAction(ActionDescription, HasMaxJointVelocity):
     """
     Park the arms of the robot.
     """

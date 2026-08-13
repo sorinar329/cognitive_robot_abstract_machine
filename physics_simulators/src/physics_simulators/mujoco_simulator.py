@@ -3,6 +3,7 @@
 import os
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field, InitVar
+from threading import RLock
 from typing import Optional, List, Dict, Union, Any
 
 import mujoco
@@ -72,6 +73,20 @@ class MujocoSimulator(BaseSimulator):
     file_path: InitVar[str] = ""
     """
     Path to the XML file of the scene (for initialization)
+    """
+
+    _model_lock: RLock = field(
+        init=False, repr=False, compare=False, default_factory=RLock
+    )
+    """
+    Guards every access to ``_mj_model``/``_mj_data`` that either steps the physics or
+    rebuilds the model.
+
+    The physics runs in a background thread (:meth:`step_callback`) while model-mutating
+    callbacks such as :meth:`add_entity` run on the caller thread; both reassign/step
+    the same MuJoCo model and data objects, so they must not overlap. ``pause()`` alone
+    only flips a state flag and does not wait for an in-flight ``mj_step`` to finish, so
+    this lock provides the actual mutual exclusion.
     """
 
     def __post_init__(self, file_path: str = ""):

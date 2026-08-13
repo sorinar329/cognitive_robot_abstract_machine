@@ -26,6 +26,11 @@ from coraplex.exceptions import GraspVerificationFailed
 from coraplex.plans.factories import sequential, execute_single
 from coraplex.querying.predicates import GripperIsFree
 from coraplex.robot_plans.actions.base import ActionDescription
+from coraplex.robot_plans.mixins import (
+    HasGraspDetectionThreshold,
+    PickUpTuningParameters,
+    ReachTuningParameters,
+)
 from coraplex.robot_plans.motions.gripper import (
     MoveGripperMotion,
     MoveToolCenterPointMotion,
@@ -33,7 +38,7 @@ from coraplex.robot_plans.motions.gripper import (
 from coraplex.view_manager import ViewManager
 from semantic_digital_twin.datastructures.definitions import GripperState
 from semantic_digital_twin.reasoning.predicates import allclose
-from semantic_digital_twin.reasoning.robot_predicates import is_body_in_gripper
+from semantic_digital_twin.reasoning.robot_predicates import is_body_gripped
 from semantic_digital_twin.robots.robot_part_mixins import HasMobileBase
 from semantic_digital_twin.spatial_types.spatial_types import Pose
 from semantic_digital_twin.world_description.world_entity import Body
@@ -48,7 +53,7 @@ for it to be considered grasped/held (see
 """
 
 @dataclass
-class ReachAction(ActionDescription):
+class ReachAction(ActionDescription, ReachTuningParameters, HasGraspDetectionThreshold):
     """
     Let the robot reach a specific pose.
     """
@@ -177,7 +182,9 @@ class ReachAction(ActionDescription):
 
 
 @dataclass
-class PickUpAction(ActionDescription):
+class PickUpAction(
+    ActionDescription, PickUpTuningParameters, HasGraspDetectionThreshold
+):
     """
     Let the robot pick up an object.
     """

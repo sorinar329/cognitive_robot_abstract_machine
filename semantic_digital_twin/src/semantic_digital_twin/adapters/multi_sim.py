@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import logging
 import inspect
+import hashlib
 import os
 from typing import Tuple
 
 import time
 import trimesh
+import PIL.ImageFile
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import IntEnum
@@ -39,6 +41,8 @@ from semantic_digital_twin.spatial_types.spatial_types import (
     HomogeneousTransformationMatrix,
     Point3,
     Quaternion,
+    RotationMatrix,
+    Vector3,
 )
 from semantic_digital_twin.spatial_types.math import inverse_frame
 from semantic_digital_twin.world import World
@@ -154,6 +158,23 @@ class MultiSimCamera(SimulatorAdditionalProperty):
     body: Any = None
     """
     The body that the camera is attached to. This can be set to the name of the body or a reference to the body object itself.
+    """
+
+
+@dataclass(eq=False)
+class MultiSimLight(SimulatorAdditionalProperty):
+    """
+    Additional property representing a light in MultiSim.
+    """
+
+    name: str = ""
+    """
+    The name of the light.
+    """
+
+    body: Optional[Body] = None
+    """
+    The body the light is attached to.
     """
 
 
@@ -298,6 +319,8 @@ class KinematicStructureEntityConverter(EntityConverter, ABC):
         """
 
         kinematic_structure_entity_props = EntityConverter._convert(self, entity)
+        # The simulator joint supplies the variable part, so the static frame must
+        # exclude it (see Connection.reference_origin_expression).
         [px, py, pz, qx, qy, qz, qw] = (
             entity.parent_connection.static_origin_as_position_quaternion().evaluate()[
                 0
@@ -443,6 +466,10 @@ class ShapeConverter(EntityConverter, ABC):
                 self.rgba_str: geom_color,
             }
         )
+        if entity.texture is not None:
+            geom_props["texture_file_path"] = entity.texture.file_path
+            geom_props["texture_repeat"] = entity.texture.repeat
+            geom_props["texture_uniform"] = entity.texture.uniform
         return geom_props
 
 
@@ -680,6 +707,29 @@ class CameraConverter(EntityConverter, ABC):
 
 
 @dataclass
+class LightConverter(EntityConverter, ABC):
+    """
+    Converts a Light object to a dictionary of light properties for Multiverse simulator.
+    """
+
+    entity_type: ClassVar[Type[MultiSimLight]] = MultiSimLight
+    """
+    The type of the entity to convert.
+    """
+
+    def _convert(self, entity: MultiSimLight, **kwargs) -> Dict[str, Any]:
+        """
+        Converts a Light object to a dictionary of light properties for Multiverse simulator.
+
+        :param entity: The Light object to convert.
+        :return: A dictionary of light properties, by default containing the parent body's name.
+        """
+        light_props = EntityConverter._convert(self, entity)
+        light_props["body"] = entity.body.name.name
+        return light_props
+
+
+@dataclass
 class MujocoActuator(SimulatorAdditionalProperty):
     """
     Represents a MuJoCo-specific actuator in the world model.
@@ -841,6 +891,138 @@ class MujocoCamera(MultiSimCamera):
     quaternion: List[float] = field(default_factory=lambda: [1, 0, 0, 0])
     """
     Orientation of the camera frame.
+    """
+
+    @staticmethod
+    def _look_at_rotation(
+        camera_position: Point3, target_position: Point3
+    ) -> RotationMatrix:
+        """
+        Computes the world-frame orientation of a camera at ``camera_position`` looking at
+        ``target_position``, following MuJoCo's convention (camera looks down its local -Z
+        axis, +Y is up).
+
+        :param camera_position: The world-frame position of the camera.
+        :param target_position: The world-frame position the camera should look at.
+        :return: The camera's world-frame orientation.
+        """
+        forward = target_position - camera_position
+        forward.scale(1)
+        up_hint = Vector3.Z()
+        if abs(float(forward.dot(up_hint).to_np().item())) > 0.99:
+            up_hint = Vector3.Y()
+
+        z_axis = -forward
+        x_axis = up_hint.cross(z_axis)
+        x_axis.scale(1)
+        return RotationMatrix.from_vectors(x=x_axis, z=z_axis)
+
+    @classmethod
+    def overview_pose(
+        cls,
+        bounds: numpy.ndarray,
+        minimum_distance: float = 1.0,
+        distance_factor: float = 1.5,
+    ) -> HomogeneousTransformationMatrix:
+        """
+        Computes a fixed diagonal viewpoint that frames an axis-aligned bounding box.
+
+        :param bounds: A ``(2, 3)`` array of the scene's ``[minimum, maximum]`` corners.
+        :param minimum_distance: Floor (in meters) for the camera's distance to the box center,
+            so a box that collapses to a point still gets a sensibly framed camera.
+        :param distance_factor: Multiplier applied to the box's bounding diagonal to place the camera.
+        :return: The framing camera's world-frame pose.
+        """
+        minimum = Point3.from_iterable(bounds[0])
+        maximum = Point3.from_iterable(bounds[1])
+        diagonal_vector = maximum - minimum
+        center = minimum + diagonal_vector * 0.5
+        diagonal = float(diagonal_vector.norm().to_np().item())
+        distance = max(diagonal, minimum_distance) * distance_factor
+        direction = Vector3.from_iterable([1.0, -1.0, 1.0])
+        direction.scale(1)
+        position = center + direction * distance
+        rotation = cls._look_at_rotation(position, center)
+        return HomogeneousTransformationMatrix.from_point_rotation_matrix(
+            position, rotation
+        )
+
+
+@dataclass
+class MujocoLight(MultiSimLight):
+    """
+    Additional property representing a MuJoCo light in the world model.
+    For more information, see: https://mujoco.readthedocs.io/en/stable/XMLreference.html#body-light
+    """
+
+    name: str = ""
+    """
+    Name of the light.
+    """
+
+    mode: mujoco.mjtCamLight = mujoco.mjtCamLight.mjCAMLIGHT_FIXED
+    """
+    This attribute specifies how the light position and orientation in world coordinates are computed in forward kinematics.
+    """
+
+    directional: bool = False
+    """
+    Whether the light is directional (parallel rays, e.g. sunlight) or a positional point/spot light.
+    """
+
+    active: bool = True
+    """
+    Whether the light is active.
+    """
+
+    cast_shadow: bool = True
+    """
+    Whether this light casts shadows.
+    """
+
+    position: List[float] = field(default_factory=lambda: [0, 0, 0])
+    """
+    Position of the light frame.
+    """
+
+    direction: List[float] = field(default_factory=lambda: [0, 0, -1])
+    """
+    Direction the light points in, relevant only for directional and spot lights.
+    """
+
+    ambient: List[float] = field(default_factory=lambda: [0, 0, 0])
+    """
+    Ambient color of the light, as ``[r, g, b]``.
+    """
+
+    diffuse: List[float] = field(default_factory=lambda: [0.7, 0.7, 0.7])
+    """
+    Diffuse color of the light, as ``[r, g, b]``.
+    """
+
+    specular: List[float] = field(default_factory=lambda: [0.3, 0.3, 0.3])
+    """
+    Specular color of the light, as ``[r, g, b]``.
+    """
+
+    attenuation: List[float] = field(default_factory=lambda: [1, 0, 0])
+    """
+    Constant, linear, and quadratic attenuation coefficients for a positional light.
+    """
+
+    cutoff: float = 45.0
+    """
+    Cutoff angle, in degrees, for a spot light.
+    """
+
+    exponent: float = 10.0
+    """
+    Spotlight attenuation exponent for a spot light.
+    """
+
+    bulb_radius: float = 0.02
+    """
+    Radius of the light's bulb, used for soft shadows.
     """
 
 
@@ -1192,6 +1374,32 @@ class MujocoMeshConverter(MujocoGeomConverter, MeshConverter):
             shape_props["texture_file_path"] = texture_file_path
         return shape_props
 
+    @staticmethod
+    def _resolve_texture_file_path(material: Any, mesh_directory: str) -> Optional[str]:
+        """
+        Resolves the on-disk file backing a mesh's texture.
+
+        trimesh reports a texture path relative to the mesh file that references it, so
+        every candidate is resolved against that mesh's directory rather than the process
+        working directory. An already absolute candidate passes through unchanged.
+
+        :param material: The trimesh material (``TextureVisuals.material``) to resolve.
+        :param mesh_directory: Directory of the mesh file the material came from.
+        :return: The texture's file path, or ``None`` if the texture is a programmatically
+            generated image (for example a flat "glass" material) with no backing file.
+        """
+        image = material.image
+        candidates = [material.name, image.info.get("file_path", "")]
+        if isinstance(image, PIL.ImageFile.ImageFile):
+            candidates.append(image.filename)
+        for candidate in candidates:
+            if not isinstance(candidate, str) or not candidate:
+                continue
+            resolved = os.path.join(mesh_directory, candidate)
+            if os.path.isfile(resolved):
+                return resolved
+        return None
+
 
 @dataclass
 class MujocoJointConverter(ConnectionConverter, ABC):
@@ -1310,6 +1518,34 @@ class MujocoCameraConverter(CameraConverter, ABC):
         camera_props["pos"] = entity.position
         camera_props["quat"] = entity.quaternion
         return camera_props
+
+
+@dataclass
+class MujocoLightConverter(LightConverter, ABC):
+
+    entity_type: ClassVar[Type[MujocoLight]] = MujocoLight
+
+    def _post_convert(
+        self, entity: MujocoLight, light_props: Dict[str, Any], **kwargs
+    ) -> Dict[str, Any]:
+        light_props["mode"] = entity.mode
+        light_props["type"] = (
+            mujoco.mjtLightType.mjLIGHT_DIRECTIONAL
+            if entity.directional
+            else mujoco.mjtLightType.mjLIGHT_SPOT
+        )
+        light_props["active"] = entity.active
+        light_props["castshadow"] = entity.cast_shadow
+        light_props["pos"] = entity.position
+        light_props["dir"] = entity.direction
+        light_props["ambient"] = entity.ambient
+        light_props["diffuse"] = entity.diffuse
+        light_props["specular"] = entity.specular
+        light_props["attenuation"] = entity.attenuation
+        light_props["cutoff"] = entity.cutoff
+        light_props["exponent"] = entity.exponent
+        light_props["bulbradius"] = entity.bulb_radius
+        return light_props
 
 
 @dataclass
@@ -1504,6 +1740,15 @@ class MultiSimBuilder(ABC):
         Builds a camera in the simulator.
 
         :param camera: The camera to build.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def _build_light(self, light: MultiSimLight):
+        """
+        Builds a light in the simulator.
+
+        :param light: The light to build.
         """
         raise NotImplementedError
 
@@ -1840,6 +2085,30 @@ class MujocoBuilder(MultiSimBuilder):
             raise MujocoEntityNotFoundError(
                 entity_name=camera_name,
                 entity_type=mujoco.mjtObj.mjOBJ_CAMERA,
+                action="add",
+            )
+
+    def _build_light(self, light: MultiSimLight):
+        """
+        Builds a light in the Mujoco spec, attached to its parent body.
+
+        :param light: The light to build.
+        """
+        light_name = light.name
+        light_props = MujocoLightConverter.convert(light)
+        body_name = light_props.pop("body")
+        body_spec = self._find_entity(
+            entity_type=mujoco.mjtObj.mjOBJ_BODY, entity_name=body_name
+        )
+        if body_spec is None:
+            raise MujocoEntityNotFoundError(
+                entity_name=body_name, entity_type=mujoco.mjtObj.mjOBJ_BODY
+            )
+        light_spec = body_spec.add_light(**light_props)
+        if light_spec is None:
+            raise MujocoEntityNotFoundError(
+                entity_name=light_name,
+                entity_type=mujoco.mjtObj.mjOBJ_LIGHT,
                 action="add",
             )
 
@@ -2536,6 +2805,14 @@ class MujocoSynchronizer(MultiSimSynchronizer):
     entity_converter: Type[EntityConverter] = field(default=MujocoConverter)
     entity_spawner: Type[EntitySpawner] = field(default=MujocoEntitySpawner)
 
+    UNTHROTTLED_SYNC_RATE_HZ: ClassVar[float] = float("inf")
+    """
+    Assign this to :attr:`sync_rate_hz` to sync on every single call, i.e. to not throttle the
+    *sim → world* direction at all: since ``1 / sync_rate_hz`` is then exactly ``0.0``, the
+    "less than 1 / sync_rate_hz seconds elapsed" skip condition in :meth:`_sim_to_world` can
+    never trigger. Distinct from ``sync_rate_hz <= 0``, which disables that direction entirely.
+    """
+
     sync_rate_hz: float = 30
     """
     Throttle (in wall-clock Hz) for the *sim → world* direction: how often
@@ -2549,7 +2826,8 @@ class MujocoSynchronizer(MultiSimSynchronizer):
     produced by the simulator (gravity, contacts, actuator dynamics, etc.).
     The opposite *world → sim* direction (driven by ``_on_state_change``) is
     independent of this setting and continues to push ``world.state`` changes
-    into MuJoCo regardless.
+    into MuJoCo regardless. Set to :attr:`UNTHROTTLED_SYNC_RATE_HZ` for the
+    opposite extreme: sync on every call, with no throttling at all.
     """
 
     physically_simulated_dofs: Set[DegreeOfFreedom] = field(

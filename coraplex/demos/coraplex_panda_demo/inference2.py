@@ -241,7 +241,7 @@ def print_positions():
     )
 
 
-NUMBER_OF_ITERATIONS = int(os.environ.get("INFERENCE2_NUMBER_OF_ITERATIONS", "20"))
+NUMBER_OF_ITERATIONS = int(os.environ.get("INFERENCE2_NUMBER_OF_ITERATIONS", "1"))
 """
 Number of times the full pickup/stack sequence is repeated.
 
