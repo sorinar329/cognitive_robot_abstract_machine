@@ -13,6 +13,7 @@ from segmind.datastructures.object_tracker import (
 )
 from semantic_digital_twin.semantic_annotations.semantic_annotations import Aperture
 from semantic_digital_twin.spatial_types.spatial_types import Pose
+from semantic_digital_twin.spatial_types.numeric import NumericPose
 from semantic_digital_twin.world_description.geometry import BoundingBox
 from semantic_digital_twin.world_description.world_entity import Body
 
@@ -213,9 +214,9 @@ class AbstractContactEvent(RelationEvent, ABC):
     Bounding box of the object.
     """
 
-    pose: Pose = field(init=False)
+    pose: NumericPose = field(init=False)
     """
-    Pose of the object.
+    Pose of the object, read out into numbers so a detector thread can record it.
     """
 
     with_object_bounding_box: BoundingBox = field(init=False)
@@ -223,22 +224,22 @@ class AbstractContactEvent(RelationEvent, ABC):
     Bounding box of the second object in contact.
     """
 
-    with_object_pose: Pose = field(init=False)
+    with_object_pose: NumericPose = field(init=False)
     """
-    Pose of the second object in contact.
+    Pose of the second object in contact, read out into numbers.
     """
 
     def __post_init__(self):
         self.bounding_box = BoundingBox.from_mesh(
-            self.tracked_object.collision.combined_mesh,
-            origin=self.tracked_object.global_pose.to_homogeneous_matrix(),
+            self.tracked_object.combined_mesh,
+            origin=self.tracked_object.numeric_global_transform,
         )
-        self.pose = self.tracked_object.global_pose
+        self.pose = self.tracked_object.numeric_global_pose
         self.with_object_bounding_box = BoundingBox.from_mesh(
-            self.with_object.collision.combined_mesh,
-            origin=self.with_object.global_pose.to_homogeneous_matrix(),
+            self.with_object.combined_mesh,
+            origin=self.with_object.numeric_global_transform,
         )
-        self.with_object_pose = self.with_object.global_pose
+        self.with_object_pose = self.with_object.numeric_global_pose
 
 
 @dataclass(eq=False, init=False)
