@@ -35,6 +35,7 @@ from semantic_digital_twin.exceptions import (
     SpatialTypesError,
     SpatialTypeNotJsonSerializable,
 )
+from semantic_digital_twin.spatial_types.numeric_pose import NumericPose
 
 if TYPE_CHECKING:
     from semantic_digital_twin.world_description.world_entity import (
@@ -483,6 +484,15 @@ class HomogeneousTransformationMatrix(
         result = Pose.from_casadi_sx(casadi_sx=self.casadi_sx)
         result.reference_frame = self.reference_frame
         return result
+
+    def to_position_quaternion_list(self) -> List[float]:
+        """
+        :return: This transform's position and orientation, as
+            ``[x, y, z, qx, qy, qz, qw]``.
+        """
+        return NumericPose.from_transformation_matrix(
+            self.to_np()
+        ).to_position_quaternion_list()
 
     def __deepcopy__(self, memo) -> HomogeneousTransformationMatrix:
         """
@@ -2068,6 +2078,12 @@ class Pose(sm.SymbolicMathType, SpatialType, SubclassJSONSerializer):
 
     def to_quaternion(self) -> Quaternion:
         return self.to_rotation_matrix().to_quaternion()
+
+    def to_position_quaternion_list(self) -> List[float]:
+        """
+        :return: This pose's position and orientation, as ``[x, y, z, qx, qy, qz, qw]``.
+        """
+        return NumericPose.of_pose(self).to_position_quaternion_list()
 
     def to_homogeneous_matrix(self) -> HomogeneousTransformationMatrix:
         return HomogeneousTransformationMatrix(
