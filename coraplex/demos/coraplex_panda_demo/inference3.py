@@ -1,29 +1,20 @@
 """
-Second-generation copy of ``inference.py``, closed-loop stacking with JPT-guided sampling
-and causal failure diagnosis against the models ``training/train_jpt2.py`` fits.
+Third-generation copy of ``inference2.py``, closed-loop stacking with JPT-guided
+sampling and causal failure diagnosis against the models ``training/train_jpt3.py``
+fits from ``demo3.py``'s own separate ``coraplex_panda_demo_v3`` collection run, kept
+apart from the ``coraplex_panda_demo_v2`` archive ``inference2.py`` diagnoses against.
 
-Structured exactly like ``inference.py`` -- same world, simulation, segmind setup and
-diagnose-and-correct loop -- with two differences:
-
-- The arm parks between the pickup and the place on every attempt, including every
-  corrective retry, instead of crossing directly from the pickup pose to the place pose.
-  ``inference.py`` itself notes why that park matters (its own comment on
-  ``build_stack_plan``: once the stack has some height, the direct crossing can pass
-  right through where the already-stacked cubes are) but currently has it disabled; a
-  corrective retry repeats that same crossing several times in a row, which is exactly
-  where a collision with an already-stacked cube is most likely. ``demo3.py`` collects
-  its training data with this same park in place, so the diagnoser here is trained on
-  attempts shaped like the ones it corrects.
-- Diagnosis is done against ``causal_diagnosis_v2``'s trees, whose causal circuit uses
-  ``object_final_z`` -- the height the picked cube actually settled at -- as the effect
-  variable instead of ``step_index``. See ``causal_diagnosis_v2.py``'s own docstring for
-  why that makes ``object_friction`` a candidate cause on the same footing as every other
-  tunable parameter, with nothing spent on a structural role that carries no information
-  about success.
+Structured exactly like ``inference2.py`` -- same world, simulation, segmind, cramera
+live-viewer setup and diagnose-and-correct loop -- with one difference: diagnosis is
+done against ``causal_diagnosis_v3``'s trees instead of ``causal_diagnosis_v2``'s. See
+``causal_diagnosis_v2.py``'s own docstring for why ``object_final_z`` -- the height the
+picked cube actually settled at -- plays the causal circuit's effect role instead of
+``step_index``, and why that makes ``object_friction`` a candidate cause on the same
+footing as every other tunable parameter.
 
 Run it with the interpreter whose packages point at this checkout, for example::
 
-    /home/sorin/.virtualenvs/cram2-env/bin/python inference2.py
+    /home/sorin/.virtualenvs/cram2-env/bin/python inference3.py
 """
 
 import dataclasses
@@ -60,7 +51,7 @@ from coraplex.robot_plans.actions.core.pick_up import PickUpAction
 from coraplex.robot_plans.actions.core.placing import PlaceAction
 from coraplex.robot_plans.actions.core.robot_body import ParkArmsAction
 
-from causal_diagnosis_v2 import (
+from causal_diagnosis_v3 import (
     ActionCausalDiagnoser,
     NoRecommendationAvailable,
     ParameterCorrection,
@@ -460,7 +451,7 @@ def apply_correction(
     fixes a failure with more than one bad parameter: retrying with only the single
     most-anomalous value corrected leaves the other equally-bad ones untouched, so the
     retry keeps failing (and burns through
-    :data:`~inference2.MAX_CORRECTION_ATTEMPTS_PER_CUBE` one parameter at a time instead
+    :data:`~inference3.MAX_CORRECTION_ATTEMPTS_PER_CUBE` one parameter at a time instead
     of fixing the actual combination) -- see :meth:`ActionCausalDiagnoser.diagnose`'s own
     docstring for how ``corrections`` is decided.
 
@@ -495,7 +486,7 @@ def apply_correction(
 
 # %% support verification via segmind
 
-INFERENCE_REPORT_PATH = Path(__file__).parent / "inference_report_v2.md"
+INFERENCE_REPORT_PATH = Path(__file__).parent / "inference_report_v3.md"
 """
 Markdown file the per-iteration diagnosis-and-correction findings are appended to.
 

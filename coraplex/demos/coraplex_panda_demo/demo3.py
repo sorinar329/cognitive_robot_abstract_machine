@@ -27,6 +27,11 @@ Kept as a separate file and a separate database rather than modifying ``demo2.py
 place: ``coraplex_panda_demo`` (``demo2.py``'s own default database) is archived source
 data ``build_merged_dataset.py`` still reads from, and overwriting its schema or its rows
 would make that archive unreproducible.
+
+:data:`DATABASE_URI`'s own default has since moved on to ``coraplex_panda_demo_v3``, a
+fresh collection round kept separate from ``coraplex_panda_demo_v2`` for the same reason
+this file is kept separate from ``demo2.py``: the earlier database is itself archived
+source data ``build_merged_dataset_v2.py`` still reads from.
 """
 
 import datetime
@@ -132,7 +137,7 @@ thread = threading.Thread(target=executor.spin, daemon=True, name="rclpy-executo
 thread.start()
 
 world = MJCFParser(
-    "/home/sorin/dev/manipulation_experiments/resources/generated/stacking_scene.xml"
+    "/home/sony/workspace/manipulation_experiments/resources/generated/stacking_scene.xml"
 ).parse()
 Panda.from_world(world)
 publisher = VizMarkerPublisher(_world=world, node=node).with_tf_publisher()
@@ -307,20 +312,26 @@ the two works as a divergence threshold.
 """
 
 DATABASE_URI: str = os.environ.get(
-    "CORAPLEX_PANDA_DEMO_V2_DATABASE_URI",
-    "postgresql+psycopg://semantic_digital_twin:naren@localhost:5432/coraplex_panda_demo_v2",
+    "CORAPLEX_PANDA_DEMO_V3_DATABASE_URI",
+    "postgresql+psycopg://semantic_digital_twin:naren@localhost:5432/coraplex_panda_demo_v3",
 )
 """
 Connection string for the database that stores every stacking attempt's plan and final
-cube heights for this second-generation collection run.
+cube heights.
 
-A database of its own (``coraplex_panda_demo_v2``, not ``demo2.py``'s
-``coraplex_panda_demo``): the latter is archived source data ``build_merged_dataset.py``
-still reads from, and this run's schema differs from it anyway (see
-``stacking_attempt_record_v2.py``). Reuses the ``semantic_digital_twin`` role already
-provisioned on this host for the other demos/experiments in this workspace; only the
-database itself is dedicated to this run. Uses the ``psycopg`` (v3) driver explicitly
-since only that, not ``psycopg2``, is installed in this environment.
+Defaults to ``coraplex_panda_demo_v3``, this collection round's own database -- not
+``coraplex_panda_demo_v2``, which an earlier round of running this same file collected
+and which ``build_merged_dataset_v2.py`` reads as archived source data, nor ``demo2.py``'s
+``coraplex_panda_demo``. Every one of these is a schema of its own (see
+``stacking_attempt_record_v2.py``), and this file's own default has moved on before,
+so overriding it here rather than editing the default in place is what keeps a future
+collection round's data from landing in this one's database. Override with the
+``CORAPLEX_PANDA_DEMO_V3_DATABASE_URI`` environment variable to collect into some other
+database instead -- for example, to resume writing into ``coraplex_panda_demo_v2``.
+Reuses the ``semantic_digital_twin`` role already provisioned on this host for the other
+demos/experiments in this workspace; only the database itself is dedicated to this run.
+Uses the ``psycopg`` (v3) driver explicitly since only that, not ``psycopg2``, is
+installed in this environment.
 """
 
 
@@ -336,10 +347,11 @@ def _ensure_database_exists(database_uri: str) -> None:
     Create the database named in ``database_uri`` on the server if it does not exist yet.
 
     ``krrood.ormatic.utils.create_engine`` (used below) only connects to an already
-    existing database; unlike ``demo2.py``'s own ``coraplex_panda_demo``, this run's
-    ``coraplex_panda_demo_v2`` is new and has never been created on this server. An
-    existing database is left untouched rather than dropped and recreated, since this
-    run's data is meant to accumulate across repeated invocations of this file.
+    existing database; unlike ``demo2.py``'s own ``coraplex_panda_demo`` or this file's
+    earlier ``coraplex_panda_demo_v2``, a fresh ``DATABASE_URI`` default is new and has
+    never been created on this server. An existing database is left untouched rather
+    than dropped and recreated, since this run's data is meant to accumulate across
+    repeated invocations of this file.
     """
     url = make_url(database_uri)
     database_name = url.database
@@ -657,9 +669,14 @@ def _build_stack_plan(object_body, target_body, picking_arm) -> PlanNode:
 
 # %% support verification via segmind
 
-SUPPORT_REPORT_PATH = Path(__file__).parent / "support_report_v2.md"
+SUPPORT_REPORT_PATH = Path(__file__).parent / "support_report_v3.md"
 """
 Markdown file the per-iteration support findings are appended to.
+
+Named after :data:`DATABASE_URI`'s own default, ``coraplex_panda_demo_v3``, not the
+earlier ``support_report_v2.md`` an earlier round of running this same file (into
+``coraplex_panda_demo_v2``) wrote to -- a fresh collection round gets a fresh report,
+the same way it gets a fresh database.
 """
 
 segmind_context = SegmindContext()
@@ -750,7 +767,7 @@ def append_support_report(iteration_index: int, simulation_diverged: bool) -> No
     The heading carries :data:`RUN_STARTED_AT` alongside ``iteration_index``: unlike the
     v1 demos, where each archived database held exactly one continuous run, this file's
     database can accumulate several separate runs, whose iteration numbering each
-    restarts at 1 -- without the run timestamp, ``build_merged_dataset_v2.py`` cannot
+    restarts at 1 -- without the run timestamp, ``build_merged_dataset_v3.py`` cannot
     tell two different runs' "iteration 6" apart and would attribute one run's outcome
     to the other's rows.
     """
