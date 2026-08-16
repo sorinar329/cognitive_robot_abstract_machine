@@ -12,9 +12,16 @@ picked cube actually settled at -- plays the causal circuit's effect role instea
 ``step_index``, and why that makes ``object_friction`` a candidate cause on the same
 footing as every other tunable parameter.
 
+Samples each cube's first attempt from a range wider than -- and deliberately more
+failure-prone than -- the one ``demo3.py`` and ``inference3a.py`` sample their own
+attempts from (see :func:`sample_actions` and :data:`WIDE_PICKUP_PARAMETER_PRIORS` /
+:data:`WIDE_PLACE_PARAMETER_PRIORS`). ``inference3a.py`` is otherwise this same file,
+differing only in sampling that first attempt from ``demo3.py``'s own narrower range
+instead.
+
 Run it with the interpreter whose packages point at this checkout, for example::
 
-    /home/sorin/.virtualenvs/cram2-env/bin/python inference3.py
+    /home/sorin/.virtualenvs/cram2-env/bin/python inference3b.py
 """
 
 import dataclasses
@@ -251,8 +258,9 @@ NUMBER_OF_ITERATIONS = int(os.environ.get("INFERENCE2_NUMBER_OF_ITERATIONS", "20
 Number of times the full pickup/stack sequence is repeated.
 
 Much smaller than ``demo3.py``'s: this demo illustrates the diagnose-and-correct loop
-rather than collecting a large training dataset, and wide priors make every iteration
-slower (a failed cube can trigger several correction attempts before moving on).
+rather than collecting a large training dataset, and the wide priors make every
+iteration slower (a failed cube can trigger several correction attempts before moving
+on).
 """
 
 MAX_CORRECTION_ATTEMPTS_PER_CUBE = 3
@@ -456,7 +464,7 @@ def apply_correction(
     fixes a failure with more than one bad parameter: retrying with only the single
     most-anomalous value corrected leaves the other equally-bad ones untouched, so the
     retry keeps failing (and burns through
-    :data:`~inference3.MAX_CORRECTION_ATTEMPTS_PER_CUBE` one parameter at a time instead
+    :data:`~inference3b.MAX_CORRECTION_ATTEMPTS_PER_CUBE` one parameter at a time instead
     of fixing the actual combination) -- see :meth:`ActionCausalDiagnoser.diagnose`'s own
     docstring for how ``corrections`` is decided.
 
@@ -896,6 +904,13 @@ def sample_actions(
     """
     Sample a fresh pickup/place pair from the wide priors, for stacking ``object_body``
     centered above ``target_body``, one cube height higher.
+
+    Deliberately wider than :func:`~pickup_place_parameterization.sample_pickup_instance`
+    and :func:`~pickup_place_parameterization.sample_place_instance`'s own default priors
+    -- and than ``demo3.py``'s and ``inference3a.py``'s own first-attempt range -- via
+    :data:`WIDE_PICKUP_PARAMETER_PRIORS` and :data:`WIDE_PLACE_PARAMETER_PRIORS`, so that
+    enough of the wider range's own failures land in every run for the causal correction
+    loop to have something to diagnose.
     """
     place_location = _current_place_location(target_body)
     grasp_description = pickup_grasp_description(object_body, target_body)
