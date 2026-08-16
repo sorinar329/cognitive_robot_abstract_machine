@@ -137,7 +137,7 @@ thread = threading.Thread(target=executor.spin, daemon=True, name="rclpy-executo
 thread.start()
 
 world = MJCFParser(
-    "/home/sony/workspace/manipulation_experiments/resources/generated/stacking_scene.xml"
+    str(Path(__file__).parent / "stacking_scene.xml")
 ).parse()
 Panda.from_world(world)
 publisher = VizMarkerPublisher(_world=world, node=node).with_tf_publisher()
@@ -227,7 +227,7 @@ def print_positions():
 # casadi::SXElem::is_constant() on an unmapped address. :func:`print_positions` is
 # kept for the one call on the main thread once the run is over.
 
-NUMBER_OF_ITERATIONS = 400
+NUMBER_OF_ITERATIONS = 200
 """
 Number of times the full pickup/stack sequence is repeated, so the demo can be left
 running unattended instead of re-started by hand for every trial.

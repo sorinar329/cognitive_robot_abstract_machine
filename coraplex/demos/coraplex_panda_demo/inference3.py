@@ -261,19 +261,24 @@ How many times a single cube is retried with a causally corrected sample before 
 is abandoned as a hard failure.
 """
 
-ITERATION_TIME_LIMIT = 120.0
+ITERATION_TIME_LIMIT = 180.0
 """
 Wall-clock budget (in seconds) for one iteration, checked between cubes.
 
-Twice ``demo3.py``'s: a cube here can go through several correction attempts, each
-costing roughly as long as a normal attempt.
+Raised from 120s: 120s was regularly running out before all four cubes' causal
+diagnosis-and-correction runs finished, and a restack triggered by a knocked-over
+stack (:func:`restack_disturbed_cubes`) eats into this same budget on top of the
+cubes' own attempts, so a tight limit starved both alike.
 """
 
-CUBE_PICKUP_TIME_LIMIT = 40.0
+CUBE_PICKUP_TIME_LIMIT = 60.0
 """
 Wall-clock budget (in seconds) for one cube's *entire* stacking step -- its initial
 attempt, every correction retry, and any re-stack of an earlier cube it disturbs along
 the way -- checked independently of, and tighter than, :data:`ITERATION_TIME_LIMIT`.
+
+Raised from 40s in step with :data:`ITERATION_TIME_LIMIT`, keeping the same ~1:3 ratio
+between them, for the same reason.
 
 A cube that has rolled out of comfortable reach fails its reach the same way on every
 attempt, and no diagnosed correction fixes "the cube is somewhere else"; left bounded

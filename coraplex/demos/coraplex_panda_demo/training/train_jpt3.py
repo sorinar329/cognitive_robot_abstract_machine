@@ -5,6 +5,12 @@ collection run, not the ``coraplex_panda_demo_v2`` archive -- and writing the fi
 trees under :data:`MODEL_DIRECTORY` so they do not overwrite ``train_jpt2.py``'s own
 models.
 
+Alongside each ``<action>_jpt.json`` tree, also writes the bare
+``<action>_circuit.json`` -- ``tree.probabilistic_circuit`` on its own, with no tree
+metadata -- since that is what ``causal_diagnosis_v3.py`` extracts from the tree at
+load time anyway, and what ``export_posterior_plots_v3.py`` and the cramera live
+viewer need to query the model directly.
+
 One tree is learned per action -- ``PickUpAction``'s and ``PlaceAction``'s sampled
 fields are unrelated variables from two different action classes, so a single tree
 spanning both would not describe either action's own distribution (see
@@ -317,6 +323,11 @@ def train_action(action: str, csv_name: str) -> None:
     with model_path.open("w") as model_file:
         json.dump(to_json(tree), model_file)
     print(f"[{action}] {model_path.name}: fit on {len(data)} attempts, tree saved")
+
+    circuit_path = MODEL_DIRECTORY / f"{action}_circuit.json"
+    with circuit_path.open("w") as circuit_file:
+        json.dump(to_json(circuit), circuit_file)
+    print(f"[{action}] {circuit_path.name}: bare circuit saved")
 
 
 def main() -> None:

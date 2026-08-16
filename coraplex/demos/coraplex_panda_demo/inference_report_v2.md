@@ -555,3 +555,16 @@
 
 - first attempt: success
 - final result: SUCCESS after 0 correction attempt(s)
+
+## Iteration 1
+
+`full_stack_intact()` (geometry, ground truth): **False**
+
+`segmind_approved()` (segmind's own reading): **False**
+
+
+### cube1 onto cube0
+
+- first attempt: failure
+- correction 1 (pickup): primary cause, judged against cube0_final_z: grasp_linear_velocity=0.2507 (support 0.0000) -> 0.0937 (support 0.0457)
+- final result: HARD FAILURE after 1 correction attempt(s)
