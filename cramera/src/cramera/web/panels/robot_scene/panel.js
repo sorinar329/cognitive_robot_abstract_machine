@@ -221,8 +221,14 @@ Panels.define('robot-scene', function (root, bus) {
       needsRender = true;
     }
     function box(scale) {
+      // Live objects publish their true kinematic center (see
+      // cramera.body_geometry.rounded_pose / Box's "pivot point is at the
+      // center" contract) — the placeholder box must stay centered on that
+      // same origin, not bottom-anchored, or it renders floating half its
+      // height above where the body actually is (most visible mid-grasp,
+      // where it then reads as offset from the gripper's fingers).
       const s = scale || [0.06, 0.06, 0.1];
-      place(new THREE.Mesh(new THREE.BoxGeometry(s[0], s[1], s[2]).translate(0, 0, s[2] / 2), mat));
+      place(new THREE.Mesh(new THREE.BoxGeometry(s[0], s[1], s[2]), mat));
     }
     if (spec.box) { box(spec.box); return; }
     const fmt = (spec.format || (spec.meshUrl || '').split('?')[0].split('.').pop() || '').toLowerCase();
@@ -483,16 +489,30 @@ Panels.define('robot-scene', function (root, bus) {
     for (let i = 0; i < models.length; i++) if (models[i].prefix === prefix) return models[i];
     return null;
   }
+  // Resolve a frame key ("joint1", "/finger_joint1", "left/joint1", ...) to the
+  // {model, joint} it names. A frame key is only ever prefix-split for a model
+  // whose own (non-empty) prefix actually matches it — MJCF-sourced joint names
+  // can themselves start with "/" (e.g. the panda gripper's "/finger_joint1"),
+  // which used to be misread as an empty model prefix plus a de-slashed joint
+  // name that no loaded URDF joint has, silently dropping every update to it.
+  function resolveJoint(key) {
+    for (let i = 0; i < models.length; i++) {
+      const m = models[i];
+      if (m.prefix && key.indexOf(m.prefix + '/') === 0) {
+        return { model: m, joint: m.obj.joints[key.slice(m.prefix.length + 1)] };
+      }
+    }
+    const bare = modelByPrefix('');
+    return bare ? { model: bare, joint: bare.obj.joints[key] } : null;
+  }
 
   function applyFrame(f) {
     if (!traj) return;
     const F = traj.frames, i0 = Math.floor(f), i1 = Math.min(i0 + 1, F.length - 1), t = f - i0;
     const f0 = F[i0], f1 = F[i1];
     for (const k in f0) {
-      const cut = k.indexOf('/');
-      const m = modelByPrefix(cut < 0 ? '' : k.slice(0, cut));
-      if (!m) continue;
-      const j = m.obj.joints[cut < 0 ? k : k.slice(cut + 1)];
+      const resolved = resolveJoint(k);
+      const j = resolved && resolved.joint;
       if (j) j.setJointValue(f0[k] + ((f1[k] !== undefined ? f1[k] : f0[k]) - f0[k]) * t);
     }
     if (robotModel && traj.base && traj.base[i0]) {
@@ -943,10 +963,8 @@ Panels.define('robot-scene', function (root, bus) {
   function applyLive(st) {
     if (!st || !st.frames) return;
     for (const k in st.frames) {
-      const cut = k.indexOf('/');
-      const m = modelByPrefix(cut < 0 ? '' : k.slice(0, cut));
-      if (!m) continue;
-      const j = m.obj.joints[cut < 0 ? k : k.slice(cut + 1)];
+      const resolved = resolveJoint(k);
+      const j = resolved && resolved.joint;
       if (j) j.setJointValue(st.frames[k]);
     }
     if (robotModel && st.base) setPose(robotModel.obj, st.base, st.base, 0);
