@@ -375,7 +375,7 @@ WIDE_PLACE_PARAMETER_PRIORS: dict[str, ParameterPrior] = {
     ),
     # Default high=0.14; 0.08 was already noted to scatter the stack, so this
     # reaches well past that.
-    "placing_linear_velocity": ParameterPrior(mean=0.12, std=0.06, low=0.01, high=0.25),
+    "placing_linear_velocity": ParameterPrior(mean=0.075, std=0.03, low=0.015, high=0.16),
     "release_opening_velocity": ParameterPrior(
         mean=0.15, std=0.07, low=0.015, high=0.28
     ),

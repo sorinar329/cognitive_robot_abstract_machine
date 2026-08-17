@@ -227,7 +227,7 @@ def print_positions():
 # casadi::SXElem::is_constant() on an unmapped address. :func:`print_positions` is
 # kept for the one call on the main thread once the run is over.
 
-NUMBER_OF_ITERATIONS = 200
+NUMBER_OF_ITERATIONS = 400
 """
 Number of times the full pickup/stack sequence is repeated, so the demo can be left
 running unattended instead of re-started by hand for every trial.

@@ -390,17 +390,43 @@ class ActionCausalDiagnoser:
         for variable, result in diagnosis.all_variable_results.items():
             if variable == diagnosis.primary_cause_variable:
                 continue
-            if result["interventional_probability"] > 0 or result["recommended_region"] is None:
+            if (
+                result["interventional_probability"] > 0
+                or result["recommended_region"] is None
+            ):
                 continue
             corrections.append(
                 ParameterCorrection(
                     variable_name=variable.name,
                     observed_value=result["actual_value"],
                     observed_support_probability=result["interventional_probability"],
-                    corrected_value=_region_midpoint(result["recommended_region"], variable),
+                    corrected_value=_region_midpoint(
+                        result["recommended_region"], variable
+                    ),
                 )
             )
 
         return RootCauseDiagnosis(
             effect_variable_name=effect_variable.name, corrections=corrections
         )
+
+    def sample_cause_values(self) -> dict[str, float]:
+        """
+        Draw one sample of every candidate-cause parameter from the trained tree's own
+        distribution, with every effect variable marginalized out.
+
+        The tree is fit on successful attempts only (``training/train_jpt3.py``), so a
+        value drawn this way is one the tree itself considers typical of a successful
+        attempt -- unlike :class:`~pickup_place_parameterization.ParameterPrior`, which
+        is a hand-specified Gaussian guess at the same thing.
+
+        :return: One sampled value per name in ``self._config.cause_names``.
+        """
+        marginal_circuit = self._causal_circuit.probabilistic_circuit.marginal(
+            self._causal_circuit.causal_variables
+        )
+        sample = marginal_circuit.sample(1)[0]
+        return {
+            variable.name: float(value)
+            for variable, value in zip(marginal_circuit.variables, sample)
+        }
