@@ -154,6 +154,27 @@ def test_pickup(_simple_apartment_setup):
     assert len(events_of(segmind_context, PickUpEvent)) == 1
     milk.parent_connection.origin = HomogeneousTransformationMatrix.from_xyz_rpy(-1.7, 0, 1.07, yaw=np.pi, reference_frame=milk.parent_connection.parent)
 
+def test_pick_up_event_records_the_object_it_was_lifted_from(_simple_apartment_setup):
+    segmind_executor, segmind_context, milk, box1, box2 = _build_executor(_simple_apartment_setup)
+    statechart = SegmindStatechart().build_statechart([PickUpDetector(), SupportDetector(), TranslationDetector(), LossOfSupportDetector()])
+    milk.parent_connection.origin = HomogeneousTransformationMatrix.from_xyz_rpy(
+        x=box2.global_pose.x, y=box2.global_pose.y, z=box2.global_pose.z + 0.56, reference_frame=milk.parent_connection.parent)
+
+    segmind_executor.compile(statechart)
+    segmind_executor.tick()
+
+    for i in range(5):
+        milk.parent_connection.origin = HomogeneousTransformationMatrix.from_xyz_rpy(
+            x=box2.global_pose.x,
+            y=box2.global_pose.y,
+            z=box2.global_pose.z + 0.56 + i * 0.1, reference_frame=milk.parent_connection.parent)
+        segmind_executor.tick()
+
+    [pick_up] = events_of(segmind_context, PickUpEvent)
+    [loss_of_support] = events_of(segmind_context, LossOfSupportEvent)
+    assert pick_up.with_object is loss_of_support.with_object
+    milk.parent_connection.origin = HomogeneousTransformationMatrix.from_xyz_rpy(-1.7, 0, 1.07, yaw=np.pi, reference_frame=milk.parent_connection.parent)
+
 def test_placing(_simple_apartment_setup):
     segmind_executor, segmind_context, milk, box1, box2 = _build_executor(_simple_apartment_setup)
     statechart = SegmindStatechart().build_statechart(

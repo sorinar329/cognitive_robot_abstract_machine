@@ -5,60 +5,83 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from functools import cached_property
 
-from geometry_msgs.msg import PoseStamped
-from typing_extensions import Optional, List
+from typing_extensions import List
 
-from segmind.datastructures.object_tracker import ObjectEventTracker, ObjectTrackerFactory
+from segmind.datastructures.object_tracker import (
+    ObjectEventTracker,
+    ObjectTrackerFactory,
+)
 from semantic_digital_twin.semantic_annotations.semantic_annotations import Aperture
 from semantic_digital_twin.spatial_types.spatial_types import Pose
 from semantic_digital_twin.world_description.geometry import BoundingBox
 from semantic_digital_twin.world_description.world_entity import Body
 
+# %% identity of a detected event
 
-@dataclass
+
+@dataclass(eq=False)
 class DetectionEvent(ABC):
+    """
+    An occurrence detected in an episode.
+
+    An event is identified by its type, the bodies taking part in it and the time it
+    occurred at, so subclasses declare their :attr:`participants` and inherit the rest.
+    """
+
     timestamp: datetime = field(default_factory=datetime.now)
     """
     The time at which the event occurred, defaults to current time.
     """
 
+    @property
     @abstractmethod
-    def __eq__(self, other):
-        pass
+    def participants(self) -> List[Body]:
+        """
+        :return: the bodies taking part in this event.
+        """
 
-    @abstractmethod
-    def __hash__(self):
-        pass
+    def update_object_trackers_with_event(self, factory: ObjectTrackerFactory) -> None:
+        """
+        Register this event with the tracker of every participant.
 
-    @abstractmethod
-    def __str__(self):
-        pass
+        :param factory: factory used to look up per-object trackers.
+        """
+        for participant in self.participants:
+            factory.get_tracker(participant).add_event(self)
 
-    def __repr__(self):
+    def __str__(self) -> str:
+        names = " - ".join(str(participant.name) for participant in self.participants)
+        return f"{type(self).__name__}: {names} - {self.timestamp}"
+
+    def __repr__(self) -> str:
         return self.__str__()
 
+    def __eq__(self, other: object) -> bool:
+        return (
+            type(other) is type(self)
+            and other.participants == self.participants
+            and other.timestamp == self.timestamp
+        )
 
-@dataclass(kw_only=True)
-class EventWithTrackedObjects(DetectionEvent, ABC):
+    def __hash__(self) -> int:
+        return hash((type(self), tuple(self.participants), self.timestamp))
+
+
+# %% participant roles
+
+
+@dataclass(eq=False, kw_only=True)
+class EventAboutObject(DetectionEvent, ABC):
     """
-    An abstract event involving one or more tracked objects.
-
-    Provides the primary :attr:`tracked_object` and an optional :attr:`with_object`,
-    along with ORM frozen copies and per-object tracker access.
+    An event predicated of a single body.
     """
 
     tracked_object: Body
-    """The primary object involved in this event."""
-
-    with_object: Optional[Body] = None
-    """The secondary object involved in this event, if any."""
+    """The body this event is about."""
 
     @property
-    def tracked_objects(self) -> List[Body]:
-        """
-        :return: the primary object, plus the secondary object when present.
-        """
-        return [self.tracked_object] if self.with_object is None else [self.tracked_object, self.with_object]
+    def participants(self) -> List[Body]:
+        return [self.tracked_object]
 
     @cached_property
     def object_tracker(self) -> ObjectEventTracker:
@@ -67,56 +90,59 @@ class EventWithTrackedObjects(DetectionEvent, ABC):
         """
         return ObjectTrackerFactory.get_tracker(self.tracked_object)
 
+
+@dataclass(eq=False, kw_only=True)
+class RelationEvent(EventAboutObject, ABC):
+    """
+    An event predicated of a body and the body it stands in relation to.
+
+    A subclass naming further participants extends :attr:`participants`, which keeps
+    them in the event's identity, its string form and its tracker registration.
+    """
+
+    with_object: Body
+    """The body the relation holds with."""
+
+    @property
+    def participants(self) -> List[Body]:
+        return super().participants + [self.with_object]
+
     @cached_property
-    def with_object_tracker(self) -> Optional[ObjectEventTracker]:
+    def with_object_tracker(self) -> ObjectEventTracker:
         """
-        :return: the event tracker for :attr:`with_object`, or ``None`` if absent.
+        :return: the event tracker for :attr:`with_object`.
         """
-        return ObjectTrackerFactory.get_tracker(self.with_object) if self.with_object is not None else None
-
-    def update_object_trackers_with_event(self, factory: ObjectTrackerFactory) -> None:
-        """
-        Register this event with the tracker of every involved object.
-
-        :param factory: factory used to look up per-object trackers.
-        """
-        for obj in self.tracked_objects:
-            factory.get_tracker(obj).add_event(self)
-
-    def __str__(self) -> str:
-        names = " - ".join(str(obj.name) for obj in self.tracked_objects)
-        return f"{self.__class__.__name__}: {names} - {self.timestamp}"
-
-    def __eq__(self, other) -> bool:
-        return (other.__class__ == self.__class__
-                and self.tracked_objects == other.tracked_objects
-                and self.timestamp == other.timestamp)
-
-    def __hash__(self) -> int:
-        return hash((self.__class__, tuple(self.tracked_objects), self.timestamp))
+        return ObjectTrackerFactory.get_tracker(self.with_object)
 
 
-@dataclass(unsafe_hash=True)
-class SupportEvent(EventWithTrackedObjects):
+# %% support
+
+
+@dataclass(eq=False)
+class SupportEvent(RelationEvent):
     """
     The SupportEvent class is used to represent an event that involves an object that is supported by another object.
     """
 
 
-@dataclass(unsafe_hash=True)
-class LossOfSupportEvent(EventWithTrackedObjects):
+@dataclass(eq=False)
+class LossOfSupportEvent(RelationEvent):
     """
     The LossOfSupportEvent class is used to represent an event that involves an object that was supported by another
     object and then lost support.
     """
 
 
-@dataclass(unsafe_hash=True)
-class MotionEvent(EventWithTrackedObjects, ABC):
+# %% motion
+
+
+@dataclass(eq=False)
+class MotionEvent(EventAboutObject, ABC):
     """
     Used to represent an event that involves an object that was stationary and then moved or
     vice versa.
     """
+
     start_pose: Pose = field(default_factory=Pose)
     """
     The pose of the object at the start of the event.
@@ -127,42 +153,47 @@ class MotionEvent(EventWithTrackedObjects, ABC):
     """
 
 
-
-
-@dataclass(init=False, unsafe_hash=True)
+@dataclass(eq=False, init=False)
 class TranslationEvent(MotionEvent):
     """
     Represents an event where an object moves from one location to another.
     """
+
     ...
 
 
-@dataclass(init=False, unsafe_hash=True)
+@dataclass(eq=False, init=False)
 class RotationEvent(MotionEvent):
     """
     Represents an event where an object rotates around a center point.
     """
+
     ...
 
 
-@dataclass(init=False, unsafe_hash=True)
+@dataclass(eq=False, init=False)
 class StopTranslationEvent(MotionEvent):
     """
     Represents an event where an object stops moving.
     """
+
     ...
 
 
-@dataclass(init=False, unsafe_hash=True)
+@dataclass(eq=False, init=False)
 class StopRotationEvent(MotionEvent):
     """
     Represents an event where an object stops rotating.
     """
+
     ...
 
 
-@dataclass(unsafe_hash=True)
-class AbstractContactEvent(EventWithTrackedObjects, ABC):
+# %% contact
+
+
+@dataclass(eq=False)
+class AbstractContactEvent(RelationEvent, ABC):
     """
     Represents an event where two objects are in contact with each other.
     """
@@ -187,12 +218,12 @@ class AbstractContactEvent(EventWithTrackedObjects, ABC):
     Pose of the object.
     """
 
-    with_object_bounding_box: Optional[BoundingBox] = field(init=False, default=None)
+    with_object_bounding_box: BoundingBox = field(init=False)
     """
     Bounding box of the second object in contact.
     """
 
-    with_object_pose: Optional[PoseStamped] = field(init=False, default=None)
+    with_object_pose: Pose = field(init=False)
     """
     Pose of the second object in contact.
     """
@@ -200,57 +231,60 @@ class AbstractContactEvent(EventWithTrackedObjects, ABC):
     def __post_init__(self):
         self.bounding_box = BoundingBox.from_mesh(
             self.tracked_object.collision.combined_mesh,
-            origin=self.tracked_object.global_pose.to_homogeneous_matrix()
+            origin=self.tracked_object.global_pose.to_homogeneous_matrix(),
         )
         self.pose = self.tracked_object.global_pose
-
-        if self.with_object is not None:
-            self.with_object_bounding_box = BoundingBox.from_mesh(
-                self.with_object.collision.combined_mesh,
-                origin=self.with_object.global_pose.to_homogeneous_matrix()
-            )
-            self.with_object_pose = self.with_object.global_pose
+        self.with_object_bounding_box = BoundingBox.from_mesh(
+            self.with_object.collision.combined_mesh,
+            origin=self.with_object.global_pose.to_homogeneous_matrix(),
+        )
+        self.with_object_pose = self.with_object.global_pose
 
 
-@dataclass(init=False, unsafe_hash=True)
+@dataclass(eq=False, init=False)
 class ContactEvent(AbstractContactEvent):
     """
     Represents an event where two objects are in contact with each other.
     """
+
     ...
 
 
-
-
-@dataclass(init=False, unsafe_hash=True)
+@dataclass(eq=False, init=False)
 class LossOfContactEvent(AbstractContactEvent):
     """
     Represents an event where two objects are no longer in contact with each other.
     """
+
     ...
 
 
-@dataclass(unsafe_hash=True)
-class PickUpEvent(EventWithTrackedObjects):
+# %% interactions
+
+
+@dataclass(eq=False)
+class PickUpEvent(RelationEvent):
     """
-    Represents an event where an object is picked up by another object.
+    Represents an event where an object is picked up off the object supporting it.
     """
+
     ...
 
 
-@dataclass(unsafe_hash=True)
-class PlacingEvent(EventWithTrackedObjects):
+@dataclass(eq=False)
+class PlacingEvent(RelationEvent):
     """
     Represents an event where an object is placed on another object.
     """
+
     ...
 
 
-
-@dataclass(unsafe_hash=True)
-class InsertionEvent(EventWithTrackedObjects):
+@dataclass(eq=False)
+class InsertionEvent(RelationEvent):
     """
-    Represents an event where an object is inserted into another object.
+    Represents an event where an object is inserted through an aperture into other
+    objects.
     """
 
     inserted_into_objects: List[Body] = field(default_factory=list)
@@ -259,25 +293,33 @@ class InsertionEvent(EventWithTrackedObjects):
     """
 
     @property
+    def participants(self) -> List[Body]:
+        return super().participants + self.inserted_into_objects
+
+    @property
     def through_hole(self) -> Aperture:
+        """
+        :return: the aperture the tracked object was inserted through.
+        """
         return self.with_object.get_semantic_annotations_by_type(type_=Aperture)[0]
 
 
-    def __str__(self) -> str:
-        with_object_name = " - " + " - ".join([str(obj.name) for obj in self.inserted_into_objects])
-        return f"{self.__class__.__name__}: {self.tracked_object.name}{with_object_name} - {self.timestamp}"
+# %% containment
 
-@dataclass(unsafe_hash=True)
-class ContainmentEvent(EventWithTrackedObjects):
+
+@dataclass(eq=False)
+class ContainmentEvent(RelationEvent):
     """
     Represents an event where an object is contained in another object.
     """
+
     ...
 
-@dataclass(unsafe_hash=True)
-class LossOfContainmentEvent(EventWithTrackedObjects):
+
+@dataclass(eq=False)
+class LossOfContainmentEvent(RelationEvent):
     """
     Represents an event where an object is no longer contained in another object.
     """
-    ...
 
+    ...
