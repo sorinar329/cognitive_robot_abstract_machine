@@ -30,6 +30,7 @@ Panels.define('robot-scene', function (root, bus) {
     '    <label class="lp-row"><input type="checkbox" id="lyr-objects" checked><span>Bench objects</span></label>' +
     '    <label class="lp-row"><input type="checkbox" id="lyr-labels"><span>Object labels</span></label>' +
     '    <label class="lp-row"><input type="checkbox" id="lyr-floor" checked><span>Floor shadow</span></label>' +
+    '    <label class="lp-row"><input type="checkbox" id="lyr-apartment" checked><span>Apartment background</span></label>' +
     '    <div class="lp-legend" id="lp-legend"></div>' +
     '  </div>' +
     '  <div id="live-indicator" class="live-indicator">● LIVE</div>' +
@@ -1134,6 +1135,11 @@ Panels.define('robot-scene', function (root, bus) {
     onStepStart: function (cb) { stepCb = cb; },
     setAutoRotate: function (on) { controls.autoRotate = on; controls.autoRotateSpeed = 0.5; needsRender = true; },
     setFloorVisible: function (on) { ground.visible = on; needsRender = true; },
+    // non-robot models (the apartment background) are purely decorative
+    setApartmentVisible: function (on) {
+      models.forEach(function (m) { if (!m.robot) m.obj.visible = on; });
+      needsRender = true;
+    },
     setFollow: function (on) { follow = on; },
     setPropsVisible: function (on) {
       for (const n in objectMeshes) objectMeshes[n].visible = on;
@@ -1194,6 +1200,7 @@ Panels.define('robot-scene', function (root, bus) {
   bindLayer('lyr-objects', 'setPropsVisible');
   bindLayer('lyr-labels', 'setLabelsAlways');
   bindLayer('lyr-floor', 'setFloorVisible');
+  bindLayer('lyr-apartment', 'setApartmentVisible');
   RobotView.onReady(function () {
     const legend = $('lp-legend');
     const scene = RobotView.getScene();

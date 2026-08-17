@@ -20,6 +20,14 @@
     "/finger_joint2",
     "/finger_joint1"
    ]
+  },
+  {
+   "name": "apartment",
+   "urdf": "apartment.urdf",
+   "prefix": "apartment",
+   "robot": false,
+   "links": 114,
+   "movableJoints": []
   }
  ],
  "robot": {
