@@ -83,23 +83,42 @@ Panels.define('activity', function (root, bus) {
     return html;
   }
 
+  // "pickup"/"place" are the only action names the demo diagnoses against
+  // (see inference3d._diagnosis_payload's docstring)
+  const ACTION_PHRASE = { pickup: 'picking the cube up', place: 'placing the cube' };
+
+  function actionPhrase(actionName) {
+    return ACTION_PHRASE[actionName] || (actionName ? humanize(actionName) : 'this step');
+  }
+
+  // turns a causal-model variable name (e.g. "grasp_closing_velocity",
+  // "cube1_final_z") into a plain-English phrase, without a hardcoded
+  // per-variable dictionary that would go stale as the causal trees change
+  function humanize(name) {
+    const cubeHeight = /^cube(\d+)_final_z$/.exec(name || '');
+    if (cubeHeight) return "cube " + cubeHeight[1] + "’s final height";
+    return String(name || '').replace(/_/g, ' ');
+  }
+
+  // one plain-English sentence for a single parameter correction
+  function correctionSentence(correction, verb) {
+    return verb + ' ' + humanize(correction.variableName) + ' from ' +
+      fmtNum(correction.observedValue) + ' to ' + fmtNum(correction.correctedValue) + '.';
+  }
+
   function renderDiagnosis(diagnosis) {
     const primary = diagnosis.primary;
     if (!primary) return '';
     let html = '<div class="activity-diagnosis">';
     html += '<span class="activity-diagnosis-tag">' + esc(diagnosis.actionName) + '</span> ';
-    html += '<code>' + esc(primary.variableName) + '</code> ';
-    html += fmtNum(primary.observedValue) + ' → ' + fmtNum(primary.correctedValue);
-    html += ' <span class="activity-diagnosis-support">(support ' +
-      fmtNum(primary.observedSupportProbability) +
-      (primary.correctedSupportProbability != null
-        ? ' → ' + fmtNum(primary.correctedSupportProbability)
-        : '') +
-      ')</span>';
+    html += '<span class="activity-diagnosis-text">' + esc(
+      'While ' + actionPhrase(diagnosis.actionName) +
+      (diagnosis.effectVariable ? ', ' + humanize(diagnosis.effectVariable) + ' came out wrong: ' : ', ') +
+      correctionSentence(primary, 'the diagnosis corrected')
+    ) + '</span>';
     (diagnosis.alsoCorrected || []).forEach(function (extra) {
-      html += '<div class="activity-diagnosis-also">also <code>' + esc(extra.variableName) +
-        '</code> ' + fmtNum(extra.observedValue) + ' → ' + fmtNum(extra.correctedValue) +
-        '</div>';
+      html += '<div class="activity-diagnosis-also">' +
+        esc('Also ' + correctionSentence(extra, 'corrected')) + '</div>';
     });
     html += '</div>';
     return html;

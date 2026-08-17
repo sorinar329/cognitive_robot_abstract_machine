@@ -366,6 +366,34 @@ past which it reliably fails, so forcing it would only add noise without adding
 certainty.
 """
 
+FORCED_FAILURE_JITTER_FRACTION = 1 / 30
+"""
+Proportional +/- range :func:`jittered_forced_failure_parameters` randomizes each of
+:data:`FORCED_FAILURE_PICKUP_PARAMETERS` within, e.g. 0.30 becomes anywhere in
+``[0.29, 0.31]``. Every field's margin past its own documented failure threshold (see
+that dict's own per-field comments) comfortably absorbs this: the jitter only varies
+what the live activity feed reports from one forced failure to the next, not whether the
+attempt still fails.
+"""
+
+
+def jittered_forced_failure_parameters() -> dict[str, float]:
+    """
+    :data:`FORCED_FAILURE_PICKUP_PARAMETERS`, each value randomized within
+    :data:`FORCED_FAILURE_JITTER_FRACTION` of its nominal value.
+
+    Without this, every forced failure reports the exact same observed values in the
+    live activity feed; jittering keeps each one past the same documented failure
+    threshold while making consecutive iterations look distinct.
+    """
+    return {
+        name: value
+        * random.uniform(
+            1 - FORCED_FAILURE_JITTER_FRACTION, 1 + FORCED_FAILURE_JITTER_FRACTION
+        )
+        for name, value in FORCED_FAILURE_PICKUP_PARAMETERS.items()
+    }
+
 
 def forced_failure_target(iteration_index: int) -> Body:
     """
@@ -1200,14 +1228,12 @@ def attempt_cube_with_correction(
         cube_to_pick, cube_to_stack_on, picking_arm
     )
     if force_initial_failure:
+        forced_parameters = jittered_forced_failure_parameters()
         overrides = ", ".join(
-            f"{name}={value:.4f}"
-            for name, value in FORCED_FAILURE_PICKUP_PARAMETERS.items()
+            f"{name}={value:.4f}" for name, value in forced_parameters.items()
         )
         print(f"[forced-failure] {step_label} attempt 1: overriding {overrides}")
-        pickup_action = dataclasses.replace(
-            pickup_action, **FORCED_FAILURE_PICKUP_PARAMETERS
-        )
+        pickup_action = dataclasses.replace(pickup_action, **forced_parameters)
     succeeded = perform_attempt(
         pickup_action, place_action, step_label, cube_to_stack_on
     )

@@ -36,18 +36,18 @@ body{
 .slot{display:flex;flex-direction:column;gap:16px;min-height:0;min-width:0}
 .slot>.panel{flex:1;min-height:0}
 .slot>.panel-graph{flex:1 1 0;min-height:260px}
-/* right column: graph full-width on top; Activity and EQL side by side below,
-   so both stay reachable at a glance instead of one being buried under a
-   scroll — and Activity gets a full grid row instead of a capped fraction,
-   so its diagnosis parameters are readable without constant scrolling */
+/* right column: Activity full-width on top (its own grid row, sized bigger
+   than a capped fraction, so its verbalized diagnoses are readable without
+   constant scrolling); the knowledge/kinematics/plan/statechart/posterior
+   graph module and EQL share the row below, reachable at a glance */
 .slot[data-slot="right"]{
   display:grid;grid-template-columns:1.6fr 1fr;
-  grid-template-rows:minmax(260px,1fr) minmax(360px,1.2fr);
-  grid-template-areas:"graph graph" "activity eql";
+  grid-template-rows:minmax(360px,1.2fr) minmax(260px,1fr);
+  grid-template-areas:"activity activity" "graph eql";
 }
 .slot[data-slot="right"]>.panel{min-height:0;min-width:0}
-.slot[data-slot="right"]>.panel-graph{grid-area:graph}
 .slot[data-slot="right"]>.panel-activity{grid-area:activity}
+.slot[data-slot="right"]>.panel-graph{grid-area:graph}
 .slot[data-slot="right"]>.panel-eql{grid-area:eql}
 .panel-error{margin:auto;color:var(--danger);font-size:13px;padding:20px;text-align:center}
 .panel{
@@ -370,8 +370,6 @@ body.graph-full-open{overflow:hidden}
   font-size:12.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;
   color:var(--action);margin-right:2px
 }
-.activity-diagnosis code{font-family:var(--mono);font-size:14px;color:var(--accent2)}
-.activity-diagnosis-support{color:var(--faint)}
 .activity-diagnosis-also{color:var(--faint);padding-left:4px}
 
 /* live mode button */
