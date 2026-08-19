@@ -496,6 +496,52 @@ class TestMujocoSimulator:
             result.type is SimulatorCallbackResult.ResultType.FAILURE_WITHOUT_EXECUTION
         )
 
+    def test_stepping_blocks_concurrent_body_callbacks(self, simulator, monkeypatch):
+        """
+        A simulator_callback-decorated method (set_body_position) issued while a step
+        is in flight must block until that step's critical section releases the model
+        lock, rather than running concurrently with mj_step and racing on the same
+        live _mj_data.
+
+        Proven by artificially lengthening every step to 0.02s: without the lock,
+        set_body_position returns almost instantly regardless of an in-flight step;
+        with it, a call made while stepping is running is forced to wait out however
+        much of the current step remains, so its measured duration is not negligible.
+        """
+        original_mj_step = mujoco.mj_step
+
+        def slow_mj_step(model, data):
+            original_mj_step(model, data)
+            time.sleep(0.02)
+
+        monkeypatch.setattr(mujoco, "mj_step", slow_mj_step)
+
+        simulator.start(simulate_in_thread=True, render_in_thread=False)
+        time.sleep(0.05)  # let the stepping thread settle into its slow rhythm
+
+        positions = [numpy.array([0.1, 0.1, 0.5]), numpy.array([0.2, 0.1, 0.5])]
+        call_durations = []
+        for i in range(20):
+            start = time.monotonic()
+            result = simulator.callbacks["set_body_position"](
+                body_name="box", position=positions[i % 2]
+            )
+            call_durations.append(time.monotonic() - start)
+            assert (
+                result.type
+                is SimulatorCallbackResult.ResultType.SUCCESS_AFTER_EXECUTION_ON_DATA
+            )
+
+        simulator.stop()
+
+        blocked_calls = [duration for duration in call_durations if duration > 0.005]
+        assert blocked_calls, (
+            f"set_body_position never had to wait for an in-flight step "
+            f"(durations={call_durations}); it must share the same model lock as "
+            "stepping, so with a 0.02s-long step continuously in progress most calls "
+            "should be forced to wait for it instead of running concurrently."
+        )
+
 
 class TestMujocoSimulatorComplex:
     file_path = os.path.join(resources_path, "mjx_single_cube_no_mesh.xml")
