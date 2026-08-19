@@ -542,6 +542,51 @@ class TestMujocoSimulator:
             "should be forced to wait for it instead of running concurrently."
         )
 
+    @pytest.mark.skipif(
+        headless,
+        reason="Needs a real display to launch MuJoCo's passive viewer; the "
+        "passive-viewer-thread race this guards against does not exist headless, so "
+        "it cannot be reproduced or verified there.",
+    )
+    def test_stepping_holds_renderer_lock_without_a_render_thread(self, monkeypatch):
+        """
+        A passive MuJoCo viewer (mujoco.viewer.launch_passive) renders on its own
+        native thread as soon as it is launched, independently of whether
+        BaseSimulator additionally runs a Python-side render thread. step_callback
+        must therefore hold the renderer's own lock around every step
+        unconditionally, not only when render_thread is set, or the viewer's native
+        thread can read _mj_data mid-step.
+        """
+        simulator = MujocoSimulator(
+            _headless=False,
+            _step_size=self.step_size,
+            file_path=os.path.join(resources_path, "mjx_single_cube_no_mesh.xml"),
+        )
+        try:
+            simulator.start(simulate_in_thread=False, render_in_thread=False)
+            assert simulator.render_thread is None
+
+            original_lock = simulator.renderer.lock
+            lock_calls = []
+
+            def tracking_lock():
+                lock_calls.append(1)
+                return original_lock()
+
+            monkeypatch.setattr(simulator.renderer, "lock", tracking_lock)
+
+            for _ in range(5):
+                simulator.step()
+
+            assert len(lock_calls) == 5, (
+                "step_callback must call renderer.lock() on every step even when no "
+                "Python-side render_thread is running, since the passive viewer's own "
+                f"native thread renders regardless; got {len(lock_calls)} calls for "
+                "5 steps."
+            )
+        finally:
+            simulator.stop()
+
 
 class TestMujocoSimulatorComplex:
     file_path = os.path.join(resources_path, "mjx_single_cube_no_mesh.xml")
