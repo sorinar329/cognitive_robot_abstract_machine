@@ -496,6 +496,97 @@ class TestMujocoSimulator:
             result.type is SimulatorCallbackResult.ResultType.FAILURE_WITHOUT_EXECUTION
         )
 
+    def test_stepping_blocks_concurrent_body_callbacks(self, simulator, monkeypatch):
+        """
+        A simulator_callback-decorated method (set_body_position) issued while a step
+        is in flight must block until that step's critical section releases the model
+        lock, rather than running concurrently with mj_step and racing on the same
+        live _mj_data.
+
+        Proven by artificially lengthening every step to 0.02s: without the lock,
+        set_body_position returns almost instantly regardless of an in-flight step;
+        with it, a call made while stepping is running is forced to wait out however
+        much of the current step remains, so its measured duration is not negligible.
+        """
+        original_mj_step = mujoco.mj_step
+
+        def slow_mj_step(model, data):
+            original_mj_step(model, data)
+            time.sleep(0.02)
+
+        monkeypatch.setattr(mujoco, "mj_step", slow_mj_step)
+
+        simulator.start(simulate_in_thread=True, render_in_thread=False)
+        time.sleep(0.05)  # let the stepping thread settle into its slow rhythm
+
+        positions = [numpy.array([0.1, 0.1, 0.5]), numpy.array([0.2, 0.1, 0.5])]
+        call_durations = []
+        for i in range(20):
+            start = time.monotonic()
+            result = simulator.callbacks["set_body_position"](
+                body_name="box", position=positions[i % 2]
+            )
+            call_durations.append(time.monotonic() - start)
+            assert (
+                result.type
+                is SimulatorCallbackResult.ResultType.SUCCESS_AFTER_EXECUTION_ON_DATA
+            )
+
+        simulator.stop()
+
+        blocked_calls = [duration for duration in call_durations if duration > 0.005]
+        assert blocked_calls, (
+            f"set_body_position never had to wait for an in-flight step "
+            f"(durations={call_durations}); it must share the same model lock as "
+            "stepping, so with a 0.02s-long step continuously in progress most calls "
+            "should be forced to wait for it instead of running concurrently."
+        )
+
+    @pytest.mark.skipif(
+        headless,
+        reason="Needs a real display to launch MuJoCo's passive viewer; the "
+        "passive-viewer-thread race this guards against does not exist headless, so "
+        "it cannot be reproduced or verified there.",
+    )
+    def test_stepping_holds_renderer_lock_without_a_render_thread(self, monkeypatch):
+        """
+        A passive MuJoCo viewer (mujoco.viewer.launch_passive) renders on its own
+        native thread as soon as it is launched, independently of whether
+        BaseSimulator additionally runs a Python-side render thread. step_callback
+        must therefore hold the renderer's own lock around every step
+        unconditionally, not only when render_thread is set, or the viewer's native
+        thread can read _mj_data mid-step.
+        """
+        simulator = MujocoSimulator(
+            _headless=False,
+            _step_size=self.step_size,
+            file_path=os.path.join(resources_path, "mjx_single_cube_no_mesh.xml"),
+        )
+        try:
+            simulator.start(simulate_in_thread=False, render_in_thread=False)
+            assert simulator.render_thread is None
+
+            original_lock = simulator.renderer.lock
+            lock_calls = []
+
+            def tracking_lock():
+                lock_calls.append(1)
+                return original_lock()
+
+            monkeypatch.setattr(simulator.renderer, "lock", tracking_lock)
+
+            for _ in range(5):
+                simulator.step()
+
+            assert len(lock_calls) == 5, (
+                "step_callback must call renderer.lock() on every step even when no "
+                "Python-side render_thread is running, since the passive viewer's own "
+                f"native thread renders regardless; got {len(lock_calls)} calls for "
+                "5 steps."
+            )
+        finally:
+            simulator.stop()
+
 
 class TestMujocoSimulatorComplex:
     file_path = os.path.join(resources_path, "mjx_single_cube_no_mesh.xml")

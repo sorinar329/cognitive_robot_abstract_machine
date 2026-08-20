@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import threading
 import time
 from typing import List, Optional
 
@@ -235,6 +236,49 @@ class TestBaseSimulator:
             time.sleep(1)
 
         assert simulator.state is SimulatorState.STOPPED
+
+    def test_concurrent_callbacks_are_mutually_exclusive(self, simulator_factory):
+        """
+        Two SimulatorCallback invocations from different threads must never execute
+        concurrently: a callback may read/mutate the simulator's live model/data, so
+        without mutual exclusion one callback's access can race with another callback
+        still mid-access on a different thread.
+        """
+        intervals: List[tuple] = []
+        intervals_guard = threading.Lock()
+
+        def slow_callback(physics_simulator: BaseSimulator) -> SimulatorCallbackResult:
+            start = time.monotonic()
+            time.sleep(0.05)
+            end = time.monotonic()
+            with intervals_guard:
+                intervals.append((start, end))
+            return SimulatorCallbackResult(
+                type=SimulatorCallbackResult.ResultType.SUCCESS_WITHOUT_EXECUTION,
+                info="slow callback",
+            )
+
+        callback = SimulatorCallback(slow_callback)
+        simulator = simulator_factory(callbacks=[callback])
+        self._assert_initialized(simulator)
+
+        threads = [
+            threading.Thread(target=simulator.callbacks["slow_callback"])
+            for _ in range(5)
+        ]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+
+        assert len(intervals) == 5
+        intervals.sort()
+        for (_, end), (next_start, _) in zip(intervals, intervals[1:]):
+            assert next_start >= end, (
+                f"SimulatorCallback invocations overlapped in time: {intervals}; "
+                "callbacks must be mutually exclusive since they may share the live "
+                "model/data with each other and with the stepping thread."
+            )
 
     def test_making_functions(self, simulator_factory):
         result_1 = SimulatorCallbackResult(

@@ -3,7 +3,6 @@
 import os
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field, InitVar
-from threading import RLock
 from typing import Optional, List, Dict, Union, Any
 
 import mujoco
@@ -30,6 +29,21 @@ class MujocoRenderer(SimulatorRenderer):
 
     def is_running(self) -> bool:
         return self.mj_viewer.is_running()
+
+    def lock(self):
+        """
+        MuJoCo's own per-viewer lock (``viewer.Handle.lock``), synchronizing
+        model/data mutations with the passive viewer's own internal rendering
+        thread.
+
+        A passive viewer (``mujoco.viewer.launch_passive``) always renders on
+        its own native thread once launched, independently of whether this
+        process additionally runs a Python-level render thread
+        (``BaseSimulator.render_thread``) -- so this must be held around every
+        direct read/write of ``_mj_model``/``_mj_data`` regardless of that flag,
+        or the viewer's own thread can race with them.
+        """
+        return self.mj_viewer.lock()
 
     def close(self):
         self.mj_viewer.close()
@@ -58,20 +72,6 @@ class MujocoSimulator(BaseSimulator):
     file_path: InitVar[str] = ""
     """
     Path to the XML file of the scene (for initialization)
-    """
-
-    _model_lock: RLock = field(
-        init=False, repr=False, compare=False, default_factory=RLock
-    )
-    """
-    Guards every access to ``_mj_model``/``_mj_data`` that either steps the physics or
-    rebuilds the model.
-
-    The physics runs in a background thread (:meth:`step_callback`) while model-mutating
-    callbacks such as :meth:`add_entity` run on the caller thread; both reassign/step
-    the same MuJoCo model and data objects, so they must not overlap. ``pause()`` alone
-    only flips a state flag and does not wait for an in-flight ``mj_step`` to finish, so
-    this lock provides the actual mutual exclusion.
     """
 
     def __post_init__(self, file_path: str = ""):
@@ -133,12 +133,14 @@ class MujocoSimulator(BaseSimulator):
             elif self.state == SimulatorState.PAUSED:
                 mujoco.mj_kinematics(self._mj_model, self._mj_data)
 
-        with self._model_lock:
-            if self.render_thread is not None:
-                with self.renderer.lock():
-                    _do_step()
-            else:
-                _do_step()
+        # A passive viewer (mujoco.viewer.launch_passive) always renders on its
+        # own native thread once launched, independently of whether this
+        # process additionally runs a Python-level render thread
+        # (self.render_thread) -- so renderer.lock() must be held here
+        # regardless of that flag, or mj_step can race with the viewer's own
+        # thread. renderer.lock() is a no-op when headless.
+        with self._model_lock, self.renderer.lock():
+            _do_step()
 
     def reset_callback(self):
         mujoco.mj_resetDataKeyframe(self._mj_model, self._mj_data, 0)
@@ -408,6 +410,81 @@ class MujocoSimulator(BaseSimulator):
         return SimulatorCallbackResult(
             type=SimulatorCallbackResult.ResultType.SUCCESS_AFTER_EXECUTION_ON_DATA,
             info=f"Set geom {geom_name} friction to {friction}",
+        )
+
+    @BaseSimulator.simulator_callback
+    def set_body_friction(
+        self, body_name: str, friction: numpy.ndarray
+    ) -> SimulatorCallbackResult:
+        """
+        Set the contact friction (sliding, torsional, rolling) of every geom a body owns.
+
+        Addresses the geoms through their body rather than by their own names, which a
+        model compiled from a scene that left them unnamed does not have.
+
+        :param body_name: The name of the body whose geoms are affected
+        :param friction: The (sliding, torsional, rolling) friction coefficients
+        :return: A SimulatorCallbackResult indicating the success or failure of the
+            operation
+        """
+        body_id = mujoco.mj_name2id(
+            m=self._mj_model, type=mujoco.mjtObj.mjOBJ_BODY, name=body_name
+        )
+        if body_id == -1:
+            return SimulatorCallbackResult(
+                type=SimulatorCallbackResult.ResultType.FAILURE_WITHOUT_EXECUTION,
+                info=f"Body {body_name} not found",
+            )
+        body = self._mj_model.body(body_id)
+        first_geom, geom_count = int(body.geomadr[0]), int(body.geomnum[0])
+        if geom_count == 0:
+            return SimulatorCallbackResult(
+                type=SimulatorCallbackResult.ResultType.FAILURE_WITHOUT_EXECUTION,
+                info=f"Body {body_name} owns no geom to set friction on",
+            )
+        self._mj_model.geom_friction[first_geom : first_geom + geom_count] = friction
+        return SimulatorCallbackResult(
+            type=SimulatorCallbackResult.ResultType.SUCCESS_AFTER_EXECUTION_ON_DATA,
+            info=f"Set friction of body {body_name}'s {geom_count} geom(s) to {friction}",
+        )
+
+    @BaseSimulator.simulator_callback
+    def reset_body_velocity(self, body_name: str) -> SimulatorCallbackResult:
+        """
+        Bring a body to a standstill by clearing the velocity of every degree of freedom
+        it owns.
+
+        Teleporting a body with :meth:`set_body_position` leaves its velocity untouched,
+        so a body that has picked up a large velocity keeps travelling however often it
+        is put back. The solver's warm-start accelerations are cleared alongside the
+        velocity, since they would otherwise feed the previous motion back in on the next
+        step.
+
+        :param body_name: The name of the body to bring to rest
+        :return: A SimulatorCallbackResult indicating the success or failure of the
+            operation
+        """
+        body_id = mujoco.mj_name2id(
+            m=self._mj_model, type=mujoco.mjtObj.mjOBJ_BODY, name=body_name
+        )
+        if body_id == -1:
+            return SimulatorCallbackResult(
+                type=SimulatorCallbackResult.ResultType.FAILURE_WITHOUT_EXECUTION,
+                info=f"Body {body_name} not found",
+            )
+        body = self._mj_model.body(body_id)
+        first_dof, dof_count = int(body.dofadr[0]), int(body.dofnum[0])
+        if dof_count == 0:
+            return SimulatorCallbackResult(
+                type=SimulatorCallbackResult.ResultType.FAILURE_WITHOUT_EXECUTION,
+                info=f"Body {body_name} owns no degree of freedom to bring to rest",
+            )
+        degrees_of_freedom = slice(first_dof, first_dof + dof_count)
+        self._mj_data.qvel[degrees_of_freedom] = 0.0
+        self._mj_data.qacc_warmstart[degrees_of_freedom] = 0.0
+        return SimulatorCallbackResult(
+            type=SimulatorCallbackResult.ResultType.SUCCESS_AFTER_EXECUTION_ON_DATA,
+            info=f"Brought body {body_name}'s {dof_count} degree(s) of freedom to rest",
         )
 
     @BaseSimulator.simulator_callback
