@@ -1,6 +1,9 @@
 import logging
+import math
 import os
+import threading
 import time
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import numpy as np
@@ -21,6 +24,7 @@ from semantic_digital_twin.spatial_types.spatial_types import (
     HomogeneousTransformationMatrix,
     Pose,
 )
+from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.connections import (
     FixedConnection,
     OmniDrive,
@@ -62,9 +66,141 @@ STANDING_LEG_JOINT_POSITIONS = {
 }
 """
 The 12 leg joint positions of the ``home`` stance, carrying the base at
-:data:`STANDING_HEIGHT`. The legs are not gaited, so navigation holds them here
-throughout.
+:data:`STANDING_HEIGHT`.
 """
+
+GAIT_CYCLE_SECONDS = 0.6
+"""
+Time for one full stride of a diagonal leg pair, a brisk trot cadence.
+"""
+
+GAIT_UPDATE_INTERVAL_SECONDS = 0.02
+"""
+How often the gait recomputes the legs' target positions while it runs.
+"""
+
+THIGH_SWING_AMPLITUDE = 0.3
+"""
+How far a thigh joint swings around its stance position during the gait, in radians.
+"""
+
+CALF_SWING_AMPLITUDE = 0.3
+"""
+How far a calf joint swings around its stance position during the gait, in radians.
+"""
+
+
+@dataclass(frozen=True)
+class Leg:
+    """
+    One leg's thigh and calf joints, and the phase its stride swings on.
+    """
+
+    thigh_joint: UnitreeGo2Joint
+    """
+    The joint raising and lowering this leg's thigh.
+    """
+
+    calf_joint: UnitreeGo2Joint
+    """
+    The joint bending and extending this leg's calf.
+    """
+
+    phase_offset: float
+    """
+    Radians added to the gait's phase for this leg. A trot swings diagonal leg pairs
+    together, so one pair uses ``0.0`` and the other ``math.pi``.
+    """
+
+
+TROT_LEGS = (
+    Leg(UnitreeGo2Joint.FRONT_LEFT_THIGH, UnitreeGo2Joint.FRONT_LEFT_CALF, 0.0),
+    Leg(UnitreeGo2Joint.REAR_RIGHT_THIGH, UnitreeGo2Joint.REAR_RIGHT_CALF, 0.0),
+    Leg(UnitreeGo2Joint.FRONT_RIGHT_THIGH, UnitreeGo2Joint.FRONT_RIGHT_CALF, math.pi),
+    Leg(UnitreeGo2Joint.REAR_LEFT_THIGH, UnitreeGo2Joint.REAR_LEFT_CALF, math.pi),
+)
+"""
+The Go2's four legs, paired diagonally (front-left/rear-right swing together, opposite
+front-right/rear-left) as in a trot gait.
+"""
+
+
+@dataclass
+class TrotGait:
+    """
+    Cycles the Go2's legs through a trot on a background thread, so they visibly walk
+    for as long as the gait runs rather than holding a frozen stance.
+
+    This only writes the leg joints; it does not drive the base itself, which
+    :class:`~coraplex.robot_plans.motions.navigation.MoveMotion` moves kinematically.
+    """
+
+    world: World
+    """
+    The world whose leg joints this gait writes to.
+    """
+
+    dof_id_by_joint: dict[UnitreeGo2Joint, int] = field(init=False)
+    """
+    Each trot leg joint's degree-of-freedom id, resolved once so the update loop does
+    not repeat name lookups every tick.
+    """
+
+    _stop_event: threading.Event = field(init=False, default_factory=threading.Event)
+    """
+    Set by :meth:`stop` to end the update loop.
+    """
+
+    _thread: threading.Thread | None = field(init=False, default=None)
+    """
+    The background thread running the update loop, started by :meth:`start`.
+    """
+
+    def __post_init__(self):
+        self.dof_id_by_joint = {
+            joint: self.world.get_connection_by_name(joint).raw_dof.id
+            for leg in TROT_LEGS
+            for joint in (leg.thigh_joint, leg.calf_joint)
+        }
+
+    def _update_legs(self, elapsed_seconds: float) -> None:
+        """
+        Write every trot leg's thigh and calf position for the given elapsed time.
+        """
+        phase = 2 * math.pi * elapsed_seconds / GAIT_CYCLE_SECONDS
+        with self.world.batch_state_changes():
+            for leg in TROT_LEGS:
+                leg_phase = phase + leg.phase_offset
+                self.world.state[self.dof_id_by_joint[leg.thigh_joint]].position = (
+                    THIGH_STANCE + THIGH_SWING_AMPLITUDE * math.sin(leg_phase)
+                )
+                self.world.state[self.dof_id_by_joint[leg.calf_joint]].position = (
+                    CALF_STANCE - CALF_SWING_AMPLITUDE * math.sin(leg_phase)
+                )
+
+    def _run(self) -> None:
+        start_time = time.monotonic()
+        while not self._stop_event.is_set():
+            self._update_legs(time.monotonic() - start_time)
+            self._stop_event.wait(GAIT_UPDATE_INTERVAL_SECONDS)
+
+    def start(self) -> None:
+        """
+        Start cycling the legs on a background thread.
+        """
+        self._thread = threading.Thread(
+            target=self._run, daemon=True, name="go2-trot-gait"
+        )
+        self._thread.start()
+
+    def stop(self) -> None:
+        """
+        Stop the background thread and wait for it to exit.
+        """
+        self._stop_event.set()
+        if self._thread is not None:
+            self._thread.join()
+
 
 # %% building the world
 
@@ -156,6 +292,9 @@ for actuator_index in range(mujoco_model.nu):
 
 context = Context(world=world, robot=go2, evaluate_conditions=False)
 
+trot_gait = TrotGait(world=world)
+trot_gait.start()
+
 try:
     with simulated_robot(real_time_factor=1.0):
         sequential(
@@ -164,6 +303,7 @@ try:
         ).perform()
     time.sleep(2.0)
 finally:
+    trot_gait.stop()
     multi_sim.stop_simulation()
 
 final_position = np.round(go2.root.global_pose.to_position(), 3)
