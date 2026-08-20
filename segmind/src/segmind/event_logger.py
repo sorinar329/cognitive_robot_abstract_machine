@@ -11,7 +11,7 @@ from os.path import dirname, abspath
 from threading import RLock
 
 from segmind.datastructures.event_plotter import EventPlotter
-from segmind.datastructures.events import DetectionEvent, EventWithTrackedObjects
+from segmind.datastructures.events import DetectionEvent
 from segmind.datastructures.object_tracker import ObjectTrackerFactory
 from typing_extensions import List, Optional, Type, Callable, Tuple
 from typing import ClassVar
@@ -29,7 +29,11 @@ class EventCallbacks(UserDict):
     This modifies the setitem such that if a class or its subclass is added, the callback is also added to the subclass.
     """
 
-    def __setitem__(self, key: Type[DetectionEvent], value: List[Tuple[ConditionFunction, CallbackFunction]]):
+    def __setitem__(
+        self,
+        key: Type[DetectionEvent],
+        value: List[Tuple[ConditionFunction, CallbackFunction]],
+    ):
         if key not in self:
             super().__setitem__(key, value)
         else:
@@ -102,7 +106,12 @@ class EventLogger:
         for obj_tracker in ObjectTrackerFactory.get_all_trackers():
             obj_tracker.reset()
 
-    def add_callback(self, event_type: Type[DetectionEvent], callback: CallbackFunction, condition: Optional[ConditionFunction] = None) -> None:
+    def add_callback(
+        self,
+        event_type: Type[DetectionEvent],
+        callback: CallbackFunction,
+        condition: Optional[ConditionFunction] = None,
+    ) -> None:
         """
         Add a callback for an event type.
 
@@ -149,22 +158,24 @@ class EventLogger:
         :param event: The event to annotate the scene with.
         """
 
-        if self.events_to_annotate is not None and (type(event) in self.events_to_annotate):
+        if self.events_to_annotate is not None and (
+            type(event) in self.events_to_annotate
+        ):
             logger.debug(f"Logging event: {event}")
             if self.annotation_thread is not None:
                 self.annotation_queue.put(event)
-                
 
     @staticmethod
-    def update_object_trackers_with_event(event: DetectionEvent, factory: ObjectTrackerFactory) -> None:
+    def update_object_trackers_with_event(
+        event: DetectionEvent, factory: ObjectTrackerFactory
+    ) -> None:
         """
         Update the event object trackers with the event.
 
         :param event: The event to update the object trackers with.
         :param factory: The object tracker factory.
         """
-        if isinstance(event, EventWithTrackedObjects):
-            event.update_object_trackers_with_event(factory)
+        event.update_object_trackers_with_event(factory)
 
     def plot_events(self, show: bool = True, save_path: Optional[str] = None):
         """
@@ -214,14 +225,14 @@ class EventLogger:
         self.event_queue.join()
 
     def __str__(self):
-        return '\n'.join([str(event) for event in self.get_events()])
+        return "\n".join([str(event) for event in self.get_events()])
 
 
 class EventAnnotationThread(threading.Thread):
     def __init__(self, logger: EventLogger):
         super().__init__()
         self.logger = logger
-        #self.current_annotations: List[TextAnnotation] = []
+        # self.current_annotations: List[TextAnnotation] = []
         self.kill_event = threading.Event()
 
     def stop(self):

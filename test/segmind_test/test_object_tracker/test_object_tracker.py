@@ -13,7 +13,11 @@ class MockEvent(DetectionEvent):
             self.timestamp = timestamp
         else:
             self.timestamp = time.time()
-        
+
+    @property
+    def participants(self):
+        return []
+
     def __eq__(self, other):
         return isinstance(other, MockEvent) and self.timestamp == other.timestamp
     

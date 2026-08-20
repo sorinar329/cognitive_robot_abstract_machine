@@ -10,7 +10,7 @@ from collections import defaultdict
 import pandas as pd
 import plotly.express as px
 
-from segmind.datastructures.events import DetectionEvent, EventWithTrackedObjects
+from segmind.datastructures.events import DetectionEvent, RelationEvent
 from semantic_digital_twin.world_description.world_entity import Body
 
 logger = logging.getLogger(__name__)
@@ -22,7 +22,12 @@ class EventPlotter:
     A class responsible for plotting events from a timeline.
     """
 
-    def plot(self, events: List[DetectionEvent], show: bool = True, save_path: Optional[str] = None) -> None:
+    def plot(
+        self,
+        events: List[DetectionEvent],
+        show: bool = True,
+        save_path: Optional[str] = None,
+    ) -> None:
         """
         Plot the given events in a timeline.
 
@@ -49,29 +54,28 @@ class EventPlotter:
         """
         data_dict = defaultdict(list)
         for event in events:
-            data_dict['event'].append(event.__class__.__name__)
-            data_dict['start'].append(event.timestamp.timestamp())
-            data_dict['end'].append(event.timestamp.timestamp())
+            data_dict["event"].append(event.__class__.__name__)
+            data_dict["start"].append(event.timestamp.timestamp())
+            data_dict["end"].append(event.timestamp.timestamp())
 
-            if isinstance(event, EventWithTrackedObjects):
-                object_name = ", ".join([str(obj.name) for obj in event.tracked_objects])
-                with_object_name = str(event.with_object.name) if event.with_object is not None else None
-            else:
-                object_name = "None"
-                with_object_name = None
-            data_dict['object'].append(object_name)
-            data_dict['with_object'].append(with_object_name)
+            object_name = ", ".join([str(obj.name) for obj in event.participants])
+            with_object_name = (
+                str(event.with_object.name)
+                if isinstance(event, RelationEvent)
+                else None
+            )
+            data_dict["object"].append(object_name)
+            data_dict["with_object"].append(with_object_name)
 
         return data_dict
-
 
     def _create_dataframe(self, data_dict: dict) -> pd.DataFrame:
         """
         Create a pandas DataFrame and normalize timestamps.
         """
-        min_start = min(data_dict['start'])
-        data_dict['start'] = [x - min_start for x in data_dict['start']]
-        data_dict['end'] = [x - min_start for x in data_dict['end']]
+        min_start = min(data_dict["start"])
+        data_dict["start"] = [x - min_start for x in data_dict["start"]]
+        data_dict["end"] = [x - min_start for x in data_dict["end"]]
         return pd.DataFrame(data_dict)
 
     def _create_figure(self, df: pd.DataFrame) -> px.timeline:
@@ -80,16 +84,16 @@ class EventPlotter:
         """
         fig = px.timeline(
             df,
-            x_start=pd.to_datetime(df['start'], unit='s'),
-            x_end=pd.to_datetime(df['end'], unit='s'),
-            y='event',
-            color='event',
-            hover_data={'object': True, 'with_object': True},
-            title="Events Timeline"
+            x_start=pd.to_datetime(df["start"], unit="s"),
+            x_end=pd.to_datetime(df["end"], unit="s"),
+            y="event",
+            color="event",
+            hover_data={"object": True, "with_object": True},
+            title="Events Timeline",
         )
 
-        fig.update_xaxes(tickformat='%S')
-        fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor='LightPink')
+        fig.update_xaxes(tickformat="%S")
+        fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor="LightPink")
         fig.update_layout(
             font_family="Courier New",
             font_color="black",
@@ -108,8 +112,8 @@ class EventPlotter:
         """
         if not os.path.exists(dirname(save_path)):
             os.makedirs(dirname(save_path))
-        if not save_path.endswith('.html'):
-            save_path += '.html'
+        if not save_path.endswith(".html"):
+            save_path += ".html"
         file_path = abspath(save_path)
         fig.write_html(file_path)
         logger.debug(f"Plot saved to {file_path}")
