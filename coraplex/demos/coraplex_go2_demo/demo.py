@@ -45,6 +45,62 @@ SCENE_PATH = (
     / "go2.xml"
 )
 
+TABLE_TOP_SIZE = 0.8
+"""Width and depth of a table top, in metres."""
+
+TABLE_HEIGHT = 0.5
+"""Height of a table's top surface above the floor, in metres."""
+
+TABLE_LEG_SIZE = 0.08
+"""Thickness of a square table leg, in metres."""
+
+
+def build_table(name: str, x: float, y: float, color: Color) -> Body:
+    """
+    Build a table standing on the floor, as a top slab on four legs.
+
+    :param name: Name for the table's body.
+    :param x: Where the centre of the table stands, along the world's x axis.
+    :param y: Where the centre of the table stands, along the world's y axis.
+    :param color: Colour to draw the whole table in.
+    :return: The table, already connected to the world.
+    """
+    table = Body(name=PrefixedName(name))
+    leg_offset = (TABLE_TOP_SIZE - TABLE_LEG_SIZE) / 2
+    leg_height = TABLE_HEIGHT - TABLE_LEG_SIZE / 2
+    shapes = [
+        Box(
+            origin=HomogeneousTransformationMatrix.from_xyz_rpy(
+                z=TABLE_HEIGHT, reference_frame=table
+            ),
+            scale=Scale(TABLE_TOP_SIZE, TABLE_TOP_SIZE, TABLE_LEG_SIZE),
+            color=color,
+        )
+    ] + [
+        Box(
+            origin=HomogeneousTransformationMatrix.from_xyz_rpy(
+                x=leg_x, y=leg_y, z=leg_height / 2, reference_frame=table
+            ),
+            scale=Scale(TABLE_LEG_SIZE, TABLE_LEG_SIZE, leg_height),
+            color=color,
+        )
+        for leg_x in (-leg_offset, leg_offset)
+        for leg_y in (-leg_offset, leg_offset)
+    ]
+    geometry = ShapeCollection(shapes, reference_frame=table)
+    table.collision, table.visual = geometry, geometry
+    world.add_connection(
+        FixedConnection(
+            parent=world.root,
+            child=table,
+            parent_T_connection_expression=HomogeneousTransformationMatrix.from_xyz_rpy(
+                x=x, y=y, reference_frame=world.root
+            ),
+        )
+    )
+    return table
+
+
 # %% building the world
 
 Go2MeshAssets(scene=SCENE_PATH).download_if_missing()
@@ -98,6 +154,16 @@ with world.modify_world():
         )
     )
 
+    # Two landmarks the walk runs between, so the robot is visibly somewhere else at
+    # the end than it was at the start. They stand clear of the route rather than on
+    # it: nothing in this demo avoids obstacles.
+    start_table = build_table(
+        "start_table", x=-0.9, y=0.0, color=Color(0.55, 0.35, 0.2, 1.0)
+    )
+    goal_table = build_table(
+        "goal_table", x=2.9, y=0.0, color=Color(0.2, 0.4, 0.7, 1.0)
+    )
+
 go2 = UnitreeGo2.from_world(world)
 
 for joint_name, position in STANDING_CONFIGURATION.items():
@@ -110,8 +176,9 @@ WAYPOINTS = [
     Pose.from_xyz_rpy(2.0, 0.0, STANDING_HEIGHT, reference_frame=world.root),
 ]
 """
-The route the robot walks: 2m straight ahead, far enough that arriving there can only
-be the result of having walked it.
+The route the robot walks: 2m straight ahead, from beside :data:`start_table` to
+beside :data:`goal_table`, far enough that arriving there can only be the result of
+having walked it.
 
 ..warning:: A second walk appended here does not work yet. The first one runs to its
     target and stops cleanly, but partway through a second the simulation diverges and
