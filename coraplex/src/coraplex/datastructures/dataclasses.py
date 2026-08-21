@@ -88,6 +88,14 @@ class Context(PlanEntity):
     Should pre -and postconditions of actions be evaluated in this plan.
     """
 
+    attach_grasped_objects: bool = field(default=True)
+    """
+    Should :class:`~coraplex.robot_plans.actions.core.pick_up.PickUpAction` and
+    :class:`~coraplex.robot_plans.actions.core.placing.PlaceAction` kinematically
+    attach a grasped object to the end effector (and detach it back to the world on
+    release), rather than relying on real contact/friction to hold it in place.
+    """
+
     query_backend: QueryBackend = field(
         default_factory=EntityQueryLanguageGenerativeBackend
     )
