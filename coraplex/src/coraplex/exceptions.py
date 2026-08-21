@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from coraplex.plans.designator import Designator
     from coraplex.robot_plans.actions.base import ActionDescription
     from semantic_digital_twin.robots.robot_parts import AbstractRobot
+    from semantic_digital_twin.world import World
     from semantic_digital_twin.world_description.world_entity import (
         KinematicStructureEntity,
         SemanticAnnotation,
@@ -298,3 +299,28 @@ class PerceptionSourceUnavailable(PerceptionException):
 
     def suggest_correction(self) -> str:
         return "start the perception pipeline before running the plan."
+
+
+@dataclass
+class NoSteppingSimulatorForServoTargets(DataclassException):
+    """
+    Raised when a gait needs to command position servos, but no simulation is stepping
+    the world's physics.
+    """
+
+    world: World
+    """
+    The world that has no stepping simulation attached.
+    """
+
+    def error_message(self) -> str:
+        return (
+            f"No simulation is stepping the physics of {self.world}, so there are no "
+            f"position servos to command."
+        )
+
+    def suggest_correction(self) -> str:
+        return (
+            "start a simulation of this world (e.g. MujocoSim.start_simulation) before "
+            "performing the motion."
+        )

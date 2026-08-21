@@ -2,18 +2,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Self, List
+
+from typing_extensions import Dict
 
 from semantic_digital_twin.collision_checking.collision_rules import (
     AvoidExternalCollisions,
 )
-from semantic_digital_twin.datastructures.joint_state import JointState
-from semantic_digital_twin.robots.robot_part_mixins import HasMobileBase
-from semantic_digital_twin.robots.robot_parts import AbstractRobot, MobileBase
-from semantic_digital_twin.world_description.connections import OmniDrive
-from semantic_digital_twin.world_description.world_entity import (
-    KinematicStructureEntity,
-)
+from semantic_digital_twin.robots.robot_parts import AbstractRobot
 
 
 class UnitreeGo2Joint(StrEnum):
@@ -41,36 +36,48 @@ class UnitreeGo2Joint(StrEnum):
     REAR_RIGHT_CALF = "RR_calf_joint"
 
 
+HIP_STANCE, THIGH_STANCE, CALF_STANCE = 0.0, 0.9, -1.8
+"""Per-leg joint angles of the Go2's standing stance, matching ``go2.xml``'s ``home``
+keyframe."""
+
+STANDING_HEIGHT = 0.27
+"""Height of the base above the floor with the legs in :data:`STANDING_CONFIGURATION`."""
+
+STANDING_CONFIGURATION: Dict[UnitreeGo2Joint, float] = {
+    UnitreeGo2Joint.FRONT_LEFT_HIP: HIP_STANCE,
+    UnitreeGo2Joint.FRONT_LEFT_THIGH: THIGH_STANCE,
+    UnitreeGo2Joint.FRONT_LEFT_CALF: CALF_STANCE,
+    UnitreeGo2Joint.FRONT_RIGHT_HIP: HIP_STANCE,
+    UnitreeGo2Joint.FRONT_RIGHT_THIGH: THIGH_STANCE,
+    UnitreeGo2Joint.FRONT_RIGHT_CALF: CALF_STANCE,
+    UnitreeGo2Joint.REAR_LEFT_HIP: HIP_STANCE,
+    UnitreeGo2Joint.REAR_LEFT_THIGH: THIGH_STANCE,
+    UnitreeGo2Joint.REAR_LEFT_CALF: CALF_STANCE,
+    UnitreeGo2Joint.REAR_RIGHT_HIP: HIP_STANCE,
+    UnitreeGo2Joint.REAR_RIGHT_THIGH: THIGH_STANCE,
+    UnitreeGo2Joint.REAR_RIGHT_CALF: CALF_STANCE,
+}
+"""
+The twelve leg joint angles that stand the robot up, carrying its base at
+:data:`STANDING_HEIGHT`.
+
+A gait works relative to this posture rather than to wherever the legs happen to be:
+read live, a leg caught mid-step would become the posture the next gait oscillates
+around, and successive walks would wander further from a stance the robot can stand on.
+"""
+
+
 @dataclass(eq=False)
-class UnitreeGo2MobileBase(MobileBase[OmniDrive]):
+class UnitreeGo2(AbstractRobot):
     """
-    The Go2's drive: an :class:`OmniDrive` connection put in place of the freejoint
-    ``base`` carries in the upstream MJCF, so the robot can be navigated like any other
-    :class:`~semantic_digital_twin.robots.robot_part_mixins.HasMobileBase` robot instead
-    of falling freely.
-    """
+    The Unitree Go2 quadruped, walking on a physically simulated floating base.
 
-    @classmethod
-    def setup_default_configuration_in_world_below_robot_root(
-        cls, robot_root: KinematicStructureEntity
-    ) -> Self:
-        return cls(root=robot_root)
-
-    def setup_hardware_interfaces(self):
-        pass
-
-    def setup_joint_states(self) -> List[JointState]:
-        return []
-
-
-@dataclass(eq=False)
-class UnitreeGo2(AbstractRobot, HasMobileBase[UnitreeGo2MobileBase]):
-    """
-    The Unitree Go2 quadruped, driven as a rigid body on its :class:`OmniDrive` base.
-
-    Its legs are not gaited: they hold whatever configuration they were placed in (see
-    ``coraplex_go2_demo``), and only the base itself is commanded when the robot
-    navigates.
+    Its base is attached to the world through the plain 6-DoF connection its MJCF's
+    freejoint parses to, so MuJoCo integrates it like any other free body: the base's
+    position and orientation are a consequence of gravity and leg-ground contact, not a
+    commanded input. It has no wheeled drive and therefore no
+    :class:`~semantic_digital_twin.robots.robot_part_mixins.HasMobileBase` mobile base -
+    navigation instead comes from gaiting its 12 leg joints, see ``coraplex_go2_demo``.
 
     https://www.unitree.com/go2
     """
