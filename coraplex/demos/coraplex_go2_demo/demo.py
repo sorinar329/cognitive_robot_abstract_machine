@@ -45,6 +45,17 @@ SCENE_PATH = (
     / "go2.xml"
 )
 
+FLOOR_SIZE = 10.0
+"""
+Width and depth of the floor, in metres.
+
+Generously larger than the route needs. The floor is the only thing holding the robot
+up, so walking off its edge drops the robot into an endless fall, which reads in the
+final numbers as the simulation having blown up rather than as having run out of floor.
+Steering is loose enough that the robot does not hold a straight line exactly, so the
+route is given room on every side rather than just enough to fit.
+"""
+
 TABLE_TOP_SIZE = 0.8
 """Width and depth of a table top, in metres."""
 
@@ -134,7 +145,7 @@ with world.modify_world():
                 origin=HomogeneousTransformationMatrix.from_xyz_rpy(
                     reference_frame=ground_plane
                 ),
-                scale=Scale(6.0, 6.0, 0.02),
+                scale=Scale(FLOOR_SIZE, FLOOR_SIZE, 0.02),
                 color=Color(0.6, 0.6, 0.6, 1.0),
             )
         ],
@@ -154,14 +165,14 @@ with world.modify_world():
         )
     )
 
-    # Two landmarks the walk runs between, so the robot is visibly somewhere else at
-    # the end than it was at the start. They stand clear of the route rather than on
-    # it: nothing in this demo avoids obstacles.
+    # Two landmarks the patrol runs between, so the robot is visibly somewhere else at
+    # the end than it was at the start. Both stand off to the side of the route rather
+    # than on it: nothing in this demo avoids obstacles.
     start_table = build_table(
-        "start_table", x=-0.9, y=0.0, color=Color(0.55, 0.35, 0.2, 1.0)
+        "start_table", x=-1.0, y=0.0, color=Color(0.55, 0.35, 0.2, 1.0)
     )
     goal_table = build_table(
-        "goal_table", x=2.9, y=0.0, color=Color(0.2, 0.4, 0.7, 1.0)
+        "goal_table", x=-1.0, y=2.0, color=Color(0.2, 0.4, 0.7, 1.0)
     )
 
 go2 = UnitreeGo2.from_world(world)
@@ -174,17 +185,18 @@ world.notify_state_change()
 
 WAYPOINTS = [
     Pose.from_xyz_rpy(2.0, 0.0, STANDING_HEIGHT, reference_frame=world.root),
+    Pose.from_xyz_rpy(2.0, 2.0, STANDING_HEIGHT, reference_frame=world.root),
+    Pose.from_xyz_rpy(0.0, 2.0, STANDING_HEIGHT, reference_frame=world.root),
 ]
 """
-The route the robot walks: 2m straight ahead, from beside :data:`start_table` to
-beside :data:`goal_table`, far enough that arriving there can only be the result of
-having walked it.
+The patrol route: 2m forward, 2m to the side, then 2m back, from beside
+:data:`start_table` to beside :data:`goal_table`. Both corners turn the robot a
+quarter turn, so walking the whole route means it steered as well as walked.
 
-..warning:: A second walk appended here does not work yet. The first one runs to its
-    target and stops cleanly, but partway through a second the simulation diverges and
-    the robot is thrown far off the map. Steering is also weak - the gait turns much
-    more slowly than it walks - so a route with corners gets walked past rather than
-    around, which is why this route is a straight line.
+..note:: The robot swings wide through the corners, because the gait turns much more
+    slowly than it walks, and arrives within
+    :data:`~coraplex.robot_plans.actions.core.legged_locomotion.ARRIVAL_TOLERANCE`
+    rather than on the spot.
 """
 
 headless = os.environ.get("CI", "false").lower() == "true"
