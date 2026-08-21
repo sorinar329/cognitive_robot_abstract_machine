@@ -115,11 +115,13 @@ class VizMarkerPublisher(ModelChangeCallback):
         self.notify_model_change()
         time.sleep(0.2)
 
-    def with_tf_publisher(self):
+    def with_tf_publisher(self, **kwargs):
         """
         Launches a tf publisher in conjunction with the VizMarkerPublisher.
+
+        :param kwargs: Forwarded to :class:`TFPublisher`.
         """
-        self._tf_publisher = TFPublisher(_world=self._world, node=self.node)
+        self._tf_publisher = TFPublisher(_world=self._world, node=self.node, **kwargs)
 
     def with_collision_visualization(self, **kwargs):
         """

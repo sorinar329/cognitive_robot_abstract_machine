@@ -56,6 +56,26 @@ Steering is loose enough that the robot does not hold a straight line exactly, s
 route is given room on every side rather than just enough to fit.
 """
 
+PUBLISH_TO_RVIZ = False
+"""
+Whether to publish the world to rviz for the length of the run.
+
+Off by default, because it costs the walk its reliability. The simulator feeds physics
+back into the world on its own thread, and publishing the tf tree from that thread
+slows it down: measured over repeated runs, the patrol went from arriving every time
+to arriving about half the time, even with :data:`TF_THROTTLE_STATE_UPDATES` as coarse
+as it is. On a machine with other work to do the robot falls over instead of walking
+at all, since the gait is open loop and cannot recover its footing. Turn it on to
+watch a run, leave it off to depend on one.
+"""
+
+TF_THROTTLE_STATE_UPDATES = 50
+"""
+Publish the tf tree on every nth world state change rather than all of them, when
+:data:`PUBLISH_TO_RVIZ` is on. Coarse enough to make the walk usually survive
+publishing, which is far coarser than it is smooth to watch.
+"""
+
 TABLE_TOP_SIZE = 0.8
 """Width and depth of a table top, in metres."""
 
@@ -216,6 +236,30 @@ for actuator_index in range(mujoco_model.nu):
     joint_name = UnitreeGo2Joint(f"{mujoco_model.actuator(actuator_index).name}_joint")
     mujoco_data.ctrl[actuator_index] = STANDING_CONFIGURATION[joint_name]
 
+# %% publishing the world to rviz
+
+visualization_node = None
+owns_ros_context = False
+
+if PUBLISH_TO_RVIZ:
+    # Imported here rather than at the top so the demo still runs without ROS
+    # installed, which is the only thing it needs ROS for.
+    import rclpy
+    from semantic_digital_twin.adapters.ros.visualization.viz_marker import (
+        VizMarkerPublisher,
+    )
+
+    # The markers describe the bodies once; the tf publisher moves them, on every world
+    # state change the simulator raises as it feeds physics back into the world. Seeing
+    # them needs a MarkerArray display on the publisher's topic, its durability set to
+    # transient local, and the fixed frame set to the tf root -- see VizMarkerPublisher.
+    owns_ros_context = not rclpy.ok()
+    if owns_ros_context:
+        rclpy.init()
+    visualization_node = rclpy.create_node("go2_demo_visualization")
+    visualization = VizMarkerPublisher(node=visualization_node, _world=world)
+    visualization.with_tf_publisher(throttle_state_updates=TF_THROTTLE_STATE_UPDATES)
+
 context = Context(world=world, robot=go2, evaluate_conditions=False)
 
 try:
@@ -227,6 +271,10 @@ try:
     time.sleep(2.0)
 finally:
     multi_sim.stop_simulation()
+    if visualization_node is not None:
+        visualization_node.destroy_node()
+    if owns_ros_context:
+        rclpy.shutdown()
 
 final_position = np.round(go2.root.global_pose.to_position()[:2], 3)
 expected_position = np.round(WAYPOINTS[-1].to_position()[:2], 3)
