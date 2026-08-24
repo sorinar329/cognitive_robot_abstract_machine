@@ -6,6 +6,7 @@ import mujoco
 import pytest
 import numpy
 from PIL import Image
+from scipy.spatial.transform import Rotation
 
 from semantic_digital_twin.adapters.mesh import STLParser
 from semantic_digital_twin.adapters.urdf import URDFParser
@@ -22,6 +23,7 @@ from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.connections import (
     Connection6DoF,
     FixedConnection,
+    OmniDrive,
     RevoluteConnection,
 )
 from semantic_digital_twin.world_description.degree_of_freedom import DegreeOfFreedom
@@ -845,6 +847,86 @@ def test_world_sim_state_sync():
         assert numpy.allclose(final_pos, target_pos, atol=1e-1), (
             f"Box did not settle at target: final_pos={final_pos}, "
             f"expected≈{target_pos}"
+        )
+    finally:
+        stop_multisim_if_running(multi_sim)
+
+
+def test_omni_drive_teleport_reaches_mujoco():
+    """
+    ``OmniDrive``/``DifferentialDrive`` connections never get a MuJoCo joint of their
+    own (``MultiSimBuilder._ignore_connection_types``); their own docstring says motion
+    is meant to be realized through the ancestor ``Connection6DoF`` free joint instead.
+    Teleporting an ``OmniDrive`` connection's own origin (exactly what
+    ``giskardpy``'s ``SetOdometry`` monitor does) must still move the body it drives
+    inside MuJoCo, both in position and in yaw.
+    """
+    world = World()
+
+    map_body = Body(name=PrefixedName("test_map"))
+    odom = Body(name=PrefixedName("test_odom"))
+    base = Body(name=PrefixedName("test_base"))
+    base.collision = ShapeCollection(
+        [
+            Box(
+                origin=HomogeneousTransformationMatrix.from_xyz_rpy(
+                    reference_frame=base
+                ),
+                scale=Scale(0.2, 0.2, 0.2),
+                color=Color(0.2, 0.4, 0.8, 1.0),
+            )
+        ],
+        reference_frame=base,
+    )
+
+    with world.modify_world():
+        localization = Connection6DoF.create_with_dofs(
+            world=world, parent=map_body, child=odom
+        )
+        world.add_connection(localization)
+        omni_drive = OmniDrive.create_with_dofs(
+            world=world,
+            parent=odom,
+            child=base,
+            translation_velocity_limits=0.2,
+            rotation_velocity_limits=0.2,
+        )
+        world.add_connection(omni_drive)
+
+    multi_sim = MujocoSim(world=world, headless=headless, step_size=STEP_SIZE)
+
+    try:
+        multi_sim.start_simulation()
+        time.sleep(1.0)
+
+        assert "test_base" in multi_sim.simulator.get_all_body_names().result
+
+        omni_drive = world.get_connections_by_type(OmniDrive)[0]
+        target_x, target_y, target_yaw = 1.0, 0.5, numpy.pi / 2
+        omni_drive.origin = HomogeneousTransformationMatrix.from_xyz_rpy(
+            x=target_x, y=target_y, yaw=target_yaw, reference_frame=omni_drive.parent
+        )
+        time.sleep(0.5)
+
+        final_position = numpy.asarray(
+            multi_sim.simulator.get_body_position("test_base").result[:3], dtype=float
+        )
+        final_quaternion = numpy.asarray(
+            multi_sim.simulator.get_body_quaternion("test_base").result, dtype=float
+        )
+        multi_sim.stop_simulation()
+
+        final_yaw = Rotation.from_quat(final_quaternion[[1, 2, 3, 0]]).as_euler("xyz")[
+            2
+        ]
+
+        assert numpy.allclose(final_position[:2], [target_x, target_y], atol=1e-2), (
+            f"test_base did not teleport to the OmniDrive's target: "
+            f"final_position={final_position}, expected_xy=({target_x}, {target_y})"
+        )
+        assert numpy.isclose(final_yaw, target_yaw, atol=1e-2), (
+            f"test_base did not rotate to the OmniDrive's target yaw: "
+            f"final_yaw={final_yaw}, expected_yaw={target_yaw}"
         )
     finally:
         stop_multisim_if_running(multi_sim)

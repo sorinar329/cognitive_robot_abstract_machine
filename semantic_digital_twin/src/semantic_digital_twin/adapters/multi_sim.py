@@ -322,9 +322,17 @@ class KinematicStructureEntityConverter(EntityConverter, ABC):
         kinematic_structure_entity_props = EntityConverter._convert(self, entity)
         # The simulator joint supplies the variable part, so the static frame must
         # exclude it (see Connection.reference_origin_expression).
-        [px, py, pz, qx, qy, qz, qw] = (
-            entity.parent_connection.reference_origin_as_position_quaternion().evaluate()[0]
-        )
+        [
+            px,
+            py,
+            pz,
+            qx,
+            qy,
+            qz,
+            qw,
+        ] = entity.parent_connection.reference_origin_as_position_quaternion().evaluate()[
+            0
+        ]
         kinematic_structure_entity_pos = [px, py, pz]
         kinematic_structure_entity_quat = [qw, qx, qy, qz]
         kinematic_structure_entity_props.update(
@@ -3013,6 +3021,53 @@ class MujocoSynchronizer(MultiSimSynchronizer):
         quat_xyzw = Rotation.from_matrix(pose[:3, :3]).as_quat()
         return xyz, quat_xyzw
 
+    def _write_drive_to_ancestor_qpos(
+        self,
+        connection: Union[OmniDrive, DifferentialDrive],
+        positions: numpy.ndarray,
+        previous_positions: numpy.ndarray,
+        state_index: Dict[Any, int],
+    ) -> None:
+        """
+        Compose ``connection``'s own state into the qpos of the nearest ancestor
+        :class:`Connection6DoF` free joint, since ``connection`` itself never gets a
+        MuJoCo joint (see :attr:`MultiSimBuilder._ignore_connection_types`): the body
+        it drives is, in MuJoCo, a fixed child of whatever body that ancestor actually
+        moves. Without this, a caller that teleports ``connection.origin`` directly --
+        exactly what giskardpy's ``SetOdometry`` monitor does for every mobile robot's
+        navigation -- silently never moves the robot.
+
+        No-op if ``connection``'s own pose dofs did not change, or if no ancestor
+        :class:`Connection6DoF` resolves to a MuJoCo joint.
+        """
+        ix, iy, iyaw = (
+            state_index[connection.x.id],
+            state_index[connection.y.id],
+            state_index[connection.yaw.id],
+        )
+        if numpy.allclose(
+            positions[[ix, iy, iyaw]], previous_positions[[ix, iy, iyaw]]
+        ):
+            return
+
+        ancestor = connection.parent.get_first_parent_connection_of_type(Connection6DoF)
+        ancestor_qpos_adr = self._resolve_qpos_adr(ancestor)
+        if ancestor_qpos_adr is None:
+            return
+
+        desired_parent_T_child = self._world.compute_forward_kinematics_np(
+            ancestor.parent, connection.child
+        )
+        mj_xyz, mj_quat_xyzw = self._decompose_pose_matrix(desired_parent_T_child)
+        mj_data = self.simulator._mj_data
+        mj_data.qpos[ancestor_qpos_adr + 0] = mj_xyz[0]
+        mj_data.qpos[ancestor_qpos_adr + 1] = mj_xyz[1]
+        mj_data.qpos[ancestor_qpos_adr + 2] = mj_xyz[2]
+        mj_data.qpos[ancestor_qpos_adr + 3] = mj_quat_xyzw[3]
+        mj_data.qpos[ancestor_qpos_adr + 4] = mj_quat_xyzw[0]
+        mj_data.qpos[ancestor_qpos_adr + 5] = mj_quat_xyzw[1]
+        mj_data.qpos[ancestor_qpos_adr + 6] = mj_quat_xyzw[2]
+
     def _read_6dof_from_qpos(self, connection: Connection6DoF, qpos_adr: int) -> None:
         """
         Copy a 6DoF MuJoCo free-joint qpos block into ``world.state`` for
@@ -3258,6 +3313,11 @@ class MujocoSynchronizer(MultiSimSynchronizer):
         with self.simulator._model_lock, self.simulator.renderer.lock():
             for connection in self._world.connections:
                 if isinstance(connection, FixedConnection):
+                    continue
+                if isinstance(connection, (OmniDrive, DifferentialDrive)):
+                    self._write_drive_to_ancestor_qpos(
+                        connection, positions, previous_positions, state_index
+                    )
                     continue
                 qpos_adr = self._resolve_qpos_adr(connection)
                 if qpos_adr is None:
