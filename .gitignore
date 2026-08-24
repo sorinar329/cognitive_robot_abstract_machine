@@ -182,3 +182,8 @@ CLAUDE.local.md
 # Scratch state, never committed: a stale copy read as current is a pass acting on a
 # stack that has since moved.
 .claude/stack/board.json
+
+# ros2 bag recordings of real-robot Tracy demo runs (see
+# experiments/src/experiments/tracy_experiments/ROSBAG_RECORDING.md) -- run data, not
+# source.
+experiments/src/experiments/tracy_experiments/*/recordings/

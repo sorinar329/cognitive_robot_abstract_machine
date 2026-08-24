@@ -31,6 +31,9 @@ Run with (``iai_tracy_description`` and the Giskard/world-fetcher ROS stack must
 running)::
 
     python -m experiments.tracy_experiments.montessori.montessori_demo_real
+
+Pass ``record=True`` to :func:`main` to also record the run; see
+``ROSBAG_RECORDING.md``.
 """
 
 from __future__ import annotations
@@ -41,11 +44,13 @@ import signal
 import subprocess
 import threading
 import time
+from pathlib import Path
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 
 import rclpy
 from rclpy.executors import MultiThreadedExecutor
+from typing_extensions import Optional
 
 from coraplex.datastructures.dataclasses import Context
 from coraplex.datastructures.enums import Arms, ExecutionType
@@ -60,6 +65,12 @@ from experiments.tracy_experiments.montessori.montessori_actions import (
     build_sorting_actions,
 )
 from experiments.tracy_experiments.montessori.world import TracyMontessoriWorld
+from experiments.tracy_experiments.run_recording import (
+    ActionRecorder,
+    NullActionRecorder,
+    RosbagActionRecorder,
+    bracket_actions_with_markers,
+)
 from semantic_digital_twin.adapters.ros.world_fetcher import fetch_world_from_service
 from semantic_digital_twin.adapters.ros.world_synchronizer import WorldSynchronizer
 from semantic_digital_twin.robots.tracy import Tracy
@@ -112,7 +123,22 @@ def _attach_montessori_scene(
     return board
 
 
-def main() -> None:
+def _default_recording_directory() -> Path:
+    """
+    Where a recording goes if :func:`main` is not given one explicitly: a
+    timestamped subdirectory next to this file, matching ``ROSBAG_RECORDING.md``'s own
+    suggested layout.
+    """
+    return Path(__file__).parent / "recordings" / time.strftime("%Y%m%d_%H%M%S")
+
+
+def main(record: bool = False, recording_directory: Optional[Path] = None) -> None:
+    """
+    :param record: Whether to record this run to a ``ros2 bag``; see
+        ``ROSBAG_RECORDING.md``. Off by default.
+    :param recording_directory: Where to write the recording, if ``record`` is set.
+        Defaults to :func:`_default_recording_directory`.
+    """
     giskard_process = subprocess.Popen(
         ["ros2", "launch", "giskardpy_ros", "giskardpy_tracy_standalone.launch.py"],
         start_new_session=True,
@@ -127,35 +153,45 @@ def main() -> None:
     thread.start()
 
     try:
-        # 300s matches giskardpy's own client (giskardpy/middleware/ros2/python_interface.py),
-        # which waits this long for the same race: the world-fetcher server is still
-        # parsing the URDF and starting up when the client's default 10s budget would
-        # otherwise expire.
-        world = fetch_world_from_service(node=node, timeout_seconds=300)
-        WorldSynchronizer(_world=world, node=node)
-        [robot] = world.get_semantic_annotations_by_type(Tracy)
-
-        board = _attach_montessori_scene(world, read_table_top_z(robot))
-
-        context = Context(
-            world=world, robot=robot, ros_node=node, evaluate_conditions=False
+        recorder: ActionRecorder = (
+            RosbagActionRecorder(
+                node=node,
+                output_directory=recording_directory or _default_recording_directory(),
+            )
+            if record
+            else NullActionRecorder()
         )
-        actions = [ParkArmsAction(Arms.BOTH)] + build_sorting_actions(
-            world,
-            board,
-            robot,
-            PICK_ARM,
-            pick_up_action=PickUpAction,
-            place_action=PlaceAction,
-        )
-        plan = sequential(actions, context=context).plan
+        with recorder:
+            # 300s matches giskardpy's own client (giskardpy/middleware/ros2/python_interface.py),
+            # which waits this long for the same race: the world-fetcher server is still
+            # parsing the URDF and starting up when the client's default 10s budget would
+            # otherwise expire.
+            world = fetch_world_from_service(node=node, timeout_seconds=300)
+            WorldSynchronizer(_world=world, node=node)
+            [robot] = world.get_semantic_annotations_by_type(Tracy)
 
-        logger.info("Performing sorting plan on the real robot.")
-        with ExecutionEnvironment(
-            execution_type=ExecutionType.REAL, collision_avoidance=False
-        ):
-            plan.perform()
-        logger.info("Sorting plan finished.")
+            board = _attach_montessori_scene(world, read_table_top_z(robot))
+
+            context = Context(
+                world=world, robot=robot, ros_node=node, evaluate_conditions=False
+            )
+            actions = [ParkArmsAction(Arms.BOTH)] + build_sorting_actions(
+                world,
+                board,
+                robot,
+                PICK_ARM,
+                pick_up_action=PickUpAction,
+                place_action=PlaceAction,
+            )
+            actions = bracket_actions_with_markers(recorder, actions)
+            plan = sequential(actions, context=context).plan
+
+            logger.info("Performing sorting plan on the real robot.")
+            with ExecutionEnvironment(
+                execution_type=ExecutionType.REAL, collision_avoidance=False
+            ):
+                plan.perform()
+            logger.info("Sorting plan finished.")
     finally:
         os.killpg(os.getpgid(giskard_process.pid), signal.SIGTERM)
         giskard_process.wait()

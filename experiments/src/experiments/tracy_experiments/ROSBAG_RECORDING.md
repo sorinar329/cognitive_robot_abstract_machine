@@ -1,9 +1,16 @@
 # Recording real-robot runs
 
-Procedure for recording `stacking_demo_real.py`/`montessori_demo_real.py` runs on the
-physical Tracy, so a run can later be sliced per action and replayed against MuJoCo to
-tune `equipment.py`'s `ServoGains` (stiffness/damping/torque/velocity limits) against
-real, measured behaviour instead of guessed numbers.
+How `stacking_demo_real.py`/`montessori_demo_real.py` record a run on the physical
+Tracy (`run_recording.py`), so it can later be sliced per action and replayed against
+MuJoCo to tune `equipment.py`'s `ServoGains` (stiffness/damping/torque/velocity limits)
+against real, measured behaviour instead of guessed numbers.
+
+Recording is optional and off by default: pass `record=True` to either demo's `main()`
+to enable it, e.g. `python3 -c "import experiments.tracy_experiments.stacking.
+stacking_demo_real as demo; demo.main(record=True)"`. With `record=False` (the default),
+`main()` uses `run_recording.NullActionRecorder`, which does not start `ros2 bag record`
+and never blocks on the operator prompts described below -- the run behaves exactly as
+it did before recording existed.
 
 ## Why
 
@@ -21,7 +28,9 @@ into MuJoCo's own actuators the same way `follow_joint_trajectory`
 the *measured* series from the real robot for the same segment. The gap between them is
 the signal for retuning `ServoGains`.
 
-## What to record
+## What gets recorded
+
+`run_recording.RosbagActionRecorder` runs, as a subprocess, the equivalent of:
 
 ```bash
 ros2 bag record -o <output-dir> \
@@ -34,33 +43,37 @@ ros2 bag record -o <output-dir> \
   /tracy_experiments/action_marker
 ```
 
-- The four `joint_states` topics are the **measured** side of the loop.
+- The four `joint_states` topics (`RECORDED_ROBOT_TOPICS`) are the **measured** side of
+  the loop.
 - The two `forward_velocity_controller/commands` topics are the **commanded** side --
   what Giskard actually sent. Recording both, not just one, is what lets you compare
   "what we asked for" against "what happened" later, rather than only ever seeing the
   outcome.
-- `/tracy_experiments/action_marker` is not a robot topic; see below.
+- `/tracy_experiments/action_marker` (`ACTION_MARKER_TOPIC`) is not a robot topic; see
+  below.
 
 Only the left arm/gripper topics are relevant to `STACK_ARM = Arms.LEFT` /
-`PICK_ARM = Arms.LEFT`, but record both arms anyway -- cheap, and rules out having to
-re-run because the wrong side was left out.
+`PICK_ARM = Arms.LEFT`, but both arms are recorded anyway -- cheap, and rules out having
+to re-run because the wrong side was left out.
 
-Start the recording once the Giskard node and world-fetcher are up (after `main()`'s
-initial `time.sleep(8)`), stop it in the same `finally:` block that already tears down
+`main()` starts the recorder (via `with recorder:`) once the Giskard node and
+world-fetcher are up, and stops it in the same `finally:` block that already tears down
 `giskard_process`, the same way `stacking_demo_real.py`/`montessori_demo_real.py` launch
-and kill that process today.
+and kill that process.
 
-Store recordings outside version control, e.g.
+Recordings are written outside version control, under
 `experiments/src/experiments/tracy_experiments/stacking/recordings/<timestamp>/` (or
-`montessori/recordings/<timestamp>/`) -- add that `recordings/` path to `.gitignore`,
-bags are run data, not source.
+`montessori/recordings/<timestamp>/`) by default -- `.gitignore` excludes that
+`recordings/` path, bags are run data, not source. Pass `recording_directory=` to
+`main()` to write somewhere else.
 
 ## Mapping a recording to the action that produced it
 
 A raw bag is just a stream of joint states -- nothing in it says which stretch was "pick
-cube_1" vs. "place cube_2" without a marker. Publish a small JSON message on
-`/tracy_experiments/action_marker` (`std_msgs/String`) immediately before and after each
-`PickUpAction`/`PlaceAction`:
+cube_1" vs. "place cube_2" without a marker. `bracket_actions_with_markers` wraps every
+`PickUpAction`/`PlaceAction` in a demo's own action sequence with an `ActionMarkerNode`
+before and after it; each one publishes a small JSON message on
+`/tracy_experiments/action_marker` (`std_msgs/String`) when the plan reaches it:
 
 ```json
 {"phase": "start", "index": 3, "action": "place", "object": "cube_2", "arm": "left", "target_pose": {"x": 0.8, "y": 0.0, "z": 0.175}}
@@ -103,19 +116,25 @@ The one thing that *is* available for free is whether the action raised
 without erroring, not that the grasp/placement was actually correct. Treat it as a floor,
 not a substitute for watching the run.
 
-Recommended convention for the operator setting `success` on the `end` marker:
+`RosbagActionRecorder.mark_end` blocks on exactly this: it prints
+`[<index>] did '<action>' on '<object>' succeed? [Y/n]` on the terminal running the demo
+and waits for the operator's answer before publishing the `end` marker (blank/`y`
+counts as success, anything starting with `n` does not) -- the run itself pauses there,
+so answer promptly. Recommended convention for what to answer:
 
-- **Stacking**: `true` only if the cube visibly ended up placed on the stack, not just
+- **Stacking**: yes only if the cube visibly ended up placed on the stack, not just
   released near it.
 - **Montessori**: the action itself only places a shape *above* its hole --
   `build_sorting_actions`'s own docstring is explicit that there is no fall-through check
-  or retry. Agree in advance whether `success` means "released within a few cm above the
+  or retry. Agree in advance whether success means "released within a few cm above the
   correct hole" (what the action actually attempts) or "visibly fell through" (what a
-  bystander naturally judges) -- these are different claims, and Montessori additionally
-  has more failure modes than a missed grasp (`CollisionViolatedError` from the board/
-  drawers, a shape knocked out of the way), so a bare boolean is worth widening to a short
-  failure-reason string (`"grasp"`, `"collision"`, `"misplaced"`, `"other"`) rather than
-  just `false`.
+  bystander naturally judges) -- these are different claims.
+
+The current `success` field is a bare boolean, so a "no" doesn't say *why*. Montessori in
+particular has more failure modes than a missed grasp (`CollisionViolatedError` from the
+board/drawers, a shape knocked out of the way) -- widening it to a short failure-reason
+string is a reasonable follow-up if that distinction turns out to matter, but is not
+implemented today.
 
 ## Verifying a recording afterward
 

@@ -27,6 +27,9 @@ Run with (``iai_tracy_description`` and the Giskard/world-fetcher ROS stack must
 running)::
 
     python -m experiments.tracy_experiments.stacking.stacking_demo_real
+
+Pass ``record=True`` to :func:`main` to also record the run; see
+``ROSBAG_RECORDING.md``.
 """
 
 from __future__ import annotations
@@ -37,12 +40,13 @@ import signal
 import subprocess
 import threading
 import time
+from pathlib import Path
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 
 import rclpy
 from rclpy.executors import MultiThreadedExecutor
-from typing_extensions import Dict
+from typing_extensions import Dict, List, Optional
 
 from coraplex.datastructures.dataclasses import Context
 from coraplex.datastructures.enums import (
@@ -54,11 +58,18 @@ from coraplex.datastructures.enums import (
 from coraplex.datastructures.grasp import GraspDescription
 from coraplex.execution_environment import ExecutionEnvironment
 from coraplex.plans.factories import sequential
+from coraplex.robot_plans.actions.base import ActionDescription
 from coraplex.robot_plans.actions.core.pick_up import PickUpAction
 from coraplex.robot_plans.actions.core.placing import PlaceAction
 from coraplex.robot_plans.actions.core.robot_body import ParkArmsAction
 from coraplex.view_manager import ViewManager
 from experiments.tracy_experiments.equipment import table_top_z as read_table_top_z
+from experiments.tracy_experiments.run_recording import (
+    ActionRecorder,
+    NullActionRecorder,
+    RosbagActionRecorder,
+    bracket_actions_with_markers,
+)
 from experiments.tracy_experiments.stacking.stacking_actions import stack_target_pose
 from semantic_digital_twin.adapters.ros.world_fetcher import fetch_world_from_service
 from semantic_digital_twin.adapters.ros.world_synchronizer import WorldSynchronizer
@@ -163,7 +174,62 @@ def _add_cubes(world: World, mounted_table_top_z: float) -> Dict[str, Body]:
     return cube_bodies
 
 
-def main() -> None:
+def _default_recording_directory() -> Path:
+    """
+    Where a recording goes if :func:`main` is not given one explicitly: a
+    timestamped subdirectory next to this file, matching ``ROSBAG_RECORDING.md``'s own
+    suggested layout.
+    """
+    return Path(__file__).parent / "recordings" / time.strftime("%Y%m%d_%H%M%S")
+
+
+def _build_actions(
+    recorder: ActionRecorder,
+    cube_bodies: Dict[str, Body],
+    stack_cube_names: List[str],
+    grasp_description: GraspDescription,
+    table_top_z: float,
+    world: World,
+) -> List[ActionDescription]:
+    """
+    The full action sequence: park both arms, then one pick/place pair per cube, each
+    bracketed by a marker (see
+    :func:`~experiments.tracy_experiments.run_recording.bracket_actions_with_markers`)
+    so a recording (if any) can later be sliced per action.
+
+    :param recorder: Recorder the marker nodes publish through; a
+        :class:`~experiments.tracy_experiments.run_recording.NullActionRecorder`
+        makes them no-ops.
+    :param cube_bodies: Every cube, keyed by name, as returned by :func:`_add_cubes`.
+    :param stack_cube_names: Names of the cubes to stack, excluding the base.
+    :param grasp_description: Grasp used to pick up every cube.
+    :param table_top_z: Height of the table's own top surface.
+    :param world: The live world, used to express each cube's own target pose in.
+    :return: The full action sequence.
+    """
+    stack_x, stack_y = _STACK_XY
+    actions: List[ActionDescription] = [ParkArmsAction(Arms.BOTH)]
+    for stack_index, name in enumerate(stack_cube_names, start=1):
+        actions.append(PickUpAction(cube_bodies[name], STACK_ARM, grasp_description))
+        actions.append(
+            PlaceAction(
+                cube_bodies[name],
+                stack_target_pose(
+                    stack_index, stack_x, stack_y, table_top_z, CUBE_SIZE, world.root
+                ),
+                STACK_ARM,
+            )
+        )
+    return bracket_actions_with_markers(recorder, actions)
+
+
+def main(record: bool = False, recording_directory: Optional[Path] = None) -> None:
+    """
+    :param record: Whether to record this run to a ``ros2 bag``; see
+        ``ROSBAG_RECORDING.md``. Off by default.
+    :param recording_directory: Where to write the recording, if ``record`` is set.
+        Defaults to :func:`_default_recording_directory`.
+    """
     giskard_process = subprocess.Popen(
         ["ros2", "launch", "giskardpy_ros", "giskardpy_tracy_standalone.launch.py"],
         start_new_session=True,
@@ -178,51 +244,48 @@ def main() -> None:
     thread.start()
 
     try:
-        world = fetch_world_from_service(node=node, timeout_seconds=300)
-        WorldSynchronizer(_world=world, node=node)
-        [robot] = world.get_semantic_annotations_by_type(Tracy)
-
-        table_top_z = read_table_top_z(robot)
-        cube_bodies = _add_cubes(world, table_top_z)
-        stack_cube_names = [name for name in cube_bodies if name != "cube_base"]
-        stack_x, stack_y = _STACK_XY
-
-        context = Context(
-            world=world, robot=robot, ros_node=node, evaluate_conditions=False
-        )
-        grasp_description = GraspDescription(
-            ApproachDirection.FRONT,
-            VerticalAlignment.TOP,
-            ViewManager.get_end_effector_view(STACK_ARM, robot),
-        )
-
-        actions = [ParkArmsAction(Arms.BOTH)]
-        for stack_index, name in enumerate(stack_cube_names, start=1):
-            actions.append(
-                PickUpAction(cube_bodies[name], STACK_ARM, grasp_description)
+        recorder: ActionRecorder = (
+            RosbagActionRecorder(
+                node=node,
+                output_directory=recording_directory or _default_recording_directory(),
             )
-            actions.append(
-                PlaceAction(
-                    cube_bodies[name],
-                    stack_target_pose(
-                        stack_index,
-                        stack_x,
-                        stack_y,
-                        table_top_z,
-                        CUBE_SIZE,
-                        world.root,
-                    ),
-                    STACK_ARM,
-                )
-            )
-        plan = sequential(actions, context=context).plan
+            if record
+            else NullActionRecorder()
+        )
+        with recorder:
+            world = fetch_world_from_service(node=node, timeout_seconds=300)
+            WorldSynchronizer(_world=world, node=node)
+            [robot] = world.get_semantic_annotations_by_type(Tracy)
 
-        logger.info("Performing stacking plan on the real robot.")
-        with ExecutionEnvironment(
-            execution_type=ExecutionType.REAL, collision_avoidance=False
-        ):
-            plan.perform()
-        logger.info("Stacking plan finished.")
+            table_top_z = read_table_top_z(robot)
+            cube_bodies = _add_cubes(world, table_top_z)
+            stack_cube_names = [name for name in cube_bodies if name != "cube_base"]
+
+            context = Context(
+                world=world, robot=robot, ros_node=node, evaluate_conditions=False
+            )
+            grasp_description = GraspDescription(
+                ApproachDirection.FRONT,
+                VerticalAlignment.TOP,
+                ViewManager.get_end_effector_view(STACK_ARM, robot),
+            )
+
+            actions = _build_actions(
+                recorder,
+                cube_bodies,
+                stack_cube_names,
+                grasp_description,
+                table_top_z,
+                world,
+            )
+            plan = sequential(actions, context=context).plan
+
+            logger.info("Performing stacking plan on the real robot.")
+            with ExecutionEnvironment(
+                execution_type=ExecutionType.REAL, collision_avoidance=False
+            ):
+                plan.perform()
+            logger.info("Stacking plan finished.")
     finally:
         os.killpg(os.getpgid(giskard_process.pid), signal.SIGTERM)
         giskard_process.wait()
