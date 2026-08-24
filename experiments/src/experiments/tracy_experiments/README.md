@@ -141,3 +141,10 @@ The `*_mujoco.py`/`parkarms_demo.py` entrypoints need the `iai_tracy_description
 package built and sourced, and the `experiments` package importable. The `*_real.py`
 entrypoints additionally need a running Giskard/world-fetcher ROS stack for the physical
 robot.
+
+## Recording real-robot runs
+
+See `ROSBAG_RECORDING.md` for how to record a `*_real.py` run (which topics, why, how a
+recording maps back to the action that produced it, and how "success" is defined given
+there is no perception yet), so it can later be replayed against MuJoCo to tune
+`equipment.py`'s `ServoGains` against real, measured behaviour.
