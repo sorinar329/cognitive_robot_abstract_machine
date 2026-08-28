@@ -1,0 +1,78 @@
+# Shape vocabulary of the montessori board.
+#
+# This file is the single description of the board: the prompts drive the segment and classify
+# pipeline, the category order drives the class list of the trained detector, and the outlines drive
+# the meshes of the synthetic renderer and the reference images the tests draw. Adapt it to the
+# board in front of the robot rather than changing code.
+#
+# Outline types and their parameters:
+#   circle          segments
+#   ellipse         width_ratio, height_ratio, segments
+#   regular_polygon sides, rotation
+#   star            points, inner_radius_ratio, rotation
+#   polygon         corners, as [horizontal, vertical] fractions of the radius, counterclockwise
+
+categories:
+  - name: circle
+    outline: {type: circle}
+    piece_prompts:
+      - "a photo of a round wooden block"
+      - "a circular toy block lying on a table"
+    hole_prompts:
+      - "a photo of a round hole cut into a wooden board"
+      - "a circular opening in a shape sorter board"
+
+  - name: square
+    outline: {type: regular_polygon, sides: 4, rotation: 0.7853981633974483}
+    piece_prompts:
+      - "a photo of a square wooden block"
+      - "a square toy block lying on a table"
+    hole_prompts:
+      - "a photo of a square hole cut into a wooden board"
+      - "a square opening in a shape sorter board"
+
+  - name: triangle
+    outline: {type: regular_polygon, sides: 3, rotation: 1.5707963267948966}
+    piece_prompts:
+      - "a photo of a triangular wooden block"
+      - "a triangular toy block lying on a table"
+    hole_prompts:
+      - "a photo of a triangular hole cut into a wooden board"
+      - "a triangular opening in a shape sorter board"
+
+  - name: rectangle
+    outline: {type: polygon, corners: [[1.0, 0.5], [-1.0, 0.5], [-1.0, -0.5], [1.0, -0.5]]}
+    piece_prompts:
+      - "a photo of a rectangular wooden block"
+      - "an oblong toy block lying on a table"
+    hole_prompts:
+      - "a photo of a rectangular hole cut into a wooden board"
+      - "an oblong opening in a shape sorter board"
+
+  - name: star
+    outline: {type: star, points: 5, inner_radius_ratio: 0.45}
+    piece_prompts:
+      - "a photo of a star shaped wooden block"
+      - "a five pointed star toy block lying on a table"
+    hole_prompts:
+      - "a photo of a star shaped hole cut into a wooden board"
+      - "a five pointed star opening in a shape sorter board"
+
+  - name: hexagon
+    outline: {type: regular_polygon, sides: 6}
+    piece_prompts:
+      - "a photo of a hexagonal wooden block"
+      - "a six sided toy block lying on a table"
+    hole_prompts:
+      - "a photo of a hexagonal hole cut into a wooden board"
+      - "a six sided opening in a shape sorter board"
+
+# Everything a segmenter proposes that is not a board shape. A crop whose best match is one of these
+# is rejected instead of being forced into the nearest shape category.
+background_prompts:
+  - "a photo of an empty wooden table"
+  - "a photo of a plain wooden board without any hole"
+  - "a photo of a robot arm"
+  - "a photo of a robot gripper"
+  - "a photo of a human hand"
+  - "a close up photo of a blurred background"

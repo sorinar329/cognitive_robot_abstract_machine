@@ -1,0 +1,20 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch: {}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      # Only the core dependencies are installed: the segment_and_classify, yolo and blender
+      # extras pull in multi-gigabyte model runtimes and are exercised through stubs instead.
+      - run: pip install -e ".[dev]"
+      - run: pytest

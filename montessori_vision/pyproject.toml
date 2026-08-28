@@ -1,0 +1,53 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "montessori-vision"
+version = "0.1.0"
+description = "Comparable computer vision pipelines that detect montessori board shapes and their holes."
+readme = "README.md"
+authors = [{ name = "Sorin Arion", email = "sorin@uni-bremen.de" }]
+license = { file = "LICENSE" }
+requires-python = ">=3.11"
+keywords = ["robotics", "computer vision", "segmentation", "object detection", "montessori"]
+classifiers = ["Programming Language :: Python :: 3"]
+dependencies = [
+  "numpy>=1.24",
+  "opencv-python-headless>=4.9",
+  "pillow>=10.0",
+  "pyyaml>=6.0",
+  "typing_extensions>=4.9",
+]
+
+[project.optional-dependencies]
+segment_and_classify = [
+  "torch>=2.2",
+  "torchvision>=0.17",
+  "segment-anything>=1.0",
+  "open_clip_torch>=2.24",
+]
+yolo = ["ultralytics>=8.3"]
+blender = ["bpy>=4.2"]
+dev = ["pytest>=8.0", "black==25.11.0", "docformatter==1.7.8"]
+
+[project.scripts]
+montessori-vision-generate = "montessori_vision.synthetic.generate:main"
+
+[project.urls]
+Homepage = "https://github.com/sorinar329/montessori_vision"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["montessori_vision*"]
+
+[tool.setuptools.package-data]
+montessori_vision = ["resources/*.yaml"]
+
+[tool.black]
+line-length = 100
+target-version = ["py311"]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["test"]
