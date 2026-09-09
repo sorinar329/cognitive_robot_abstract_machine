@@ -1199,6 +1199,12 @@ class MotionStatechart(SubclassJSONSerializer):
         :meth:`to_json`: first all nodes, then their transition conditions, then
         goal/child parent links.
 
+        A registered goal serializes each child both in the flat node list and inline
+        (Sequence, Parallel), so its inline copies are dropped the first time a flat
+        child is re-nested; keeping them would list each child twice. A goal whose
+        children only live inline (an unexpanded nested motion chart named by no flat
+        node) is untouched.
+
         :param data: The JSON dict.
         :param kwargs: Forwarded to :func:`~krrood.adapters.json_serializer.from_json`
             for every node.
@@ -1213,12 +1219,15 @@ class MotionStatechart(SubclassJSONSerializer):
                 json_data, motion_statechart=motion_statechart, **kwargs
             )
             transition.owner._set_transition(transition)
+        reparented: set[int] = set()
         for node in motion_statechart.nodes:
-            if node.parent_node_index is not None:
-                parent_node = motion_statechart.get_node_by_index(
-                    node.parent_node_index
-                )
-                parent_node.nodes.append(node)
+            if node.parent_node_index is None:
+                continue
+            parent_node = motion_statechart.get_node_by_index(node.parent_node_index)
+            if node.parent_node_index not in reparented:
+                parent_node.nodes.clear()
+                reparented.add(node.parent_node_index)
+            parent_node.nodes.append(node)
         return motion_statechart
 
     def sanity_check(self):

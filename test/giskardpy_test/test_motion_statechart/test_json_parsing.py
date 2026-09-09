@@ -366,6 +366,22 @@ def test_collapsed_goal_survives_json_round_trip():
     assert msc_copy.get_node_by_index(goal.index).plot_specifications.collapse_children
 
 
+def test_goal_children_survive_json_round_trip_exactly_once():
+    msc = MotionStatechart()
+    registered = Sequence(name="registered")
+    msc.add_node(registered)
+    registered.add_node(ConstTrueNode())
+    registered.add_node(ConstTrueNode())
+    inline_only = Sequence([ConstTrueNode(), ConstTrueNode()], name="inline_only")
+    msc.add_node(inline_only)
+    msc.add_node(EndMotion.when_true(registered))
+
+    msc_copy = MotionStatechart.from_json(json.loads(json.dumps(msc.to_json())))
+
+    assert len(msc_copy.get_node_by_index(registered.index).nodes) == 2
+    assert len(msc_copy.get_node_by_index(inline_only.index).nodes) == 2
+
+
 def test_cancel_motion():
     msc = MotionStatechart()
     msc.add_node(node := ConstTrueNode())
