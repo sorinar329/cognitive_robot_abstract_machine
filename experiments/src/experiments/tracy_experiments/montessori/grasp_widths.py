@@ -23,6 +23,9 @@ from dataclasses import dataclass, field
 from typing_extensions import Mapping
 
 from experiments.montessori.semantics import MontessoriShapeCategory
+from experiments.tracy_experiments.montessori.gripper_feedback import (
+    FULLY_CLOSED_KNUCKLE_POSITION,
+)
 from experiments.tracy_experiments.robotiq_gripper import FingerSetpoint
 
 DEFAULT_CLOSE_SETPOINT = float(FingerSetpoint.CLOSED)
@@ -81,3 +84,36 @@ class GraspCloseTable:
         :return: Its close setpoint, in the gripper controller's own units.
         """
         return self.overrides.get(category, self.default_setpoint)
+
+    def for_pieces_scaled_by(self, scale: float) -> GraspCloseTable:
+        """
+        The table for pieces ``scale`` times the size of the ones this table is for.
+
+        Every setpoint is moved towards
+        :data:`~experiments.tracy_experiments.montessori.gripper_feedback.FULLY_CLOSED_KNUCKLE_POSITION`
+        so the finger opening it leaves shrinks by ``scale``, assuming that opening
+        shrinks linearly from the fully open setpoint to that position.
+
+        :param scale: Size of the pieces to grasp, relative to the ones this table is for.
+        :return: A table of setpoints for the scaled pieces.
+        """
+        return GraspCloseTable(
+            default_setpoint=self._setpoint_for_scaled_opening(
+                self.default_setpoint, scale
+            ),
+            overrides={
+                category: self._setpoint_for_scaled_opening(setpoint, scale)
+                for category, setpoint in self.overrides.items()
+            },
+        )
+
+    @staticmethod
+    def _setpoint_for_scaled_opening(setpoint: float, scale: float) -> float:
+        """
+        :param setpoint: A close setpoint, in the gripper controller's own units.
+        :param scale: Factor the finger opening ``setpoint`` leaves is scaled by.
+        :return: The setpoint leaving that scaled opening.
+        """
+        return FULLY_CLOSED_KNUCKLE_POSITION - scale * (
+            FULLY_CLOSED_KNUCKLE_POSITION - setpoint
+        )

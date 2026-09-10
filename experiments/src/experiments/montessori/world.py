@@ -171,6 +171,13 @@ LANDING_REGION_NAME_SUFFIX = "_landing_region"
 Suffix a hole's landing region is named with, after the hole's own key.
 """
 
+LANDING_REGION_TOP_CLEARANCE = 0.02
+"""
+Distance kept below the board's top surface when sizing a hole's landing region's top
+face, so a shape merely resting on top of the board (having failed to fall through)
+never also registers as being in the landing region.
+"""
+
 LANDING_REGION_BOTTOM_MARGIN = 0.005
 """
 Distance the landing region's bottom face is dropped below the table's own top
@@ -234,6 +241,19 @@ class _HoleSpec:
     hole's own marker region.
     """
 
+_HOLE_KEY_BY_CATEGORY = {
+    MontessoriShapeCategory.CUBE: "square_hole",
+    MontessoriShapeCategory.TRIANGULAR_PRISM: "triangle_hole",
+    MontessoriShapeCategory.RECTANGULAR_PRISM: "rectangular_hole",
+    MontessoriShapeCategory.DISK: "disk_hole",
+}
+"""
+Name given to a hole of a given category, for the categories that occur at most once on
+the board.
+
+The :attr:`~MontessoriShapeCategory.CYLINDER` category occurs twice and is numbered
+instead (``circular_hole_1``, ``circular_hole_2``).
+"""
 
 def _hole_spec_from_footprint(footprint: HoleFootprint, key: str) -> _HoleSpec:
     """
@@ -604,10 +624,12 @@ def _table_shapes(
     return shapes
 
 
-def _measured_piece_mesh(footprint: HoleFootprint, piece: KnownPiece) -> Mesh:
+def _measured_piece_mesh(
+    footprint: HoleFootprint, piece: KnownPiece, scale: float = 1.0
+) -> Mesh:
     """
     Build a solid :class:`Mesh` of one loose piece: its hole's own cross-section, at the
-    size and in the colour that piece was measured to be.
+    size and in the colour that piece was measured to be, uniformly scaled by ``scale``.
 
     The cross-section is read from the same :class:`HoleFootprint` its hole is cut from,
     so a piece and its hole stand in one local orientation by construction rather than by
@@ -621,10 +643,13 @@ def _measured_piece_mesh(footprint: HoleFootprint, piece: KnownPiece) -> Mesh:
 
     :param footprint: The hole this piece drops through, which fixes its cross-section.
     :param piece: The piece as it was measured, which fixes how large it comes out.
+    :param scale: Factor applied to the measured size along every axis.
     """
     solid = footprint.extrude(piece.height)
-    scale = piece.cross_section_size / footprint.cross_section_size
-    solid.apply_transform(np.diag([scale, scale, 1.0, 1.0]))
+    cross_section_scale = piece.cross_section_size / footprint.cross_section_size
+    solid.apply_transform(
+        np.diag([cross_section_scale * scale, cross_section_scale * scale, scale, 1.0])
+    )
     mesh = Mesh.from_trimesh(mesh=solid)
     mesh.color = piece.color
     return mesh
@@ -705,10 +730,56 @@ def _landing_region(name: PrefixedName, open_space: VolumetricBoundingBox) -> Re
     return Region(name=name, area=ShapeCollection([Box(scale=open_space.scale)]))
 
 
+def _landing_region_position(
+    hole_position: Point3, table_top_z: float, height: float
+) -> Point3:
+    """
+    Position, in the world root frame, a hole's landing region (see
+    :func:`_landing_region`) must be placed at so it spans from
+    :data:`LANDING_REGION_BOTTOM_MARGIN` below ``table_top_z`` up to
+    :data:`LANDING_REGION_TOP_CLEARANCE` below the board's top surface.
+
+    :param hole_position: The matching hole's own position (shares its ``x``, ``y``).
+    :param table_top_z: Height of the surface the board sits on; see
+        :func:`_landing_region_height`.
+    :param height: The landing region's height; see :func:`_landing_region_height`.
+    """
+    region_bottom_z = table_top_z - LANDING_REGION_BOTTOM_MARGIN
+    return Point3(hole_position.x, hole_position.y, region_bottom_z + height / 2)
+
+def _landing_region_height(table_top_z: float, board_top_z: float) -> float:
+    """
+    Height of a hole's landing region: ``board_top_z``, minus
+    :data:`LANDING_REGION_TOP_CLEARANCE`, down to :data:`LANDING_REGION_BOTTOM_MARGIN`
+    below ``table_top_z``.
+
+    A shape that has fallen all the way through a hole comes to rest directly on the
+    surface carrying the board, inside the open shaft the hole cuts through the board's
+    full thickness; a shape that never fell through instead rests on the board's own top
+    surface, well above this range.
+
+    Takes the two surfaces' heights as parameters (rather than reading
+    :const:`TABLE_POSITION`/:const:`TABLE_SCALE`/:const:`BOARD_POSITION` directly) so
+    :mod:`~experiments.montessori.world2`'s differently-positioned board and stand can
+    reuse this unchanged.
+
+    :param table_top_z: Height of the surface the board sits on (a table, a stand, ...).
+    :param board_top_z: Height of the board's own top surface.
+    """
+    return (
+        board_top_z
+        - LANDING_REGION_TOP_CLEARANCE
+        - (table_top_z - LANDING_REGION_BOTTOM_MARGIN)
+    )
+
+
+
+
 def _shape_body(
     name: PrefixedName,
     category: MontessoriShapeCategory,
     footprint: Optional[HoleFootprint],
+    scale: float = 1.0,
 ) -> Body:
     """
     Build the :class:`Body` of a loose Montessori shape, its geometry depending on its
@@ -721,14 +792,19 @@ def _shape_body(
         :func:`_measured_piece_mesh`). The disk and the sphere have none, since this set
         holds neither: a disk fits through its hole at any fixed size and yaw, mirroring
         the board's single hole of that category, and the sphere has no hole at all.
+    :param scale: Factor applied to the shape's size along every axis.
     """
     color = _SHAPE_COLORS[category]
     if category is MontessoriShapeCategory.DISK:
-        return _body_with_shape(name, Cylinder(width=0.044, height=0.004, color=color))
+        return _body_with_shape(
+            name,
+            Cylinder(width=0.044 * scale, height=0.004 * scale, color=color),
+        )
     if category is MontessoriShapeCategory.SPHERE:
-        return _body_with_shape(name, Sphere(radius=0.02, color=color))
+        return _body_with_shape(name, Sphere(radius=0.02 * scale, color=color))
     return _body_with_shape(
-        name, _measured_piece_mesh(footprint, KNOWN_PIECE_BY_CATEGORY[category])
+        name,
+        _measured_piece_mesh(footprint, KNOWN_PIECE_BY_CATEGORY[category], scale),
     )
 
 

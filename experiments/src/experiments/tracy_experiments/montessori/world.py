@@ -34,7 +34,7 @@ from typing_extensions import List
 from experiments.montessori.hole_geometry import (
     HOLE_MARKER_THICKNESS,
     HoleFootprint,
-    _extrude_polygon,
+    extrude_polygon,
 )
 from experiments.montessori.pieces import (
     CUBE_EDGE,
@@ -194,8 +194,8 @@ def _hole_spec_from_footprint_tracy(
     directly for a board whose height is only known once Tracy is mounted.
     """
     position = Point3(
-        float(board_position.x) + footprint.center[0],
-        float(board_position.y) + footprint.center[1],
+        float(board_position.x) + footprint.center.x,
+        float(board_position.y) + footprint.center.y,
         board_top_z - HOLE_MARKER_THICKNESS / 2,
     )
     return _HoleSpec(key, footprint.category, position, footprint)
@@ -252,7 +252,7 @@ def _measured_shape_body(name: PrefixedName, category: MontessoriShapeCategory) 
             )
         case MontessoriShapeCategory.TRIANGULAR_PRISM:
             boundary = equilateral_triangle_boundary(TRIANGULAR_PRISM_SIDE)
-            solid = _extrude_polygon(boundary, TRIANGULAR_PRISM_HEIGHT)
+            solid = extrude_polygon(boundary, TRIANGULAR_PRISM_HEIGHT)
             shape = Mesh.from_trimesh(mesh=solid)
             shape.color = color
     return _body_with_shape(name, shape)

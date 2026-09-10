@@ -22,6 +22,7 @@ from coraplex.plans.executables import (
 from coraplex.plans.factories import (
     cancel_when,
     execute_single,
+    parallel,
     pause_until,
     pause_while,
     repeat,
@@ -96,7 +97,7 @@ def test_parse_simple_action(immutable_model_world):
     assert type(list(executable.motion_mappings.values())[0]) == JointPositionList
 
 
-# %% the chart mirrors the plan tree
+# %% the chart shape
 
 
 def test_language_nodes_create_a_goal_of_their_template():
@@ -110,10 +111,11 @@ def test_language_nodes_create_a_goal_of_their_template():
     assert type(TryInOrderNode().create_goal()) is TryInOrder
 
 
-def test_sequential_plan_nests_a_goal_per_plan_node(immutable_model_world):
+def test_sequential_plan_runs_its_motions_in_one_flat_sequence(immutable_model_world):
     """
-    Parsing a sequential plan builds a goal per language and action node, with the
-    motions as tasks at the leaves, rather than one flat list of tasks.
+    A sequence nested in a sequence runs the same steps in the same order, so parsing a
+    sequential plan adds every motion straight to the root goal instead of to a goal per
+    action.
     """
     world, view, context = immutable_model_world
 
@@ -126,15 +128,40 @@ def test_sequential_plan_nests_a_goal_per_plan_node(immutable_model_world):
 
     root_goal = executable.root_node
     assert type(root_goal) is Sequence
-    assert root_goal.name == "SequentialNode"
+    assert root_goal.name == SequentialNode.__name__
+    assert root_goal.nodes == list(executable.motion_mappings.values())
 
-    action_goals = root_goal.nodes
-    assert len(action_goals) == 2
-    assert [type(goal) for goal in action_goals] == [Sequence, Sequence]
-    assert [goal.name for goal in action_goals] == ["ActionNode", "ActionNode"]
+
+def test_a_sequence_inside_a_parallel_keeps_its_own_goal(immutable_model_world):
+    """
+    Each child of a parallel goal runs beside the others, so a sequential child keeps a
+    goal of its own: its motions still run one after the other, next to the sibling
+    action.
+    """
+    world, view, context = immutable_model_world
+
+    plan = parallel(
+        [
+            sequential(
+                [MoveTorsoAction(TorsoState.LOW), MoveTorsoAction(TorsoState.HIGH)]
+            ),
+            MoveTorsoAction(TorsoState.MID),
+        ],
+        context=context,
+    )
+    # ParallelNode.notify performs its children; expanding them is all parsing needs.
+    for child in plan.children:
+        child.notify()
+    executable = plan.parse()
 
     tasks = list(executable.motion_mappings.values())
-    assert [goal.nodes for goal in action_goals] == [[tasks[0]], [tasks[1]]]
+    root_goal = executable.root_node
+    assert type(root_goal) is Parallel
+    sequence_goal, action_goal = root_goal.nodes
+    assert type(sequence_goal) is Sequence
+    assert sequence_goal.nodes == tasks[:2]
+    assert type(action_goal) is Sequence
+    assert action_goal.nodes == [tasks[2]]
 
 
 # %% monitored subtrees

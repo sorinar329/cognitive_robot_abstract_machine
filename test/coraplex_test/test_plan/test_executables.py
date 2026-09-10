@@ -3,8 +3,9 @@ Tests for the motion state chart a ``GiskardExecutable`` owns (see
 ``coraplex/src/coraplex/plans/executables.py``).
 
 The chart is created once while the plan is parsed and only extended afterwards: parsing
-adds a goal per plan node and a task per motion, and ``prepare_for_execution`` adds the
-nodes that terminate the chart, which depend on the execution type.
+adds a task per motion, below a goal for every plan node that is not a plain sequence
+inside another, and ``prepare_for_execution`` adds the nodes that terminate the chart,
+which depend on the execution type.
 """
 
 import pytest
@@ -100,19 +101,19 @@ def test_parsing_populates_the_chart_with_the_motions(reach_action_executable):
         )
 
 
-def test_parsing_mirrors_the_plan_tree_as_nested_goals(reach_action_executable):
+def test_parsing_adds_the_action_motions_straight_to_the_root_goal(
+    reach_action_executable,
+):
     """
-    The action's motions live in a goal below the executable's root goal rather than
-    flat in the chart.
+    The action's motions run in plain sequence, so they are added to the executable's
+    root goal rather than to a goal of their own below it.
     """
     tasks = list(reach_action_executable.motion_mappings.values())
     root_goal = reach_action_executable.root_node
 
     assert isinstance(root_goal, Sequence)
     assert root_goal.parent_node is None
-    for task in tasks:
-        assert task.parent_node is not None
-        assert task.parent_node.parent_node is root_goal
+    assert root_goal.nodes == tasks
 
 
 def test_parsing_does_not_terminate_the_chart(reach_action_executable):

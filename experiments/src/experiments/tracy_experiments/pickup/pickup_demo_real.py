@@ -67,7 +67,7 @@ from coraplex.datastructures.enums import (
 )
 from coraplex.datastructures.grasp import GraspDescription
 from coraplex.execution_environment import ExecutionEnvironment
-from coraplex.plans.attachment_nodes import AttachNode, DetachNode
+from coraplex.plans.attachment_nodes import ReAttachNode
 from coraplex.plans.factories import sequential
 from coraplex.robot_plans.actions.core.pick_up import ReachAction
 from coraplex.robot_plans.actions.core.robot_body import ParkArmsAction
@@ -79,7 +79,12 @@ from experiments.tracy_experiments.rosbag_recording import (
     RosbagRecorder,
 )
 from experiments.montessori.hole_geometry import HoleFootprint
-from experiments.montessori.semantics import MontessoriShapeCategory
+from experiments.montessori.pieces import CUBE_EDGE, KNOWN_PIECE_BY_CATEGORY
+from experiments.montessori.semantics import (
+    MONTESSORI_SHAPE_CLASSES,
+    MontessoriShape,
+    MontessoriShapeCategory,
+)
 from experiments.montessori.world import (
     BOARD_COLOR,
     BOARD_SCALE,
@@ -140,7 +145,13 @@ PICK_ARM = Arms.LEFT
 Which arm picks up the cube.
 """
 
-CUBE_SIZE = 0.03
+SHAPE_SCALE = 0.8
+"""
+Factor the cube and the loose shapes are scaled by, relative to the measured set in
+:mod:`experiments.montessori.pieces`.
+"""
+
+CUBE_SIZE = CUBE_EDGE * SHAPE_SCALE
 """
 Edge length of the cube, in metres.
 """
@@ -169,16 +180,16 @@ PLACE_HOVER = 0.04
 Height above the board's top surface at which a shape is released over its hole.
 """
 
-GRASP_HEIGHT_OFFSET = 0.04
+GRASP_HEIGHT_OFFSET = 0.04 * SHAPE_SCALE
 """
 Height, in metres, the reach, grasp and lift are aimed above a loose shape's own centre.
 
 The shapes and cube are spawned resting on the table (:func:`_add_montessori_shape`,
 :func:`_add_cube`), so the model sits where the real object does and SegMind's own
 model-based support and contact detectors see it on the table. This offset then lifts
-the grasp target back up by the same distance the shapes used to be spawned hovering, so
-the arm still reaches where it did before the spawn was lowered. A starting point to
-tune on hardware, not a measured value.
+the grasp target back up by the same distance the full-size shapes used to be spawned
+hovering, scaled by :data:`SHAPE_SCALE` so the fingers close at the same fraction of a
+scaled piece's height. A starting point to tune on hardware, not a measured value.
 """
 
 SLIP_WATCH_INTERVAL_SECONDS = 1.0
@@ -213,19 +224,19 @@ class PickTarget:
     pick_y: float
     """Y of the shape on the table, in the world root frame (X is shared: :data:`CUBE_X`)."""
 
-    half_height: float
-    """
-    Half the shape's own height, used to seat it on the table and above its hole; matches
-    :func:`~experiments.montessori.world._shape_body`'s own per-category thickness.
-    """
+    @property
+    def half_height(self) -> float:
+        """
+        Half the shape's own height at :data:`SHAPE_SCALE`, used to seat it on the table
+        and above its hole.
+        """
+        return _shape_half_height(self.category)
 
 
 PICK_TARGETS: list[PickTarget] = [
-    PickTarget("pickup_circle", MontessoriShapeCategory.CYLINDER, 0.5, 0.015),
-    PickTarget(
-        "pickup_rectangle", MontessoriShapeCategory.RECTANGULAR_PRISM, 0.3, 0.015
-    ),
-    PickTarget("pickup_triangle", MontessoriShapeCategory.TRIANGULAR_PRISM, 0.2, 0.01),
+    PickTarget("pickup_circle", MontessoriShapeCategory.CYLINDER, 0.5),
+    PickTarget("pickup_rectangle", MontessoriShapeCategory.RECTANGULAR_PRISM, 0.3),
+    PickTarget("pickup_triangle", MontessoriShapeCategory.TRIANGULAR_PRISM, 0.2),
 ]
 """
 Every loose shape besides the cube, in pick order. All share :data:`CUBE_X`; only the Y
@@ -319,8 +330,8 @@ def _hole_place_pose(
     footprint = _hole_footprint(category)
     board_top_z = _board_center_z(mounted_table_top_z) + BOARD_SCALE.z / 2
     return Pose.from_xyz_rpy(
-        BOARD_X + footprint.center[0],
-        BOARD_Y + footprint.center[1],
+        BOARD_X + footprint.center.x,
+        BOARD_Y + footprint.center.y,
         board_top_z + shape_half_height + PLACE_HOVER,
         reference_frame=world.root,
     )
@@ -337,6 +348,52 @@ def _grasp_target_pose(body: Body, grasp_height_offset: float) -> Pose:
     return Pose.from_xyz_rpy(0.0, 0.0, grasp_height_offset, reference_frame=body)
 
 
+def _shape_half_height(category: MontessoriShapeCategory) -> float:
+    """
+    :return: Half the height of a loose Montessori shape of ``category`` at
+        :data:`SHAPE_SCALE`, which seats its body on the table and above its hole.
+    """
+    return KNOWN_PIECE_BY_CATEGORY[category].height * SHAPE_SCALE / 2
+
+
+def _spawn_shape_body(
+    world: World,
+    name: str,
+    category: MontessoriShapeCategory,
+    x: float,
+    y: float,
+    mounted_table_top_z: float,
+) -> Body:
+    """
+    Add one loose Montessori shape to the live world as a fixed body standing at
+    ``(x, y)`` in the world root frame, resting on the live robot's own table top.
+
+    :param world: The live world to add the shape to, modified in place.
+    :param name: Name of the shape's body.
+    :param category: Which shape to add.
+    :param x: X of the shape's centre, in the world root frame.
+    :param y: Y of the shape's centre, in the world root frame.
+    :param mounted_table_top_z: Height of the live robot's own table top.
+    :return: The newly added shape body.
+    """
+    body = _shape_body(
+        PrefixedName(name), category, _hole_footprint(category), scale=SHAPE_SCALE
+    )
+    with world.modify_world():
+        world.add_kinematic_structure_entity(body)
+        world.add_connection(
+            FixedConnection.create_with_dofs(
+                parent=world.root,
+                child=body,
+                world=world,
+                parent_T_connection_expression=HomogeneousTransformationMatrix.from_xyz_rpy(
+                    x, y, mounted_table_top_z + _shape_half_height(category)
+                ),
+            )
+        )
+    return body
+
+
 def _add_montessori_shape(
     world: World, mounted_table_top_z: float, target: PickTarget
 ) -> Body:
@@ -349,23 +406,14 @@ def _add_montessori_shape(
     :param target: Which shape to add and where.
     :return: The newly added shape body.
     """
-    body = _shape_body(
-        PrefixedName(target.name), target.category, _hole_footprint(target.category)
+    return _spawn_shape_body(
+        world,
+        target.name,
+        target.category,
+        CUBE_X,
+        target.pick_y,
+        mounted_table_top_z,
     )
-    shape_center_z = mounted_table_top_z + target.half_height
-    with world.modify_world():
-        world.add_kinematic_structure_entity(body)
-        world.add_connection(
-            FixedConnection.create_with_dofs(
-                parent=world.root,
-                child=body,
-                world=world,
-                parent_T_connection_expression=HomogeneousTransformationMatrix.from_xyz_rpy(
-                    CUBE_X, target.pick_y, shape_center_z
-                ),
-            )
-        )
-    return body
 
 
 def _add_montessori_board(world: World, mounted_table_top_z: float) -> Body:
@@ -466,8 +514,12 @@ class _SortingRig:
     table_top_z: float
     """Height of the live robot's own table top."""
 
-    close_table: GraspCloseTable = field(default_factory=GraspCloseTable)
-    """Per-shape close setpoint the grasp is sized to."""
+    close_table: GraspCloseTable = field(
+        default_factory=lambda: GraspCloseTable().for_pieces_scaled_by(SHAPE_SCALE)
+    )
+    """
+    Per-shape close setpoint the grasp is sized to, for pieces at :data:`SHAPE_SCALE`.
+    """
 
     grasp_height_offset: float = GRASP_HEIGHT_OFFSET
     """Height the reach, grasp and lift are aimed above a shape's own centre."""
@@ -478,12 +530,23 @@ class _SortingRig:
     post_lift_settle: float = POST_LIFT_SETTLE_SECONDS
     """Seconds to let the grasp settle after the lift before it is read."""
 
+    def release_pose_for(self, shape: MontessoriShape, half_height: float) -> Pose:
+        """
+        :param shape: The shape being sorted.
+        :param half_height: Half the shape's own height.
+        :return: The pose, in the world root frame, at which ``shape``'s centre is
+            released :data:`PLACE_HOVER` above the board hole matching its category.
+        """
+        return _hole_place_pose(
+            self.world, self.table_top_z, shape.shape_category, half_height
+        )
+
     def sort(
         self, body: Body, category: MontessoriShapeCategory, half_height: float
     ) -> None:
         """
-        Pick ``body`` off the table and release it :data:`PLACE_HOVER` above the board
-        hole matching ``category``.
+        Pick ``body`` off the table and release it where :meth:`release_pose_for` puts
+        it.
 
         The gripper is opened and closed through :attr:`gripper` rather than a plan
         node, since Giskard cannot command Tracy's real fingers, and the close is sized
@@ -497,16 +560,15 @@ class _SortingRig:
         :param half_height: Half the shape's own height, for seating it above the hole.
         """
         grasp_target = _grasp_target_pose(body, self.grasp_height_offset)
+        shape = MONTESSORI_SHAPE_CLASSES[category](name=body.name, root=body)
         reach = ReachAction(
             target_pose=grasp_target,
-            object_designator=body,
+            object_designator=shape,
             arm=PICK_ARM,
             grasp_description=self.grasp_description,
         )
         _, _, lift_to_pose = self.grasp_description.pose_sequence(grasp_target, body)
-        place_target = _hole_place_pose(
-            self.world, self.table_top_z, category, half_height
-        )
+        place_target = self.release_pose_for(shape, half_height)
         transport_pose, placing_pose, retract_pose = (
             self.grasp_description.pose_sequence(place_target, body, reverse=True)
         )
@@ -514,7 +576,7 @@ class _SortingRig:
         reach_plan = sequential([reach], context=self.context).plan
         lift = sequential(
             [
-                AttachNode(body=body, new_parent=self.tool_frame),
+                ReAttachNode(body=body, new_parent=self.tool_frame),
                 MoveToolCenterPointMotion(
                     lift_to_pose,
                     PICK_ARM,
@@ -540,7 +602,7 @@ class _SortingRig:
         ).plan
         retract_and_park = sequential(
             [
-                DetachNode(body=body, new_parent=self.world.root),
+                ReAttachNode(body=body, new_parent=self.world.root),
                 MoveToolCenterPointMotion(
                     retract_pose,
                     PICK_ARM,
@@ -779,7 +841,7 @@ def main() -> None:
     with (
         recorder,
         ExecutionEnvironment(
-            execution_type=ExecutionType.REAL, collision_avoidance=True
+            execution_type=ExecutionType.REAL, collision_avoidance=False
         ),
     ):
         park.perform()

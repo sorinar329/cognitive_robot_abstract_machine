@@ -22,7 +22,8 @@ import numpy as np
 import pytest
 from typing_extensions import List, Tuple
 
-from experiments.montessori.hole_geometry import detect_hole_footprints
+from experiments.montessori.board_description import DescribedBoard
+from experiments.montessori.hole_geometry import BoardHoleLayout, detect_hole_footprints
 from experiments.montessori.perception.captures import SceneCapture
 from experiments.montessori.perception.detections import (
     MontessoriBoardDetection,
@@ -31,12 +32,20 @@ from experiments.montessori.perception.detections import (
 )
 from experiments.montessori.perception.orthophoto import Orthophoto
 from experiments.montessori.perception.explanations import CompetingExplanations
-from experiments.montessori.perception.pipeline import MontessoriPerceptionPipeline
+from experiments.montessori.perception.pipeline import (
+    LIVE_POSITION_CORRECTION,
+    MontessoriPerceptionPipeline,
+    default_look_rules,
+)
 from experiments.montessori.perception.recorded_setup import (
     BOARD_SCALE_AGAINST_THE_MESH,
     WIDEST_WORKSPACE,
 )
-from experiments.montessori.semantics import MontessoriShapeCategory
+from experiments.montessori.perception.backend import MontessoriPerceptionBackend
+from experiments.montessori.perception.scene_request import SceneRequest
+from experiments.montessori.perception.scene_source import RecordedFrame
+from experiments.montessori.semantics import MontessoriShapeCategory, ShapeSortingBoard
+from experiments.montessori.world import BOARD_SCALE
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 
 from .dataset import montessori_capture_fixtures
@@ -175,6 +184,76 @@ def test_every_hole_in_the_board_is_found(
         for hole in scene.board.holes
         if not lies_over_an_opening(hole, scene.board, lid)
     ] == []
+
+
+# %% the board found from its description
+
+PLACEMENT_TOLERANCE = 0.005
+"""
+How far apart, in metres, the board found from its description and the board found on
+the modelled lid may stand.
+"""
+
+
+def test_the_board_is_found_from_its_description_with_no_board_modelled(
+    capture: SceneCapture, capture_pipeline: MontessoriPerceptionPipeline
+) -> None:
+    """
+    A board the world does not hold is found by fitting the layout a statement describes,
+    on the plane its stated height puts the lid at above the table this look measured,
+    and it stands where the board found on the modelled lid does.
+    """
+    frame = capture.to_frame()
+    described = DescribedBoard.of_layout(
+        BoardHoleLayout.of_board_mesh(BOARD_SCALE_AGAINST_THE_MESH),
+        height=float(BOARD_SCALE.z),
+    )
+    unmodelled = replace(capture_pipeline, lid=None)
+
+    found = unmodelled.detect(
+        frame,
+        SceneRequest(
+            detection_type=MontessoriBoardDetection, described_board=described
+        ),
+    ).board
+
+    modelled = capture_pipeline.board_in(frame)
+    assert found is not None
+    assert Counter(hole.category for hole in found.holes) == Counter(
+        hole.category for hole in described.layout.holes
+    )
+    assert found.lid_height == pytest.approx(
+        unmodelled.table_in(frame).height + described.height
+    )
+    found_at = found.pose.to_position().to_np()[:2]
+    modelled_at = modelled.pose.to_position().to_np()[:2]
+    assert float(np.linalg.norm(found_at - modelled_at)) <= PLACEMENT_TOLERANCE
+
+
+def test_a_statement_describing_the_board_is_answered_with_the_board_it_found(
+    capture: SceneCapture, capture_pipeline: MontessoriPerceptionPipeline
+) -> None:
+    """
+    Asking for a board by what it measures answers with the board annotation standing
+    where the look found it, carrying the lid and the holes it was described with.
+    """
+    described = DescribedBoard.of_layout(
+        BoardHoleLayout.of_board_mesh(BOARD_SCALE_AGAINST_THE_MESH),
+        height=float(BOARD_SCALE.z),
+    )
+    looking = MontessoriPerceptionBackend(
+        source=RecordedFrame(
+            pipeline=replace(capture_pipeline, lid=None), frame=capture.to_frame()
+        )
+    )
+
+    [board] = described.statement().evaluate(backend=looking)
+
+    assert isinstance(board, ShapeSortingBoard)
+    assert (board.lid_size, board.height) == (described.lid_size, described.height)
+    assert [hole.shape_category for hole in board.apertures] == [
+        hole.shape_category for hole in described.holes
+    ]
 
 
 # %% the loose pieces
@@ -393,3 +472,52 @@ def test_every_piece_reported_stands_on_the_table_that_was_measured(
         )
     ]
     assert outside == []
+
+
+# %% the stopgap position correction
+
+
+def _xy(pose) -> np.ndarray:
+    """
+    A pose's world-frame ``(x, y)``.
+    """
+    return pose.to_position().to_np()[:2].astype(float)
+
+
+def test_the_position_correction_shifts_every_reported_position_by_exactly_it(
+    capture: SceneCapture, capture_pipeline: MontessoriPerceptionPipeline
+) -> None:
+    """
+    Wiring a ground-plane correction into the look adds it, unchanged, to the reported
+    position of the board, of every hole in it, and of every loose piece, and changes
+    nothing else about what is found.
+    """
+    correction = LIVE_POSITION_CORRECTION
+    corrected = replace(
+        capture_pipeline,
+        look_rules=default_look_rules(
+            board_detector=capture_pipeline.look_rules.find_the_board.board_detector,
+            position_correction=correction,
+        ),
+    )
+    frame = capture.to_frame()
+
+    base = capture_pipeline.detect(frame)
+    shifted = corrected.detect(frame)
+
+    offset = np.array([correction.x, correction.y])
+    assert base.board is not None and shifted.board is not None
+    assert _xy(shifted.board.pose) == pytest.approx(_xy(base.board.pose) + offset)
+    assert [hole.category for hole in shifted.board.holes] == [
+        hole.category for hole in base.board.holes
+    ]
+    for was, now in zip(base.board.holes, shifted.board.holes):
+        assert _xy(now.pose) == pytest.approx(_xy(was.pose) + offset)
+
+    assert len(shifted.shapes) == len(base.shapes)
+    for now in shifted.shapes:
+        assert any(
+            was.category == now.category
+            and _xy(was.pose) == pytest.approx(_xy(now.pose) - offset, abs=1e-6)
+            for was in base.shapes
+        ), f"no unshifted match for {now.category} at {_xy(now.pose)}"

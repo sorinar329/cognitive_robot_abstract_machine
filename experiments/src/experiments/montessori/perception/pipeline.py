@@ -26,7 +26,7 @@ than replaced by it.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 import cv2
 import numpy as np
@@ -54,9 +54,6 @@ from experiments.montessori.perception.explanations import (
     PlaceInThePicture,
 )
 from experiments.montessori.hole_geometry import BoardHoleLayout, PlacedHole
-from experiments.montessori.perception.exceptions import (
-    BoardMissingFromWorld,
-)
 from experiments.montessori.perception.footprint import RectifiedFootprint
 from experiments.montessori.perception.hypotheses import (
     BelievedPlace,
@@ -386,6 +383,42 @@ slot, and above the slivers of shadow that fall along the lid's own edges.
 """
 
 
+# %% the stopgap ground-plane position correction
+
+NO_POSITION_CORRECTION = PlanarPoint(0.0, 0.0)
+"""
+The correction a look applies to nothing: what every detector uses unless a caller wires
+one in.
+"""
+
+LIVE_POSITION_CORRECTION = PlanarPoint(0.2, 0.05)
+"""
+Added to every position perception reports on the physical robot, in the reference
+frame's ground plane.
+
+A stopgap, not a calibration. On the physical robot every detected position comes out
+about this far toward the camera from where the object really is, while the camera pose,
+intrinsics, image size and table height all match the setup the shipped captures were
+taken on, where positions are accurate -- so the cause is still open. This is the mean
+error over three hand-placed pieces measured on 2026-09-10; the piece farthest from the
+camera is left about thirty-five millimetres short, since the error grows with distance
+rather than being the constant this treats it as. Wired in only by
+:func:`~experiments.montessori.perception.node.pipeline_of`, so a recorded capture and a
+rendered scene are still read unmoved. Set to :data:`NO_POSITION_CORRECTION` once the
+rectification is fixed.
+"""
+
+
+def _corrected(center: PlanarPoint, correction: PlanarPoint) -> PlanarPoint:
+    """
+    A fitted centre moved by a look's ground-plane correction.
+
+    :param center: Where a fit placed the thing, in the reference frame's ground plane.
+    :param correction: How far, and which way, to move every reported position.
+    """
+    return PlanarPoint(center.x + correction.x, center.y + correction.y)
+
+
 # %% what a look found cut through a surface
 
 
@@ -548,6 +581,14 @@ class BoardDetector:
     not the holes, so their middle is only ever a place to start: measured on the
     shipped captures they lie within about ten millimetres of the board's true centre,
     and this leaves room for several times that.
+    """
+
+    position_correction: PlanarPoint = field(
+        default_factory=lambda: NO_POSITION_CORRECTION
+    )
+    """
+    Added to the reported position of the board and every hole in it, in the reference
+    frame's ground plane. See :data:`LIVE_POSITION_CORRECTION`.
     """
 
     def detect(
@@ -878,10 +919,11 @@ class BoardDetector:
         :return: The board.
         """
         width, length = self.layout.size.x, self.layout.size.y
+        moved = _corrected(placement.center, self.position_correction)
         return MontessoriBoardDetection(
             pose=Pose.from_xyz_rpy(
-                placement.center.x,
-                placement.center.y,
+                moved.x,
+                moved.y,
                 orthophoto.plane_height,
                 yaw=placement.yaw,
                 reference_frame=reference_frame,
@@ -903,8 +945,8 @@ class BoardDetector:
             lid_height=orthophoto.plane_height,
         )
 
-    @staticmethod
     def _hole_at(
+        self,
         hole: PlacedHole,
         orthophoto: Orthophoto,
         reference_frame: Optional[KinematicStructureEntity],
@@ -919,10 +961,11 @@ class BoardDetector:
         :param orthophoto: The rectified view of the lid's plane.
         :param reference_frame: Frame the resulting pose is expressed in.
         """
+        moved = _corrected(hole.center, self.position_correction)
         return ShapeSortingHoleDetection(
             pose=Pose.from_xyz_rpy(
-                hole.center.x,
-                hole.center.y,
+                moved.x,
+                moved.y,
                 orthophoto.plane_height,
                 reference_frame=reference_frame,
             ),
@@ -958,6 +1001,14 @@ class EdgeFitDetector(PieceDetector):
     piece_size: SizeRange = LOOSE_PIECE_SIZE
     """
     Area a piece's outline may cover.
+    """
+
+    position_correction: PlanarPoint = field(
+        default_factory=lambda: NO_POSITION_CORRECTION
+    )
+    """
+    Added to every reported piece position, in the reference frame's ground plane. See
+    :data:`LIVE_POSITION_CORRECTION`.
     """
 
     def capability(self, look: TargetOnSurface) -> ConditionType:
@@ -1112,16 +1163,24 @@ class EdgeFitDetector(PieceDetector):
         height = _measure_height(
             fitted, orthophoto, surface_pass.frame, self.piece_height
         )
-        pose = Pose.from_xyz_rpy(
+        top_height = orthophoto.plane_height + height / 2
+        seen_pose = Pose.from_xyz_rpy(
             match.center.x,
             match.center.y,
-            orthophoto.plane_height + height / 2,
+            top_height,
             yaw=match.yaw,
             reference_frame=imagined.reference_frame,
         )
+        moved = _corrected(match.center, self.position_correction)
         return DetectedMontessoriShape(
-            role_taker=imagined.spawn(match.piece, pose),
-            pose=pose,
+            role_taker=imagined.spawn(match.piece, seen_pose),
+            pose=Pose.from_xyz_rpy(
+                moved.x,
+                moved.y,
+                top_height,
+                yaw=match.yaw,
+                reference_frame=imagined.reference_frame,
+            ),
             footprint=RectifiedFootprint.from_contour(
                 fitted, orthophoto.region.resolution
             ),
@@ -1160,6 +1219,14 @@ class ColorBlobDetector(PieceDetector):
     piece_size: SizeRange = LOOSE_PIECE_SIZE
     """
     Area a piece's outline may cover.
+    """
+
+    position_correction: PlanarPoint = field(
+        default_factory=lambda: NO_POSITION_CORRECTION
+    )
+    """
+    Added to every reported piece position, in the reference frame's ground plane. See
+    :data:`LIVE_POSITION_CORRECTION`.
     """
 
     def capability(self, look: TargetOnSurface) -> ConditionType:
@@ -1256,16 +1323,24 @@ class ColorBlobDetector(PieceDetector):
         height = _measure_height(
             contour, orthophoto, surface_pass.frame, self.piece_height
         )
-        pose = Pose.from_xyz_rpy(
+        top_height = orthophoto.plane_height + height / 2
+        seen_pose = Pose.from_xyz_rpy(
             match.center.x,
             match.center.y,
-            orthophoto.plane_height + height / 2,
+            top_height,
             yaw=match.yaw,
             reference_frame=imagined.reference_frame,
         )
+        moved = _corrected(match.center, self.position_correction)
         return DetectedMontessoriShape(
-            role_taker=imagined.spawn(match.piece, pose),
-            pose=pose,
+            role_taker=imagined.spawn(match.piece, seen_pose),
+            pose=Pose.from_xyz_rpy(
+                moved.x,
+                moved.y,
+                top_height,
+                yaw=match.yaw,
+                reference_frame=imagined.reference_frame,
+            ),
             footprint=footprint,
             outline=outline,
             category=match.piece.category,
@@ -1419,22 +1494,64 @@ class FindTheBoard(SceneDetector):
 
     def detect(self, scene: SceneToSearch) -> MontessoriScene:
         """
-        Find the board.
+        Find the board, and stand a board the request describes in the world the look
+        brings its findings into.
 
         :param scene: What was asked for, and the frame to answer it from.
         """
-        return MontessoriScene(board=self.board_in(scene))
+        board = self.board_in(scene)
+        described = scene.request.described_board
+        if board is None or described is None:
+            return MontessoriScene(board=board)
+        imagined = scene.imagine()
+        return MontessoriScene(
+            board=board,
+            stood_board=imagined.stand_board(described, board.pose),
+            imagined=imagined,
+        )
 
     def board_in(self, scene: SceneToSearch) -> Optional[MontessoriBoardDetection]:
         """
         The board as this look sees it, rectified onto the plane its lid stands in.
 
         :param scene: The frame to find it in, and the surfaces it stands among.
-        :return: The board, or None if it was not in view.
+        :return: The board, or None if it was not in view or neither the world nor the
+            request says how high its lid stands.
         """
-        return self.board_detector.detect(
-            scene.rectified.at(scene.lid.height), scene.reference_frame
+        lid_height = self.lid_height_in(scene)
+        if lid_height is None:
+            return None
+        return self.board_detector_for(scene.request).detect(
+            scene.rectified.at(lid_height), scene.reference_frame
         )
+
+    @staticmethod
+    def lid_height_in(scene: SceneToSearch) -> Optional[float]:
+        """
+        How high the board's lid stands: the modelled lid where the world holds a board,
+        and otherwise the table this look measured raised by the height the request
+        describes the board to stand.
+
+        :param scene: The frame to find the board in, and the surfaces it stands among.
+        :return: The lid's height above the world frame's origin, in metres, or None where
+            neither the world nor the request says.
+        """
+        if scene.lid is not None:
+            return scene.lid.height
+        described = scene.request.described_board
+        if described is None:
+            return None
+        return scene.table.height + described.height
+
+    def board_detector_for(self, request: SceneRequest) -> BoardDetector:
+        """
+        :param request: What the look was asked for.
+        :return: The board detector fitting the layout the request describes, or the one
+            this way of looking was configured with where it describes none.
+        """
+        if request.described_board is None:
+            return self.board_detector
+        return replace(self.board_detector, layout=request.described_board.layout)
 
 
 @dataclass(eq=False)
@@ -1576,6 +1693,7 @@ def _board_outlines_in(
 
 def default_look_rules(
     board_detector: Optional[BoardDetector] = None,
+    position_correction: Optional[PlanarPoint] = None,
 ) -> LookRules:
     """
     The rules a pipeline starts with, sharing the one board search between the two ways
@@ -1583,11 +1701,24 @@ def default_look_rules(
 
     :param board_detector: The detector that finds the board, for a setup whose board is
         not the size the mesh was drawn at, or None for the one every scene starts with.
+    :param position_correction: Added to every position the board and piece detectors
+        report, or None to report positions unmoved. See :data:`LIVE_POSITION_CORRECTION`.
     """
-    find_the_board = FindTheBoard(board_detector=board_detector or BoardDetector())
+    correction = position_correction or NO_POSITION_CORRECTION
+    find_the_board = FindTheBoard(
+        board_detector=replace(
+            board_detector or BoardDetector(), position_correction=correction
+        )
+    )
     return LookRules(
         find_the_board=find_the_board,
-        find_the_pieces=FindThePieces(find_the_board=find_the_board),
+        find_the_pieces=FindThePieces(
+            find_the_board=find_the_board,
+            detector_rules=DetectorRules(
+                edge_fit=EdgeFitDetector(position_correction=correction),
+                color_blob=ColorBlobDetector(position_correction=correction),
+            ),
+        ),
     )
 
 
@@ -1608,15 +1739,17 @@ class MontessoriPerceptionPipeline:
     reflective table is too noisy to support.
     """
 
-    lid: WorkspaceSurface
+    lid: Optional[WorkspaceSurface]
     """
-    The board's lid: the second surface pieces rest on, and the plane its holes are cut
-    in.
+    The board's lid as the world models it: the second surface pieces rest on, and the
+    plane its holes are cut in, or None where the world holds no board yet.
 
     Its height must match the physical board, since it sets the plane the holes are
     rectified onto and so how far apart their centres come out. How far it reaches is
     not read from here but from the board as it was seen, because a board that has been
-    slid across the table stands exactly as high as before somewhere else.
+    slid across the table stands exactly as high as before somewhere else. Without one,
+    a look asked for a described board finds the lid at the height the description
+    gives it.
     """
 
     reference_frame: Optional[KinematicStructureEntity] = None
@@ -1669,30 +1802,46 @@ class MontessoriPerceptionPipeline:
     """
 
     @classmethod
-    def of_world(cls, world: World, table: Body) -> MontessoriPerceptionPipeline:
+    def of_world(
+        cls,
+        world: World,
+        table: Body,
+        position_correction: PlanarPoint = NO_POSITION_CORRECTION,
+    ) -> MontessoriPerceptionPipeline:
         """
         Build the pipeline that looks at the Montessori scene a world describes.
 
         The stretch of table to search and the plane each surface stands at are read
         from the world, so perception looks where the robot's own model says the scene
-        is.
+        is. A world holding no board leaves the lid to be found by looking for a
+        described one.
 
         :param world: The world the scene is described in.
         :param table: The body carrying the surface the scene is set up on.
-        :raises BoardMissingFromWorld: If the world describes no shape-sorting board.
+        :param position_correction: Added to every position the look reports; unmoved by
+            default. See :data:`LIVE_POSITION_CORRECTION` for the stopgap the physical
+            robot passes here.
         :raises SurfaceHasNothingToMeasure: If a surface the scene needs has no shape.
         """
-        reference_frame = world.root
+        return cls(
+            table=WorkspaceSurface.of_body(table, world.root),
+            lid=cls._lid_of(world),
+            reference_frame=world.root,
+            world=world,
+            look_rules=default_look_rules(position_correction=position_correction),
+        )
+
+    @staticmethod
+    def _lid_of(world: World) -> Optional[WorkspaceSurface]:
+        """
+        :param world: The world the scene is described in.
+        :return: The lid of the board the world holds, or None where it holds none.
+        """
         boards = world.get_semantic_annotations_by_type(ShapeSortingBoard)
         if not boards:
-            raise BoardMissingFromWorld()
+            return None
         [board] = boards
-        return cls(
-            table=WorkspaceSurface.of_body(table, reference_frame),
-            lid=WorkspaceSurface.of(board, reference_frame),
-            reference_frame=reference_frame,
-            world=world,
-        )
+        return WorkspaceSurface.of(board, world.root)
 
     @property
     def workspace(self) -> WorkspaceBox:

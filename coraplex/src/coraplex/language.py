@@ -78,22 +78,23 @@ class LanguageNode(PlanNode, BuildsMotionStateChart, ABC):
     def parse(self) -> Executable:
         return self.parse_children(self.children)
 
-    def create_goal(self) -> Goal:
+    @property
+    def goal_type(self) -> type[Goal]:
         """
-        :return: An empty goal of this node's template, describing how its children are
-            executed inside a motion state chart.
+        :return: This node's template, describing how its children are executed inside
+            a motion state chart.
         """
-        return self.motion_state_chart_template(name=type(self).__name__)
+        return self.motion_state_chart_template
 
     def add_to_motion_state_chart(
         self, parent_goal: Goal, executable: GiskardExecutable
     ) -> Goal:
         """
-        Add this node as its own goal below `parent_goal` and add every child that
-        contributes motions into it, one at a time.
+        Add every child that contributes motions below `parent_goal`, one at a time, in
+        a goal of this node's own unless both are plain sequences (see
+        :meth:`goal_for_children`).
         """
-        goal = self.create_goal()
-        parent_goal.add_node(goal)
+        goal = self.goal_for_children(parent_goal)
         self.add_children_to_motion_state_chart(goal, self.children, executable)
         return goal
 

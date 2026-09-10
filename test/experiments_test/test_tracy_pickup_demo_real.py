@@ -11,7 +11,11 @@ import threading
 import time
 from dataclasses import dataclass, field
 
+import pytest
+
 from coraplex.datastructures.enums import Arms
+from experiments.montessori.pieces import CUBE_EDGE, KNOWN_PIECE_BY_CATEGORY
+from experiments.montessori.semantics import MontessoriShapeCategory
 from experiments.tracy_experiments.montessori.gripper_feedback import (
     FULLY_CLOSED_KNUCKLE_POSITION,
     RECLOSE_MARGIN,
@@ -21,13 +25,18 @@ from experiments.tracy_experiments.montessori.gripper_feedback import (
 )
 from experiments.tracy_experiments.montessori.grasp_widths import (
     RECTANGULAR_PRISM_CLOSE_SETPOINT,
+    GraspCloseTable,
 )
 from experiments.tracy_experiments.pickup.pickup_demo_real import (
     GRASP_HEIGHT_OFFSET,
     PICK_TARGETS,
     POST_LIFT_SETTLE_SECONDS,
+    SHAPE_SCALE,
+    _add_cube,
     _add_montessori_shape,
     _grasp_target_pose,
+    _shape_half_height,
+    _spawn_shape_body,
     _SortingRig,
 )
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
@@ -77,6 +86,20 @@ def test_a_loose_shape_is_spawned_resting_on_the_table():
 
     spawned_z = float(world.compute_forward_kinematics_np(world.root, body)[2, 3])
     assert spawned_z == TABLE_TOP_Z + target.half_height
+
+
+def test_a_shape_body_is_spawned_standing_on_the_table_at_the_given_point():
+    world = _world_with_root()
+    category = MontessoriShapeCategory.RECTANGULAR_PRISM
+
+    body = _spawn_shape_body(world, "perceived_0", category, 1.09, 0.4, TABLE_TOP_Z)
+
+    placed = world.compute_forward_kinematics_np(world.root, body)
+    assert [float(placed[axis, 3]) for axis in range(3)] == [
+        1.09,
+        0.4,
+        TABLE_TOP_Z + _shape_half_height(category),
+    ]
 
 
 def test_the_grasp_is_aimed_where_the_pre_offset_spawn_put_it():
@@ -280,9 +303,7 @@ def test_the_grasp_is_left_to_settle_after_the_lift_before_it_is_read():
     rig.post_lift_settle = 0.2
 
     started = time.monotonic()
-    rig._carry_watching_for_slip(
-        Body(name=PrefixedName("cube")), 0.5, lambda: None
-    )
+    rig._carry_watching_for_slip(Body(name=PrefixedName("cube")), 0.5, lambda: None)
 
     assert time.monotonic() - started >= 0.2
     assert gripper.close_to_setpoints[0] == 0.5
@@ -309,3 +330,47 @@ def test_a_slip_streams_a_gripper_slip_event_to_the_feed():
     assert isinstance(first_event, GripperSlipEvent)
     assert first_event.tracked_object is body
     assert _no_slip_watch_thread_left_running()
+
+
+# %% shape scale
+
+
+def _collision_extents(body: Body) -> list[float]:
+    """
+    :return: The extent of ``body``'s collision geometry along x, y and z.
+    """
+    return [float(extent) for extent in body.collision.combined_mesh.extents]
+
+
+def test_the_cube_is_spawned_at_the_scaled_edge_length():
+    world = _world_with_root()
+
+    cube = _add_cube(world, TABLE_TOP_Z)
+
+    assert _collision_extents(cube) == pytest.approx([CUBE_EDGE * SHAPE_SCALE] * 3)
+
+
+def test_a_loose_shape_is_spawned_at_the_scaled_height():
+    world = _world_with_root()
+    target = PICK_TARGETS[0]
+
+    body = _add_montessori_shape(world, TABLE_TOP_Z, target)
+
+    assert _collision_extents(body)[2] == pytest.approx(
+        KNOWN_PIECE_BY_CATEGORY[target.category].height * SHAPE_SCALE
+    )
+
+
+def test_every_loose_shape_is_seated_half_its_own_height_above_the_table():
+    world = _world_with_root()
+
+    for target in PICK_TARGETS:
+        body = _add_montessori_shape(world, TABLE_TOP_Z, target)
+
+        assert target.half_height == pytest.approx(_collision_extents(body)[2] / 2)
+
+
+def test_the_rig_closes_to_the_setpoints_for_the_scaled_pieces():
+    rig = _slip_watch_rig(RecordingGripper(), _held())
+
+    assert rig.close_table == GraspCloseTable().for_pieces_scaled_by(SHAPE_SCALE)

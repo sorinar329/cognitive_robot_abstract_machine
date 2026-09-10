@@ -644,14 +644,14 @@ class ActionNode(DesignatorNode, BuildsMotionStateChart):
         self, parent_goal: Goal, executable: GiskardExecutable
     ) -> Goal:
         """
-        Add this action's body as its own goal below `parent_goal`.
+        Add this action's body below `parent_goal`, in a goal of its own unless both run
+        in plain sequence (see :meth:`goal_for_children`).
 
         .. note:: A nested action's conditions are not evaluated inside the surrounding
             motion state chart; only the conditions of the action a chart is built for
             are, see :meth:`parse`.
         """
-        goal = self.create_goal()
-        parent_goal.add_node(goal)
+        goal = self.goal_for_children(parent_goal)
         self.add_children_to_motion_state_chart(goal, self.body_children, executable)
         return goal
 

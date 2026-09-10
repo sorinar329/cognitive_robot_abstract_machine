@@ -14,6 +14,7 @@ from enum import StrEnum
 from typing_extensions import Dict, Optional, Type
 
 from experiments.montessori.exceptions import NoMatchingHoleError
+from experiments.montessori.planar_geometry import PlanarPoint, PlanarSize
 from krrood.ormatic.utils import classproperty
 from semantic_digital_twin.semantic_annotations.mixins import (
     HasApertures,
@@ -246,6 +247,24 @@ class ShapeSortingHole(Aperture):
     :attr:`MontessoriShape.shape_category` to decide which pieces fit through it.
     """
 
+    footprint_size: Optional[PlanarSize] = field(kw_only=True, default=None)
+    """
+    How far the hole reaches along its own axes before :attr:`turn_on_lid` turns it, in
+    metres: a triangle's side along x, a rectangle's width and length, a circle's
+    diameter along x.
+    """
+
+    position_on_lid: Optional[PlanarPoint] = field(kw_only=True, default=None)
+    """
+    Where the hole's centre stands, from the lid's centre along the lid's own axes, in
+    metres.
+    """
+
+    turn_on_lid: float = field(kw_only=True, default=0.0)
+    """
+    How far the hole is turned about the lid's vertical axis, in radians.
+    """
+
     landing_region: Optional[Region] = field(kw_only=True, default=None)
     """
     The space under this hole, which a shape that has gone through it is inside and a
@@ -288,6 +307,16 @@ class ShapeSortingBoard(HasCaseAsRootBody, HasDrawers, HasApertures):
     The Montessori shape-sorting board: a wooden case whose lid has one
     :class:`ShapeSortingHole` per :class:`MontessoriShapeCategory` and whose body houses
     drawers for storing the shapes when they are not on the board.
+    """
+
+    lid_size: Optional[PlanarSize] = field(kw_only=True, default=None)
+    """
+    How far the lid reaches along the board's own axes, in metres.
+    """
+
+    height: Optional[float] = field(kw_only=True, default=None)
+    """
+    How far the lid stands above the surface the board rests on, in metres.
     """
 
     @classproperty
