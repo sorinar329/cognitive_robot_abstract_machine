@@ -31,10 +31,11 @@ kinematic detach would otherwise risk. Both actions are generic over any body an
 used the same way for a Montessori shape being sorted into a hole and a cube being
 stacked onto another.
 
-Both actions currently support only a fixed top-down grasp (``grasp_description`` is
-accepted for interface parity with ``PickUpAction``, but its own approach direction and
-vertical alignment are not yet read); see :func:`_finger_midpoint_offset`'s own
-docstring for the geometry this fixed orientation assumes.
+Both actions approach top-down (``grasp_description`` is accepted for interface parity
+with ``PickUpAction``, but its own approach direction and vertical alignment are not yet
+read); the gripper may be turned about that vertical axis via ``grasp_yaw`` so the
+fingers meet an object across a chosen width. See :func:`_finger_midpoint_offset`'s own
+docstring for the geometry the top-down approach assumes.
 """
 
 from __future__ import annotations
@@ -52,6 +53,7 @@ from coraplex.robot_plans.actions.base import ActionDescription
 from dataclasses import dataclass
 from experiments.tracy_experiments.real_time_simulation import RealTimeSimulation
 from experiments.tracy_experiments.trajectory_planning import (
+    SQUEEZE_MARGIN,
     close_gripper_around,
     follow_joint_trajectory,
     plan_cartesian_trajectory,
@@ -91,6 +93,7 @@ closed) -- confirmed directly, a pad that clears the table by that same ~1.35cm 
 open ends up flush with the table once closed. ``0.015`` covers that swing with a small
 margin.
 """
+
 
 def _bounding_box_center_world(world: World, body: Body) -> numpy.ndarray:
     """
@@ -146,16 +149,25 @@ def _finger_midpoint_offset(robot: Tracy, arm_side: Arms) -> numpy.ndarray:
     return root_transform_tool[:3, :3].T @ offset_in_root_frame
 
 
-def _top_down_pose_builder(world: World, robot: Tracy, arm: Arms):
+def _top_down_pose_builder(
+    world: World, robot: Tracy, arm: Arms, grasp_yaw: float = 0.0
+):
     """
     Build a ``pose(x, y, z) -> Pose`` closure that places the gripper's own finger
-    midpoint (not its tool frame) at the given world-frame point, fixed top-down.
+    midpoint (not its tool frame) at the given world-frame point, approaching top-down.
 
     :param world: The world the returned poses are expressed in.
     :param robot: The robot whose gripper geometry corrects the target.
     :param arm: Which arm's gripper geometry to use.
+    :param grasp_yaw: Rotation of the gripper about the vertical approach axis, in
+        radians. ``0`` closes the fingers along the world x-axis; a non-zero value turns
+        the closing axis in the horizontal plane so the pads can meet an object across a
+        chosen width -- e.g. a triangular prism clamped face-to-vertex rather than
+        across two corners.
     """
-    orientation = Pose.from_xyz_rpy(0, 0, 0, pitch=math.pi, reference_frame=world.root)
+    orientation = Pose.from_xyz_rpy(
+        0, 0, 0, pitch=math.pi, yaw=grasp_yaw, reference_frame=world.root
+    )
     tool_frame_rotation = orientation.to_rotation_matrix().evaluate()[:3, :3]
     finger_midpoint_offset = _finger_midpoint_offset(robot, arm)
 
@@ -163,7 +175,10 @@ def _top_down_pose_builder(world: World, robot: Tracy, arm: Arms):
         finger_target = numpy.array([x, y, z])
         tool_frame_target = finger_target - tool_frame_rotation @ finger_midpoint_offset
         return Pose.from_xyz_rpy(
-            *tool_frame_target, pitch=math.pi, reference_frame=world.root
+            *tool_frame_target,
+            pitch=math.pi,
+            yaw=grasp_yaw,
+            reference_frame=world.root,
         )
 
     return pose
@@ -240,6 +255,20 @@ class PickUpActionMujoco(ActionDescription):
     See :data:`HOVER_CLEARANCE`.
     """
 
+    grasp_yaw: float = 0.0
+    """
+    Rotation of the gripper about the vertical approach axis for this grasp, in radians;
+    see :func:`_top_down_pose_builder`.
+    """
+
+    squeeze_margin: float = SQUEEZE_MARGIN
+    """
+    How far past the object's own half-width the fingers close, in metres; see
+    :data:`~experiments.tracy_experiments.trajectory_planning.SQUEEZE_MARGIN`.
+
+    Raise it for an object held at a point or edge rather than a flat face.
+    """
+
     @property
     def _action_plan(self) -> PlanNode:
         return code(self._run)
@@ -247,7 +276,7 @@ class PickUpActionMujoco(ActionDescription):
     def _run(self) -> None:
         world = self.world
         robot = self.robot
-        pose = _top_down_pose_builder(world, robot, self.arm)
+        pose = _top_down_pose_builder(world, robot, self.arm, self.grasp_yaw)
 
         body_center = _bounding_box_center_world(world, self.object_designator)
         pick_hover = pose(
@@ -262,7 +291,12 @@ class PickUpActionMujoco(ActionDescription):
         _reach(world, self.sim, self.actuators, self.arm, pick_hover)
         _reach(world, self.sim, self.actuators, self.arm, pick_grasp)
         close_gripper_around(
-            self.sim, self.actuators, robot, self.arm, self.object_designator
+            self.sim,
+            self.actuators,
+            robot,
+            self.arm,
+            self.object_designator,
+            squeeze_margin=self.squeeze_margin,
         )
         _reach(world, self.sim, self.actuators, self.arm, pick_hover)
 
@@ -311,6 +345,15 @@ class PlaceActionMujoco(ActionDescription):
     See :data:`PLACE_HOVER_CLEARANCE`.
     """
 
+    grasp_yaw: float = 0.0
+    """
+    Rotation of the gripper about the vertical approach axis while placing, in radians;
+    match the value the matching :class:`PickUpActionMujoco` used so the held object is
+    not twisted between grasp and release.
+
+    See :func:`_top_down_pose_builder`.
+    """
+
     @property
     def _action_plan(self) -> PlanNode:
         return code(self._run)
@@ -318,7 +361,7 @@ class PlaceActionMujoco(ActionDescription):
     def _run(self) -> None:
         world = self.world
         robot = self.robot
-        pose = _top_down_pose_builder(world, robot, self.arm)
+        pose = _top_down_pose_builder(world, robot, self.arm, self.grasp_yaw)
 
         target_position = self.target_location.to_position()
         place_hover = pose(

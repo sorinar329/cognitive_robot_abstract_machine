@@ -1,8 +1,8 @@
 """
 Alternate layout for the Montessori shape-sorting scene: the shape-sorting board sits
 directly in front of the mounted robot, and the loose shapes sit off to its side on
-their own stand, instead of both sharing the single table :mod:`~experiments.montessori.world`
-lays them out on.
+their own stand, instead of both sharing the single table
+:mod:`~experiments.montessori.world` lays them out on.
 
 :mod:`~experiments.montessori.world` is left untouched (this is a separate, parallel
 layout to compare against it, not a replacement); :class:`MontessoriWorld2` subclasses
@@ -165,9 +165,9 @@ _BOARD_POSITION_DELTA_Y = float(BOARD_POSITION_2.y) - float(BOARD_POSITION.y)
 _BOARD_POSITION_DELTA_Z = float(BOARD_POSITION_2.z) - float(BOARD_POSITION.z)
 """
 Offset from :const:`~experiments.montessori.world.BOARD_POSITION` to
-:const:`BOARD_POSITION_2`, used to carry :const:`~experiments.montessori.world._DRAWER_POSITIONS`
-(hand-placed relative to the original board position) over to this layout without
-re-deriving them from scratch.
+:const:`BOARD_POSITION_2`, used to carry
+:const:`~experiments.montessori.world._DRAWER_POSITIONS` (hand-placed relative to the
+original board position) over to this layout without re-deriving them from scratch.
 """
 
 _DRAWER_POSITIONS_2: List[Point3] = [
@@ -304,8 +304,11 @@ class MontessoriWorld2(MontessoriWorld):
 
             landing_region = _landing_region(
                 _name(f"{hole_spec.key}_landing_region"),
-                hole_spec.shape,
-                landing_region_height,
+                Scale(
+                    hole_spec.shape.size.x,
+                    hole_spec.shape.size.y,
+                    landing_region_height,
+                ),
             )
             self._spawn_region(
                 landing_region,

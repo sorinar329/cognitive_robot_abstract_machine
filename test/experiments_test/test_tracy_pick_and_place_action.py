@@ -1,3 +1,7 @@
+import math
+
+import numpy
+
 from coraplex.datastructures.enums import Arms
 from experiments.montessori.world import mount_stationary_robot
 from experiments.tracy_experiments.equipment import (
@@ -7,6 +11,7 @@ from experiments.tracy_experiments.equipment import (
 from experiments.tracy_experiments.pick_and_place_action import (
     _bounding_box_center_world,
     _finger_midpoint_offset,
+    _top_down_pose_builder,
 )
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.robots.tracy import Tracy
@@ -52,3 +57,28 @@ def test_finger_midpoint_offset_differs_between_left_and_right_arm():
     right_offset = _finger_midpoint_offset(robot, Arms.RIGHT)
 
     assert list(left_offset) != list(right_offset)
+
+
+def test_grasp_yaw_turns_the_closing_axis_about_the_vertical_without_tilting_it():
+    world, robot = _mounted_tracy()
+    yaw = math.pi / 6
+
+    straight = _top_down_pose_builder(world, robot, Arms.LEFT)(0.0, 0.0, 1.0)
+    turned = _top_down_pose_builder(world, robot, Arms.LEFT, grasp_yaw=yaw)(
+        0.0, 0.0, 1.0
+    )
+
+    straight_rotation = straight.to_rotation_matrix().evaluate()[:3, :3]
+    turned_rotation = turned.to_rotation_matrix().evaluate()[:3, :3]
+    about_vertical = numpy.array(
+        [
+            [math.cos(yaw), -math.sin(yaw), 0.0],
+            [math.sin(yaw), math.cos(yaw), 0.0],
+            [0.0, 0.0, 1.0],
+        ]
+    )
+
+    numpy.testing.assert_allclose(
+        turned_rotation, about_vertical @ straight_rotation, atol=1e-9
+    )
+    numpy.testing.assert_allclose(turned_rotation[:, 2], [0.0, 0.0, -1.0], atol=1e-9)

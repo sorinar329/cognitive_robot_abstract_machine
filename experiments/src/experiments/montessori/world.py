@@ -241,6 +241,7 @@ class _HoleSpec:
     hole's own marker region.
     """
 
+
 _HOLE_KEY_BY_CATEGORY = {
     MontessoriShapeCategory.CUBE: "square_hole",
     MontessoriShapeCategory.TRIANGULAR_PRISM: "triangle_hole",
@@ -254,6 +255,7 @@ the board.
 The :attr:`~MontessoriShapeCategory.CYLINDER` category occurs twice and is numbered
 instead (``circular_hole_1``, ``circular_hole_2``).
 """
+
 
 def _hole_spec_from_footprint(footprint: HoleFootprint, key: str) -> _HoleSpec:
     """
@@ -713,7 +715,7 @@ def _open_space_under(
     return open_space
 
 
-def _landing_region(name: PrefixedName, open_space: VolumetricBoundingBox) -> Region:
+def _landing_region(name: PrefixedName, size: Scale) -> Region:
     """
     Build the :class:`Region` a shape is checked for containment against once it has
     fallen through a hole.
@@ -725,9 +727,11 @@ def _landing_region(name: PrefixedName, open_space: VolumetricBoundingBox) -> Re
     from "now resting below it" apart.
 
     :param name: Name of the resulting region.
-    :param open_space: The space under that hole; see :func:`_open_space_under`.
+    :param size: Extent of the box the region spans: the hole's opening carried down the
+        shaft, sized either from the measured open space (see :func:`_open_space_under`)
+        or analytically from the hole's footprint and :func:`_landing_region_height`.
     """
-    return Region(name=name, area=ShapeCollection([Box(scale=open_space.scale)]))
+    return Region(name=name, area=ShapeCollection([Box(scale=size)]))
 
 
 def _landing_region_position(
@@ -746,6 +750,7 @@ def _landing_region_position(
     """
     region_bottom_z = table_top_z - LANDING_REGION_BOTTOM_MARGIN
     return Point3(hole_position.x, hole_position.y, region_bottom_z + height / 2)
+
 
 def _landing_region_height(table_top_z: float, board_top_z: float) -> float:
     """
@@ -771,8 +776,6 @@ def _landing_region_height(table_top_z: float, board_top_z: float) -> float:
         - LANDING_REGION_TOP_CLEARANCE
         - (table_top_z - LANDING_REGION_BOTTOM_MARGIN)
     )
-
-
 
 
 def _shape_body(
@@ -1227,7 +1230,7 @@ class MontessoriWorld:
         }
         for key, open_space in open_spaces.items():
             landing_region = _landing_region(
-                _name(f"{key}{LANDING_REGION_NAME_SUFFIX}"), open_space
+                _name(f"{key}{LANDING_REGION_NAME_SUFFIX}"), open_space.scale
             )
             self._spawn_region(landing_region, open_space.center)
             holes_by_key[key].landing_region = landing_region

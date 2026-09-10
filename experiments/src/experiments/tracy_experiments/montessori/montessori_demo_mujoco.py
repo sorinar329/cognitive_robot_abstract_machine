@@ -3,8 +3,8 @@ Tracy's left arm picks up every loose Montessori shape that has a matching hole 
 places it above that hole, with MuJoCo standing in as the real robot: one
 :class:`~experiments.tracy_experiments.pick_and_place_action.PickUpActionMujoco`/
 :class:`~experiments.tracy_experiments.pick_and_place_action.PlaceActionMujoco` pair per
-shape, written out as one flat :func:`~coraplex.plans.factories.sequential` plan (Tracy's
-four sorted shapes and their matching holes are fixed by :class:`~experiments.
+shape, written out as one flat :func:`~coraplex.plans.factories.sequential` plan
+(Tracy's four sorted shapes and their matching holes are fixed by :class:`~experiments.
 tracy_experiments.montessori.world.TracyMontessoriWorld`'s own construction, so the plan
 does not need to be built dynamically) -- see :mod:`~experiments.tracy_experiments.
 pick_and_place_action`'s own docstring for why each action's own leaf motion runs plain
@@ -23,6 +23,7 @@ Run with (the ``iai_tracy_description`` ROS package must be built and sourced)::
 from __future__ import annotations
 
 import logging
+import math
 import time
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -71,12 +72,35 @@ TRACY_MOUNT_X = 0.0
 TRACY_MOUNT_Y = 0.0
 """
 Where Tracy's own root ("table") is bolted, in the scene's root frame; matches
-:mod:`~experiments.tracy_experiments.montessori.world`'s own proven-reachable coordinates.
+:mod:`~experiments.tracy_experiments.montessori.world`'s own proven-reachable
+coordinates.
 """
 
 PICK_ARM = Arms.LEFT
 """
 Which arm sorts every shape.
+"""
+
+TRIANGLE_GRASP_YAW = math.pi / 2
+"""
+Gripper yaw, in radians, for the triangular-prism grasp.
+
+The prism is spawned with its base edge along the world x-axis and its apex along +y, so
+a plain top-down grasp (yaw ``0``) closes the fingers across the base edge and the two
+corners opposite it -- a 3.7cm span the pads meet only at the corners, skidding the
+piece out before either seats. A quarter turn points the closing axis apex-to-base
+instead, along the triangle's own altitude: its narrowest span (3.2cm), with one pad
+flat on the base face and the other at the apex.
+"""
+
+TRIANGLE_SQUEEZE_MARGIN = 0.0015
+"""
+How far past its own half-altitude the fingers close on the triangular prism, in metres.
+
+Wider than the default squeeze because the apex-side contact is a line, not a face: the
+fingers have to press into it to hold the piece through the lift and carry rather than
+let it pivot straight back out. Paired with
+:data:`~experiments.tracy_experiments.grasp_contact.TRIANGULAR_PRISM_GRASP_FRICTION`.
 """
 
 
@@ -206,6 +230,8 @@ def main(headless: bool = False) -> None:
                         grasp_description=grasp_description,
                         sim=sim,
                         actuators=actuators,
+                        grasp_yaw=TRIANGLE_GRASP_YAW,
+                        squeeze_margin=TRIANGLE_SQUEEZE_MARGIN,
                     ),
                     PlaceActionMujoco(
                         object_designator=triangle_hole_shape.root,
@@ -215,6 +241,7 @@ def main(headless: bool = False) -> None:
                         arm=PICK_ARM,
                         sim=sim,
                         actuators=actuators,
+                        grasp_yaw=TRIANGLE_GRASP_YAW,
                     ),
                     # rectangular_hole_shape -> rectangular_hole
                     PickUpActionMujoco(

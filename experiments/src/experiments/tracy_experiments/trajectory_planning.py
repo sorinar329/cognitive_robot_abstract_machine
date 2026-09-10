@@ -64,9 +64,9 @@ Giskard tick rate used both to plan (scratch world) and to pace trajectory playb
 DEFAULT_MAX_TICKS = 2000
 """
 Tick budget a single plan gets before giving up, matching
-:attr:`~coraplex.datastructures.dataclasses.Context.ticks_per_motion`'s own
-kinematic-motion default -- planning always runs kinematically (see this module's own
-docstring), regardless of whether the executing arm is physically simulated.
+:attr:`~coraplex.datastructures.dataclasses.Context.ticks_per_motion`'s own kinematic-
+motion default -- planning always runs kinematically (see this module's own docstring),
+regardless of whether the executing arm is physically simulated.
 """
 
 
@@ -240,7 +240,8 @@ def follow_joint_trajectory(
 ) -> None:
     """
     Drive ``actuators`` through ``trajectory`` on the real, physically simulated world,
-    one recorded waypoint per :meth:`~experiments.tracy_experiments.real_time_simulation.
+    one recorded waypoint per
+    :meth:`~experiments.tracy_experiments.real_time_simulation.
     RealTimeSimulation.advance` step, then hold the final waypoint until every joint
     settles.
 
@@ -485,6 +486,17 @@ def _closing_raw_angle_for_half_width(
     return upper
 
 
+GRASP_SETTLE_TIME = 0.5
+"""
+Simulated seconds the fingers are held at their closing target, after the planned close
+finishes, before the caller moves the arm.
+
+The position servos need this long to build up their holding force against the object;
+moving the arm the instant the last close waypoint is issued lets a barely-seated grip
+peel off during the first reach.
+"""
+
+
 def close_gripper_around(
     sim: RealTimeSimulation,
     actuators: Dict[str, Actuator],
@@ -492,6 +504,7 @@ def close_gripper_around(
     arm_side: Arms,
     target_body: Body,
     squeeze_margin: float = SQUEEZE_MARGIN,
+    settle_time: float = GRASP_SETTLE_TIME,
     max_ticks: int = DEFAULT_MAX_TICKS,
     tick_period: float = 1.0 / TARGET_FREQUENCY,
 ) -> None:
@@ -507,10 +520,11 @@ def close_gripper_around(
     (``montessori_segmind_integration``) fix: measure the target's own half-width along
     the gripper's closing axis, in the gripper's own root frame (so it stays correct
     regardless of the object's orientation relative to the approach), and close to
-    that instead, minus :data:`SQUEEZE_MARGIN` so the fingers press in rather than
-    merely touch. Also stops early if both fingertip pads register real MuJoCo contact
-    against ``target_body`` before reaching the computed target, as a safety net
-    against the target being sized slightly off.
+    that instead, minus ``squeeze_margin`` so the fingers press in rather than merely
+    touch. The whole planned close is played out even once both fingertip pads register
+    MuJoCo contact, so the ``squeeze_margin`` penetration is actually applied -- a face
+    contact holds on friction alone, but a point or edge contact (a triangular prism
+    gripped at its apex) slips straight back out without it.
 
     :param sim: The running real-time simulation to drive.
     :param actuators: Every joint's own actuator, keyed by joint name.
@@ -554,17 +568,23 @@ def close_gripper_around(
         ).result
         return target_name in left_contacts and target_name in right_contacts
 
+    made_contact = False
     for waypoint in trajectory:
         for joint_name, target in waypoint.items():
             sim.command(actuators[joint_name], target)
         sim.advance(tick_period)
-        if both_fingertips_touching():
-            logger.info(
-                "%s: gripper stopped early on both-fingertip contact.", target_body.name
-            )
-            return
+        made_contact = made_contact or both_fingertips_touching()
+
+    for _ in range(round(settle_time / tick_period)):
+        for joint_name, target in trajectory[-1].items():
+            sim.command(actuators[joint_name], target)
+        sim.advance(tick_period)
+        made_contact = made_contact or both_fingertips_touching()
+
     logger.info(
-        "%s: gripper closed to its own half-width-sized target (%.4fm).",
+        "%s: gripper closed to its own half-width-sized target (%.4fm); "
+        "both fingertips %s the object.",
         target_body.name,
         target_inner_x,
+        "reached" if made_contact else "never reached",
     )

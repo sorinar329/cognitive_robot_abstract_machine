@@ -330,8 +330,11 @@ class TracyMontessoriWorld(MontessoriWorld):
 
             landing_region = _landing_region(
                 _name(f"{hole_spec.key}_landing_region"),
-                hole_spec.shape,
-                landing_region_height,
+                Scale(
+                    hole_spec.shape.size.x,
+                    hole_spec.shape.size.y,
+                    landing_region_height,
+                ),
             )
             self._spawn_region(
                 landing_region,
