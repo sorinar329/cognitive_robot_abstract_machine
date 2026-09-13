@@ -16,10 +16,11 @@ import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 
-from typing_extensions import List, Optional, Self
+from typing_extensions import List, Optional, Self, Set
 
 from semantic_digital_twin.adapters.multi_sim import MujocoSim, RegionAppearance
 from semantic_digital_twin.world import World
+from semantic_digital_twin.world_description.degree_of_freedom import DegreeOfFreedom
 from semantic_digital_twin.world_description.world_entity import Actuator
 
 
@@ -93,6 +94,33 @@ class RealTimeSimulation:
     How much of the regions the world holds the simulation draws.
     """
 
+    physically_simulated_dofs: Set[DegreeOfFreedom] = field(default_factory=set)
+    """
+    DOFs driven purely by physics (gravity, contacts) rather than kinematically
+    teleported to the world's own belief of their position every step.
+
+    A DOF absent from this set is snapped back to that belief on every step, which is
+    right for one Giskard is actively commanding, but pins a freshly released free body
+    in place: nothing has written its physics-derived position into the world yet, so
+    the belief being enforced is simply wherever it was released.
+    """
+
+    sync_rate_hz: Optional[float] = None
+    """
+    Wall-clock rate the simulated pose is read back into :attr:`world`'s own state,
+    throttled against real elapsed time regardless of how much simulated time an
+    :meth:`advance` covers (see :class:`~semantic_digital_twin.adapters.multi_sim.
+    MujocoSynchronizer`); ``None`` leaves it at that class's own default.
+
+    An unpaced caller (:attr:`paced_to_the_wall_clock` off) can run many simulated
+    seconds of :meth:`advance` in a fraction of a real one, so little enough wall-clock
+    time passes for the default rate to throttle every read-back away and leave
+    :attr:`world` looking exactly as it did before the advance. Pass
+    :attr:`~semantic_digital_twin.adapters.multi_sim.MujocoSynchronizer.
+    UNTHROTTLED_SYNC_RATE_HZ` there, so the caller's own read after :meth:`advance` sees
+    the physics result rather than a stale belief.
+    """
+
     followers: List[World] = field(default_factory=list)
     """
     Worlds kept in step with the simulated robot: after every advance, each joint of a
@@ -124,11 +152,16 @@ class RealTimeSimulation:
     """
 
     def __post_init__(self):
+        sync_rate_hz = (
+            {} if self.sync_rate_hz is None else {"sync_rate_hz": self.sync_rate_hz}
+        )
         self.multi_sim = MujocoSim(
             world=self.world,
             headless=self.headless,
             step_size=self.step_size,
             region_appearance=self.region_appearance,
+            physically_simulated_dofs=self.physically_simulated_dofs,
+            **sync_rate_hz,
         )
 
     def __enter__(self) -> Self:

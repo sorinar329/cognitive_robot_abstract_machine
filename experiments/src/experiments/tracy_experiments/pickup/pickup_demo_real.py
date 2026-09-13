@@ -24,6 +24,14 @@ no hole-contact or insertion, since the pieces here are bare bodies with no boar
 Its events stream to the live dashboard at ``http://127.0.0.1:5000`` while the demo
 runs, and a per-piece yes/no verdict is logged after each pick.
 
+Once a piece is released and the arm has retracted, :class:`~experiments.
+tracy_experiments.pickup.release_simulation.ReleaseCheck` drops a piece of the same
+kind, at the pose the real one settled at, into a disposable, robot-free copy of the
+perceived board -- rebuilt with real open-hole collision and landing regions, since the
+perceived board itself has neither -- and streams what it detected (support, hole
+contact, containment, insertion, ...) to the same dashboard, without changing what the
+live world believes.
+
 While a piece is carried to its hole, the left gripper's knuckle joint is watched for
 slip: the close is re-commanded a little past fully closed on a fixed period and, if the
 fingers then travel past where the grasp first settled, the piece has left the pads (see
@@ -104,7 +112,11 @@ from experiments.montessori.results_database import (
     ResultsDatabase,
     resolve_lasting_database,
 )
-from experiments.montessori.semantics import MontessoriShape, MontessoriShapeCategory
+from experiments.montessori.semantics import (
+    MontessoriShape,
+    MontessoriShapeCategory,
+    ShapeSortingBoard,
+)
 from experiments.questions.question import QuestionedThings, SceneAsSetUp
 from experiments.questions.after_the_move import QuestionAfterTheMove
 from experiments.questions.question_set import QuestionSet
@@ -131,6 +143,7 @@ from experiments.tracy_experiments.pickup.perceived_sorting import (
     PerceivedSorting,
     ShapeSorter,
 )
+from experiments.tracy_experiments.pickup.release_simulation import ReleaseCheck
 from experiments.tracy_experiments.robotiq_gripper import RobotiqGripperController
 from experiments.tracy_experiments.rosbag_recording import (
     DECIMATED_TOPICS,
@@ -355,6 +368,12 @@ class _SortingRig(ShapeSorter):
     a run that asks it some other way.
     """
 
+    release_check: Optional[ReleaseCheck] = None
+    """
+    Drops each piece under physics once it is released, in a scene of its own that never
+    changes what this rig's own belief believes; None runs a sort with no such check.
+    """
+
     def sort(self, piece: MontessoriShape, release_pose: Pose) -> None:
         """
         Pick ``piece`` off the table and release it at ``release_pose``.
@@ -447,6 +466,32 @@ class _SortingRig(ShapeSorter):
         finally:
             monitor.stop()
         _log_pick_events(body, monitor)
+        if self.release_check is not None:
+            self._check_the_release(piece)
+
+    def _check_the_release(self, piece: MontessoriShape) -> None:
+        """
+        Drop a piece of ``piece``'s own kind under physics in a disposable copy of the
+        board it was just released over, and stream what :mod:`segmind` saw to the
+        dashboard.
+
+        Run once the piece has been fully let go and the arm has retracted, so the
+        piece's pose is read from where it actually settled rather than while it still
+        hung off the gripper.
+
+        :param piece: The piece just released, read from the live world; never modified.
+        """
+        board = ShapeSortingBoard.held_by(self.world)
+        outcome = self.release_check.simulate(piece, board)
+        piece_name = piece.root.name.name
+        logger.info(
+            "%s: physics check -> fell_through=%s, settled at %s.",
+            piece_name,
+            outcome.fell_through,
+            outcome.settled_pose.to_position(),
+        )
+        for event in outcome.events:
+            self.feed.publish(piece_name, event)
 
     def perform_and_record(self, plan) -> None:
         """
@@ -734,6 +779,7 @@ def main(argument_list: Optional[Sequence[str]] = None) -> None:
             sorter=rig,
         )
         sorting.perceive()
+        rig.release_check = ReleaseCheck(piece_set=sorting.scene.piece_set)
 
         park = sequential([ParkArmsAction(PICK_ARM)], context=context).plan
 

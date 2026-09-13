@@ -65,11 +65,37 @@ class BuildsMotionStateChart:
 
     # %% building the chart
 
+    @property
+    def goal_type(self) -> type[NodeListGoal]:
+        """
+        :return: The type of goal describing how this node's children are executed.
+        """
+        return Sequence
+
     def create_goal(self) -> NodeListGoal:
         """
         :return: An empty goal describing how the children are executed.
         """
-        return Sequence(name=type(self).__name__)
+        return self.goal_type(name=type(self).__name__)
+
+    def goal_for_children(self, parent_goal: NodeListGoal) -> NodeListGoal:
+        """
+        Choose the goal this node's children are added to below `parent_goal`.
+
+        A plain sequence directly inside a plain sequence runs the same steps in the
+        same order, so its children are added to `parent_goal` itself. Any other node
+        gets a new goal of :attr:`goal_type`, added to `parent_goal`, because goals such
+        as parallel, try-in-order or repeating ones give each child goal a meaning of
+        its own.
+
+        :param parent_goal: The goal this node is added below.
+        :return: The goal to add this node's children to.
+        """
+        if self.goal_type is Sequence and type(parent_goal) is Sequence:
+            return parent_goal
+        goal = self.create_goal()
+        parent_goal.add_node(goal)
+        return goal
 
     def add_children_to_motion_state_chart(
         self,

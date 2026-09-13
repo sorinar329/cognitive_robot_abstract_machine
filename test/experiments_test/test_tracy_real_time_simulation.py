@@ -23,10 +23,20 @@ from experiments.tracy_experiments.real_time_simulation import (
     RealTimeSimulation,
     SimulationObserver,
 )
+from semantic_digital_twin.adapters.multi_sim import MujocoSynchronizer
 from semantic_digital_twin.datastructures.definitions import StaticJointState
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.robots.tracy import Tracy
+from semantic_digital_twin.spatial_types.spatial_types import (
+    HomogeneousTransformationMatrix,
+)
 from semantic_digital_twin.world import World
+from semantic_digital_twin.world_description.connections import (
+    Connection6DoF,
+    FixedConnection,
+)
+from semantic_digital_twin.world_description.geometry import Box, Color, Scale
+from semantic_digital_twin.world_description.shape_collection import ShapeCollection
 from semantic_digital_twin.world_description.world_entity import Body
 
 ADVANCE = 0.2
@@ -112,6 +122,94 @@ def test_an_observer_is_told_the_simulated_time_after_every_advance():
         simulation.advance(ADVANCE)
 
     assert observer.told == pytest.approx([ADVANCE, 2 * ADVANCE])
+
+
+PLANE_SCALE = Scale(2.0, 2.0, 0.1)
+"""
+Size of the ground plane a free box is dropped onto.
+"""
+
+BOX_SCALE = Scale(0.1, 0.1, 0.1)
+"""
+Size of the free box dropped onto the plane.
+"""
+
+BOX_RELEASE_HEIGHT = 0.5
+"""
+Height a free box is released from above the plane it falls onto, in metres.
+"""
+
+BOX_FALL_ADVANCE = 0.5
+"""
+Simulated seconds advanced to let a released box fall and come to rest, in metres.
+"""
+
+BOX_RESTING_HEIGHT = PLANE_SCALE.z / 2 + BOX_SCALE.z / 2
+"""
+Height the box's own origin settles at once it has fallen onto the plane and stopped,
+in metres: the plane's own top surface, plus half the box's height.
+"""
+
+
+def _free_box_above_a_plane() -> tuple[World, Body, Connection6DoF]:
+    """
+    :return: A world holding a fixed ground plane and a box on a
+        :class:`Connection6DoF`, released :data:`BOX_RELEASE_HEIGHT` above the plane.
+    """
+    world = World()
+    root = Body(name=PrefixedName(name="root", prefix="world"))
+    with world.modify_world():
+        world.add_kinematic_structure_entity(root)
+
+        plane = Body(name=PrefixedName(name="plane", prefix="world"))
+        plane.collision = ShapeCollection(
+            [Box(scale=PLANE_SCALE, color=Color.GREY())], reference_frame=plane
+        )
+        world.add_connection(FixedConnection(parent=root, child=plane))
+
+        box = Body(name=PrefixedName(name="box", prefix="world"))
+        box.collision = ShapeCollection(
+            [Box(scale=BOX_SCALE, color=Color.RED())], reference_frame=box
+        )
+        connection = Connection6DoF.create_with_dofs(
+            world=world, parent=root, child=box
+        )
+        world.add_connection(connection)
+    connection.origin = HomogeneousTransformationMatrix.from_xyz_rpy(
+        z=BOX_RELEASE_HEIGHT, reference_frame=root
+    )
+    world.notify_state_change()
+    return world, box, connection
+
+
+def test_a_physically_simulated_dof_falls_under_gravity_instead_of_staying_pinned():
+    """
+    A DOF the world never writes to during the advance has to be listed in
+    ``physically_simulated_dofs``, or the simulation keeps snapping it back to the
+    world's own (unmoving) belief of its position every step instead of letting gravity
+    move it -- exactly the situation a body has the instant it is released, before
+    anything reads the physics result back into the world.
+
+    Run unthrottled and unpaced, as an unattended settle check needs to: with the
+    default (throttled) sync rate, an advance this fast in wall-clock time would read
+    the pose back too rarely to see the fall at all (see
+    :attr:`~experiments.tracy_experiments.real_time_simulation.RealTimeSimulation.
+    sync_rate_hz`).
+    """
+    world, box, connection = _free_box_above_a_plane()
+
+    with RealTimeSimulation(
+        world=world,
+        headless=True,
+        paced_to_the_wall_clock=False,
+        physically_simulated_dofs=set(connection.passive_dofs),
+        sync_rate_hz=MujocoSynchronizer.UNTHROTTLED_SYNC_RATE_HZ,
+    ) as simulation:
+        simulation.advance(BOX_FALL_ADVANCE)
+
+    world.update_forward_kinematics()
+    settled_z = float(box.global_transform.to_np()[2, 3])
+    assert settled_z == pytest.approx(BOX_RESTING_HEIGHT, abs=1e-3)
 
 
 def test_an_unpaced_simulation_does_not_wait_for_the_wall_clock():
