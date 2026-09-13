@@ -19,8 +19,8 @@ and usually cannot say: the same reflections leave the depth image with large dr
 and centimetre-scale noise, far too coarse to measure a thirty millimetre piece. It is
 also asked whether a surface is open where it looks solid, which is a step down of a
 centimetre to the drawer under the board's lid: a rendering answers that exactly and a
-capture of this table does not, so the darkness of a hole is read beside its depth rather
-than replaced by it.
+capture of this table does not, so the darkness of a hole is read beside its depth
+rather than replaced by it.
 """
 
 from __future__ import annotations
@@ -66,7 +66,11 @@ from experiments.montessori.perception.look_choice import (
     SceneToSearch,
 )
 from experiments.montessori.perception.occupancy import Occupancy
-from experiments.montessori.perception.outline_fit import OutlineFitter, Placement
+from experiments.montessori.perception.outline_fit import (
+    CandidatePositions,
+    OutlineFitter,
+    Placement,
+)
 from experiments.montessori.perception.orthophoto import (
     Orthophoto,
     OrthophotoProjector,
@@ -78,13 +82,14 @@ from experiments.montessori.perception.scene_request import SceneRequest
 from experiments.montessori.perception.surface_finding import SurfaceRules
 from experiments.montessori.perception.surfaces import SurfaceSearch, WorkspaceSurface
 from experiments.montessori.pieces import (
+    FULL_SIZE_PIECES,
     HUE_RANGE,
     HUE_TOLERANCE,
-    KNOWN_PIECES,
     KnownPiece,
+    KnownPieceSet,
     hues_of,
-    pieces_colored,
     rectangle_boundary,
+    tallest,
 )
 from experiments.montessori.planar_geometry import PlanarPoint, turned
 from experiments.montessori.semantics import ShapeSortingBoard
@@ -192,20 +197,22 @@ class SurfaceColors:
         )
         return mask.astype(np.uint8) * 255
 
-    def color_mask(self, orthophoto: Orthophoto, color: Color) -> np.ndarray:
+    def color_mask(
+        self, orthophoto: Orthophoto, pieces: Sequence[KnownPiece]
+    ) -> np.ndarray:
         """
-        Mark every pixel wearing a colour, whichever of this set's hues that colour is.
+        Mark every pixel wearing a colour some pieces wear.
 
         The pieces are still searched one hue at a time, for the reason
         :meth:`piece_mask` records; this is the whole of what a look asked for one
         colour has left to read, which is what a viewer draws.
 
         :param orthophoto: The rectified image to segment.
-        :param color: The colour to mark.
-        :return: A ``uint8`` mask, 255 on that colour and 0 elsewhere.
+        :param pieces: The pieces whose colours to mark.
+        :return: A ``uint8`` mask, 255 on those colours and 0 elsewhere.
         """
         marked = np.zeros(orthophoto.image.shape[:2], dtype=np.uint8)
-        for hue in hues_of(pieces_colored(color)):
+        for hue in hues_of(pieces):
             marked = cv2.bitwise_or(marked, self.piece_mask(orthophoto, hue))
         return marked
 
@@ -383,42 +390,6 @@ slot, and above the slivers of shadow that fall along the lid's own edges.
 """
 
 
-# %% the stopgap ground-plane position correction
-
-NO_POSITION_CORRECTION = PlanarPoint(0.0, 0.0)
-"""
-The correction a look applies to nothing: what every detector uses unless a caller wires
-one in.
-"""
-
-LIVE_POSITION_CORRECTION = PlanarPoint(0.2, 0.05)
-"""
-Added to every position perception reports on the physical robot, in the reference
-frame's ground plane.
-
-A stopgap, not a calibration. On the physical robot every detected position comes out
-about this far toward the camera from where the object really is, while the camera pose,
-intrinsics, image size and table height all match the setup the shipped captures were
-taken on, where positions are accurate -- so the cause is still open. This is the mean
-error over three hand-placed pieces measured on 2026-09-10; the piece farthest from the
-camera is left about thirty-five millimetres short, since the error grows with distance
-rather than being the constant this treats it as. Wired in only by
-:func:`~experiments.montessori.perception.node.pipeline_of`, so a recorded capture and a
-rendered scene are still read unmoved. Set to :data:`NO_POSITION_CORRECTION` once the
-rectification is fixed.
-"""
-
-
-def _corrected(center: PlanarPoint, correction: PlanarPoint) -> PlanarPoint:
-    """
-    A fitted centre moved by a look's ground-plane correction.
-
-    :param center: Where a fit placed the thing, in the reference frame's ground plane.
-    :param correction: How far, and which way, to move every reported position.
-    """
-    return PlanarPoint(center.x + correction.x, center.y + correction.y)
-
-
 # %% what a look found cut through a surface
 
 
@@ -444,14 +415,6 @@ class PerforatedSurface:
     """
     Where each opening that could lie on one board stands, in world coordinates.
     """
-
-    @property
-    def middle(self) -> PlanarPoint:
-        """
-        Roughly where the board stands, which is where its openings put it.
-        """
-        middle = np.array([(patch.x, patch.y) for patch in self.middles]).mean(axis=0)
-        return PlanarPoint(float(middle[0]), float(middle[1]))
 
     @property
     def rims(self) -> np.ndarray:
@@ -492,7 +455,11 @@ class BoardDetector:
 
     What those openings are is then settled by fitting the board's whole known layout
     over them at once, rather than by measuring each patch and deciding from its
-    proportions what shape it is. The patches only say roughly where to start.
+    proportions what shape it is. The patches only say where to start: each is one of
+    the holes, whichever one, so each names where the board would stand for every hole
+    it could be, and the layout is tried at all of those places. The board is then
+    found from any few of its holes, and a patch that is not a hole at all names places
+    the picture bears out no better than chance.
     """
 
     layout: BoardHoleLayout = field(default_factory=BoardHoleLayout.of_board_mesh)
@@ -513,12 +480,16 @@ class BoardDetector:
         )
     )
     """
-    Finds roughly which way round the board lies, over every turn it could be at.
+    Finds roughly where the board stands and which way round it lies, among the places
+    its openings name over every turn it could be at.
 
     A board can be stood on the table any way round, and nothing before the fit says
-    which, so the turn has to be searched over a whole circle -- which is most of what a
-    fit costs. This pass reaches wide enough, and compares at few enough points, that a
-    circle is affordable, and it is only ever asked which twelfth of a turn to look in.
+    which, so the turn has to be searched over a whole circle. A named place is off by
+    however far an opening's middle lies from its hole's centre and by what the nearest
+    twelfth of a turn moves the holes, so this pass forgives an edge lying some way from
+    an outline, and it compares at few enough points that a circle is affordable; it is
+    only ever asked which twelfth of a turn to look in and which named place to look
+    around.
     """
 
     fitter: OutlineFitter = field(
@@ -573,24 +544,6 @@ class BoardDetector:
     patches.
     """
 
-    seed_reach: float = 0.04
-    """
-    How far, in metres, the fit may move the board from where the openings put it.
-
-    The patches are whatever the lighting made dark or the depth found hollow and are
-    not the holes, so their middle is only ever a place to start: measured on the
-    shipped captures they lie within about ten millimetres of the board's true centre,
-    and this leaves room for several times that.
-    """
-
-    position_correction: PlanarPoint = field(
-        default_factory=lambda: NO_POSITION_CORRECTION
-    )
-    """
-    Added to the reported position of the board and every hole in it, in the reference
-    frame's ground plane. See :data:`LIVE_POSITION_CORRECTION`.
-    """
-
     def detect(
         self,
         orthophoto: Orthophoto,
@@ -610,7 +563,7 @@ class BoardDetector:
         placement = self._fit(
             self.layout,
             EdgeDistances.of(orthophoto, together_with=perforated.rims),
-            perforated.middle,
+            perforated.middles,
         )
         return self._board_at(placement, orthophoto, reference_frame)
 
@@ -639,21 +592,14 @@ class BoardDetector:
         perforated = self._perforations_in(orthophoto)
         if perforated is None:
             return None
-        openings = np.array([(patch.x, patch.y) for patch in perforated.middles])
         edges = EdgeDistances.of(orthophoto, together_with=perforated.rims)
         return min(
             candidates,
-            key=lambda scale: self._gap_to_openings(
-                scale, edges, perforated.middle, openings
-            ),
+            key=lambda scale: self._gap_to_openings(scale, edges, perforated.middles),
         )
 
     def _gap_to_openings(
-        self,
-        scale: float,
-        edges: EdgeDistances,
-        seed: PlanarPoint,
-        openings: np.ndarray,
+        self, scale: float, edges: EdgeDistances, openings: Sequence[PlanarPoint]
     ) -> float:
         """
         How far the openings seen lie from the holes a board of one size would put
@@ -661,50 +607,60 @@ class BoardDetector:
 
         :param scale: The size to try, against the mesh.
         :param edges: The edges seen in the lid's plane.
-        :param seed: Roughly where the board stands.
-        :param openings: World-frame ``(n, 2)`` middles of the openings seen.
+        :param openings: Where the openings seen stand.
         :return: The middle distance, in metres, from an opening to the nearest hole.
         """
         layout = BoardHoleLayout.of_board_mesh(scale)
-        placement = self._fit(layout, edges, seed)
+        placement = self._fit(layout, edges, openings)
         holes = np.array(
             [
                 (hole.center.x, hole.center.y)
                 for hole in layout.placed(placement.center, placement.yaw)
             ]
         )
+        seen = np.array([(opening.x, opening.y) for opening in openings])
         return float(
             np.median(
-                np.linalg.norm(openings[:, None, :] - holes[None, :, :], axis=2).min(
-                    axis=1
-                )
+                np.linalg.norm(seen[:, None, :] - holes[None, :, :], axis=2).min(axis=1)
             )
         )
 
     def _fit(
-        self, layout: BoardHoleLayout, edges: EdgeDistances, seed: PlanarPoint
+        self,
+        layout: BoardHoleLayout,
+        edges: EdgeDistances,
+        openings: Sequence[PlanarPoint],
     ) -> Placement:
         """
-        Lay one layout over the edges, from anywhere within reach of the seed and at any
-        turn.
+        Lay one layout over the edges, at any turn and wherever the openings say a board
+        with a hole at each of them would stand.
 
-        Searched twice over: once roughly, over every turn a board could be stood at,
-        and once carefully around the answer. Sweeping a whole circle at the resolution
-        the second pass needs would cost three times as much and answer the same, since
-        all the first one has to say is which twelfth of a turn the board lies in.
+        Searched twice over: once roughly, over every turn a board could be stood at
+        and every place the openings name, and once carefully around the answer.
+        Sweeping a whole circle at the resolution the second pass needs would cost far
+        more and answer the same, since all the first one has to say is which twelfth
+        of a turn the board lies in and which of the named places it stands nearest.
+
+        Named places rather than a grid around the openings' middle, because that middle
+        is not the board's: the holes the lighting leaves lit are missing from it, and
+        the shadow under the lid's rim adds a patch that is no hole, so it can lie
+        further from the board than any grid affordably walks.
 
         :param layout: The holes to look for.
         :param edges: The edges seen in the lid's plane.
-        :param seed: Roughly where the board stands.
+        :param openings: Where the openings seen stand.
         """
-        rough = self.rough_fitter.fit(
+        rough = self.rough_fitter.fit_among(
             layout,
             edges,
-            center=seed,
-            radius=self.seed_reach,
-            angles=list(
-                np.arange(-math.pi, math.pi, self.rough_fitter.coarse_angle_step)
-            ),
+            [
+                CandidatePositions(
+                    yaw=yaw, positions=layout.origins_with_a_hole_at(openings, yaw)
+                )
+                for yaw in np.arange(
+                    -math.pi, math.pi, self.rough_fitter.coarse_angle_step
+                )
+            ],
         )
         turns = round(
             self.rough_fitter.coarse_angle_step / self.fitter.coarse_angle_step
@@ -769,7 +725,11 @@ class BoardDetector:
 
         The surface is filled in first, so that an opening is a patch within a solid
         region rather than a gap that the surface's own outline has to enclose; a hole
-        broken open at the board's edge would otherwise be missed entirely.
+        broken open at the board's edge would otherwise be missed entirely. Its depth is
+        read against the height the surface itself was measured at rather than the plane
+        the world states, so a depth image that reads the whole lid a few millimetres
+        low -- the shipped captures read it seven below a lid measured with a tape --
+        does not read as one opening the size of itself.
 
         :param surface: The candidate surface's own contour, in rectified pixels.
         :param orthophoto: The rectified view it was found in.
@@ -784,7 +744,11 @@ class BoardDetector:
             self.colors.dark_mask(orthophoto, region), orthophoto
         )
         hollow = self._hole_sized_parts(
-            orthophoto.opening_mask(self.minimum_hole_depth) & region, orthophoto
+            orthophoto.opening_mask(
+                self.minimum_hole_depth, orthophoto.surface_height_within(region)
+            )
+            & region,
+            orthophoto,
         )
         return PerforatedSurface(
             dark=dark,
@@ -919,11 +883,10 @@ class BoardDetector:
         :return: The board.
         """
         width, length = self.layout.size.x, self.layout.size.y
-        moved = _corrected(placement.center, self.position_correction)
         return MontessoriBoardDetection(
             pose=Pose.from_xyz_rpy(
-                moved.x,
-                moved.y,
+                placement.center.x,
+                placement.center.y,
                 orthophoto.plane_height,
                 yaw=placement.yaw,
                 reference_frame=reference_frame,
@@ -945,8 +908,8 @@ class BoardDetector:
             lid_height=orthophoto.plane_height,
         )
 
+    @staticmethod
     def _hole_at(
-        self,
         hole: PlacedHole,
         orthophoto: Orthophoto,
         reference_frame: Optional[KinematicStructureEntity],
@@ -961,11 +924,10 @@ class BoardDetector:
         :param orthophoto: The rectified view of the lid's plane.
         :param reference_frame: Frame the resulting pose is expressed in.
         """
-        moved = _corrected(hole.center, self.position_correction)
         return ShapeSortingHoleDetection(
             pose=Pose.from_xyz_rpy(
-                moved.x,
-                moved.y,
+                hole.center.x,
+                hole.center.y,
                 orthophoto.plane_height,
                 reference_frame=reference_frame,
             ),
@@ -1001,14 +963,6 @@ class EdgeFitDetector(PieceDetector):
     piece_size: SizeRange = LOOSE_PIECE_SIZE
     """
     Area a piece's outline may cover.
-    """
-
-    position_correction: PlanarPoint = field(
-        default_factory=lambda: NO_POSITION_CORRECTION
-    )
-    """
-    Added to every reported piece position, in the reference frame's ground plane. See
-    :data:`LIVE_POSITION_CORRECTION`.
     """
 
     def capability(self, look: TargetOnSurface) -> ConditionType:
@@ -1108,6 +1062,7 @@ class EdgeFitDetector(PieceDetector):
                             orthophoto, _filled(contour, orthophoto)
                         ),
                         source=self,
+                        candidates=surface_pass.sought_pieces,
                         hue_tolerance=self.hue_tolerance,
                     )
                 )
@@ -1161,26 +1116,18 @@ class EdgeFitDetector(PieceDetector):
             return None
         fitted = _to_rectified_contour(outline, orthophoto)
         height = _measure_height(
-            fitted, orthophoto, surface_pass.frame, self.piece_height
+            fitted, orthophoto, surface_pass.frame, surface_pass.piece_height
         )
-        top_height = orthophoto.plane_height + height / 2
-        seen_pose = Pose.from_xyz_rpy(
+        pose = Pose.from_xyz_rpy(
             match.center.x,
             match.center.y,
-            top_height,
+            orthophoto.plane_height + height / 2,
             yaw=match.yaw,
             reference_frame=imagined.reference_frame,
         )
-        moved = _corrected(match.center, self.position_correction)
         return DetectedMontessoriShape(
-            role_taker=imagined.spawn(match.piece, seen_pose),
-            pose=Pose.from_xyz_rpy(
-                moved.x,
-                moved.y,
-                top_height,
-                yaw=match.yaw,
-                reference_frame=imagined.reference_frame,
-            ),
+            role_taker=imagined.spawn(match.piece, pose),
+            pose=pose,
             footprint=RectifiedFootprint.from_contour(
                 fitted, orthophoto.region.resolution
             ),
@@ -1219,14 +1166,6 @@ class ColorBlobDetector(PieceDetector):
     piece_size: SizeRange = LOOSE_PIECE_SIZE
     """
     Area a piece's outline may cover.
-    """
-
-    position_correction: PlanarPoint = field(
-        default_factory=lambda: NO_POSITION_CORRECTION
-    )
-    """
-    Added to every reported piece position, in the reference frame's ground plane. See
-    :data:`LIVE_POSITION_CORRECTION`.
     """
 
     def capability(self, look: TargetOnSurface) -> ConditionType:
@@ -1298,6 +1237,7 @@ class ColorBlobDetector(PieceDetector):
             ),
             hue=self.colors.measure_hue(orthophoto, _filled(contour, orthophoto)),
             source=self,
+            candidates=surface_pass.sought_pieces,
             hue_tolerance=self.hue_tolerance,
         )
         fitted_pieces = self.matcher.match_at(
@@ -1321,26 +1261,18 @@ class ColorBlobDetector(PieceDetector):
         if not surface_pass.explanations.is_reported(account, *rivals):
             return None
         height = _measure_height(
-            contour, orthophoto, surface_pass.frame, self.piece_height
+            contour, orthophoto, surface_pass.frame, surface_pass.piece_height
         )
-        top_height = orthophoto.plane_height + height / 2
-        seen_pose = Pose.from_xyz_rpy(
+        pose = Pose.from_xyz_rpy(
             match.center.x,
             match.center.y,
-            top_height,
+            orthophoto.plane_height + height / 2,
             yaw=match.yaw,
             reference_frame=imagined.reference_frame,
         )
-        moved = _corrected(match.center, self.position_correction)
         return DetectedMontessoriShape(
-            role_taker=imagined.spawn(match.piece, seen_pose),
-            pose=Pose.from_xyz_rpy(
-                moved.x,
-                moved.y,
-                top_height,
-                yaw=match.yaw,
-                reference_frame=imagined.reference_frame,
-            ),
+            role_taker=imagined.spawn(match.piece, pose),
+            pose=pose,
             footprint=footprint,
             outline=outline,
             category=match.piece.category,
@@ -1533,8 +1465,8 @@ class FindTheBoard(SceneDetector):
         describes the board to stand.
 
         :param scene: The frame to find the board in, and the surfaces it stands among.
-        :return: The lid's height above the world frame's origin, in metres, or None where
-            neither the world nor the request says.
+        :return: The lid's height above the world frame's origin, in metres, or None
+            where neither the world nor the request says.
         """
         if scene.lid is not None:
             return scene.lid.height
@@ -1612,7 +1544,7 @@ class FindThePieces(SceneDetector):
         pieces = []
         for search in scene.searched_surfaces(board):
             for detector, candidates in self.detector_rules.detectors_for(
-                search.surface, KNOWN_PIECES
+                search.surface, scene.pieces.pieces
             ):
                 pieces.extend(
                     detector.detect(
@@ -1657,7 +1589,7 @@ class FindThePieces(SceneDetector):
         :param imagined: Where what is found comes to stand.
         :param expected: What is believed to be in the workspace already.
         """
-        top = search.surface.height + detector.piece_height
+        top = search.surface.height + tallest(candidates)
         return SurfacePass(
             orthophoto=scene.rectified.at(search.surface.height),
             top_orthophoto=scene.rectified.at(top),
@@ -1693,7 +1625,6 @@ def _board_outlines_in(
 
 def default_look_rules(
     board_detector: Optional[BoardDetector] = None,
-    position_correction: Optional[PlanarPoint] = None,
 ) -> LookRules:
     """
     The rules a pipeline starts with, sharing the one board search between the two ways
@@ -1701,24 +1632,11 @@ def default_look_rules(
 
     :param board_detector: The detector that finds the board, for a setup whose board is
         not the size the mesh was drawn at, or None for the one every scene starts with.
-    :param position_correction: Added to every position the board and piece detectors
-        report, or None to report positions unmoved. See :data:`LIVE_POSITION_CORRECTION`.
     """
-    correction = position_correction or NO_POSITION_CORRECTION
-    find_the_board = FindTheBoard(
-        board_detector=replace(
-            board_detector or BoardDetector(), position_correction=correction
-        )
-    )
+    find_the_board = FindTheBoard(board_detector=board_detector or BoardDetector())
     return LookRules(
         find_the_board=find_the_board,
-        find_the_pieces=FindThePieces(
-            find_the_board=find_the_board,
-            detector_rules=DetectorRules(
-                edge_fit=EdgeFitDetector(position_correction=correction),
-                color_blob=ColorBlobDetector(position_correction=correction),
-            ),
-        ),
+        find_the_pieces=FindThePieces(find_the_board=find_the_board),
     )
 
 
@@ -1748,8 +1666,8 @@ class MontessoriPerceptionPipeline:
     rectified onto and so how far apart their centres come out. How far it reaches is
     not read from here but from the board as it was seen, because a board that has been
     slid across the table stands exactly as high as before somewhere else. Without one,
-    a look asked for a described board finds the lid at the height the description
-    gives it.
+    a look asked for a described board finds the lid at the height the description gives
+    it.
     """
 
     reference_frame: Optional[KinematicStructureEntity] = None
@@ -1764,6 +1682,12 @@ class MontessoriPerceptionPipeline:
     workspace and so where a look may expect to find them.
 
     None where a look has no world behind it at all, as a recorded frame does.
+    """
+
+    pieces: KnownPieceSet = FULL_SIZE_PIECES
+    """
+    The loose pieces standing on the table: the ones a look fits and the colours it
+    looks for.
     """
 
     look_rules: LookRules = field(default_factory=default_look_rules)
@@ -1803,10 +1727,7 @@ class MontessoriPerceptionPipeline:
 
     @classmethod
     def of_world(
-        cls,
-        world: World,
-        table: Body,
-        position_correction: PlanarPoint = NO_POSITION_CORRECTION,
+        cls, world: World, table: Body, pieces: KnownPieceSet = FULL_SIZE_PIECES
     ) -> MontessoriPerceptionPipeline:
         """
         Build the pipeline that looks at the Montessori scene a world describes.
@@ -1818,9 +1739,7 @@ class MontessoriPerceptionPipeline:
 
         :param world: The world the scene is described in.
         :param table: The body carrying the surface the scene is set up on.
-        :param position_correction: Added to every position the look reports; unmoved by
-            default. See :data:`LIVE_POSITION_CORRECTION` for the stopgap the physical
-            robot passes here.
+        :param pieces: The loose pieces standing on the table.
         :raises SurfaceHasNothingToMeasure: If a surface the scene needs has no shape.
         """
         return cls(
@@ -1828,7 +1747,7 @@ class MontessoriPerceptionPipeline:
             lid=cls._lid_of(world),
             reference_frame=world.root,
             world=world,
-            look_rules=default_look_rules(position_correction=position_correction),
+            pieces=pieces,
         )
 
     @staticmethod
@@ -1837,10 +1756,9 @@ class MontessoriPerceptionPipeline:
         :param world: The world the scene is described in.
         :return: The lid of the board the world holds, or None where it holds none.
         """
-        boards = world.get_semantic_annotations_by_type(ShapeSortingBoard)
-        if not boards:
+        board = ShapeSortingBoard.held_by(world)
+        if board is None:
             return None
-        [board] = boards
         return WorkspaceSurface.of(board, world.root)
 
     @property
@@ -1951,6 +1869,7 @@ class MontessoriPerceptionPipeline:
             reference_frame=self.reference_frame,
             request=request,
             world=self.world,
+            pieces=self.pieces,
             explanations=self.explanations,
             headroom=self.headroom,
         )

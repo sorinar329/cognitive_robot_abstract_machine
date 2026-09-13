@@ -57,15 +57,29 @@ class FigureName(StrEnum):
     QUERY_LATENCY_BY_BACKEND = "query_latency_by_backend"
     QUERY_DETERMINISM = "query_determinism"
     TRIAL_OUTCOME_BY_EXECUTION_TYPE = "trial_outcome_by_execution_type"
+    ACCURACY_BY_BUCKET = "accuracy_by_bucket"
+    ACCURACY_BY_BLOOM_LEVEL = "accuracy_by_bloom_level"
 
 
 class FigureFile(StrEnum):
     """
-    The suffix each of the two files a figure is written to carries.
+    The suffix each file the paper's own figures are written to carries.
     """
 
     TYPST_TABLE = ".typ"
+    """
+    The markup the paper includes, whether it holds a table or names pictures.
+    """
+
     ROW_MANIFEST = ".json"
+    """
+    The rows a table presents, so a number in the paper is traceable to them.
+    """
+
+    IMAGE = ".png"
+    """
+    One drawn picture, which is what a query card's panels are written as.
+    """
 
 
 @dataclass(frozen=True)
@@ -220,6 +234,24 @@ class PaperFigure(ABC):
         :param trials: The trials to read.
         """
         return [query for trial in trials for query in trial.queries]
+
+    @classmethod
+    def scored_queries_of(cls, trials: Sequence[RecordedTrial]) -> List[RecordedQuery]:
+        """
+        Every query of the given trials that was scored against a question of the frozen
+        set.
+
+        A query :meth:`~experiments.questions.question_set.QuestionSet.answer_and_record`
+        recorded carries ``answered_correctly``; an ordinary query, asked outside that
+        scoring, does not.
+
+        :param trials: The trials to read.
+        """
+        return [
+            query
+            for query in cls.queries_of(trials)
+            if query.answered_correctly is not None
+        ]
 
     @staticmethod
     def indicators(

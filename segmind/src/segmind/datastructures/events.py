@@ -8,6 +8,7 @@ from functools import cached_property
 from typing_extensions import Any, Optional, List, Tuple
 
 from krrood.entity_query_language.backends import relation_asserted_about
+from krrood.entity_query_language.explanation.explanation import explain_inference
 from krrood.entity_query_language.factories import an
 from krrood.entity_query_language.predicate import Relation
 from krrood.entity_query_language.query.match import Match
@@ -21,6 +22,7 @@ from semantic_digital_twin.reasoning.predicates import InsideRegion, SupportedBy
 from semantic_digital_twin.semantic_annotations.semantic_annotations import Aperture
 from semantic_digital_twin.spatial_types.spatial_types import Pose
 from semantic_digital_twin.spatial_types.numeric import NumericPose
+from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.geometry import VolumetricBoundingBox
 from semantic_digital_twin.world_description.world_entity import (
     Body,
@@ -58,6 +60,21 @@ class DetectionEvent(Symbol, ABC):
     def __repr__(self):
         return self.__str__()
 
+    def participating_events(self) -> List[DetectionEvent]:
+        """
+        The events a rule consumed to conclude this one.
+
+        Empty for an event no rule produced, such as one an atomic detector built
+        directly.
+        """
+        explanation = explain_inference(self)
+        if explanation is None:
+            return []
+        consumed = explanation.get_values_of_variable_nodes_of_given_type(
+            DetectionEvent
+        )
+        return [event for event in consumed.tolist() if event is not self]
+
 
 @dataclass(kw_only=True)
 class EventWithTrackedObjects(DetectionEvent, ABC):
@@ -69,7 +86,9 @@ class EventWithTrackedObjects(DetectionEvent, ABC):
     """
 
     tracked_object: Body
-    """The primary object involved in this event."""
+    """
+    The primary object involved in this event.
+    """
 
     with_object: Optional[KinematicStructureEntity] = None
     """
@@ -142,13 +161,13 @@ class EventWithTrackedObjects(DetectionEvent, ABC):
 @dataclass(frozen=True)
 class Effect:
     """
-    What an event says about the object it is about once it has happened, in the
-    world's own vocabulary: the relations that hold of it from then on, the ones that
-    stop holding, and the ones it is evidence about without settling.
+    What an event says about the object it is about once it has happened, in the world's
+    own vocabulary: the relations that hold of it from then on, the ones that stop
+    holding, and the ones it is evidence about without settling.
 
-    Each is stated about the object without the object standing in it, so what an
-    event says can be applied to whatever was believed of the object before it.
-    Everything an event says nothing about is left exactly as it was.
+    Each is stated about the object without the object standing in it, so what an event
+    says can be applied to whatever was believed of the object before it. Everything an
+    event says nothing about is left exactly as it was.
     """
 
     begins: Tuple[Match[Relation], ...] = ()
@@ -158,9 +177,11 @@ class Effect:
 
     ends: Tuple[Match[Relation], ...] = ()
     """
-    The relations that stop holding of it, each read as covering every relation
-    believed *before* the event that it states: one stating no operand ends every
-    relation of its kind. What the event itself begins is never ended by it.
+    The relations that stop holding of it, each read as covering every relation believed
+    *before* the event that it states: one stating no operand ends every relation of its
+    kind.
+
+    What the event itself begins is never ended by it.
     """
 
     checks: Tuple[Match[Relation], ...] = ()
@@ -255,15 +276,15 @@ class EventWithEffect(EventWithTrackedObjects, ABC):
 
 SUPPORTED_BY_ANYTHING = an(SupportedBy)()
 """
-Resting on anything at all: every support believed before the event, whatever it
-named, which an event that says what the object now rests on ends, and a pick-up ends
-without saying what it rests on instead.
+Resting on anything at all: every support believed before the event, whatever it named,
+which an event that says what the object now rests on ends, and a pick-up ends without
+saying what it rests on instead.
 """
 
 INSIDE_ANY_REGION = an(InsideRegion)()
 """
-Lying in any region at all: every containment believed before the event, which a
-pick-up is a reason to check.
+Lying in any region at all: every containment believed before the event, which a pick-up
+is a reason to check.
 """
 
 
@@ -287,40 +308,72 @@ class ComesToRestEvent(EventWithEffect, ABC):
 @dataclass(unsafe_hash=True)
 class SupportEvent(ComesToRestEvent):
     """
-    The SupportEvent class is used to represent an event that involves an object that is supported by another object.
+    The SupportEvent class is used to represent an event that involves an object that is
+    supported by another object.
     """
 
 
 @dataclass(unsafe_hash=True)
 class LossOfSupportEvent(EventWithEffect):
     """
-    The LossOfSupportEvent class is used to represent an event that involves an object that was supported by another
-    object and then lost support.
+    The LossOfSupportEvent class is used to represent an event that involves an object
+    that was supported by another object and then lost support.
     """
 
     def effect(self) -> Effect:
         """
-        The object no longer rests on what this event names; what else it may rest on
-        is left as it was.
+        The object no longer rests on what this event names; what else it may rest on is
+        left as it was.
         """
         return Effect(ends=(an(SupportedBy)(supporting=self._entity_it_names()),))
 
 
-@dataclass(unsafe_hash=True)
-class MotionEvent(EventWithTrackedObjects, ABC):
+class ReproducibleEvent(ABC):
     """
-    Used to represent an event that involves an object that was stationary and then moved or
-    vice versa.
+    An event that can be made to happen: what it describes is brought about in a world
+    the way the process that caused it would have.
+
+    An event is what was seen to happen; its effect, where it states one, is what holds
+    afterwards. Reproducing it is the third thing an event can say -- how the world gets
+    there -- and it is what lets an event that was described, rather than seen, be
+    brought about in a simulation.
+    """
+
+    @abstractmethod
+    def reproduce(self, world: World) -> None:
+        """
+        Make what this event describes happen in the given world.
+
+        :param world: The world holding the object the event is about.
+        """
+
+
+@dataclass(unsafe_hash=True)
+class MotionEvent(EventWithTrackedObjects, ReproducibleEvent, ABC):
+    """
+    Used to represent an event that involves an object that was stationary and then
+    moved or vice versa.
     """
 
     start_pose: Pose = field(default_factory=Pose)
     """
     The pose of the object at the start of the event.
     """
+
     current_pose: Pose = field(default_factory=Pose)
     """
     The pose of the object at the end of the event.
     """
+
+    def reproduce(self, world: World) -> None:
+        """
+        Put the object where the motion ended, whichever connection it hangs from.
+
+        :param world: The world holding the object.
+        """
+        world.move_branch_to(
+            self.tracked_object, self.current_pose.to_homogeneous_matrix()
+        )
 
 
 @dataclass(init=False, unsafe_hash=True)
@@ -416,6 +469,11 @@ class AbstractContactEvent(EventWithTrackedObjects, ABC):
     """
 
     def __post_init__(self):
+        # an event read back from a record is about a body that stands in no world any
+        # more, so there is nothing to read its pose off; the numbers it read when it
+        # happened are the record's
+        if self.tracked_object._world is None:
+            return
         # combined_mesh (not tracked_object.collision.combined_mesh directly) so this
         # also works when with_object is a hole's Region root, which exposes its
         # geometry via .area rather than .collision.
@@ -503,7 +561,9 @@ class PickUpEvent(AgentInteractionEvent):
     def effect(self) -> Effect:
         """
         Picked up, the object is held rather than supported, so it rests on nothing
-        whatever it rested on before. Whether it still lies in a region it was believed
+        whatever it rested on before.
+
+        Whether it still lies in a region it was believed
         in is not settled by the pick-up but checked against where the object now is: a
         piece lifted clear of a hole is no longer in it, one nudged within it still is.
         """
@@ -546,8 +606,8 @@ class InsertionEvent(AgentInteractionEvent):
     The aperture :attr:`~EventWithTrackedObjects.with_object` (its own ``Region`` root)
     was detected passing through.
 
-    Set directly by the detector that builds this event, which already has the
-    aperture in hand (via ``SegmindContext.hole_regions``) rather than derived from
+    Set directly by the detector that builds this event, which already has the aperture
+    in hand (via ``SegmindContext.hole_regions``) rather than derived from
     ``with_object`` here: a hole's root is a virtual ``Region``, not a ``Body``, and has
     no reliable way to look its owning annotation back up on its own.
     """

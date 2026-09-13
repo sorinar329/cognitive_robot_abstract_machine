@@ -16,10 +16,12 @@ from enum import StrEnum
 from coraplex.datastructures.enums import ExecutionType
 from coraplex.plans.plan import Plan
 from giskardpy.motion_statechart.motion_statechart import MotionStatechart
+from krrood.patterns.role import Role
 from segmind.datastructures.events import DetectionEvent
 from semantic_digital_twin.world import World
-from typing_extensions import TYPE_CHECKING, List, Optional, Sequence
+from typing_extensions import TYPE_CHECKING, List, Optional, Sequence, Type
 
+from experiments.questions.question import BloomLevel, Bucket, Question
 from experiments.scenarios.trial import TrialOutcome
 
 if TYPE_CHECKING:
@@ -95,15 +97,17 @@ class AnsweredPredicate:
     """
 
 
-@dataclass
-class RecordedQuery:
+@dataclass(eq=False)
+class RecordedQuery(Role[Question]):
     """
     One query asked during a trial, with how it was routed and what it answered.
-    """
 
-    text: str
-    """
-    The query as it was asked.
+    The question is the role taker: this row is the question, playing the part of one
+    query a trial asked and recorded. The instance that was actually asked, not only its
+    class, is what is held - a long-term-memory question's own fields (which episode it
+    is about) are part of what it asked - and ``Question`` is a
+    :class:`~krrood.adapters.json_serializer.SubclassJSONSerializer` so it round-trips
+    through the database as JSON.
     """
 
     answer: str
@@ -124,6 +128,65 @@ class RecordedQuery:
     answered_predicates: List[AnsweredPredicate] = field(default_factory=list)
     """
     Which backend answered each predicate of the query.
+    """
+
+    answered_correctly: Optional[bool] = None
+    """
+    Whether this query's answer matched ground truth, or None if it was not scored
+    against the frozen set.
+    """
+
+    @property
+    def question(self) -> Question:
+        """
+        The question this query answers.
+        """
+        return self.role_taker
+
+    @property
+    def text(self) -> str:
+        """
+        The query as it was asked.
+        """
+        return self.question.english
+
+    @property
+    def bucket(self) -> Bucket:
+        """
+        The kind of thing this query asks about.
+        """
+        return self.question.bucket
+
+    @property
+    def bloom_level(self) -> BloomLevel:
+        """
+        The level of Bloom's taxonomy this query exercises.
+        """
+        return self.question.bloom_level
+
+
+@dataclass
+class RecordedMotion:
+    """
+    One motion a trial ran, and when it ran.
+
+    A trial runs several, one per motion state chart its steps build, so what was asked
+    of the controller at a moment is read off whichever of these was running then.
+    """
+
+    motion_statechart: MotionStatechart
+    """
+    The chart that ran, holding the history the controller wrote into it.
+    """
+
+    start_moment: float
+    """
+    Seconds between the start of the trial and the moment this motion began.
+    """
+
+    end_moment: float
+    """
+    Seconds between the start of the trial and the moment this motion ended.
     """
 
 
@@ -165,6 +228,18 @@ class InsertionAttempt:
 
 
 @dataclass
+class PerformedPlan:
+    """
+    One plan the robot performed while a trial ran.
+    """
+
+    plan: Plan
+    """
+    The plan as it was performed, its nodes carrying when each of them ran.
+    """
+
+
+@dataclass
 class RecordedTrial:
     """
     One trial of an episode's scenario, as it was recorded.
@@ -189,9 +264,31 @@ class RecordedTrial:
     How long the trial took, in seconds.
     """
 
+    number: int = 1
+    """
+    Which trial of its episode this is, counted from one in the order they ran.
+
+    What addresses the files the trial kept of its own among the episode's artifacts.
+    """
+
+    began_at: datetime.datetime = field(default_factory=datetime.datetime.now)
+    """
+    When the trial started, on the clock the nodes of its plans and the events of its
+    ticks are stamped with.
+
+    What turns an instant one of them carries into seconds into the trial, which is
+    the clock a tick or a query already states its moment on.
+    """
+
     ticks: List[Tick] = field(default_factory=list)
     """
     The event monitor's ticks, in the order they happened.
+    """
+
+    plans: List[PerformedPlan] = field(default_factory=list)
+    """
+    Every plan the robot performed while the trial ran, in the order it performed
+    them.
     """
 
     queries: List[RecordedQuery] = field(default_factory=list)
@@ -204,14 +301,14 @@ class RecordedTrial:
     Every insertion attempted while the trial ran, in the order they were made.
     """
 
-    motion_statechart: Optional[MotionStatechart] = None
+    motions: List[RecordedMotion] = field(default_factory=list)
     """
-    The motion the trial ran, or None if it ran none.
+    Every motion the trial ran, in the order they ran.
 
-    What a question about the control program reaches: the statechart holds the tasks
+    What a question about the control program reaches: each statechart holds the tasks
     that were active and the constraints they put on the optimization, so asking what the
-    robot was constrained by at the time is a query over this rather than over prose
-    about it.
+    robot was constrained by at a moment is a query over whichever of these was running
+    then rather than over prose about it.
     """
 
     @classmethod
@@ -219,8 +316,9 @@ class RecordedTrial:
         """
         Take what a finished trial recorded of itself.
 
-        What the trial's own runner cannot see - the monitor's ticks, the queries asked
-        and the insertions attempted - is added by whatever observed it.
+        What the trial's own runner cannot see - when it began on the wall clock, the
+        monitor's ticks, the queries asked, the plans performed and the insertions
+        attempted - is added by whatever observed it.
 
         :param trial: The trial that has finished.
         :param episode: The episode the trial belongs to.
@@ -293,16 +391,39 @@ class Episode:
         """
         Describe the run a scenario is about to make.
 
-        The conditions and perturbations are recorded by name because they act on a live
-        world and so are not themselves records.
-
         :param scenario: The scenario every trial runs.
         :param conditions: The knowledge sources switched for every trial.
         :param perturbations: The changes applied to every trial's world.
         """
+        return cls.planned(
+            type(scenario), scenario.execution_type, conditions, perturbations
+        )
+
+    @classmethod
+    def planned(
+        cls,
+        scenario_type: Type[Scenario],
+        execution_type: ExecutionType,
+        conditions: Sequence[Condition] = (),
+        perturbations: Sequence[Perturbation] = (),
+    ) -> Episode:
+        """
+        Describe a run that is going to be made, before the scenario making it exists.
+
+        What a run is made of can be known before its scene can be built — a scene on
+        the robot needs the robot — so the episode, whose identifier is what everything
+        the run leaves behind is filed under, is described from the run's kind alone.
+        The conditions and perturbations are recorded by name because they act on a
+        live world and so are not themselves records.
+
+        :param scenario_type: The kind of scenario every trial runs.
+        :param execution_type: Whether the run happens in a simulator or on the robot.
+        :param conditions: The knowledge sources switched for every trial.
+        :param perturbations: The changes applied to every trial's world.
+        """
         return cls(
-            scenario_name=scenario.name,
-            execution_type=scenario.execution_type,
+            scenario_name=scenario_type.name,
+            execution_type=execution_type,
             condition_names=[type(condition).__name__ for condition in conditions],
             perturbation_names=[
                 type(perturbation).__name__ for perturbation in perturbations

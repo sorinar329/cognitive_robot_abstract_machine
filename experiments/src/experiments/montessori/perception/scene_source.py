@@ -52,6 +52,35 @@ class MontessoriSceneSource(ABC):
 
 
 @dataclass
+class RepeatedLook(MontessoriSceneSource):
+    """
+    A source that takes a fresh look for every request, through a pipeline it can be
+    handed anew.
+
+    What a pipeline reads off the world is fixed when it is built, so a source looking
+    at a world that has since come to hold the board is handed a pipeline that reads the
+    board's lid, rather than being rebuilt itself.
+    """
+
+    pipeline: MontessoriPerceptionPipeline
+    """
+    What takes the look.
+    """
+
+    @property
+    def reference_frame(self) -> Optional[KinematicStructureEntity]:
+        return self.pipeline.reference_frame
+
+    def read_with(self, pipeline: MontessoriPerceptionPipeline) -> None:
+        """
+        Take every later look through the given pipeline.
+
+        :param pipeline: What takes the looks from now on.
+        """
+        self.pipeline = pipeline
+
+
+@dataclass
 class FixedScene(MontessoriSceneSource):
     """
     A scene that was already looked at, for querying one captured moment repeatedly.
@@ -80,7 +109,7 @@ class FixedScene(MontessoriSceneSource):
 
 
 @dataclass
-class RecordedFrame(MontessoriSceneSource):
+class RecordedFrame(RepeatedLook):
     """
     One frame of camera data, looked at afresh for every request.
 
@@ -89,19 +118,10 @@ class RecordedFrame(MontessoriSceneSource):
     filtered afterwards.
     """
 
-    pipeline: MontessoriPerceptionPipeline
-    """
-    What takes the look.
-    """
-
     frame: RgbdFrame
     """
     The camera data to look at.
     """
-
-    @property
-    def reference_frame(self) -> Optional[KinematicStructureEntity]:
-        return self.pipeline.reference_frame
 
     def scene(self, request: SceneRequest = SceneRequest()) -> MontessoriScene:
         """

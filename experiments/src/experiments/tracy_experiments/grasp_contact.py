@@ -40,25 +40,12 @@ board contact can actually drop below the finger-dominated grip instead of being
 by it.
 """
 
-TRIANGULAR_PRISM_GRASP_FRICTION = [1.0, 0.8, 0.02]
-"""
-Grasp friction (sliding, torsional, rolling) for the triangular prism.
-
-A parallel-jaw gripper can only ever hold this piece with one pad flat on a face and the
-other on the opposite vertex; that vertex contact is a line, not a patch, so it pivots
-and slides out from between the pads under :data:`GRASP_FRICTION`'s own painted-surface
-values. Raised towards the fingertip pads' own rubber friction, with the torsional and
-rolling components lifted well above their defaults to resist the pivot specifically.
-"""
-
-GRASP_FRICTION_OVERRIDES: dict[MontessoriShapeCategory, list[float]] = {
-    MontessoriShapeCategory.TRIANGULAR_PRISM: TRIANGULAR_PRISM_GRASP_FRICTION,
-}
+GRASP_FRICTION_OVERRIDES: dict[MontessoriShapeCategory, list[float]] = {}
 """
 Per-:class:`~experiments.montessori.semantics.MontessoriShapeCategory` override of
 :data:`GRASP_FRICTION`, used by :func:`apply_montessori_grasp_contact_parameters`.
 
-A category absent from this mapping uses :data:`GRASP_FRICTION`.
+A category absent from this mapping (currently all of them) uses :data:`GRASP_FRICTION`.
 """
 
 BOARD_FRICTION = [0.3, 0.005, 0.0001]
@@ -97,6 +84,23 @@ Harder than MuJoCo's own default (``0.9 0.95``), for the same reason as
 :data:`GRASP_SOLVER_REFERENCE`.
 """
 
+GRASP_CONTACT_DIMENSIONALITY = 4
+"""
+Contact dimensionality (see
+:attr:`~semantic_digital_twin.adapters.multi_sim.MujocoGeom.contact_dimensionality`)
+given to every loose shape: sliding friction plus torsional friction about the contact
+normal.
+
+A shape pinched between two flat pads is held at a few contact points, and with sliding
+friction alone nothing resists it turning about the line through them, so a shape held
+above its own middle -- every one of them, since the pads reach down only so far --
+swings under its own weight as the arm moves and works its way out. Measured on the
+triangular prism carried from the table to its hole: with sliding friction alone it tips
+by 13 degrees on the way and is dropped on a longer swing, with torsional friction it
+stays level to a tenth of a degree. Rolling friction on top of that (6) let the same
+prism fall as it was lowered over the hole, so it is not added.
+"""
+
 
 def apply_contact_friction(bodies: Iterable[Body], friction: list[float]) -> None:
     """
@@ -120,7 +124,9 @@ def apply_grasp_contact_parameters(
     Give every body in ``shapes`` the contact parameters that let a gripper pick it up
     and hold it: ``friction`` plus the solver reference and solver impedance of
     ``coraplex_panda_demo``'s own reliably-grasped cube (see :data:`GRASP_FRICTION`,
-    :data:`GRASP_SOLVER_REFERENCE`, :data:`GRASP_SOLVER_IMPEDANCE`).
+    :data:`GRASP_SOLVER_REFERENCE`, :data:`GRASP_SOLVER_IMPEDANCE`), and torsional
+    friction so the held shape cannot turn between the pads (see
+    :data:`GRASP_CONTACT_DIMENSIONALITY`).
 
     :param shapes: The bodies to modify in place.
     :param friction: Contact friction to give every body's collision geometry.
@@ -131,6 +137,7 @@ def apply_grasp_contact_parameters(
             mujoco_geom.friction = list(friction)
             mujoco_geom.solver_reference = list(GRASP_SOLVER_REFERENCE)
             mujoco_geom.solver_impedance = list(GRASP_SOLVER_IMPEDANCE)
+            mujoco_geom.contact_dimensionality = GRASP_CONTACT_DIMENSIONALITY
 
 
 def apply_montessori_grasp_contact_parameters(

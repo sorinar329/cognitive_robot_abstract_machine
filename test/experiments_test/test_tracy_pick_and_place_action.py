@@ -1,18 +1,20 @@
-import math
-
-import numpy
-
 from coraplex.datastructures.enums import Arms
 from experiments.montessori.world import mount_stationary_robot
 from experiments.tracy_experiments.equipment import (
     parse_tracy,
     tracy_table_mount_position,
 )
+from coraplex.datastructures.enums import ApproachDirection, VerticalAlignment
+from coraplex.datastructures.grasp import GraspDescription
+from coraplex.robot_plans.mixins import ManipulatesBodies
+from coraplex.view_manager import ViewManager
 from experiments.tracy_experiments.pick_and_place_action import (
+    PickUpActionMujoco,
+    PlaceActionMujoco,
     _bounding_box_center_world,
     _finger_midpoint_offset,
-    _top_down_pose_builder,
 )
+from semantic_digital_twin.spatial_types.spatial_types import Pose
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.robots.tracy import Tracy
 from semantic_digital_twin.world import World
@@ -59,26 +61,36 @@ def test_finger_midpoint_offset_differs_between_left_and_right_arm():
     assert list(left_offset) != list(right_offset)
 
 
-def test_grasp_yaw_turns_the_closing_axis_about_the_vertical_without_tilting_it():
+# %% what the actions say they act on
+
+
+def test_both_actions_act_on_the_body_they_are_given():
+    """
+    A plan chart reads which body an item of the plan acted on off the action itself,
+    which is what lets it tell the robot's own pick-up from someone else's shove.
+    """
     world, robot = _mounted_tracy()
-    yaw = math.pi / 6
-
-    straight = _top_down_pose_builder(world, robot, Arms.LEFT)(0.0, 0.0, 1.0)
-    turned = _top_down_pose_builder(world, robot, Arms.LEFT, grasp_yaw=yaw)(
-        0.0, 0.0, 1.0
+    piece = world.get_body_by_name("left_robotiq_85_left_finger_tip_link")
+    grasp = GraspDescription(
+        ApproachDirection.FRONT,
+        VerticalAlignment.TOP,
+        ViewManager.get_end_effector_view(Arms.LEFT, robot),
+    )
+    pick = PickUpActionMujoco(
+        object_designator=piece,
+        arm=Arms.LEFT,
+        grasp_description=grasp,
+        sim=None,
+        actuators={},
+    )
+    place = PlaceActionMujoco(
+        object_designator=piece,
+        target_location=Pose(),
+        arm=Arms.LEFT,
+        sim=None,
+        actuators={},
     )
 
-    straight_rotation = straight.to_rotation_matrix().evaluate()[:3, :3]
-    turned_rotation = turned.to_rotation_matrix().evaluate()[:3, :3]
-    about_vertical = numpy.array(
-        [
-            [math.cos(yaw), -math.sin(yaw), 0.0],
-            [math.sin(yaw), math.cos(yaw), 0.0],
-            [0.0, 0.0, 1.0],
-        ]
-    )
-
-    numpy.testing.assert_allclose(
-        turned_rotation, about_vertical @ straight_rotation, atol=1e-9
-    )
-    numpy.testing.assert_allclose(turned_rotation[:, 2], [0.0, 0.0, -1.0], atol=1e-9)
+    assert isinstance(pick, ManipulatesBodies) and isinstance(place, ManipulatesBodies)
+    assert pick.manipulated_bodies == [piece]
+    assert place.manipulated_bodies == [piece]

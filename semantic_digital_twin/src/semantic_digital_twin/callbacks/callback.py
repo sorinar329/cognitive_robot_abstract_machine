@@ -81,6 +81,13 @@ class Callback(WorldEntityWithClassBasedID, SubclassJSONSerializer, ABC):
         """
         pass
 
+    @property
+    def paused(self) -> bool:
+        """
+        Whether the callback is currently paused, so that a change goes by without it.
+        """
+        return self._is_paused
+
     def pause(self):
         """
         Pause the callback such that notify does not trigger anymore.
@@ -93,8 +100,8 @@ class Callback(WorldEntityWithClassBasedID, SubclassJSONSerializer, ABC):
         """
         self._is_paused = False
 
-    def to_json(self) -> Dict[str, Any]:
-        return {**super().to_json(), "is_paused": self._is_paused}
+    def to_json(self, **kwargs) -> Dict[str, Any]:
+        return {**super().to_json(**kwargs), "is_paused": self._is_paused}
 
     @classmethod
     def _from_json(cls, data: Dict[str, Any], **kwargs) -> Self:

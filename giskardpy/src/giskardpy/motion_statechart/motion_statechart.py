@@ -27,6 +27,7 @@ from giskardpy.motion_statechart.exceptions import (
     UnsupportedObservationVariableError,
 )
 from giskardpy.motion_statechart.graph_node import (
+    DeserializedNodeTracker,
     MotionStatechartNode,
     TrinaryCondition,
     Goal,
@@ -43,6 +44,9 @@ from giskardpy.motion_statechart.graph_node import (
 from giskardpy.motion_statechart.graph_node import Task
 from giskardpy.motion_statechart.plotters.graphviz import MotionStatechartGraphviz
 from giskardpy.qp.constraint_collection import ConstraintCollection
+from semantic_digital_twin.world_description.world_entity import (
+    WorldEntityReferenceWriter,
+)
 
 
 @dataclass(repr=False, eq=False)
@@ -154,11 +158,11 @@ class State(MutableMapping[MotionStatechartNode, float], SubclassJSONSerializer)
             data=self.data.copy(),
         )
 
-    def to_json(self) -> dict[str, Any]:
+    def to_json(self, **kwargs) -> dict[str, Any]:
         """
         :return: The JSON representation of the base class, extended with the raw :attr:`data` array.
         """
-        return {**super().to_json(), "data": self.data.tolist()}
+        return {**super().to_json(**kwargs), "data": self.data.tolist()}
 
     @classmethod
     def _from_json(cls, data: dict[str, Any], **kwargs) -> Self:
@@ -463,7 +467,7 @@ class NextLifeCycle:
 
 
 @dataclass(repr=False, eq=False)
-class StateHistoryItem:
+class StateHistoryItem(SubclassJSONSerializer):
     """
     A snapshot of a :class:`MotionStatechart`'s life cycle and observation state at one
     control cycle.
@@ -516,9 +520,41 @@ class StateHistoryItem:
         }
         return str(merged)
 
+    def to_json(self, **kwargs) -> dict[str, Any]:
+        """
+        :return: The JSON representation of the base class, extended with the control
+            cycle and both states of this snapshot.
+        """
+        return {
+            **super().to_json(**kwargs),
+            "control_cycle": self.control_cycle,
+            "life_cycle_state": self.life_cycle_state.to_json(**kwargs),
+            "observation_state": self.observation_state.to_json(**kwargs),
+        }
+
+    @classmethod
+    def _from_json(cls, data: dict[str, Any], **kwargs) -> Self:
+        """
+        Reconstruct a snapshot from its JSON representation.
+
+        :param data: The JSON dict, as produced by :meth:`to_json`.
+        :param kwargs: Must contain the owning `motion_statechart`, whose nodes the
+            restored states are indexed by.
+        :return: The deserialized snapshot.
+        """
+        return cls(
+            control_cycle=data["control_cycle"],
+            life_cycle_state=LifeCycleState.from_json(
+                data["life_cycle_state"], **kwargs
+            ),
+            observation_state=ObservationState.from_json(
+                data["observation_state"], **kwargs
+            ),
+        )
+
 
 @dataclass
-class StateHistory:
+class StateHistory(SubclassJSONSerializer):
     """
     The recorded sequence of :class:`StateHistoryItem` snapshots of a
     :class:`MotionStatechart`.
@@ -559,6 +595,35 @@ class StateHistory:
         :return: The recorded observation state of `node` at every control cycle, in order.
         """
         return [history_item.observation_state[node] for history_item in self.history]
+
+    def to_json(self, **kwargs) -> dict[str, Any]:
+        """
+        :return: The JSON representation of the base class, extended with every
+            recorded snapshot.
+        """
+        return {
+            **super().to_json(**kwargs),
+            "history": [item.to_json(**kwargs) for item in self.history],
+        }
+
+    @classmethod
+    def _from_json(cls, data: dict[str, Any], **kwargs) -> Self:
+        """
+        Reconstruct a history from its JSON representation.
+
+        The snapshots are taken as they were recorded rather than appended one by one,
+        because :meth:`append` drops an item equal to the one before it and a restored
+        history has already had that done to it.
+
+        :param data: The JSON dict, as produced by :meth:`to_json`.
+        :param kwargs: Must contain the owning `motion_statechart`.
+        :return: The deserialized history.
+        """
+        return cls(
+            history=[
+                StateHistoryItem.from_json(item, **kwargs) for item in data["history"]
+            ]
+        )
 
     def __len__(self) -> int:
         return len(self.history)
@@ -1024,7 +1089,7 @@ class MotionStatechart(SubclassJSONSerializer):
         combined_constraint_collection = ConstraintCollection()
         for node in self.nodes:
             combined_constraint_collection.merge(
-                name_prefix=node.unique_name, other=node._constraint_collection
+                name_prefix=node.unique_name, constraints=node.constraints
             )
         return combined_constraint_collection
 
@@ -1179,17 +1244,23 @@ class MotionStatechart(SubclassJSONSerializer):
             self, second_width_in_cm=second_length_in_cm, context=context
         ).plot_gantt_chart(path)
 
-    def to_json(self) -> dict[str, Any]:
+    def to_json(self, **kwargs) -> dict[str, Any]:
         """
-        :return: The JSON representation of this motion statechart, including all nodes and their unique edges.
+        World entities are written as references, because whoever reads a motion
+        statechart resolves them against its own world, which has the same entities.
+
+        :return: The JSON representation of this motion statechart, including all nodes, their unique edges and the history of its run.
         .. warning:: This rebuilds the graph's edges from the nodes' current conditions as a side effect, see :meth:`_add_transitions`.
         """
+        kwargs = {**kwargs, **WorldEntityReferenceWriter().create_kwargs()}
         self._add_transitions()
-        result = super().to_json()
+        result = super().to_json(**kwargs)
         result["nodes"] = [
-            to_json(node) for node in sorted(self.nodes, key=lambda n: n.index)
+            to_json(node, **kwargs)
+            for node in sorted(self.nodes, key=lambda n: n.index)
         ]
-        result["unique_edges"] = [edge.to_json() for edge in self.unique_edges]
+        result["unique_edges"] = [edge.to_json(**kwargs) for edge in self.unique_edges]
+        result["history"] = self.history.to_json(**kwargs)
         return result
 
     @classmethod
@@ -1197,13 +1268,9 @@ class MotionStatechart(SubclassJSONSerializer):
         """
         Reconstructs a motion statechart from its JSON representation, as produced by
         :meth:`to_json`: first all nodes, then their transition conditions, then
-        goal/child parent links.
-
-        A registered goal serializes each child both in the flat node list and inline
-        (Sequence, Parallel), so its inline copies are dropped the first time a flat
-        child is re-nested; keeping them would list each child twice. A goal whose
-        children only live inline (an unexpanded nested motion chart named by no flat
-        node) is untouched.
+        goal/child parent links, and last the history, whose snapshots are indexed by
+        the nodes. A goal that serializes its own nodes already holds them, so it is not
+        handed them a second time.
 
         :param data: The JSON dict.
         :param kwargs: Forwarded to :func:`~krrood.adapters.json_serializer.from_json`
@@ -1211,6 +1278,7 @@ class MotionStatechart(SubclassJSONSerializer):
         :return: The deserialized motion statechart.
         """
         motion_statechart = cls()
+        DeserializedNodeTracker.from_kwargs(kwargs)
         for json_data in data["nodes"]:
             node = from_json(json_data, **kwargs)
             motion_statechart.add_node(node)
@@ -1219,15 +1287,15 @@ class MotionStatechart(SubclassJSONSerializer):
                 json_data, motion_statechart=motion_statechart, **kwargs
             )
             transition.owner._set_transition(transition)
-        reparented: set[int] = set()
         for node in motion_statechart.nodes:
             if node.parent_node_index is None:
                 continue
             parent_node = motion_statechart.get_node_by_index(node.parent_node_index)
-            if node.parent_node_index not in reparented:
-                parent_node.nodes.clear()
-                reparented.add(node.parent_node_index)
-            parent_node.nodes.append(node)
+            if node not in parent_node.nodes:
+                parent_node.nodes.append(node)
+        motion_statechart.history = StateHistory.from_json(
+            data["history"], motion_statechart=motion_statechart, **kwargs
+        )
         return motion_statechart
 
     def sanity_check(self):

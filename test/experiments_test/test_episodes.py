@@ -12,12 +12,18 @@ from coraplex.datastructures.enums import ExecutionType
 from coraplex.plans.plan import Plan
 from coraplex.plans.plan_node import PlanNode
 from giskardpy.motion_statechart.motion_statechart import MotionStatechart
-from segmind.datastructures.events import InsertionEvent, PickUpEvent
+from segmind.datastructures.events import ContactEvent, InsertionEvent, PickUpEvent
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.robots.minimal_robot import MinimalRobot
 from semantic_digital_twin.robots.robot_parts import AbstractRobot
 from semantic_digital_twin.testing import two_arm_robot_world
+from semantic_digital_twin.spatial_types.spatial_types import (
+    HomogeneousTransformationMatrix,
+)
 from semantic_digital_twin.world import World
+from semantic_digital_twin.world_description.connections import FixedConnection
+from semantic_digital_twin.world_description.geometry import Box, Scale
+from semantic_digital_twin.world_description.shape_collection import ShapeCollection
 from semantic_digital_twin.world_description.world_entity import Body
 from sqlalchemy import select
 
@@ -28,13 +34,27 @@ from experiments.episodes.episode import (
     FailureType,
     InsertionAttempt,
     InsertionOutcome,
+    RecordedMotion,
     RecordedQuery,
     RecordedTrial,
     Tick,
 )
 from experiments.orm.ormatic_interface import EpisodeDAO, RecordedTrialDAO
+from experiments.questions.question import Bucket
+from experiments.questions.working_memory import ObjectColours, ObjectsSeen
 from experiments.scenarios.trial import TrialOutcome
 from krrood.ormatic.data_access_objects.helper import to_dao
+
+MOMENT_THE_MOTION_BEGAN = 2.0
+"""
+When the motion of the trial below is taken to have begun, in seconds after the start of
+the trial.
+"""
+
+MOMENT_THE_MOTION_ENDED = 7.5
+"""
+When that motion is taken to have ended.
+"""
 
 
 class SortingFailureType(FailureType):
@@ -145,6 +165,58 @@ def test_events_are_persisted_under_the_tick_they_were_seen_in(
     assert events_by_moment == {1.0: {"PickUpEventDAO"}, 2.0: {"InsertionEventDAO"}}
 
 
+def test_a_contact_event_comes_back_without_the_world_it_was_seen_in(
+    experiments_database_session,
+):
+    """
+    A contact event reads the pose of what it is about off the world when it is made,
+    and a body read back from the database stands in no world any more.
+    """
+    session = experiments_database_session
+    world = World()
+    tracked_shape = Body(
+        name=PrefixedName("circular_hole_1_shape"),
+        collision=ShapeCollection([Box(scale=Scale(0.1, 0.1, 0.1))]),
+    )
+    table = Body(
+        name=PrefixedName("table"),
+        collision=ShapeCollection([Box(scale=Scale(1.0, 1.0, 0.1))]),
+    )
+    with world.modify_world():
+        world.add_kinematic_structure_entity(table)
+        world.add_connection(
+            FixedConnection(
+                parent=table,
+                child=tracked_shape,
+                parent_T_connection_expression=HomogeneousTransformationMatrix.from_xyz_rpy(
+                    reference_frame=table
+                ),
+            )
+        )
+    trial = RecordedTrial(
+        episode=sorting_episode(),
+        outcome=TrialOutcome.SUCCEEDED,
+        duration=12.5,
+        ticks=[
+            Tick(
+                moment=1.0,
+                events=[ContactEvent(tracked_object=tracked_shape, with_object=table)],
+            )
+        ],
+    )
+
+    session.add(to_dao(trial))
+    session.commit()
+
+    [recorded_trial] = session.scalars(select(RecordedTrialDAO)).all()
+    restored: RecordedTrial = recorded_trial.from_dao()
+    [tick] = restored.ticks
+    [event] = tick.events
+    assert type(event) is ContactEvent
+    assert event.tracked_object.name == tracked_shape.name
+    assert event.with_object.name == table.name
+
+
 def test_a_query_keeps_the_backend_that_answered_each_predicate(
     experiments_database_session,
 ):
@@ -159,7 +231,7 @@ def test_a_query_keeps_the_backend_that_answered_each_predicate(
         duration=12.5,
         queries=[
             RecordedQuery(
-                text="the cyan piece left of the triangle on the table",
+                role_taker=ObjectsSeen(),
                 answer="the cyan cube",
                 latency=0.42,
                 moment=3.0,
@@ -185,6 +257,54 @@ def test_a_query_keeps_the_backend_that_answered_each_predicate(
         association.target.predicate_name: association.target.backend_name
         for association in query.answered_predicates
     } == {"LeftOf": "TwinBackend", "HasColour": "PerceptionBackend"}
+
+
+def test_a_scored_query_keeps_the_question_it_answered_apart_from_an_ordinary_one(
+    experiments_database_session,
+):
+    """
+    Every recorded query is the question it answers, held as its role taker rather than
+    a separately persisted text field, so the instance - not only which subclass it is -
+    round-trips through the database as JSON. A scored query is told apart from an
+    ordinary one by carrying ``answered_correctly``, not by a class of its own.
+    """
+    session = experiments_database_session
+    trial = RecordedTrial(
+        episode=sorting_episode(),
+        outcome=TrialOutcome.SUCCEEDED,
+        duration=1.0,
+        queries=[
+            RecordedQuery(
+                role_taker=ObjectColours(),
+                answer="red, blue",
+                latency=0.42,
+                moment=3.0,
+            ),
+            RecordedQuery(
+                role_taker=ObjectsSeen(),
+                answer="cube, cylinder",
+                latency=0.1,
+                moment=4.0,
+                answered_correctly=True,
+            ),
+        ],
+    )
+
+    session.add(to_dao(trial))
+    session.commit()
+
+    [recorded_trial] = session.scalars(select(RecordedTrialDAO)).all()
+    restored: RecordedTrial = recorded_trial.from_dao()
+
+    scored = [
+        query for query in restored.queries if query.answered_correctly is not None
+    ]
+    ordinary = [query for query in restored.queries if query.answered_correctly is None]
+    assert len(ordinary) == 1
+    assert len(scored) == 1
+    assert isinstance(scored[0].question, ObjectsSeen)
+    assert scored[0].bucket is Bucket.SCENE
+    assert scored[0].answered_correctly is True
 
 
 def test_an_attempt_keeps_the_failure_observed_the_one_predicted_and_the_resolution(
@@ -222,7 +342,7 @@ def test_an_attempt_keeps_the_failure_observed_the_one_predicted_and_the_resolut
     assert attempt.predicted_failure is SortingFailureType.OUT_OF_REACH
     assert attempt.observed_failure is SortingFailureType.WRONG_HOLE
     assert attempt.resolution is FailureResolution.RETRIED
-    assert attempt.plan_id is not None
+    assert attempt._plan_id is not None
 
 
 # %% the vocabularies the model leaves to the items that own them
@@ -299,17 +419,22 @@ def test_the_recorded_world_names_the_robot_among_its_annotations(
     ]
 
 
-def test_a_trial_keeps_the_motion_it_ran(experiments_database_session):
+def test_a_trial_keeps_the_motions_it_ran(experiments_database_session):
     """
-    The control questions are answered from the statechart a trial ran, so a trial that
-    ran one has to still name it after a round trip.
+    The control questions are answered from the statecharts a trial ran and from when
+    each of them ran, so a trial that ran one has to still name both after a round trip.
     """
     session = experiments_database_session
+    motion = RecordedMotion(
+        motion_statechart=MotionStatechart(),
+        start_moment=MOMENT_THE_MOTION_BEGAN,
+        end_moment=MOMENT_THE_MOTION_ENDED,
+    )
     trial = RecordedTrial(
         episode=sorting_episode(),
         outcome=TrialOutcome.SUCCEEDED,
         duration=12.5,
-        motion_statechart=MotionStatechart(),
+        motions=[motion],
     )
 
     session.add(to_dao(trial))
@@ -317,7 +442,10 @@ def test_a_trial_keeps_the_motion_it_ran(experiments_database_session):
 
     [recorded_trial] = session.scalars(select(RecordedTrialDAO)).all()
     restored: RecordedTrial = recorded_trial.from_dao()
-    assert isinstance(restored.motion_statechart, MotionStatechart)
+    [restored_motion] = restored.motions
+    assert isinstance(restored_motion.motion_statechart, MotionStatechart)
+    assert restored_motion.start_moment == motion.start_moment
+    assert restored_motion.end_moment == motion.end_moment
 
 
 def test_an_episode_that_kept_no_world_round_trips_without_one(

@@ -46,9 +46,12 @@ from semantic_digital_twin.world_description.world_entity import (
 
 
 @dataclass(eq=False, repr=False)
-class _CollisionAvoidanceTask(Task):
+class CollisionAvoidanceTask(Task):
     """
     Superclass with helper methods for collision avoidance tasks.
+
+    Public because it is the type a question about what the robot was constrained by
+    names to tell keeping clear of things apart from the rest.
     """
 
 
@@ -58,7 +61,7 @@ class _CancelBecauseCollisionViolated(CancelMotion):
     Cancels the motion when one of the collision avoidance tasks it watches is violated.
     """
 
-    tasks: list[_CollisionAvoidanceTask] = field(kw_only=True)
+    tasks: list[CollisionAvoidanceTask] = field(kw_only=True)
     """
     The list of collision avoidance tasks to check for collisions.
     """
@@ -87,7 +90,7 @@ class _CancelBecauseCollisionViolated(CancelMotion):
 
 
 @dataclass(eq=False, repr=False)
-class _ExternalCollisionAvoidanceNode(_CollisionAvoidanceTask):
+class _ExternalCollisionAvoidanceNode(CollisionAvoidanceTask):
     """
     Avoids external collisions between a collision group and its collision_index-closest
     object in the environment.
@@ -444,7 +447,7 @@ class ExternalCollisionAvoidance(Goal):
                     collision_index=index,
                     external_collision_manager=self.external_collision_manager,
                 )
-                self.add_node(distance_monitor)
+                self._add_child_to_motion_statechart(distance_monitor)
 
                 task = _ExternalCollisionAvoidanceTask(
                     name=f"{self.name}/task({group.root.name.name, index})",
@@ -453,12 +456,12 @@ class ExternalCollisionAvoidance(Goal):
                     collision_index=index,
                     external_collision_manager=self.external_collision_manager,
                 )
-                self.add_node(task)
+                self._add_child_to_motion_statechart(task)
                 task.pause_condition = distance_monitor.observation_variable
                 tasks.append(task)
 
         if self.cancel_if_collision_violated:
-            self.add_node(
+            self._add_child_to_motion_statechart(
                 _CancelBecauseExternalCollisionViolated(
                     tasks=tasks,
                     name="External Collision Violated",
@@ -508,7 +511,7 @@ class ExternalCollisionDistanceMonitor(MotionStatechartNode):
 
 
 @dataclass(eq=False, repr=False)
-class _SelfCollisionAvoidanceNode(_CollisionAvoidanceTask):
+class _SelfCollisionAvoidanceNode(CollisionAvoidanceTask):
     """
     Avoids self collisions between two collision groups.
 
@@ -796,7 +799,7 @@ class SelfCollisionAvoidance(Goal):
                 collision_group_b=group_b,
                 self_collision_manager=self.self_collision_manager,
             )
-            self.add_node(distance_monitor)
+            self._add_child_to_motion_statechart(distance_monitor)
 
             task = _SelfCollisionAvoidanceTask(
                 name=f"{self.name}/{group_a.root.name.name, group_b.root.name.name}/task",
@@ -805,12 +808,12 @@ class SelfCollisionAvoidance(Goal):
                 max_velocity=self.max_velocity,
                 self_collision_manager=self.self_collision_manager,
             )
-            self.add_node(task)
+            self._add_child_to_motion_statechart(task)
             task.pause_condition = distance_monitor.observation_variable
             tasks.append(task)
 
         if self.cancel_if_collision_violated:
-            self.add_node(
+            self._add_child_to_motion_statechart(
                 _CancelBecauseSelfCollisionViolated(
                     name="self collision violated", tasks=tasks
                 )

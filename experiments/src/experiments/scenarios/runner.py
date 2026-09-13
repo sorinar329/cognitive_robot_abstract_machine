@@ -8,11 +8,14 @@ from dataclasses import dataclass, field
 
 from typing_extensions import Generic, List, Sequence, TypeVar
 
+from coraplex.datastructures.enums import ExecutionType
 from krrood.patterns.subclass_safe_generic import SubClassSafeGeneric
 
 from experiments.experiment_definitions import DEFAULT_CONFIDENCE_LEVEL
 from experiments.scenarios.report import Metric, Report
 from experiments.scenarios.scenario import (
+    AbsentPerson,
+    Person,
     Perturbation,
     Scenario,
     ScenarioCondition,
@@ -34,6 +37,8 @@ ScenarioType = TypeVar("ScenarioType", bound=Scenario)
 """
 The scenario a runner runs.
 """
+
+# %% the runner
 
 
 @dataclass
@@ -58,6 +63,12 @@ class ScenarioRunner(Generic[ScenarioType, WorldType], SubClassSafeGeneric):
     confidence_level: float = DEFAULT_CONFIDENCE_LEVEL
     """
     Two-sided confidence level the report's intervals hold at.
+    """
+
+    person: Person = field(default_factory=AbsentPerson)
+    """
+    The person at the scene, who brings a perturbation about when a trial runs on the
+    robot.
     """
 
     def run(
@@ -109,6 +120,7 @@ class ScenarioRunner(Generic[ScenarioType, WorldType], SubClassSafeGeneric):
                 execution_type=scenario.execution_type,
             )
         )
+        self.trial_started(scenario, world)
         try:
             for condition in conditions:
                 condition.apply(world)
@@ -119,7 +131,7 @@ class ScenarioRunner(Generic[ScenarioType, WorldType], SubClassSafeGeneric):
                 for perturbation in perturbations:
                     if perturbation.step is not step.name:
                         continue
-                    perturbation.apply(world)
+                    self.apply_perturbation(scenario, perturbation, world)
                     log.record(
                         PerturbationApplied(
                             moment=log.elapsed_seconds, perturbation=perturbation
@@ -146,13 +158,43 @@ class ScenarioRunner(Generic[ScenarioType, WorldType], SubClassSafeGeneric):
         self.trial_finished(scenario, trial)
         return trial
 
+    def apply_perturbation(
+        self,
+        scenario: ScenarioType,
+        perturbation: Perturbation[WorldType],
+        world: WorldType,
+    ) -> None:
+        """
+        Bring one perturbation about in the trial's world: the run does it itself in
+        simulation, and the person at the scene does it on the robot.
+
+        :param scenario: The scenario the trial runs.
+        :param perturbation: The perturbation due at the step about to be performed.
+        :param world: The world the trial is running in.
+        """
+        if scenario.execution_type is ExecutionType.REAL:
+            perturbation.carried_out_by(self.person, scenario, world)
+            return
+        perturbation.apply(world)
+
+    def trial_started(self, scenario: ScenarioType, world: WorldType) -> None:
+        """
+        Take note of a trial that has just started, before any of its steps runs.
+
+        A runner that observes what happens inside a trial overrides this to start
+        watching the world the trial runs in; this one does nothing.
+
+        :param scenario: The scenario the trial runs.
+        :param world: The world the trial is about to run in.
+        """
+
     def trial_finished(self, scenario: ScenarioType, trial: Trial) -> None:
         """
         Take note of a trial that has just finished.
 
-        A runner that keeps its trials somewhere overrides this; this one keeps them only
-        in the report it returns. Called as each trial ends rather than once the run is
-        over, so a run that dies keeps what it had finished.
+        A runner that keeps its trials somewhere overrides this; this one keeps them
+        only in the report it returns. Called as each trial ends rather than once the
+        run is over, so a run that dies keeps what it had finished.
 
         :param scenario: The scenario the trial ran.
         :param trial: The trial that has finished.

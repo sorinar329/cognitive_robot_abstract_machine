@@ -14,16 +14,35 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import StrEnum
 
+import numpy as np
 from coraplex.datastructures.enums import ExecutionType
+from krrood.adapters.json_serializer import (
+    DataclassJSONSerializer,
+    SubclassJSONSerializer,
+)
+from krrood.entity_query_language.backends import QueryBackend
+from krrood.entity_query_language.core.variable import InstantiatedVariable
+from krrood.entity_query_language.predicate import Predicate
 from krrood.entity_query_language.query.query import Query
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.spatial_types.spatial_types import (
     HomogeneousTransformationMatrix,
+    SpatialType,
 )
 from semantic_digital_twin.world_description.world_entity import Body
 from krrood.patterns.subclass_safe_generic import SubClassSafeGeneric
 from krrood.utils import get_generic_type_parameters
-from typing_extensions import Any, ClassVar, Generic, List, Tuple, TypeVar
+from typing_extensions import (
+    Any,
+    Callable,
+    ClassVar,
+    Dict,
+    Generic,
+    List,
+    Tuple,
+    Type,
+    TypeVar,
+)
 
 # %% what a question is about, and what answering it exercises
 
@@ -133,12 +152,18 @@ What a question answers with.
 
 
 @dataclass
-class Question(Generic[SourceType, AnswerType], SubClassSafeGeneric, ABC):
+class Question(
+    SubclassJSONSerializer, Generic[SourceType, AnswerType], SubClassSafeGeneric, ABC
+):
     """
     One question of the frozen set, asked of one memory.
 
     ..note:: The memory a question is asked of is its bound source type, and the level it
         exercises follows from that memory rather than being stated per question.
+
+    ..note:: Inherits :class:`~krrood.adapters.json_serializer.SubclassJSONSerializer` so
+        a specific question instance - not only which subclass it is - can be persisted
+        as the question that produced a scored, recorded query.
     """
 
     bucket: ClassVar[Bucket]
@@ -159,6 +184,12 @@ class Question(Generic[SourceType, AnswerType], SubClassSafeGeneric, ABC):
     bloom_level: ClassVar[BloomLevel]
     """
     The level of Bloom's taxonomy answering this question exercises.
+    """
+
+    backend: ClassVar[Type[QueryBackend]]
+    """
+    The kind of query backend the memory this question is asked of answers it with,
+    which is what a reported latency is attributed to.
     """
 
     @property
@@ -188,6 +219,36 @@ class Question(Generic[SourceType, AnswerType], SubClassSafeGeneric, ABC):
 
         :param source: The memory the question is put to.
         """
+
+    def predicates_asked(self, source: SourceType) -> List[Callable[..., Any]]:
+        """
+        The predicates this question's query applies, in the order the query holds them.
+
+        What a reported latency is attributed to, together with the backend that
+        answered them.
+
+        :param source: The memory the question is put to.
+        """
+        query = self.query(source)
+        query.build()
+        return [
+            descendant._type_
+            for descendant in query._descendants_
+            if isinstance(descendant, InstantiatedVariable)
+            and self.is_a_predicate(descendant._type_)
+        ]
+
+    @staticmethod
+    def is_a_predicate(applied: Any) -> bool:
+        """
+        Whether what a query applies to the things it ranges over is a predicate: one of
+        the predicate classes, or a function the query language made symbolic.
+
+        :param applied: What the query applies.
+        """
+        if isinstance(applied, type):
+            return issubclass(applied, Predicate)
+        return callable(applied)
 
     @abstractmethod
     def solutions(self, source: SourceType) -> List[Any]:
@@ -229,6 +290,47 @@ class Question(Generic[SourceType, AnswerType], SubClassSafeGeneric, ABC):
         :param answered: What the query found.
         """
         return list(dict.fromkeys(answered))
+
+    def matches_ground_truth(self, source: SourceType) -> bool:
+        """
+        Whether this question's answer agrees with ground truth.
+
+        A spatial answer is compared numerically rather than by identity, since two
+        poses standing for the same place are two objects and the twin's own equality
+        says so; a list is compared position by position, each element the same way.
+
+        :param source: The memory the question is put to.
+        """
+        return self.values_agree(self.ask(source), self.ground_truth(source))
+
+    @classmethod
+    def values_agree(cls, answered: Any, true: Any) -> bool:
+        """
+        Whether one answered value and its true counterpart are the same thing.
+
+        :param answered: What a question answered, or one element of it.
+        :param true: What the representation actually holds, or one element of it.
+        """
+        if isinstance(answered, SpatialType):
+            return np.allclose(answered.to_np(), true.to_np())
+        if isinstance(answered, list):
+            return len(answered) == len(true) and all(
+                cls.values_agree(one, other) for one, other in zip(answered, true)
+            )
+        return answered == true
+
+    def to_json(self) -> Dict[str, Any]:
+        """
+        Serialize this question's own fields, which is what a recorded, scored query
+        needs to keep - not only which subclass answered it, but which instance, since a
+        long-term-memory question's own fields (which episode it is about) are part of
+        what it asked.
+        """
+        return DataclassJSONSerializer.to_json(self)
+
+    @classmethod
+    def _from_json(cls, data: Dict[str, Any], **kwargs) -> Question:
+        return DataclassJSONSerializer.from_json(data, clazz=cls, **kwargs)
 
 
 # %% what a scene fills in

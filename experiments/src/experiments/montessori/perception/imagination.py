@@ -20,7 +20,6 @@ from typing_extensions import Optional
 from experiments.montessori.board_description import DescribedBoard
 from experiments.montessori.hole_geometry import extrude_polygon
 from experiments.montessori.pieces import KnownPiece
-from experiments.montessori.planar_geometry import PlanarPoint
 from experiments.montessori.semantics import (
     MONTESSORI_SHAPE_CLASSES,
     MontessoriShape,
@@ -45,6 +44,21 @@ IMAGINATION_PREFIX = "imagined"
 What every body a look brings into the world of its own is named under, which is what
 tells one apart from a body the world already held.
 """
+
+
+def piece_mesh(piece: KnownPiece) -> Mesh:
+    """
+    The solid a body standing for a known piece is built from.
+
+    :param piece: The piece that was recognised.
+    :return: Its measured outline standing as tall as it was measured to stand, in its
+        own colour, with its origin at the middle of its height.
+    """
+    solid = extrude_polygon(piece.outline, piece.height)
+    mesh = Mesh.from_trimesh(mesh=solid)
+    mesh.color = piece.color
+    return mesh
+
 
 # %% the world a look's findings stand in
 
@@ -124,7 +138,7 @@ class ImaginedWorld:
             IMAGINATION_PREFIX,
         )
         self.spawned += 1
-        body = Body.from_shape_collection(name, ShapeCollection([self._mesh_of(piece)]))
+        body = Body.from_shape_collection(name, ShapeCollection([piece_mesh(piece)]))
         parent = self._frame_of(pose)
         with self.world.modify_world():
             connection = Connection6DoF.create_with_dofs(
@@ -155,28 +169,7 @@ class ImaginedWorld:
             :attr:`reference_frame`.
         :return: The board as the world holds it, ready to be a detection's role taker.
         """
-        position = pose.to_position().to_np()
-        _, _, yaw = (
-            np.asarray(angle).item() for angle in pose.to_rotation_matrix().to_rpy()
-        )
-        return described.stand_in(
-            self.world,
-            PlanarPoint(float(position[0]), float(position[1])),
-            yaw=yaw,
-            lid_height=float(position[2]),
-            prefix=IMAGINATION_PREFIX,
-        )
-
-    @staticmethod
-    def _mesh_of(piece: KnownPiece) -> Mesh:
-        """
-        :param piece: The piece that was recognised.
-        :return: Its measured outline standing as tall as it was measured to stand.
-        """
-        solid = extrude_polygon(piece.outline, piece.height)
-        mesh = Mesh.from_trimesh(mesh=solid)
-        mesh.color = piece.color
-        return mesh
+        return described.stand_in(self.world, pose, IMAGINATION_PREFIX)
 
     def _frame_of(self, pose: Pose) -> KinematicStructureEntity:
         """

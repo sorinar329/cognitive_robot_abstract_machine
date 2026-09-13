@@ -21,7 +21,9 @@ from krrood.entity_query_language.factories import (
     not_,
     variable,
 )
+from krrood.entity_query_language.backends import EntityQueryLanguageBackend
 from krrood.entity_query_language.predicate import symbolic_function
+from krrood.entity_query_language.predicate import Relation, symbolic_function
 from krrood.entity_query_language.query.query import Query
 from krrood.symbol_graph.symbol_graph import SymbolGraph
 from segmind.datastructures.events import (
@@ -45,7 +47,7 @@ from semantic_digital_twin.spatial_types.spatial_types import (
 from semantic_digital_twin.world_description.connections import ActiveConnection
 from semantic_digital_twin.world_description.degree_of_freedom import DegreeOfFreedom
 from semantic_digital_twin.world_description.geometry import Color
-from semantic_digital_twin.world_description.world_entity import Body
+from semantic_digital_twin.world_description.world_entity import Body, WorldEntity
 from typing_extensions import Any, ClassVar, Generic, List, Tuple, Type
 
 from experiments.questions.question import (
@@ -54,6 +56,7 @@ from experiments.questions.question import (
     Bucket,
     Memory,
     Question,
+    QueryBackend,
     QuestionedThings,
     RequiredFact,
 )
@@ -83,6 +86,12 @@ class WorkingMemoryQuestion(
     """
     Everything asked here is already represented, so answering it is interpretation
     rather than recall.
+    """
+
+    backend: ClassVar[Type[QueryBackend]] = EntityQueryLanguageBackend
+    """
+    A live query selects in this process, which is what evaluating it without naming a
+    backend does.
     """
 
     def solutions(self, source: AbstractRobot) -> List[Any]:
@@ -126,6 +135,23 @@ def has_a_shape(body: Body) -> bool:
     :param body: The body to judge.
     """
     return body.has_collision()
+
+
+@symbolic_function
+def stands_in_the_scene_of(entity: WorldEntity, robot: AbstractRobot) -> bool:
+    """
+    Whether a body or connection belongs to the world the robot stands in.
+
+    The symbol graph tracks every entity ever made, a piece taken out of a scene and one
+    never put in one included, and two of the same name in two worlds are equal by the
+    twin's account; a question is about the robot's own scene. An entity the graph only
+    remembers, handed out as None once it has been garbage collected, stands in no scene
+    at all.
+
+    :param entity: The body or connection to judge, or None for one that is gone.
+    :param robot: The robot whose scene it is.
+    """
+    return entity is not None and entity._world is robot._world
 
 
 class Side(StrEnum):
@@ -186,6 +212,33 @@ def objects_of_the_scene(robot: AbstractRobot) -> List[Body]:
     ]
 
 
+def moving_parts_of(robot: AbstractRobot) -> List[Body]:
+    """
+    The robot's bodies apart from its root.
+
+    A fixed robot's description bolts its arms to what it stands on, so its root body is
+    the table its scene is set on rather than a part of the robot.
+
+    :param robot: The robot whose parts they are.
+    """
+    return [body for body in robot.bodies if body is not robot.root]
+
+
+def surfaces_of_the_scene(robot: AbstractRobot) -> List[Body]:
+    """
+    The bodies something in the robot's scene can stand on, read off the twin directly:
+    every body with a shape that is not one of the robot's moving parts.
+
+    :param robot: The robot whose scene it is.
+    """
+    moving_parts = moving_parts_of(robot)
+    return [
+        body
+        for body in robot._world.bodies
+        if body.has_collision() and body not in moving_parts
+    ]
+
+
 # %% scene
 
 
@@ -220,7 +273,11 @@ class ObjectsSeen(WorkingMemoryQuestion[List[Body]]):
         """
         body = variable(Body)
         return an(
-            entity(body).where(has_a_shape(body), not_(contains(source.bodies, body)))
+            entity(body).where(
+                stands_in_the_scene_of(body, source),
+                has_a_shape(body),
+                not_(contains(source.bodies, body)),
+            )
         )
 
     def ground_truth(self, source: AbstractRobot) -> List[Body]:
@@ -271,7 +328,9 @@ class ObjectColours(WorkingMemoryQuestion[List[Color]]):
         body = variable(Body)
         return an(
             entity(body.collision.shapes).where(
-                has_a_shape(body), not_(contains(source.bodies, body))
+                stands_in_the_scene_of(body, source),
+                has_a_shape(body),
+                not_(contains(source.bodies, body)),
             )
         )
 
@@ -331,7 +390,9 @@ class ObjectPlaces(WorkingMemoryQuestion[List[Pose]]):
         body = variable(Body)
         return an(
             entity(body.global_pose).where(
-                has_a_shape(body), not_(contains(source.bodies, body))
+                stands_in_the_scene_of(body, source),
+                has_a_shape(body),
+                not_(contains(source.bodies, body)),
             )
         )
 
@@ -390,15 +451,19 @@ class SupportingSurfaces(WorkingMemoryQuestion[List[Body]]):
 
     def query(self, source: AbstractRobot) -> Query:
         """
-        Every object the subject stands on.
+        Every surface of the scene the subject stands on.
+
+        The robot's own root is a surface like any other: a fixed robot is bolted to the
+        table its scene is set on, and that table is what its pieces stand on.
 
         :param source: The robot the question is put to.
         """
         surface = variable(Body)
         return an(
             entity(surface).where(
+                stands_in_the_scene_of(surface, source),
                 has_a_shape(surface),
-                not_(contains(source.bodies, surface)),
+                not_(contains(moving_parts_of(source), surface)),
                 is_supported_by(self.subject, surface),
             )
         )
@@ -411,7 +476,7 @@ class SupportingSurfaces(WorkingMemoryQuestion[List[Body]]):
         """
         return [
             surface
-            for surface in objects_of_the_scene(source)
+            for surface in surfaces_of_the_scene(source)
             if is_supported_by(self.subject, surface)
         ]
 
@@ -499,6 +564,7 @@ class SideOfAnotherObject(WorkingMemoryQuestion[bool]):
         body = variable(Body)
         return an(
             entity(body).where(
+                stands_in_the_scene_of(body, source),
                 body == self.subject,
                 is_on_side_of(body, self.other, self.side, self.point_of_view),
             )
@@ -524,6 +590,107 @@ class SideOfAnotherObject(WorkingMemoryQuestion[bool]):
             self.point_of_view,
         )
         return bool(relation())
+
+
+@dataclass
+class BeliefAgreesWithPerception(WorkingMemoryQuestion[bool]):
+    """
+    Whether what a look reported of an object bore out everything believed of it.
+
+    The one question of the set that is about two accounts of the same thing rather than
+    about one: a look at the object, and what was believed of it before the look was
+    taken. What the look made of the belief is carried here, since a look is not
+    something the twin holds and cannot be read back off it afterwards.
+    """
+
+    bucket: ClassVar[Bucket] = Bucket.SUPPORT_AND_SPATIAL_RELATIONS
+    """
+    The relations a belief about a resting object is stated in: what holds it up, and
+    where it stands.
+    """
+
+    required_facts: ClassVar[Tuple[RequiredFact, ...]] = (
+        RequiredFact.OBJECT_SHAPES,
+        RequiredFact.OBJECT_PLACES,
+        RequiredFact.SUPPORT_RELATIONS,
+    )
+    """
+    Both accounts are of a shape resting somewhere, so neither can be had without all
+    three.
+    """
+
+    subject: Body
+    """
+    The object both accounts are of, as the twin holds it.
+    """
+
+    contradicted: List[Type[Relation]]
+    """
+    The kinds of relation believed of the subject that what the look found does not
+    stand in, in the order they were believed.
+
+    The kinds rather than the relations themselves, because a relation names the place
+    it is read against by the frame that place was measured in, and the world holding
+    that frame is gone by the time a recorded query is read back.
+    """
+
+    nothing_was_found: bool
+    """
+    Whether the look reported nothing at all where the subject was believed, which
+    contradicts no relation in particular and is a disagreement nonetheless.
+    """
+
+    perturbed: bool
+    """
+    Whether someone other than the robot acted on the subject, or on what the look
+    reported of it.
+    """
+
+    @classmethod
+    def asked_of(cls, things: QuestionedThings) -> List[BeliefAgreesWithPerception]:
+        """
+        Asked of no scene on its own: a belief and the look that checked it are what
+        this question is about, and a scene holds neither, so it joins the set wherever
+        such a check happened.
+
+        :param things: What the scene fills in for the questions about one thing.
+        """
+        return []
+
+    @property
+    def english(self) -> str:
+        """
+        The question as a person would ask it.
+        """
+        return "Does what you see of the %s agree with what you believed of it?" % (
+            self.subject.name.name
+        )
+
+    def query(self, source: AbstractRobot) -> Query:
+        """
+        Every kind of relation believed of the subject that the look did not bear out.
+
+        :param source: The robot the question is put to.
+        """
+        contradicted = variable(type, self.contradicted)
+        return an(entity(contradicted))
+
+    def ask(self, source: AbstractRobot) -> bool:
+        """
+        Whether the look and the belief agree about the subject.
+
+        :param source: The robot the question is put to.
+        """
+        return not self.nothing_was_found and not self.solutions(source)
+
+    def ground_truth(self, source: AbstractRobot) -> bool:
+        """
+        Whether the two accounts ought to agree, which in simulation is settled by
+        whether anyone other than the robot acted on the subject.
+
+        :param source: The robot whose scene it is.
+        """
+        return not self.perturbed
 
 
 # %% temporal and agency
@@ -829,6 +996,7 @@ class HeldInTheHand(WorkingMemoryQuestion[bool]):
         held = variable(Body)
         return an(
             entity(held).where(
+                stands_in_the_scene_of(held, source),
                 held == self.subject,
                 contains(source.bodies, held.parent_kinematic_structure_entity),
             )
@@ -903,7 +1071,9 @@ class PlaceOfOwnBody(WorkingMemoryQuestion[Pose]):
         own = variable(Body)
         return an(
             entity(own.global_pose).where(
-                contains(source.bodies, own), own.name == self.body_name
+                stands_in_the_scene_of(own, source),
+                contains(source.bodies, own),
+                own.name == self.body_name,
             )
         )
 
@@ -1002,7 +1172,11 @@ class NumberOfOwnBodies(NumberOfOwnParts):
         :param source: The robot the question is put to.
         """
         own = variable(Body)
-        return an(entity(own).where(contains(source.bodies, own)))
+        return an(
+            entity(own).where(
+                stands_in_the_scene_of(own, source), contains(source.bodies, own)
+            )
+        )
 
 
 @dataclass
@@ -1059,6 +1233,7 @@ class NumberOfOwnDegreesOfFreedom(NumberOfOwnParts):
         degree_of_freedom = variable(DegreeOfFreedom)
         return an(
             entity(degree_of_freedom).where(
+                stands_in_the_scene_of(connection, source),
                 contains(source.bodies, connection.parent),
                 contains(source.bodies, connection.child),
                 contains(connection.active_dofs, degree_of_freedom),

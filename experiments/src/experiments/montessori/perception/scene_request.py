@@ -90,8 +90,8 @@ class SceneRequest(Look):
     The board asked for, as a statement described it by what it measures, or ``None``
     where the request describes none.
 
-    A look asked for a described board fits that description's layout, at the height
-    the description gives the lid.
+    A look asked for a described board fits that description's layout, at the height the
+    description gives the lid.
     """
 
     believed_by: Optional[BeliefSource] = None

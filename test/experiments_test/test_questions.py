@@ -11,12 +11,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-import numpy as np
 import pytest
+from krrood.adapters.json_serializer import from_json, to_json
+from krrood.entity_query_language.predicate import Relation
+from typing_extensions import Type
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
+from semantic_digital_twin.reasoning.predicates import Near, SupportedBy
 from semantic_digital_twin.spatial_types.spatial_types import (
     HomogeneousTransformationMatrix,
-    SpatialType,
+    Point3,
 )
 from semantic_digital_twin.robots.minimal_robot import MinimalRobot
 from semantic_digital_twin.robots.robot_parts import AbstractRobot
@@ -31,7 +34,7 @@ from segmind.datastructures.events import (
     PickUpEvent,
     TranslationEvent,
 )
-from typing_extensions import Any, List
+from typing_extensions import List
 
 from experiments.questions.question import (
     BloomLevel,
@@ -42,8 +45,10 @@ from experiments.questions.question import (
 )
 from experiments.questions.question import QuestionedThings
 from experiments.questions.question_set import QuestionSet
+from experiments.questions.long_term_memory import AnythingMovedInTheEpisode
 from experiments.questions.working_memory import (
     AnythingMoved,
+    BeliefAgreesWithPerception,
     HeldInTheHand,
     NumberOfOwnBodies,
     NumberOfOwnDegreesOfFreedom,
@@ -57,7 +62,11 @@ from experiments.questions.working_memory import (
     Side,
     SideOfAnotherObject,
     SupportingSurfaces,
+    stands_in_the_scene_of,
 )
+from krrood.adapters.json_serializer import from_json, to_json
+from krrood.entity_query_language.predicate import Relation
+from typing_extensions import Type
 
 TABLE_COLOUR = Color(0.5, 0.3, 0.1)
 """
@@ -277,25 +286,6 @@ def robot(scene: QuestionedScene) -> AbstractRobot:
     return scene.robot
 
 
-def answers_agree(answered: Any, true: Any) -> bool:
-    """
-    Whether an answer and the truth are the same thing.
-
-    Places are compared as numbers, because two poses standing for the same place are
-    two objects and the twin's own equality says so.
-
-    :param answered: What the question answered.
-    :param true: What the twin actually holds.
-    """
-    if isinstance(answered, SpatialType):
-        return np.allclose(answered.to_np(), true.to_np())
-    if isinstance(answered, list):
-        return len(answered) == len(true) and all(
-            answers_agree(one, other) for one, other in zip(answered, true)
-        )
-    return answered == true
-
-
 # %% what a question declares about itself
 
 
@@ -358,13 +348,35 @@ def test_the_objects_seen_are_the_bodies_that_are_not_the_robot(
     assert ObjectsSeen().ask(robot) == [scene.table, scene.cube, scene.cylinder]
 
 
+def test_a_body_standing_in_no_world_is_not_among_the_objects_seen(
+    scene: QuestionedScene, robot: AbstractRobot
+):
+    """
+    The symbol graph tracks every body ever made, a piece taken out of a scene and one
+    that was never put in one included; the robot is asked about its own scene.
+    """
+    stray = dye("stray", CUBE_COLOUR, Scale(OBJECT_EDGE, OBJECT_EDGE, OBJECT_EDGE))
+
+    assert stray.has_collision()
+    assert ObjectsSeen().ask(robot) == [scene.table, scene.cube, scene.cylinder]
+    assert SupportingSurfaces(subject=scene.cube).ask(robot) == [scene.table]
+
+
+def test_an_entity_the_symbol_graph_has_lost_stands_in_no_scene(robot: AbstractRobot):
+    """
+    The symbol graph keeps only a weak reference to each entity, and hands out None for
+    one that has been garbage collected while a query still ranges over it.
+    """
+    assert bool(stands_in_the_scene_of(None, robot)) is False
+
+
 def test_the_colours_are_the_ones_the_shapes_carry(robot: AbstractRobot):
     assert ObjectColours().ask(robot) == [TABLE_COLOUR, CUBE_COLOUR, CYLINDER_COLOUR]
 
 
 def test_the_places_are_where_the_twin_puts_the_objects(robot: AbstractRobot):
     question = ObjectPlaces()
-    assert answers_agree(question.ask(robot), question.ground_truth(robot))
+    assert question.matches_ground_truth(robot)
 
 
 # %% support and spatial relations
@@ -388,6 +400,130 @@ def test_the_cube_is_left_of_the_cylinder_and_not_right_of_it(
     )
     assert left.ask(robot) is True
     assert right.ask(robot) is False
+
+
+# %% whether the eyes and the belief agree
+
+
+def believed_of(
+    scene: QuestionedScene, *contradicted: Type[Relation]
+) -> BeliefAgreesWithPerception:
+    """
+    What a look made of the belief about the cube: it bore out everything unless the
+    test names a relation it did not, in which case someone else acted on the cube.
+
+    :param scene: The scene the cube stands in.
+    :param contradicted: The kinds of relation the look did not bear out.
+    """
+    return BeliefAgreesWithPerception(
+        subject=scene.cube,
+        contradicted=list(contradicted),
+        nothing_was_found=False,
+        perturbed=bool(contradicted),
+    )
+
+
+def test_whether_the_eyes_and_the_belief_agree_is_a_spatial_question(
+    scene: QuestionedScene,
+):
+    asked = believed_of(scene)
+
+    assert asked.bucket is Bucket.SUPPORT_AND_SPATIAL_RELATIONS
+    assert asked.answer_type is bool
+
+
+def test_a_scene_on_its_own_is_not_asked_whether_its_eyes_and_belief_agree(
+    scene: QuestionedScene,
+):
+    """
+    A belief and the look that checked it are what this question is about, and a scene
+    holds neither, so it joins the set only where such a check happened.
+    """
+    assert (
+        BeliefAgreesWithPerception.asked_of(
+            QuestionedThings(
+                object_asked_about=scene.cube,
+                object_compared_against=scene.cylinder,
+                object_in_the_hand=scene.held_cube,
+                own_body_asked_about=scene.own_body_name,
+                point_of_view=scene.point_of_view,
+            )
+        )
+        == []
+    )
+    assert BeliefAgreesWithPerception not in [
+        type(question) for question in scene.question_set.questions
+    ]
+
+
+def test_a_look_that_bore_out_every_believed_relation_agrees_with_the_belief(
+    scene: QuestionedScene, robot: AbstractRobot
+):
+    asked = believed_of(scene)
+
+    assert asked.ask(robot) is True
+    assert asked.solutions(robot) == []
+    assert asked.matches_ground_truth(robot)
+
+
+def test_a_look_that_contradicts_a_believed_relation_disagrees_with_the_belief(
+    scene: QuestionedScene, robot: AbstractRobot
+):
+    asked = believed_of(scene, SupportedBy, Near)
+
+    assert asked.ask(robot) is False
+    assert asked.solutions(robot) == [SupportedBy, Near]
+    assert asked.matches_ground_truth(robot)
+
+
+def test_a_look_that_found_nothing_disagrees_though_it_contradicts_no_relation(
+    scene: QuestionedScene, robot: AbstractRobot
+):
+    """
+    An absence contradicts no relation in particular and is still the two accounts
+    failing to agree, which is what a relabelled detection leaves behind.
+    """
+    asked = BeliefAgreesWithPerception(
+        subject=scene.cube, contradicted=[], nothing_was_found=True, perturbed=True
+    )
+
+    assert asked.ask(robot) is False
+    assert asked.matches_ground_truth(robot)
+
+
+def test_an_object_nobody_else_acted_on_is_meant_to_agree(
+    scene: QuestionedScene, robot: AbstractRobot
+):
+    """
+    Ground truth in simulation: the two accounts differ exactly when someone other than
+    the robot acted on the object, or on what the look reported of it.
+    """
+    unperturbed = BeliefAgreesWithPerception(
+        subject=scene.cube, contradicted=[], nothing_was_found=False, perturbed=False
+    )
+    perturbed = BeliefAgreesWithPerception(
+        subject=scene.cube, contradicted=[], nothing_was_found=False, perturbed=True
+    )
+
+    assert unperturbed.ground_truth(robot) is True
+    assert perturbed.ground_truth(robot) is False
+
+
+def test_whether_the_eyes_and_the_belief_agree_round_trips_with_what_failed(
+    scene: QuestionedScene,
+):
+    """
+    Which relations the look did not bear out is part of what was asked, so a recorded
+    query keeps them rather than only the verdict.
+    """
+    asked = believed_of(scene, SupportedBy, Near)
+
+    restored = from_json(to_json(asked))
+
+    assert type(restored) is BeliefAgreesWithPerception
+    assert restored.contradicted == [SupportedBy, Near]
+    assert restored.subject.name == scene.cube.name
+    assert restored.perturbed is True
 
 
 # %% temporal and agency
@@ -433,7 +569,7 @@ def test_the_place_of_a_link_is_where_the_twin_puts_it(
     scene: QuestionedScene, robot: AbstractRobot
 ):
     question = PlaceOfOwnBody(body_name=scene.own_body_name)
-    assert answers_agree(question.ask(robot), question.ground_truth(robot))
+    assert question.matches_ground_truth(robot)
 
 
 def test_the_robot_counts_the_links_the_twin_says_are_its_own(
@@ -455,11 +591,35 @@ def test_every_question_of_the_set_answers_its_own_ground_truth(
     scene: QuestionedScene, robot: AbstractRobot
 ):
     for question in scene.question_set.questions:
-        assert answers_agree(
-            question.ask(robot), question.ground_truth(robot)
-        ), question.english
+        assert question.matches_ground_truth(robot), question.english
 
 
 def test_every_question_of_the_set_reads_as_a_question(scene: QuestionedScene):
     for question in scene.question_set.questions:
         assert question.english.endswith("?")
+
+
+# %% persisted as the question actually asked, not only its class
+
+
+def test_a_question_with_no_fields_of_its_own_round_trips_by_class_alone():
+    """
+    A working-memory question typically adds nothing beyond its class, so persisting it
+    is persisting which subclass it is.
+    """
+    restored = from_json(to_json(ObjectsSeen()))
+
+    assert type(restored) is ObjectsSeen
+
+
+def test_a_question_with_its_own_fields_round_trips_with_them():
+    """
+    A long-term-memory question's own fields are part of what it asked - here, which
+    episode - so persisting only the class would lose it.
+    """
+    asked = AnythingMovedInTheEpisode(episode_identifier="episode-42")
+
+    restored = from_json(to_json(asked))
+
+    assert type(restored) is AnythingMovedInTheEpisode
+    assert restored.episode_identifier == "episode-42"

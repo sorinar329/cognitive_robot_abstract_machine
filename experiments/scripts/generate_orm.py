@@ -9,17 +9,41 @@ import experiments.scenarios.runner
 import experiments.scenarios.scenario
 import experiments.scenarios.trial
 import experiments.episodes.artifacts
+import experiments.episodes.trace
+import experiments.episodes.observer
 import experiments.episodes.recording
 import experiments.episodes.long_term_memory
+import experiments.montessori.ask_episode
+import experiments.montessori.record_episode
+import experiments.montessori.run_corpus
+import experiments.montessori.watched_run
+import experiments.tracy_experiments.montessori.scene_builder
 import experiments.questions.long_term_memory
 import experiments.questions.question
 import experiments.questions.question_set
 import experiments.questions.working_memory
+import experiments.paper.camera_frame
+import experiments.paper.chart
 import experiments.paper.figure
+import experiments.paper.layered
+import experiments.paper.lettering
 import experiments.paper.figure_set
 import experiments.paper.measurement
 import experiments.paper.outcomes
+import experiments.paper.panel
+import experiments.paper.plan_timeline
+import experiments.paper.pose_change
 import experiments.paper.queries
+import experiments.paper.query_card
+import experiments.paper.questions
+import experiments.montessori.perception.scene_publishing
+import experiments.paper.run_plan
+import experiments.paper.run_timeline
+import experiments.paper.scene
+import experiments.paper.timeline
+import experiments.tracy_experiments.live_tracy
+import experiments.tracy_experiments.pickup.perceived_sorting
+import experiments.tracy_experiments.pickup.pickup_demo_mujoco
 import coraplex.orm.ormatic_interface
 import segmind.orm.ormatic_interface
 
@@ -60,10 +84,25 @@ for episode_database_module in (
 ):
     ignored_classes |= set(classes_of_module(episode_database_module))
 
+# what observes a trial, the run that is observed, the command lines that start one,
+# record a whole corpus of them and ask one back, and the scene builder they run on are
+# machinery of the same kind: what they observe is written onto the episode model's own
+# rows
+for episode_machinery_module in (
+    experiments.episodes.observer,
+    experiments.montessori.watched_run,
+    experiments.montessori.record_episode,
+    experiments.montessori.run_corpus,
+    experiments.montessori.ask_episode,
+    experiments.tracy_experiments.montessori.scene_builder,
+):
+    ignored_classes |= set(classes_of_module(episode_machinery_module))
+
 # an episode's artifacts are kept as files, so what this module holds is where they are
 # and how they are rendered - a path names a file rather than describing one, and the
 # transcript is a reading of queries the trials' rows already carry
 ignored_classes |= set(classes_of_module(experiments.episodes.artifacts))
+ignored_classes |= set(classes_of_module(experiments.episodes.trace))
 
 # the Montessori scenes and scripts are the same kind of description one level down:
 # they say how a sorting run is set up and what is done to it, and what a run then
@@ -80,17 +119,47 @@ for question_module in (
 ):
     ignored_classes |= set(classes_of_module(question_module))
 
-# a table of the paper is computed from what was recorded rather than recorded itself,
+# a figure of the paper is computed from what was recorded rather than recorded itself,
 # and it is regenerated whenever the database changes, so storing one would store an
-# answer next to the rows it was read off
+# answer next to the rows it was read off. The same holds of a query card and of
+# everything it is drawn from: a render holds a live mirror of the world and a drawn
+# panel holds pixels, neither of which is anything a row could keep
 for paper_module in (
+    experiments.paper.camera_frame,
+    experiments.paper.chart,
     experiments.paper.figure,
+    experiments.paper.layered,
     experiments.paper.figure_set,
     experiments.paper.measurement,
     experiments.paper.outcomes,
+    experiments.paper.panel,
+    experiments.paper.plan_timeline,
+    experiments.paper.pose_change,
     experiments.paper.queries,
+    experiments.paper.query_card,
+    experiments.paper.questions,
+    experiments.paper.run_plan,
+    experiments.paper.scene,
+    experiments.paper.timeline,
 ):
     ignored_classes |= set(classes_of_module(paper_module))
+
+# the pickup demo's run is performed rather than recorded: it holds the worlds, the
+# camera and the simulation it is performed in and the arm that sorts, none of which is
+# a row; what such a run leaves behind is its films
+for pickup_demo_module in (
+    experiments.tracy_experiments.pickup.perceived_sorting,
+    experiments.tracy_experiments.pickup.pickup_demo_mujoco,
+):
+    ignored_classes |= set(classes_of_module(pickup_demo_module))
+
+# what stands a look's findings in the world the robot publishes, and the connection to
+# the robot it is stood through, are running things rather than records of anything
+for live_robot_module in (
+    experiments.montessori.perception.scene_publishing,
+    experiments.tracy_experiments.live_tracy,
+):
+    ignored_classes |= set(classes_of_module(live_robot_module))
 
 # Create an ORMatic object with the classes to be mapped
 ormatic = ORMatic.from_package(

@@ -19,7 +19,6 @@ from experiments.montessori.perception.explanations import BoardOutlines, Explan
 from experiments.montessori.perception.footprint import RectifiedFootprint
 from experiments.montessori.perception.hypotheses import PieceHypothesis
 from experiments.montessori.perception.imagination import ImaginedWorld
-from experiments.montessori.pieces import KNOWN_PIECE_BY_CATEGORY
 from experiments.montessori.semantics import (
     MontessoriShape,
     MontessoriShapeCategory,
@@ -27,7 +26,7 @@ from experiments.montessori.semantics import (
 )
 from krrood.patterns.role import Role
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
-from semantic_digital_twin.spatial_types.spatial_types import Pose
+from semantic_digital_twin.spatial_types.spatial_types import Point3, Pose
 from semantic_digital_twin.world_description.geometry import Color
 
 # %% detections
@@ -145,7 +144,7 @@ class DetectedMontessoriShape(MontessoriDetection, Role[MontessoriShape]):
     How far its top surface stands above the surface it rests on, in metres.
 
     Read from the depth image where that image resolves the piece, and otherwise the
-    height :attr:`~experiments.montessori.perception.pipeline.EdgeFitDetector.piece_height`
+    height :attr:`~experiments.montessori.perception.detector_choice.SurfacePass.piece_height`
     says a loose piece stands: a depth sensor that cannot tell a two centimetre piece
     from the surface under it says nothing about how tall the piece is, and reporting
     zero would place it in the surface itself.
@@ -184,9 +183,9 @@ class DetectedMontessoriShape(MontessoriDetection, Role[MontessoriShape]):
     @property
     def color(self) -> Color:
         """
-        The colour this set gives the piece that was recognised.
+        The colour the set this piece was looked for in gives its kind.
         """
-        return KNOWN_PIECE_BY_CATEGORY[self.category].color
+        return self.hypothesis.piece_of(self.category).color
 
     @property
     def surface_height(self) -> float:
@@ -309,6 +308,29 @@ class MontessoriScene:
         The holes found in the board's lid, empty when no board was in view.
         """
         return list(self.board.holes) if self.board is not None else []
+
+    def shape_nearest_to(
+        self, category: MontessoriShapeCategory, place: Point3
+    ) -> Optional[DetectedMontessoriShape]:
+        """
+        The loose piece of one shape this look found nearest a place, or ``None`` where
+        it found none of that shape.
+
+        Which sighting a belief about a piece is answered by: a look reports the odd
+        piece that is not there, so two of one shape are told apart by which of them
+        stands where the piece was believed, and a shape the look reports none of is an
+        absence rather than a piece somewhere else.
+
+        :param category: The shape to look up.
+        :param place: The place the nearest sighting of it is wanted from.
+        """
+        of_that_shape = [shape for shape in self.shapes if shape.category is category]
+        if not of_that_shape:
+            return None
+        return min(
+            of_that_shape,
+            key=lambda shape: float(shape.pose.to_position().euclidean_distance(place)),
+        )
 
     @property
     def detections(self) -> List[MontessoriDetection]:

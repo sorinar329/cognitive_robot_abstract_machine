@@ -12,11 +12,13 @@ being written and none can be written and then forgotten.
 from __future__ import annotations
 
 import inspect
+import time
 from dataclasses import dataclass
 
 from krrood.utils import recursive_subclasses
-from typing_extensions import Any, List, Type, TypeVar
+from typing_extensions import Any, List, Set, Type, TypeVar
 
+from experiments.episodes.episode import AnsweredPredicate, RecordedQuery
 from experiments.questions.long_term_memory import LongTermMemoryQuestion
 from experiments.questions.question import (
     BloomLevel,
@@ -25,6 +27,7 @@ from experiments.questions.question import (
     Question,
     QuestionedThings,
     RememberedThings,
+    RequiredFact,
 )
 from experiments.questions.working_memory import WorkingMemoryQuestion
 
@@ -97,6 +100,24 @@ class QuestionSet:
             ]
         )
 
+    def answerable_with(self, recorded: Set[RequiredFact]) -> QuestionSet:
+        """
+        The questions of this set whose required facts were all recorded, in the set's
+        own order.
+
+        A question whose facts nothing recorded cannot be scored: it would be counted
+        wrong for evidence it never had.
+
+        :param recorded: The facts a run represented.
+        """
+        return QuestionSet(
+            questions=[
+                question
+                for question in self.questions
+                if set(question.required_facts) <= recorded
+            ]
+        )
+
     def for_bucket(self, bucket: Bucket) -> List[Question[Any, Any]]:
         """
         The questions of one bucket, in the set's own order.
@@ -135,3 +156,52 @@ class QuestionSet:
             if question.bucket not in found:
                 found.append(question.bucket)
         return found
+
+    @staticmethod
+    def routed_predicates(
+        question: Question[Any, Any], source: Any
+    ) -> List[AnsweredPredicate]:
+        """
+        Which backend answered each predicate one question's query put, named as the
+        query spells them.
+
+        Read after the question has been answered rather than while it is, so building
+        the query a second time is not counted against the latency the answer took.
+
+        :param question: The question that was asked.
+        :param source: The memory it was asked of.
+        """
+        return [
+            AnsweredPredicate(
+                predicate_name=predicate.__name__,
+                backend_name=question.backend.__name__,
+            )
+            for predicate in question.predicates_asked(source)
+        ]
+
+    def answer_and_record(self, source: Any) -> List[RecordedQuery]:
+        """
+        Ask every question of this set, score each against ground truth, and return the
+        outcome as episode rows.
+
+        :param source: The memory every question of this set is asked of.
+        """
+        batch_started_at = time.perf_counter()
+        recorded: List[RecordedQuery] = []
+        for question in self.questions:
+            asked_at = time.perf_counter()
+            answer = question.ask(source)
+            latency = time.perf_counter() - asked_at
+            recorded.append(
+                RecordedQuery(
+                    role_taker=question,
+                    answer=str(answer),
+                    latency=latency,
+                    moment=asked_at - batch_started_at,
+                    answered_predicates=self.routed_predicates(question, source),
+                    answered_correctly=question.values_agree(
+                        answer, question.ground_truth(source)
+                    ),
+                )
+            )
+        return recorded

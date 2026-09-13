@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import logging
 import time
+from datetime import datetime
 from dataclasses import dataclass, field
 
-from typing_extensions import List, Dict, ClassVar, Optional, TYPE_CHECKING
+from typing_extensions import List, Dict, ClassVar, Optional, Protocol, TYPE_CHECKING
 
 from coraplex.datastructures.enums import ExecutionType
 from coraplex.exceptions import (
@@ -32,10 +33,45 @@ if TYPE_CHECKING:
     from coraplex.robot_plans.actions.base import ActionDescription
 
     from coraplex.plans.condition_nodes import ConditionNode
-    from coraplex.plans.plan_node import MotionNode, UnderspecifiedNode
+    from coraplex.plans.plan_node import MotionNode
+    from coraplex.plans.underspecified import UnderspecifiedNode
     from coraplex.datastructures.dataclasses import Context
 
 logger = logging.getLogger(__name__)
+
+HELD_BY_THE_PLAN = (LifeCycleValues.PAUSED, LifeCycleValues.INTERRUPTED)
+"""
+The states a plan sets on its own nodes to steer the chart, which the chart's own life
+cycles are not allowed to overwrite.
+"""
+
+ENDED = (
+    LifeCycleValues.SUCCEEDED,
+    LifeCycleValues.FAILED,
+    LifeCycleValues.INTERRUPTED,
+)
+"""
+The states a node does not run on from.
+"""
+
+# %% who is told about a motion that has run
+
+
+class ReceivesExecutedMotions(Protocol):
+    """
+    Something told about each motion state chart an executable has run.
+    """
+
+    def receive(self, motion_state_chart: MotionStatechart, duration: float) -> None:
+        """
+        Take the chart of a motion that has just finished.
+
+        :param motion_state_chart: The chart that ran, holding the history it wrote.
+        :param duration: How long it ran, in seconds.
+        """
+
+
+# %% the executables
 
 
 @dataclass
@@ -271,7 +307,7 @@ class GiskardExecutable(Executable):
     def execute(self) -> None:
         """
         Completes the motion state chart and executes it according to the execution
-        type.
+        type, then tells the context's listener about the chart that ran.
         """
         if len(self.motion_mappings) == 0:
             return
@@ -279,6 +315,7 @@ class GiskardExecutable(Executable):
             return
         self.prepare_for_execution()
 
+        started_at = time.monotonic()
         match GiskardExecutable.execution_type:
             case ExecutionType.SIMULATED:
                 self._execute_simulation()
@@ -286,6 +323,20 @@ class GiskardExecutable(Executable):
                 self._execute_real()
             case _:
                 raise UnknownExecutionType(GiskardExecutable.execution_type)
+        self._hand_over_the_chart_that_ran(time.monotonic() - started_at)
+
+    def _hand_over_the_chart_that_ran(self, duration: float) -> None:
+        """
+        Hand the chart that has just run to whoever the context says listens.
+
+        The chart itself is handed over rather than a copy of it, so what the listener
+        keeps is the history the controller wrote into it.
+
+        :param duration: How long the chart ran, in seconds.
+        """
+        if self.context.motion_listener is None:
+            return
+        self.context.motion_listener.receive(self.motion_state_chart, duration)
 
     def _build_pacer(self) -> Pacer:
         """
@@ -347,6 +398,8 @@ class GiskardExecutable(Executable):
 
             tick_start_time = time.time()
             executor.tick()
+            ticked_at = datetime.now()
+            self.keep_the_motions_in_step(started_at=ticked_at, ended_at=ticked_at)
             executor.pacer.sleep()
             counter += 1
             if tick_period is not None:
@@ -375,8 +428,54 @@ class GiskardExecutable(Executable):
         """
         Executes the motion state chart on the real robot via giskard while monitoring
         for interrupts.
+
+        The chart runs inside Giskard, which reports back once it is done, so every
+        motion of it is stamped with the stretch the whole chart ran over.
         """
+        began = datetime.now()
         self.context.giskard_wrapper.execute(self.motion_state_chart)
+        self.keep_the_motions_in_step(started_at=began, ended_at=datetime.now())
+
+    def keep_the_motions_in_step(
+        self, started_at: datetime, ended_at: datetime
+    ) -> None:
+        """
+        Bring each motion's own record up to date with the life cycle its task is in.
+
+        A plan's nodes are not performed one by one: the whole plan runs as one motion
+        statechart, so what a motion node knows of its own run is read off its task
+        after every tick. A node the plan itself holds paused or interrupted is left as
+        the plan set it.
+
+        :param started_at: When a task first seen running now is taken to have started.
+        :param ended_at: When a task first seen ended now is taken to have ended.
+        """
+        for motion, task in self.motion_mappings.items():
+            state = self._life_cycle_of(task)
+            if state is motion.status or motion.status in HELD_BY_THE_PLAN:
+                continue
+            if motion.status is LifeCycleValues.NOT_STARTED:
+                motion.start_time = started_at
+            if state in ENDED:
+                motion.end_time = ended_at
+            motion.status = state
+
+    def _life_cycle_of(self, task: Task) -> LifeCycleValues:
+        """
+        The life cycle a motion's task is in.
+
+        A task below a chart compiled in this process knows its own; one below a chart
+        Giskard compiled elsewhere belongs to no statechart here, and is read off the
+        chart as a whole: Giskard ran it as one goal, so the task ended when the chart
+        did and is still running while the chart is.
+
+        :param task: The task of one motion.
+        """
+        if task.belongs_to_motion_statechart():
+            return task.life_cycle_state
+        if self.motion_state_chart.is_end_motion():
+            return LifeCycleValues.SUCCEEDED
+        return LifeCycleValues.RUNNING
 
 
 @dataclass

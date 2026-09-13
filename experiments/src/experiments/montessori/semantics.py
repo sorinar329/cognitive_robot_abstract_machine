@@ -11,7 +11,7 @@ from abc import abstractmethod
 from dataclasses import dataclass, field
 from enum import StrEnum
 
-from typing_extensions import Dict, Optional, Type
+from typing_extensions import Dict, Optional, TYPE_CHECKING, Type
 
 from experiments.montessori.exceptions import NoMatchingHoleError
 from experiments.montessori.planar_geometry import PlanarPoint, PlanarSize
@@ -30,6 +30,9 @@ from semantic_digital_twin.semantic_annotations.semantic_annotations import Aper
 from semantic_digital_twin.spatial_types import Vector3
 from semantic_digital_twin.spatial_types.spatial_types import Point3, Pose
 from semantic_digital_twin.world_description.world_entity import Region
+
+if TYPE_CHECKING:
+    from semantic_digital_twin.world import World
 
 
 class MontessoriShapeCategory(StrEnum):
@@ -322,6 +325,18 @@ class ShapeSortingBoard(HasCaseAsRootBody, HasDrawers, HasApertures):
     @classproperty
     def hole_direction(self) -> Vector3:
         return Vector3.Z()
+
+    @classmethod
+    def held_by(cls, world: World) -> Optional[ShapeSortingBoard]:
+        """
+        :param world: The world to read the board off.
+        :return: The one board the world holds, or None where it holds none.
+        """
+        boards = world.get_semantic_annotations_by_type(cls)
+        if not boards:
+            return None
+        [board] = boards
+        return board
 
     def hole_for(self, montessori_shape: MontessoriShape) -> ShapeSortingHole:
         """

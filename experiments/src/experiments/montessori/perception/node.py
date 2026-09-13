@@ -23,50 +23,32 @@ import time
 from argparse import ArgumentParser, Namespace
 from dataclasses import dataclass, field
 
-import numpy as np
 import rclpy
-from rclpy.duration import Duration
-from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
-from rclpy.qos import qos_profile_sensor_data
-from rclpy.time import Time
-from sensor_msgs.msg import CameraInfo, CompressedImage
+from sensor_msgs.msg import CompressedImage
 from typing_extensions import Callable, List, Optional, TypeVar
 
-from experiments.montessori.board_description import DescribedBoard
-from experiments.montessori.perception.backend import MontessoriPerceptionBackend
-from experiments.montessori.perception.board_publishing import BoardPublisher
-from experiments.montessori.perception.camera import (
-    CameraIntrinsics,
-    CameraTopic,
-    RgbdFrame,
-    decode_compressed_color_image,
-    decode_compressed_depth_image,
-)
+from experiments.montessori.perception.camera import CameraTopic, RgbdFrame
 from experiments.montessori.perception.detections import MontessoriScene
 from experiments.montessori.perception.exceptions import NoSceneAvailable
+from experiments.montessori.perception.live_camera import LiveCamera
 from experiments.montessori.perception.markers import DetectionMarkerPublisher
+from experiments.montessori.perception.measured_plane import CameraPoseError
 from experiments.montessori.perception.overlay import (
     DetectionOverlay,
 )
-from experiments.montessori.perception.pipeline import (
-    LIVE_POSITION_CORRECTION,
-    MontessoriPerceptionPipeline,
-)
+from experiments.montessori.perception.pipeline import MontessoriPerceptionPipeline
 from experiments.montessori.perception.recorded_setup import lab_board
+from experiments.montessori.perception.scene_publishing import (
+    LOOKS_FOR_THE_BOARD,
+    hold_board,
+)
 from experiments.montessori.perception.scene_request import SceneRequest
-from experiments.montessori.perception.scene_source import MontessoriSceneSource
+from experiments.montessori.perception.scene_source import RepeatedLook
 from experiments.montessori.perception.scene_windows import SceneWindows
 from experiments.montessori.perception.viewer import CameraFrameViewer
-from experiments.montessori.semantics import ShapeSortingBoard
-from experiments.network_limits import check_large_messages_can_arrive
-from semantic_digital_twin.adapters.ros.tfwrapper import TFWrapper
-from semantic_digital_twin.adapters.ros.world_fetcher import fetch_world_from_service
-from semantic_digital_twin.adapters.ros.world_synchronizer import WorldSynchronizer
+from experiments.montessori.pieces import SMALLER_PIECES
 from semantic_digital_twin.robots.tracy import Tracy
-from semantic_digital_twin.spatial_types.spatial_types import (
-    HomogeneousTransformationMatrix,
-)
 from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.world_entity import (
     KinematicStructureEntity,
@@ -84,12 +66,6 @@ REPORT_PERIOD_SECONDS = 1.0
 How often the scene is logged while the node runs.
 """
 
-BOARD_SEARCH_PERIOD_SECONDS = 1.0
-"""
-How long the node waits before looking for the described board again, while no board
-answering the description is in view.
-"""
-
 Held = TypeVar("Held")
 """
 Whatever the node holds that a caller waits to arrive: a look, or a frame.
@@ -99,7 +75,7 @@ Whatever the node holds that a caller waits to arrive: a look, or a frame.
 
 
 @dataclass
-class MontessoriPerceptionNode(MontessoriSceneSource):
+class MontessoriPerceptionNode(RepeatedLook):
     """
     Watches the Montessori scene continuously and serves the newest result.
 
@@ -109,14 +85,9 @@ class MontessoriPerceptionNode(MontessoriSceneSource):
     running, and a result that is one frame old beats blocking a plan on a fresh capture.
     """
 
-    node: Node
+    node: Node = field(kw_only=True)
     """
     The node subscriptions and transform lookups are made on.
-    """
-
-    pipeline: MontessoriPerceptionPipeline
-    """
-    Turns a frame into detections.
     """
 
     minimum_period: float = 0.5
@@ -147,24 +118,15 @@ class MontessoriPerceptionNode(MontessoriSceneSource):
     Draws the detections onto the frame the viewer shows.
     """
 
-    _transforms: TFWrapper = field(init=False)
+    camera_pose_error: Optional[CameraPoseError] = field(init=False, default=None)
     """
-    Reads where the camera stood when a frame was taken.
-    """
-
-    _intrinsics: Optional[CameraIntrinsics] = field(init=False, default=None)
-    """
-    The intrinsics the camera last reported.
+    How far the camera's published pose is from levelling the table, read off the first
+    look the node could place in the world, or None until one has been.
     """
 
-    _camera_frame: Optional[str] = field(init=False, default=None)
+    _camera: LiveCamera = field(init=False)
     """
-    The frame the camera last reported its images in.
-    """
-
-    _latest_depth: Optional[CompressedImage] = field(init=False, default=None)
-    """
-    The newest depth image, held until a colour image arrives to pair it with.
+    The newest of everything the camera publishes, and where it stands.
     """
 
     _frame: Optional[RgbdFrame] = field(init=False, default=None)
@@ -182,76 +144,107 @@ class MontessoriPerceptionNode(MontessoriSceneSource):
     When the pipeline last ran, as a monotonic timestamp.
     """
 
+    _look_under_way_since: Optional[float] = field(init=False, default=None)
+    """
+    When the look the camera's thread is taking now began, as a monotonic timestamp, or
+    None between looks; what tells a wait for a result that one is on its way.
+    """
+
     _lock: threading.Lock = field(init=False, default_factory=threading.Lock)
     """
     Guards the newest result against being read while it is being replaced.
     """
 
     def __post_init__(self) -> None:
-        self._transforms = TFWrapper(node=self.node)
-        self.node.create_subscription(
-            CameraInfo,
-            CameraTopic.CAMERA_INFO,
-            self._on_camera_info,
-            qos_profile_sensor_data,
-        )
-        self.node.create_subscription(
-            CompressedImage, CameraTopic.DEPTH, self._on_depth, qos_profile_sensor_data
-        )
-        self.node.create_subscription(
-            CompressedImage, CameraTopic.COLOR, self._on_color, qos_profile_sensor_data
-        )
+        self._camera = LiveCamera(node=self.node, color_callback=self._on_look)
 
-    # %% subscriptions
+    # %% each look
 
-    def _on_camera_info(self, message: CameraInfo) -> None:
+    def _on_look(self, _: CompressedImage) -> None:
         """
-        Remember the intrinsics and the frame the camera reports its images in.
-
-        :param message: The camera's own calibration.
-        """
-        self._intrinsics = CameraIntrinsics.from_camera_info_matrix(message.k)
-        self._camera_frame = message.header.frame_id
-
-    def _on_depth(self, message: CompressedImage) -> None:
-        """
-        Hold the newest depth image until a colour image arrives to pair it with.
-
-        :param message: The depth image.
-        """
-        self._latest_depth = message
-
-    def _on_color(self, message: CompressedImage) -> None:
-        """
-        Pair a colour image with the newest depth image and run the pipeline on the two.
+        Run the pipeline on the newest look, once a colour image has completed it.
 
         The bare images are shown only while the camera cannot be placed in the world,
         since a viewer that is about to be handed the same ones cut down to the
         workspace and drawn on would otherwise flash the bare ones first.
-
-        :param message: The colour image.
         """
-        if not self._ready() or time.monotonic() - self._last_run < self.minimum_period:
+        if (
+            self._camera.missing_inputs()
+            or time.monotonic() - self._last_run < self.minimum_period
+        ):
             return
         self._last_run = time.monotonic()
-        color = decode_compressed_color_image(message.data, message.format)
-        depth = decode_compressed_depth_image(
-            self._latest_depth.data, self._latest_depth.format
-        )
-        frame = self._build_frame(color, depth)
+        frame = self._build_frame()
         if frame is None:
             if self.viewer is not None:
-                self.viewer.show_color(color)
-                self.viewer.show_depth(depth)
+                self.viewer.show_color(self._camera.color_image)
+                self.viewer.show_depth(self._camera.depth_image)
             return
-        scene = self.pipeline.detect(frame)
-        with self._lock:
-            self._scene = scene
-            self._frame = frame
+        if self.camera_pose_error is None:
+            self.check_camera_pose(frame)
+        scene = self.look_at(frame)
         if self.markers is not None:
             self.markers.publish(scene)
         if self.viewer is not None:
             self._show(frame, scene)
+
+    def look_at(self, frame: RgbdFrame) -> MontessoriScene:
+        """
+        Run the pipeline on one look and keep the result as the newest.
+
+        The frame is kept before the pipeline runs on it, so whoever waits for a frame
+        is served as soon as one is built rather than once the look is over -- a first
+        look under load can outlast that wait. A result is kept only if the look was
+        taken through the pipeline this node still reads with: a look begun before
+        :meth:`read_with` handed over another pipeline was taken through the old one,
+        and serving it would answer a request with what that pipeline made of the scene.
+
+        :param frame: The look, in the pipeline's own reference frame.
+        :return: What the look found.
+        """
+        pipeline = self.pipeline
+        with self._lock:
+            self._look_under_way_since = time.monotonic()
+            if pipeline is self.pipeline:
+                self._frame = frame
+        scene = pipeline.detect(frame)
+        with self._lock:
+            self._look_under_way_since = None
+            if pipeline is self.pipeline:
+                self._scene = scene
+        return scene
+
+    def read_with(self, pipeline: MontessoriPerceptionPipeline) -> None:
+        """
+        Take every later look through the given pipeline, and forget the newest result,
+        which was taken through the pipeline this replaces.
+
+        :param pipeline: What takes the looks from now on.
+        """
+        with self._lock:
+            super().read_with(pipeline)
+            self._scene = None
+            self._frame = None
+
+    def check_camera_pose(self, frame: RgbdFrame) -> CameraPoseError:
+        """
+        Read how far the camera's published pose is off against the table, keep the
+        answer, and warn if it is more than the depth image's noise explains.
+
+        The transform tree publishes whatever calibration the robot description was
+        written with, and a camera that has moved since reports every detection from the
+        wrong place; the table is flat and at a known height whatever the calibration
+        says, so it is what the pose is checked against.
+
+        :param frame: A look placed in the world by the published pose.
+        """
+        self.camera_pose_error = CameraPoseError.of(frame, self.pipeline.table)
+        if not self.camera_pose_error.within_tolerance:
+            self.node.get_logger().warning(
+                f"the camera's published pose is off: {self.camera_pose_error}; "
+                "recalibrate the camera link in the robot description"
+            )
+        return self.camera_pose_error
 
     def _show(self, frame: RgbdFrame, scene: MontessoriScene) -> None:
         """
@@ -265,88 +258,31 @@ class MontessoriPerceptionNode(MontessoriSceneSource):
             pipeline=self.pipeline, viewer=self.viewer, overlay=self.overlay
         ).show(frame, scene)
 
-    def _ready(self) -> bool:
-        """
-        Whether everything the pipeline needs has arrived at least once.
-        """
-        return self._intrinsics is not None and self._latest_depth is not None
-
     def _missing_inputs(self) -> List[str]:
         """
         The inputs that have not arrived yet, for reporting why no scene is available.
+
+        A colour image counts as missing until one has been looked at, since it is the
+        one that completes a look.
         """
-        missing = []
-        if self._intrinsics is None:
-            missing.append(str(CameraTopic.CAMERA_INFO))
-        if self._latest_depth is None:
-            missing.append(str(CameraTopic.DEPTH))
-        if self._scene is None:
+        missing = self._camera.missing_inputs()
+        if self._scene is None and str(CameraTopic.COLOR) not in missing:
             missing.append(str(CameraTopic.COLOR))
         return missing
 
-    def _build_frame(self, color: np.ndarray, depth: np.ndarray) -> Optional[RgbdFrame]:
+    def _build_frame(self) -> Optional[RgbdFrame]:
         """
-        Assemble one colour image, the depth image taken with it, and the camera's pose
-        into a frame the pipeline can read.
+        The newest look, in the pipeline's own reference frame.
 
-        :param color: The colour image, blue/green/red.
-        :param depth: The depth image in metres.
-        :return: The frame, or None while the camera's pose is not yet known to the
-            transform tree.
-        """
-        reference_frame_T_camera = self._camera_pose()
-        if reference_frame_T_camera is None:
-            return None
-        return RgbdFrame(
-            color=color,
-            depth=depth,
-            intrinsics=self._intrinsics,
-            reference_frame_T_camera=reference_frame_T_camera,
-        )
-
-    def _camera_pose(self) -> Optional[np.ndarray]:
-        """
-        Where the camera stands, in the pipeline's own reference frame.
-
-        Reads the newest transform rather than the one stamped on the image: this camera
-        is bolted to the robot's own table, so its pose does not move between the frame
-        being taken and being processed, and asking for a past stamp only risks falling
-        off the back of the transform buffer.
-
-        :return: The camera's pose as a 4x4 homogeneous transformation, or None while
-            the transform tree cannot yet answer for that frame.
+        :return: The frame, or None while the pipeline has no reference frame or the
+            camera's pose is not yet known to the transform tree.
         """
         reference_frame = self.pipeline.reference_frame
-        if reference_frame is None or self._camera_frame is None:
+        if reference_frame is None:
             return None
-        if not self._transforms.wait_for_transform(
-            str(reference_frame.name.name),
-            self._camera_frame,
-            Time(),
-            Duration(seconds=0.2),
-        ):
-            return None
-        transform = self._transforms.lookup_transform(
-            str(reference_frame.name.name), self._camera_frame
-        ).transform
-        return HomogeneousTransformationMatrix.from_xyz_quaternion(
-            transform.translation.x,
-            transform.translation.y,
-            transform.translation.z,
-            transform.rotation.x,
-            transform.rotation.y,
-            transform.rotation.z,
-            transform.rotation.w,
-        ).to_np()
+        return self._camera.frame_in(str(reference_frame.name.name))
 
     # %% serving results
-
-    @property
-    def reference_frame(self) -> Optional[KinematicStructureEntity]:
-        """
-        The frame this node's pipeline places its detections in.
-        """
-        return self.pipeline.reference_frame
 
     def scene(self, request: SceneRequest = SceneRequest()) -> MontessoriScene:
         """
@@ -393,19 +329,30 @@ class MontessoriPerceptionNode(MontessoriSceneSource):
         """
         Block until something this node holds has arrived.
 
+        A look under way is waited for however long it takes: a first look through a
+        pipeline just handed over is slow, and a wait that gave up while the camera's
+        thread was still looking would report a camera that is silent when it is not.
+        The timeout is the time the node is allowed to spend between looks, so only a
+        node the camera has stopped feeding gives up.
+
         :param newest: Reads what the node holds now, None until it has arrived.
-        :param timeout_seconds: How long to wait before giving up.
+        :param timeout_seconds: How long to wait with no look under way before giving
+            up.
         :return: What arrived.
         :raises NoSceneAvailable: If nothing arrived within the timeout.
         """
         deadline = time.monotonic() + timeout_seconds
-        while time.monotonic() < deadline:
+        while True:
             with self._lock:
                 held = newest()
+                look_under_way = self._look_under_way_since is not None
             if held is not None:
                 return held
+            if look_under_way:
+                deadline = time.monotonic() + timeout_seconds
+            elif time.monotonic() >= deadline:
+                raise NoSceneAvailable(timeout_seconds, self._missing_inputs())
             time.sleep(self.scene_check_period)
-        raise NoSceneAvailable(timeout_seconds, self._missing_inputs())
 
 
 # %% running it
@@ -419,8 +366,8 @@ def build_node(
 ) -> MontessoriPerceptionNode:
     """
     Wire the perception node against the live robot's world, which says which stretch of
-    table the scene stands on, how high its surfaces lie, and which frame to report poses
-    in.
+    table the scene stands on, how high its surfaces lie, and which frame to report
+    poses in.
 
     :param node: The node to subscribe and publish on.
     :param world: The world the robot publishes.
@@ -453,58 +400,10 @@ def pipeline_of(world: World) -> MontessoriPerceptionPipeline:
     """
     :param world: The world the robot publishes.
     :return: The pipeline looking at the scene that world describes, on the robot's own
-        table, with the stopgap :data:`LIVE_POSITION_CORRECTION` wired into what it
-        reports.
+        table, for the pieces standing on it now.
     """
     [robot] = world.get_semantic_annotations_by_type(Tracy)
-    return MontessoriPerceptionPipeline.of_world(
-        world, robot.root, position_correction=LIVE_POSITION_CORRECTION
-    )
-
-
-def find_board(
-    perception: MontessoriPerceptionNode, described: DescribedBoard
-) -> ShapeSortingBoard:
-    """
-    Look until a board answering a description is in view.
-
-    :param perception: The node to look through.
-    :param described: The board to look for.
-    :return: The board, standing where it was found in the world the look brought its
-        findings into.
-    """
-    looking = MontessoriPerceptionBackend(source=perception)
-    while True:
-        found = list(described.statement().evaluate(backend=looking))
-        if found:
-            return found[0]
-        logger.info("No board answering the description is in view yet.")
-        time.sleep(BOARD_SEARCH_PERIOD_SECONDS)
-
-
-def hold_board(world: World, perception: MontessoriPerceptionNode) -> ShapeSortingBoard:
-    """
-    Have the world the robot publishes hold the shape-sorting board on this table.
-
-    A world holding no board has the board looked for by the description of the board on
-    this table, and the board found published into it, so every process keeping that
-    world in step holds it too.
-
-    :param world: The world the robot publishes.
-    :param perception: The node to look through, whose pipeline then reads the published
-        board's lid.
-    :return: The board the world holds.
-    """
-    held = world.get_semantic_annotations_by_type(ShapeSortingBoard)
-    if held:
-        return held[0]
-    described = lab_board()
-    published = BoardPublisher(world=world).publish(
-        described, find_board(perception, described)
-    )
-    logger.info("Found the board and published it as %s.", published.name)
-    perception.pipeline = pipeline_of(world)
-    return published
+    return MontessoriPerceptionPipeline.of_world(world, robot.root, SMALLER_PIECES)
 
 
 def parse_arguments() -> Namespace:
@@ -547,30 +446,29 @@ def main() -> None:
     A world the robot publishes without a shape-sorting board has the board looked for
     first, by the description of the board on this table, and the board found is
     published into that world so every process keeping it in step holds it too.
+
+    Imported here rather than at the top: the connection to the live robot is built on
+    this module's own node, and importing it above would import this module from
+    itself.
     """
+    from experiments.tracy_experiments.live_tracy import LiveTracy
+
     arguments = parse_arguments()
     logging.basicConfig(level=logging.INFO, format="%(message)s")
-    check_large_messages_can_arrive()
     rclpy.init()
-    node = rclpy.create_node(NODE_NAME)
-    executor = MultiThreadedExecutor()
-    executor.add_node(node)
-    threading.Thread(target=executor.spin, daemon=True, name="rclpy-executor").start()
-
-    world = fetch_world_from_service(node=node, timeout_seconds=300)
-    WorldSynchronizer(_world=world, node=node)
-    perception = build_node(node, world, show_images=arguments.show_images)
-    hold_board(world, perception)
-    report(perception.wait_for_scene())
-    next_report = time.monotonic() + REPORT_PERIOD_SECONDS
-    while rclpy.ok():
-        if time.monotonic() >= next_report:
-            next_report = time.monotonic() + REPORT_PERIOD_SECONDS
-            report(perception.scene())
-        if perception.viewer is None:
-            time.sleep(REPORT_PERIOD_SECONDS)
-            continue
-        perception.viewer.refresh()
+    with LiveTracy.connected(NODE_NAME, show_images=arguments.show_images) as tracy:
+        perception = tracy.look
+        hold_board(tracy.world, perception, lab_board(), looks=LOOKS_FOR_THE_BOARD)
+        report(perception.wait_for_scene())
+        next_report = time.monotonic() + REPORT_PERIOD_SECONDS
+        while rclpy.ok():
+            if time.monotonic() >= next_report:
+                next_report = time.monotonic() + REPORT_PERIOD_SECONDS
+                report(perception.scene())
+            if perception.viewer is None:
+                time.sleep(REPORT_PERIOD_SECONDS)
+                continue
+            perception.viewer.refresh()
 
 
 if __name__ == "__main__":

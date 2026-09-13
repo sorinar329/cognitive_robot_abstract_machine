@@ -1,41 +1,53 @@
 """
-The physical Tracy's left arm picks up a single cube -- pickup only, no place -- wired
-the way :mod:`coraplex_real_tracy.demo` wires the physical robot: a Giskard standalone
-node is launched, the live world is fetched from a running ``WorldFetcher`` service and
-kept in sync via :class:`~semantic_digital_twin.adapters.ros.
-world_synchronizer.WorldSynchronizer`, and the plan runs under
-:attr:`~coraplex.datastructures.enums.ExecutionType.REAL`.
+The physical Tracy's left arm sorts the loose Montessori pieces into the shape-sorting
+board by looking -- wired the way :mod:`coraplex_real_tracy.demo` wires the physical
+robot: a Giskard standalone node is launched, the live world is fetched and kept in step
+through :class:`~experiments.tracy_experiments.live_tracy.LiveTracy`, and the plan runs
+under :attr:`~coraplex.datastructures.enums.ExecutionType.REAL`.
 
-The cube is added to the live, fetched world as a plain
-:class:`~semantic_digital_twin.world_description.world_entity.Body`, the same
-symbolic-anchor trick :mod:`~experiments.tracy_experiments.stacking.stacking_demo_real`
-uses -- it is not a perception result, so the physical cube must already be placed at
-:data:`CUBE_X`/:data:`CUBE_Y` by hand before this runs. Once added it is visible in the
-same rviz the physical robot renders in (via ``WorldSynchronizer``), so its position can
-be checked against the real cube before the pickup runs -- the script pauses for that
-check right after spawning it.
+Nothing on the table is placed by hand. The camera looks for the board by its
+description (:func:`~experiments.montessori.perception.recorded_setup.lab_board`) and
+the board found is stood in the live world with one
+:class:`~experiments.montessori.semantics.ShapeSortingHole` per hole; one look then
+stands every loose piece resting on the bare table where it was seen, as the piece the
+set on the table says it is (see
+:class:`~experiments.tracy_experiments.pickup.perceived_sorting.PerceivedSorting`).
+Board and pieces are visible in the same rviz the physical robot renders in (via
+``WorldSynchronizer``), so they can be checked against the real table before the
+sorting runs -- the script pauses for that check after looking. Each piece is picked
+from where it was seen and released above the hole of the perceived board it fits
+through.
 
 Each pick is watched by a SegMind :func:`~experiments.tracy_experiments.montessori.
 event_monitoring.build_pick_monitor` monitor -- support, grasp, lift and pick-up, but
-no hole-contact or insertion, since the shapes here are bare bodies with no board model.
+no hole-contact or insertion, since the pieces here are bare bodies with no board model.
 Its events stream to the live dashboard at ``http://127.0.0.1:5000`` while the demo
-runs, and a per-shape yes/no verdict is logged after each pick.
+runs, and a per-piece yes/no verdict is logged after each pick.
 
-While a shape is carried to its hole, the left gripper's knuckle joint is watched for
+While a piece is carried to its hole, the left gripper's knuckle joint is watched for
 slip: the close is re-commanded a little past fully closed on a fixed period and, if the
-fingers then travel past where the grasp first settled, the shape has left the pads (see
+fingers then travel past where the grasp first settled, the piece has left the pads (see
 :mod:`~experiments.tracy_experiments.montessori.gripper_feedback`). Each poll's verdict
 is logged, and a slip also shows on the dashboard as a ``GripperSlipEvent``.
 
-Run with (``iai_tracy_description`` and the Giskard/world-fetcher ROS stack must be
-running)::
+The run is recorded as one trial of one episode, the way a simulated run is: every
+plan the rig performs, every event its monitors report and the working-memory question
+set asked about one piece at the end go onto the trial, and where every joint stood
+along the run is kept beside the episode's other artifacts -- with the bag, when one is
+recorded -- so the paper's cards can be drawn from the run on the robot exactly as from
+a run in MuJoCo.
+
+Run with (the camera, ``iai_tracy_description`` and the Giskard/world-fetcher ROS stack
+must be running)::
 
     python -m experiments.tracy_experiments.pickup.pickup_demo_real
 
 Pass ``--record`` to capture a rosbag of the camera, depth camera and joint states for
 the duration of the sorting. Bags are written to
 :data:`~experiments.tracy_experiments.rosbag_recording.DEFAULT_BAG_DIRECTORY` and keep
-one camera frame in :data:`KEEP_EVERY_NTH_FRAME`; both are overridable, see
+one camera frame in
+:data:`~experiments.tracy_experiments.rosbag_recording.DEFAULT_KEEP_EVERY_NTH_FRAME`;
+both are overridable, see
 ``--bag-directory`` and ``--keep-every-nth-frame``.
 """
 
@@ -44,18 +56,19 @@ from __future__ import annotations
 import argparse
 import contextlib
 import logging
-import os
-import signal
-import subprocess
 import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from enum import StrEnum
+from pathlib import Path
+
+from krrood.exceptions import DataclassException
+from typing_extensions import Optional, Sequence
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 
 import rclpy
-from rclpy.executors import MultiThreadedExecutor
 
 from coraplex.datastructures.dataclasses import Context
 from coraplex.datastructures.enums import (
@@ -73,27 +86,30 @@ from coraplex.robot_plans.actions.core.pick_up import ReachAction
 from coraplex.robot_plans.actions.core.robot_body import ParkArmsAction
 from coraplex.robot_plans.motions.gripper import MoveToolCenterPointMotion
 from coraplex.view_manager import ViewManager
-from experiments.tracy_experiments.rosbag_recording import (
-    DEFAULT_BAG_DIRECTORY,
-    DECIMATED_TOPICS,
-    RosbagRecorder,
+from experiments.episodes.artifacts import (
+    ArtifactDirectory,
+    EpisodeArtifacts,
+    Transcript,
 )
-from experiments.montessori.hole_geometry import HoleFootprint
-from experiments.montessori.pieces import CUBE_EDGE, KNOWN_PIECE_BY_CATEGORY
-from experiments.montessori.semantics import (
-    MONTESSORI_SHAPE_CLASSES,
-    MontessoriShape,
-    MontessoriShapeCategory,
+from experiments.episodes.episode import Episode, RecordedTrial
+from experiments.episodes.observer import EpisodeObserver
+from experiments.episodes.recording import open_recording
+from experiments.episodes.trace import JointTrace, JointTraceRecorder
+from experiments.montessori.perception.recorded_setup import lab_board
+from experiments.montessori.perception.scene_publishing import (
+    LOOKS_FOR_THE_BOARD,
+    PerceivedScene,
 )
-from experiments.montessori.world import (
-    BOARD_COLOR,
-    BOARD_SCALE,
-    _BOARD_MESH,
-    _HOLE_FOOTPRINTS,
-    _board_body,
-    _shape_body,
+from experiments.montessori.results_database import (
+    ResultsDatabase,
+    resolve_lasting_database,
 )
-from experiments.tracy_experiments.equipment import table_top_z as read_table_top_z
+from experiments.montessori.semantics import MontessoriShape, MontessoriShapeCategory
+from experiments.questions.question import QuestionedThings
+from experiments.questions.after_the_move import QuestionAfterTheMove
+from experiments.questions.question_set import QuestionSet
+from experiments.scenarios.trial import TrialOutcome
+from experiments.tracy_experiments.live_tracy import LiveTracy
 from experiments.tracy_experiments.montessori.event_dashboard import (
     EventFeed,
     run_dashboard,
@@ -111,7 +127,18 @@ from experiments.tracy_experiments.montessori.gripper_feedback import (
     confirm_grasp,
     reclose_setpoint_for,
 )
+from experiments.tracy_experiments.pickup.perceived_sorting import (
+    PerceivedSorting,
+    ShapeSorter,
+)
 from experiments.tracy_experiments.robotiq_gripper import RobotiqGripperController
+from experiments.tracy_experiments.rosbag_recording import (
+    DECIMATED_TOPICS,
+    DEFAULT_BAG_DIRECTORY,
+    DEFAULT_KEEP_EVERY_NTH_FRAME,
+    RosbagRecorder,
+    RosbagRecordingProcess,
+)
 from segmind.datastructures.events import (
     DetectionEvent,
     GraspEvent,
@@ -123,78 +150,41 @@ from segmind.datastructures.events import (
 )
 from segmind.detectors.base import SegmindContext
 from semantic_digital_twin.datastructures.definitions import GripperState
-from semantic_digital_twin.spatial_types.spatial_types import Pose
-from semantic_digital_twin.adapters.ros.world_fetcher import fetch_world_from_service
-from semantic_digital_twin.adapters.ros.world_synchronizer import WorldSynchronizer
-from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
-from semantic_digital_twin.robots.tracy import Tracy
-from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
-from semantic_digital_twin.world import World
-from semantic_digital_twin.world_description.connections import FixedConnection
-from semantic_digital_twin.world_description.geometry import Box, Color, Mesh, Scale
-from semantic_digital_twin.world_description.shape_collection import ShapeCollection
-from semantic_digital_twin.world_description.world_entity import Body
-from semantic_digital_twin.adapters.ros.visualization.viz_marker import (
-    VizMarkerPublisher,
+from semantic_digital_twin.spatial_types.spatial_types import (
+    HomogeneousTransformationMatrix,
+    Pose,
 )
+from semantic_digital_twin.robots.tracy import Tracy
+from semantic_digital_twin.world import World
+from semantic_digital_twin.world_description.world_entity import Body
 
 logger = logging.getLogger(__name__)
 
+NODE_NAME = "tracy_pickup_demo_real"
+"""
+The name this demo's node registers under.
+"""
+
 PICK_ARM = Arms.LEFT
 """
-Which arm picks up the cube.
+Which arm sorts every piece.
 """
 
-SHAPE_SCALE = 0.8
+GRASP_HEIGHT_OFFSET = 0.04
 """
-Factor the cube and the loose shapes are scaled by, relative to the measured set in
-:mod:`experiments.montessori.pieces`.
-"""
+Height, in metres, the reach, grasp and lift are aimed above a loose piece's own centre.
 
-CUBE_SIZE = CUBE_EDGE * SHAPE_SCALE
-"""
-Edge length of the cube, in metres.
-"""
-
-CUBE_X = 0.79
-CUBE_Y = 0.4
-"""
-Where the cube must already be placed by hand before this runs, in the live world's root
-frame.
-"""
-
-BOARD_X = 1.035
-BOARD_Y = 0.16
-"""
-Where the Montessori shape-sorting board sits on the same table as the cube, in the live
-world's root frame.
-"""
-
-BOARD_TABLE_CLEARANCE = 0
-"""
-Vertical offset added to the read table-top height when seating the board.
-"""
-
-PLACE_HOVER = 0.04
-"""
-Height above the board's top surface at which a shape is released over its hole.
-"""
-
-GRASP_HEIGHT_OFFSET = 0.04 * SHAPE_SCALE
-"""
-Height, in metres, the reach, grasp and lift are aimed above a loose shape's own centre.
-
-The shapes and cube are spawned resting on the table (:func:`_add_montessori_shape`,
-:func:`_add_cube`), so the model sits where the real object does and SegMind's own
-model-based support and contact detectors see it on the table. This offset then lifts
-the grasp target back up by the same distance the full-size shapes used to be spawned
-hovering, scaled by :data:`SHAPE_SCALE` so the fingers close at the same fraction of a
-scaled piece's height. A starting point to tune on hardware, not a measured value.
+A perceived piece stands resting on the table where the look saw it, so the model sits
+where the real object does and SegMind's own model-based support and contact detectors
+see it on the table. This offset then lifts the grasp target back up by the same
+distance the pieces used to be spawned hovering, so the arm still reaches where it did
+before the spawn was lowered. A starting point to tune on hardware, not a measured
+value.
 """
 
 SLIP_WATCH_INTERVAL_SECONDS = 1.0
 """
-Seconds between the slip watch's re-closes while a shape is carried to its hole (see
+Seconds between the slip watch's re-closes while a piece is carried to its hole (see
 :class:`~experiments.tracy_experiments.montessori.gripper_feedback.LiveGraspGuard`).
 """
 
@@ -202,7 +192,7 @@ POST_LIFT_SETTLE_SECONDS = 5.0
 """
 Seconds to hold still after the lift before the grasp is read and the slip watch starts.
 
-The knuckle keeps moving for a moment after the shape leaves the table: the fingers take
+The knuckle keeps moving for a moment after the piece leaves the table: the fingers take
 up the piece's weight and it settles between the pads. Reading immediately catches that
 transient, which both seeds
 :class:`~experiments.tracy_experiments.montessori.gripper_feedback.SlipDetector` from a
@@ -210,39 +200,15 @@ position the grasp has not actually reached and risks a first poll that reads th
 still-settling travel as a slip.
 """
 
-
-@dataclass(frozen=True)
-class PickTarget:
-    """One loose shape to pick off the table and drop through its matching board hole."""
-
-    name: str
-    """Name of the shape's body."""
-
-    category: MontessoriShapeCategory
-    """Board hole the shape belongs to."""
-
-    pick_y: float
-    """Y of the shape on the table, in the world root frame (X is shared: :data:`CUBE_X`)."""
-
-    @property
-    def half_height(self) -> float:
-        """
-        Half the shape's own height at :data:`SHAPE_SCALE`, used to seat it on the table
-        and above its hole.
-        """
-        return _shape_half_height(self.category)
-
-
-PICK_TARGETS: list[PickTarget] = [
-    PickTarget("pickup_circle", MontessoriShapeCategory.CYLINDER, 0.5),
-    PickTarget("pickup_rectangle", MontessoriShapeCategory.RECTANGULAR_PRISM, 0.3),
-    PickTarget("pickup_triangle", MontessoriShapeCategory.TRIANGULAR_PRISM, 0.2),
-]
+SCENARIO_NAME = "the robot sorts the pieces it saw"
 """
-Every loose shape besides the cube, in pick order. All share :data:`CUBE_X`; only the Y
-differs.
+What the episode a run records calls its scenario, the same as its simulated twin.
 """
 
+DEFAULT_PIECE_ASKED_ABOUT = MontessoriShapeCategory.CUBE
+"""
+The piece the question set is asked about at the end of the run unless told otherwise.
+"""
 
 BAG_NAME_PREFIX = "tracy_pickup_demo"
 """
@@ -250,91 +216,17 @@ Leading part of the recorded bag's directory name, completed with a timestamp so
 consecutive runs do not collide.
 """
 
-KEEP_EVERY_NTH_FRAME = 10
-"""
-How much of the camera streams a recorded run keeps, by default.
 
-Recording every frame costs around 230 MB of disk per second of wall clock: a sorting
-run fills tens of gigabytes, almost all of it registered depth and point cloud. One frame
-in ten still shows what the arm did, at roughly a ninth of the size. Pass
-``--keep-every-nth-frame 1`` for a run that genuinely needs every frame.
-"""
-
-
-def _add_cube(world: World, mounted_table_top_z: float) -> Body:
+class DemoOption(StrEnum):
     """
-    Add the cube to the live, fetched world as a fixed, symbolic body at
-    :data:`CUBE_X`/:data:`CUBE_Y`, resting on the live robot's own table top -- not a
-    perception result, so the physical cube must already be there.
-
-    :param world: The live world to add the cube to, modified in place.
-    :param mounted_table_top_z: Height of the live robot's own table top, read via
-        :func:`~experiments.tracy_experiments.equipment.table_top_z`.
-    :return: The newly added cube.
+    The command line options, as they are spelled.
     """
-    cube = Body(
-        name=PrefixedName("pickup_cube"),
-        collision=ShapeCollection([Box(scale=Scale(CUBE_SIZE, CUBE_SIZE, CUBE_SIZE))]),
-        visual=ShapeCollection(
-            [
-                Box(
-                    scale=Scale(CUBE_SIZE, CUBE_SIZE, CUBE_SIZE),
-                    color=Color(0.6, 0.6, 0.6),
-                )
-            ]
-        ),
-    )
-    cube_center_z = mounted_table_top_z + CUBE_SIZE / 2
-    with world.modify_world():
-        world.add_kinematic_structure_entity(cube)
-        world.add_connection(
-            FixedConnection.create_with_dofs(
-                parent=world.root,
-                child=cube,
-                world=world,
-                parent_T_connection_expression=HomogeneousTransformationMatrix.from_xyz_rpy(
-                    CUBE_X, CUBE_Y, cube_center_z
-                ),
-            )
-        )
-    return cube
 
-
-def _board_center_z(mounted_table_top_z: float) -> float:
-    """
-    :return: Z of the board's centre, seated on the same surface as the cube.
-    """
-    return mounted_table_top_z + BOARD_SCALE.z / 2 + BOARD_TABLE_CLEARANCE
-
-
-def _hole_footprint(category: MontessoriShapeCategory) -> HoleFootprint:
-    """
-    :return: The board hole footprint matching ``category`` (the first, for a category
-        with more than one hole).
-    """
-    return next(
-        footprint for footprint in _HOLE_FOOTPRINTS if footprint.category is category
-    )
-
-
-def _hole_place_pose(
-    world: World,
-    mounted_table_top_z: float,
-    category: MontessoriShapeCategory,
-    shape_half_height: float,
-) -> Pose:
-    """
-    :return: The pose, in the world root frame, at which a shape's centre should be
-        released so it sits :data:`PLACE_HOVER` above its matching board hole.
-    """
-    footprint = _hole_footprint(category)
-    board_top_z = _board_center_z(mounted_table_top_z) + BOARD_SCALE.z / 2
-    return Pose.from_xyz_rpy(
-        BOARD_X + footprint.center.x,
-        BOARD_Y + footprint.center.y,
-        board_top_z + shape_half_height + PLACE_HOVER,
-        reference_frame=world.root,
-    )
+    ASK_ABOUT = "--ask-about"
+    RECORD = "--record"
+    BAG_DIRECTORY = "--bag-directory"
+    KEEP_EVERY_NTH_FRAME = "--keep-every-nth-frame"
+    DATABASE_URI = "--database-uri"
 
 
 def _grasp_target_pose(body: Body, grasp_height_offset: float) -> Pose:
@@ -342,107 +234,10 @@ def _grasp_target_pose(body: Body, grasp_height_offset: float) -> Pose:
     :return: The pose the reach, grasp and lift are aimed at: ``body``'s own origin
         raised by ``grasp_height_offset`` (see :data:`GRASP_HEIGHT_OFFSET`).
 
-    The shapes are spawned resting on the table, with no roll or pitch, so the offset
+    A perceived piece stands resting on the table, with no roll or pitch, so the offset
     along the body frame's own vertical is the offset along the world's.
     """
     return Pose.from_xyz_rpy(0.0, 0.0, grasp_height_offset, reference_frame=body)
-
-
-def _shape_half_height(category: MontessoriShapeCategory) -> float:
-    """
-    :return: Half the height of a loose Montessori shape of ``category`` at
-        :data:`SHAPE_SCALE`, which seats its body on the table and above its hole.
-    """
-    return KNOWN_PIECE_BY_CATEGORY[category].height * SHAPE_SCALE / 2
-
-
-def _spawn_shape_body(
-    world: World,
-    name: str,
-    category: MontessoriShapeCategory,
-    x: float,
-    y: float,
-    mounted_table_top_z: float,
-) -> Body:
-    """
-    Add one loose Montessori shape to the live world as a fixed body standing at
-    ``(x, y)`` in the world root frame, resting on the live robot's own table top.
-
-    :param world: The live world to add the shape to, modified in place.
-    :param name: Name of the shape's body.
-    :param category: Which shape to add.
-    :param x: X of the shape's centre, in the world root frame.
-    :param y: Y of the shape's centre, in the world root frame.
-    :param mounted_table_top_z: Height of the live robot's own table top.
-    :return: The newly added shape body.
-    """
-    body = _shape_body(
-        PrefixedName(name), category, _hole_footprint(category), scale=SHAPE_SCALE
-    )
-    with world.modify_world():
-        world.add_kinematic_structure_entity(body)
-        world.add_connection(
-            FixedConnection.create_with_dofs(
-                parent=world.root,
-                child=body,
-                world=world,
-                parent_T_connection_expression=HomogeneousTransformationMatrix.from_xyz_rpy(
-                    x, y, mounted_table_top_z + _shape_half_height(category)
-                ),
-            )
-        )
-    return body
-
-
-def _add_montessori_shape(
-    world: World, mounted_table_top_z: float, target: PickTarget
-) -> Body:
-    """
-    Add one loose Montessori shape to the live world as a fixed body at
-    :data:`CUBE_X`/``target.pick_y``, resting on the same table as the cube.
-
-    :param world: The live world to add the shape to, modified in place.
-    :param mounted_table_top_z: Height of the live robot's own table top.
-    :param target: Which shape to add and where.
-    :return: The newly added shape body.
-    """
-    return _spawn_shape_body(
-        world,
-        target.name,
-        target.category,
-        CUBE_X,
-        target.pick_y,
-        mounted_table_top_z,
-    )
-
-
-def _add_montessori_board(world: World, mounted_table_top_z: float) -> Body:
-    """
-    Add the Montessori shape-sorting board to the live, fetched world as a fixed body at
-    :data:`BOARD_X`/:data:`BOARD_Y`, resting on the same table surface as the cube.
-
-    :param world: The live world to add the board to, modified in place.
-    :param mounted_table_top_z: Height of the live robot's own table top, read via
-        :func:`~experiments.tracy_experiments.equipment.table_top_z`.
-    :return: The newly added board body.
-    """
-    board_shape = Mesh.from_trimesh(mesh=_BOARD_MESH)
-    board_shape.color = BOARD_COLOR
-    board = _board_body(PrefixedName("montessori_board"), board_shape, _HOLE_FOOTPRINTS)
-    board_center_z = _board_center_z(mounted_table_top_z)
-    with world.modify_world():
-        world.add_kinematic_structure_entity(board)
-        world.add_connection(
-            FixedConnection.create_with_dofs(
-                parent=world.root,
-                child=board,
-                world=world,
-                parent_T_connection_expression=HomogeneousTransformationMatrix.from_xyz_rpy(
-                    BOARD_X, BOARD_Y, board_center_z
-                ),
-            )
-        )
-    return board
 
 
 REPORTED_PICK_EVENT_TYPES: tuple[type, ...] = (
@@ -454,7 +249,7 @@ REPORTED_PICK_EVENT_TYPES: tuple[type, ...] = (
     PickUpEvent,
 )
 """
-Event types :func:`_log_pick_events` reports a yes/no on after each shape's pick.
+Event types :func:`_log_pick_events` reports a yes/no on after each piece's pick.
 """
 
 
@@ -462,7 +257,7 @@ def _log_pick_events(body: Body, monitor: MontessoriEventMonitor) -> None:
     """
     Log which of :data:`REPORTED_PICK_EVENT_TYPES` SegMind detected for ``body``.
 
-    :param body: The shape body the monitor tracked.
+    :param body: The piece's body the monitor tracked.
     :param monitor: The stopped monitor that tracked it.
     """
     events = monitor.events
@@ -481,96 +276,109 @@ def _log_pick_events(body: Body, monitor: MontessoriEventMonitor) -> None:
 
 
 @dataclass
-class _SortingRig:
+class _SortingRig(ShapeSorter):
     """
-    The fixed pieces every pick-and-place in this demo shares, so one shape can be
-    sorted with a single call.
+    The fixed parts every pick-and-place in this demo shares, so one piece can be
+    sorted with a single call: Giskard drives the arm and the Robotiq action server the
+    gripper.
     """
 
     context: Context
-    """Plan context bound to the live world and robot."""
+    """
+    Plan context bound to the live world and robot.
+    """
 
     world: World
-    """The live, fetched world."""
+    """
+    The live, fetched world.
+    """
 
     robot: Tracy
-    """The robot doing the sorting, for the SegMind grasp and lift detectors."""
+    """
+    The robot doing the sorting, for the SegMind grasp and lift detectors.
+    """
 
     feed: EventFeed
-    """Sink the per-shape SegMind events are streamed to for the live dashboard."""
+    """
+    Sink the per-piece SegMind events are streamed to for the live dashboard.
+    """
 
     gripper: RobotiqGripperController
-    """Direct Robotiq gripper control, bypassing Giskard."""
+    """
+    Direct Robotiq gripper control, bypassing Giskard.
+    """
 
     gripper_listener: GripperJointStateListener
-    """Live knuckle-position feed for the pick arm, read by the slip watch."""
+    """
+    Live knuckle-position feed for the pick arm, read by the slip watch.
+    """
 
     grasp_description: GraspDescription
-    """Grasp used for every shape."""
+    """
+    Grasp used for every piece.
+    """
 
     tool_frame: Body
-    """The picking arm's tool frame, the parent a grasped shape is attached to."""
-
-    table_top_z: float
-    """Height of the live robot's own table top."""
-
-    close_table: GraspCloseTable = field(
-        default_factory=lambda: GraspCloseTable().for_pieces_scaled_by(SHAPE_SCALE)
-    )
     """
-    Per-shape close setpoint the grasp is sized to, for pieces at :data:`SHAPE_SCALE`.
+    The picking arm's tool frame, the parent a grasped piece is attached to.
+    """
+
+    close_table: GraspCloseTable = field(default_factory=GraspCloseTable)
+    """
+    Per-piece close setpoint the grasp is sized to.
     """
 
     grasp_height_offset: float = GRASP_HEIGHT_OFFSET
-    """Height the reach, grasp and lift are aimed above a shape's own centre."""
+    """
+    Height the reach, grasp and lift are aimed above a piece's own centre.
+    """
 
     slip_watch_interval: float = SLIP_WATCH_INTERVAL_SECONDS
-    """Seconds between the slip watch's re-closes while carrying a shape."""
+    """
+    Seconds between the slip watch's re-closes while carrying a piece.
+    """
 
     post_lift_settle: float = POST_LIFT_SETTLE_SECONDS
-    """Seconds to let the grasp settle after the lift before it is read."""
+    """
+    Seconds to let the grasp settle after the lift before it is read.
+    """
 
-    def release_pose_for(self, shape: MontessoriShape, half_height: float) -> Pose:
-        """
-        :param shape: The shape being sorted.
-        :param half_height: Half the shape's own height.
-        :return: The pose, in the world root frame, at which ``shape``'s centre is
-            released :data:`PLACE_HOVER` above the board hole matching its category.
-        """
-        return _hole_place_pose(
-            self.world, self.table_top_z, shape.shape_category, half_height
-        )
+    observer: EpisodeObserver = field(default_factory=EpisodeObserver)
+    """
+    What keeps, for the episode the run records, every plan this rig performs and every
+    event its monitors report.
+    """
 
-    def sort(
-        self, body: Body, category: MontessoriShapeCategory, half_height: float
-    ) -> None:
+    asks: Optional[QuestionAfterTheMove] = None
+    """
+    What asks the question set once the piece asked about has come to rest, or None for
+    a run that asks it some other way.
+    """
+
+    def sort(self, piece: MontessoriShape, release_pose: Pose) -> None:
         """
-        Pick ``body`` off the table and release it where :meth:`release_pose_for` puts
-        it.
+        Pick ``piece`` off the table and release it at ``release_pose``.
 
         The gripper is opened and closed through :attr:`gripper` rather than a plan
         node, since Giskard cannot command Tracy's real fingers, and the close is sized
-        to ``category`` via :attr:`close_table`. The reach and lift are aimed
-        :attr:`grasp_height_offset` above ``body``'s own centre, since the shape is
-        spawned resting on the table.
+        to the piece's kind via :attr:`close_table`. The reach and lift are aimed
+        :attr:`grasp_height_offset` above the piece's own centre, since the piece stands
+        resting on the table.
 
-        :param body: The shape to sort, already spawned on the table.
-        :param category: The board hole the shape belongs to, and the shape whose close
-            setpoint the grasp uses.
-        :param half_height: Half the shape's own height, for seating it above the hole.
+        :param piece: The piece to sort, standing on the table where the look saw it.
+        :param release_pose: Where the piece's centre is let go, over its hole.
         """
+        body = piece.root
         grasp_target = _grasp_target_pose(body, self.grasp_height_offset)
-        shape = MONTESSORI_SHAPE_CLASSES[category](name=body.name, root=body)
         reach = ReachAction(
             target_pose=grasp_target,
-            object_designator=shape,
+            object_designator=body,
             arm=PICK_ARM,
             grasp_description=self.grasp_description,
         )
         _, _, lift_to_pose = self.grasp_description.pose_sequence(grasp_target, body)
-        place_target = self.release_pose_for(shape, half_height)
         transport_pose, placing_pose, retract_pose = (
-            self.grasp_description.pose_sequence(place_target, body, reverse=True)
+            self.grasp_description.pose_sequence(release_pose, body, reverse=True)
         )
 
         reach_plan = sequential([reach], context=self.context).plan
@@ -609,7 +417,7 @@ class _SortingRig:
                     allow_gripper_collision=True,
                     movement_type=MovementType.TRANSLATION,
                 ),
-                # Park before the next shape so the arm clears the board on its way
+                # Park before the next piece so the arm clears the board on its way
                 # back to the table instead of dragging the gripper across it.
                 ParkArmsAction(PICK_ARM),
             ],
@@ -619,24 +427,48 @@ class _SortingRig:
         monitor = build_pick_monitor(
             world=self.world, tracked_body=body, robot=self.robot, arm=PICK_ARM
         )
-        shape_name = body.name.name
+        piece_name = body.name.name
         monitor.context.require_extension(SegmindContext).logger.add_callback(
             DetectionEvent,
-            lambda event, name=shape_name: self.feed.publish(name, event),
+            lambda event, name=piece_name: self.note_event(name, event),
         )
-        close_setpoint = self.close_table.setpoint_for(category)
+        close_setpoint = self.close_table.setpoint_for(piece.shape_category)
         monitor.start()
         try:
             self.gripper.move(PICK_ARM, GripperState.OPEN)
-            reach_plan.perform()
+            self.perform_and_record(reach_plan)
             self.gripper.close_to(PICK_ARM, close_setpoint)
-            lift.perform()
-            self._carry_watching_for_slip(body, close_setpoint, place.perform)
+            self.perform_and_record(lift)
+            self._carry_watching_for_slip(
+                body, close_setpoint, lambda: self.perform_and_record(place)
+            )
             self.gripper.move(PICK_ARM, GripperState.OPEN)
-            retract_and_park.perform()
+            self.perform_and_record(retract_and_park)
         finally:
             monitor.stop()
         _log_pick_events(body, monitor)
+
+    def perform_and_record(self, plan) -> None:
+        """
+        Perform one plan and keep it for the episode, its nodes carrying when they ran.
+
+        :param plan: The plan to perform.
+        """
+        plan.perform()
+        self.observer.performed(plan)
+
+    def note_event(self, piece_name: str, event: DetectionEvent) -> None:
+        """
+        Pass one event a monitor reported on to the dashboard, and keep it as a tick of
+        the episode's trial stamped with the moment it arrived.
+
+        :param piece_name: The piece the event is about, as the dashboard names it.
+        :param event: The event.
+        """
+        self.feed.publish(piece_name, event)
+        self.observer.tick(self.observer.elapsed_seconds, [event])
+        if self.asks is not None:
+            self.asks.receive([event])
 
     def _carry_watching_for_slip(
         self, body: Body, close_setpoint: float, carry: Callable[[], None]
@@ -646,7 +478,7 @@ class _SortingRig:
         knuckle joint for ``body`` slipping out.
 
         The grasp is first given :attr:`post_lift_settle` seconds to settle: the lift has
-        just transferred the shape's weight onto the fingers and the knuckle is still
+        just transferred the piece's weight onto the fingers and the knuckle is still
         moving, so a reading taken now would seed the slip detector from a position the
         grasp never reaches. Then the close is firmed to ``close_setpoint`` and the
         knuckle read once: an empty
@@ -657,16 +489,16 @@ class _SortingRig:
         :class:`~experiments.tracy_experiments.montessori.gripper_feedback.
         GripperSlipEvent` to the dashboard.
 
-        :param body: The shape being carried.
-        :param close_setpoint: The shape's own close setpoint, re-commanded to firm the
+        :param body: The piece being carried.
+        :param close_setpoint: The piece's own close setpoint, re-commanded to firm the
             grasp before the knuckle is read.
         :param carry: Runs the transport-and-place motion.
         """
-        shape_name = body.name.name
+        piece_name = body.name.name
         time.sleep(self.post_lift_settle)
         self.gripper.close_to(PICK_ARM, close_setpoint)
         confirmation = confirm_grasp(self.gripper_listener.latest_closure)
-        logger.info("%s: grasp check -> %s.", shape_name, confirmation.verdict)
+        logger.info("%s: grasp check -> %s.", piece_name, confirmation.verdict)
         if confirmation.slip_detector is None:
             carry()
             return
@@ -687,7 +519,7 @@ class _SortingRig:
                 lambda verdict: self._report_slip_verdict(body, verdict),
             ),
             daemon=True,
-            name=f"slip-watch-{shape_name}",
+            name=f"slip-watch-{piece_name}",
         )
         watcher.start()
         try:
@@ -702,7 +534,7 @@ class _SortingRig:
         :class:`~experiments.tracy_experiments.montessori.gripper_feedback.
         GripperSlipEvent` for it to the dashboard.
 
-        :param body: The shape being carried.
+        :param body: The piece being carried.
         :param verdict: The poll's held-or-slipped verdict.
         """
         logger.info("%s: slip watch -> %s.", body.name.name, verdict)
@@ -710,15 +542,102 @@ class _SortingRig:
             self.feed.publish(body.name.name, GripperSlipEvent(tracked_object=body))
 
 
-def _parse_arguments() -> argparse.Namespace:
+def piece_asked_about(
+    sorting: PerceivedSorting, category: MontessoriShapeCategory
+) -> MontessoriShape:
     """
+    The piece the look found of the given kind, which the run is asked about.
+
+    :param sorting: The run, once it has looked.
+    :param category: The kind of piece.
+    :raises PieceNotSeenError: If the look found no piece of that kind.
+    """
+    for piece in sorting.pieces:
+        if piece.shape_category is category:
+            return piece
+    raise PieceNotSeenError(category=category)
+
+
+def question_set_about(
+    sorting: PerceivedSorting, piece: MontessoriShape, robot: Tracy
+) -> QuestionSet:
+    """
+    The working-memory question set, asked about one of the pieces the look found,
+    placed against the next one, from where the robot stands.
+
+    :param sorting: The run, once it has looked.
+    :param piece: The piece the questions single out.
+    :param robot: The robot the questions are put to.
+    """
+    others = [other for other in sorting.pieces if other is not piece]
+    compared_against = others[0] if others else sorting.board
+    return QuestionSet.over_working_memory(
+        QuestionedThings(
+            object_asked_about=piece.root,
+            object_compared_against=compared_against.root,
+            object_in_the_hand=piece.root,
+            own_body_asked_about=ViewManager.get_end_effector_view(
+                PICK_ARM, robot
+            ).tool_frame.name,
+            point_of_view=HomogeneousTransformationMatrix(
+                robot.root.global_transform.to_np()
+            ),
+        )
+    )
+
+
+@dataclass
+class PieceNotSeenError(DataclassException):
+    """
+    Raised when the run is asked about a kind of piece the look did not find.
+    """
+
+    category: MontessoriShapeCategory
+    """
+    The kind of piece asked about.
+    """
+
+    def error_message(self) -> str:
+        return "The look found no %s to ask about." % self.category.value
+
+    def suggest_correction(self) -> str:
+        return (
+            "Ask about a piece standing on the table, or put one of that kind there "
+            "before the look."
+        )
+
+
+def outcome_of(trial_events, asked_about: Body) -> TrialOutcome:
+    """
+    Whether the run picked the piece it was asked about up, as its monitors saw it.
+
+    :param trial_events: Every event the run's monitors reported.
+    :param asked_about: The piece the run is asked about.
+    """
+    picked_up = any(
+        isinstance(event, PickUpEvent) and event.tracked_object is asked_about
+        for event in trial_events
+    )
+    return TrialOutcome.SUCCEEDED if picked_up else TrialOutcome.FAILED
+
+
+def _parse_arguments(argument_list: Optional[Sequence[str]]) -> argparse.Namespace:
+    """
+    :param argument_list: Arguments to read; the process's own when None.
     :return: The demo's own command line arguments.
     """
     parser = argparse.ArgumentParser(
-        description="Sort the Montessori shapes with the physical Tracy."
+        description="Sort the Montessori pieces with the physical Tracy by looking."
     )
     parser.add_argument(
-        "--record",
+        DemoOption.ASK_ABOUT,
+        type=MontessoriShapeCategory,
+        choices=list(MontessoriShapeCategory),
+        default=DEFAULT_PIECE_ASKED_ABOUT,
+        help="the piece the question set is asked about once the sorting is done",
+    )
+    parser.add_argument(
+        DemoOption.RECORD,
         action="store_true",
         help=(
             "Record a rosbag of the camera, depth camera, joint states and transforms "
@@ -726,7 +645,7 @@ def _parse_arguments() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
-        "--bag-directory",
+        DemoOption.BAG_DIRECTORY,
         default=DEFAULT_BAG_DIRECTORY,
         help=(
             f"Directory the recorded bag is placed in. Default: "
@@ -734,121 +653,191 @@ def _parse_arguments() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
-        "--keep-every-nth-frame",
+        DemoOption.KEEP_EVERY_NTH_FRAME,
         type=int,
-        default=KEEP_EVERY_NTH_FRAME,
+        default=DEFAULT_KEEP_EVERY_NTH_FRAME,
         metavar="N",
         help=(
             f"Record only one in every N frames of the heavy camera streams "
             f"({', '.join(DECIMATED_TOPICS)}). Joint states and transforms are always "
             f"recorded whole. Pass 1 to record every frame. Default: "
-            f"{KEEP_EVERY_NTH_FRAME}."
+            f"{DEFAULT_KEEP_EVERY_NTH_FRAME}."
         ),
     )
-    return parser.parse_args()
+    parser.add_argument(
+        DemoOption.DATABASE_URI,
+        default=None,
+        help=(
+            "Database the episode is recorded to; the MONTESSORI_SORTING_DATABASE_URI "
+            "environment variable or the built-in default otherwise. A database that "
+            "cannot be reached or would live only in memory is refused before the "
+            "robot moves."
+        ),
+    )
+    return parser.parse_args(argument_list)
 
 
-def main() -> None:
-    # giskard_process = subprocess.Popen(
-    #     ["ros2", "launch", "giskardpy_ros", "giskardpy_tracy_velocity.launch.py"],
-    #     start_new_session=True,
-    # )
-    # time.sleep(8)  # Wait for the launch file to start
+def main(argument_list: Optional[Sequence[str]] = None) -> None:
+    """
+    Sort the pieces the camera finds with the physical Tracy, recording the episode.
 
-    arguments = _parse_arguments()
+    :param argument_list: Arguments to read; the process's own when omitted.
+    :raises InMemoryDatabaseRefused: If the episode would be recorded to a database that
+        dies with the run, before anything on the robot is touched.
+    """
+    arguments = _parse_arguments(argument_list)
+    database = resolve_lasting_database(arguments.database_uri)
 
     feed = EventFeed()
     run_dashboard(feed)
 
     rclpy.init()
-    node = rclpy.create_node("tracy_pickup_demo_real")
-    executor = MultiThreadedExecutor()
-    executor.add_node(node)
-    thread = threading.Thread(target=executor.spin, daemon=True, name="rclpy-executor")
-    thread.start()
-
-    world = fetch_world_from_service(node=node, timeout_seconds=300)
-    [robot] = world.get_semantic_annotations_by_type(Tracy)
-
-    # Build the rviz marker + tf publisher before the WorldSynchronizer exists.
-    # TFPublisher registers a state-change callback partway through its own
-    # construction; a sync update landing in that window reaches it before its
-    # tf_model_callback is set and takes down the executor thread.
-    viz_marker_publisher = VizMarkerPublisher(_world=world, node=node)
-
-    WorldSynchronizer(_world=world, node=node)
-
-    table_top_z = read_table_top_z(robot)
-    cube = _add_cube(world, table_top_z)
-    _add_montessori_board(world, table_top_z)
-    shape_bodies = [
-        _add_montessori_shape(world, table_top_z, target) for target in PICK_TARGETS
-    ]
-
-    logger.info(
-        "Cube plus %d shapes spawned in rviz at x=%.3f. Check they line up with the "
-        "real objects, then press Enter to run the sorting.",
-        len(shape_bodies),
-        CUBE_X,
-    )
-    # input()
-
-    context = Context(
-        world=world, robot=robot, ros_node=node, evaluate_conditions=False
-    )
-    grasp_description = GraspDescription(
-        ApproachDirection.FRONT,
-        VerticalAlignment.TOP,
-        ViewManager.get_end_effector_view(PICK_ARM, robot),
-        rotate_gripper=True,
-    )
-
-    # Giskard's Tracy interface has no command channel for the gripper fingers, so a
-    # plan's own MoveGripperMotion blocks forever on the real robot. The arm motion
-    # still runs through the plan; the gripper is driven straight through its Robotiq
-    # action server instead.
-    gripper = RobotiqGripperController(node)
-    gripper_listener = GripperJointStateListener(node=node, arm=PICK_ARM)
-    tool_frame = ViewManager.get_end_effector_view(PICK_ARM, robot).tool_frame
-    rig = _SortingRig(
-        context,
-        world,
-        robot,
-        feed,
-        gripper,
-        gripper_listener,
-        grasp_description,
-        tool_frame,
-        table_top_z,
-    )
-
-    park = sequential([ParkArmsAction(PICK_ARM)], context=context).plan
-
-    input()
-    logger.info("Sorting %d shapes on the real robot.", len(shape_bodies) + 1)
-    # Recording starts here rather than at start-up so the bag holds the sorting itself,
-    # not the operator's wait at the prompt above, and closes as soon as the last shape
-    # is placed.
-    recorder = (
-        RosbagRecorder.timestamped(
-            BAG_NAME_PREFIX,
-            arguments.bag_directory,
-            keep_every_nth_frame=arguments.keep_every_nth_frame,
+    with LiveTracy.connected(NODE_NAME) as tracy:
+        context = Context(
+            world=tracy.world,
+            robot=tracy.robot,
+            ros_node=tracy.node,
+            evaluate_conditions=False,
         )
-        if arguments.record
-        else contextlib.nullcontext()
+        grasp_description = GraspDescription(
+            ApproachDirection.FRONT,
+            VerticalAlignment.TOP,
+            ViewManager.get_end_effector_view(PICK_ARM, tracy.robot),
+            rotate_gripper=True,
+        )
+
+        # Giskard's Tracy interface has no command channel for the gripper fingers, so
+        # a plan's own MoveGripperMotion blocks forever on the real robot. The arm
+        # motion still runs through the plan; the gripper is driven straight through
+        # its Robotiq action server instead.
+        gripper = RobotiqGripperController(tracy.node)
+        gripper_listener = GripperJointStateListener(node=tracy.node, arm=PICK_ARM)
+        tool_frame = ViewManager.get_end_effector_view(PICK_ARM, tracy.robot).tool_frame
+        rig = _SortingRig(
+            context,
+            tracy.world,
+            tracy.robot,
+            feed,
+            gripper,
+            gripper_listener,
+            grasp_description,
+            tool_frame,
+        )
+        sorting = PerceivedSorting(
+            scene=PerceivedScene(
+                world=tracy.world,
+                look=tracy.look,
+                described_board=lab_board(),
+                looks_for_board=LOOKS_FOR_THE_BOARD,
+            ),
+            sorter=rig,
+        )
+        sorting.perceive()
+
+        park = sequential([ParkArmsAction(PICK_ARM)], context=context).plan
+
+        logger.info(
+            "Board and %d perceived piece(s) in rviz. Check they line up with the real "
+            "objects, then press Enter to run the sorting.",
+            len(sorting.pieces),
+        )
+        input()
+        logger.info("Sorting %d piece(s) on the real robot.", len(sorting.pieces))
+        episode = Episode(
+            scenario_name=SCENARIO_NAME,
+            execution_type=ExecutionType.REAL,
+            world=tracy.world,
+        )
+        asked_about = piece_asked_about(sorting, arguments.ask_about)
+        question_set = question_set_about(sorting, asked_about, tracy.robot)
+        rig.asks = QuestionAfterTheMove(
+            observer=rig.observer,
+            asked_about=asked_about.root,
+            question_set=lambda: question_set,
+            robot=tracy.robot,
+        )
+        # Recording starts here rather than at start-up so the bag holds the sorting
+        # itself, not the operator's wait at the prompt above, and closes as soon as
+        # the last piece is placed. The trial's own clock starts with it, so the bag
+        # and the trial agree.
+        recorder = (
+            RosbagRecordingProcess(
+                RosbagRecorder.timestamped(
+                    BAG_NAME_PREFIX,
+                    arguments.bag_directory,
+                    keep_every_nth_frame=arguments.keep_every_nth_frame,
+                )
+            )
+            if arguments.record
+            else contextlib.nullcontext()
+        )
+        rig.observer.restart()
+        joints = JointTraceRecorder(
+            _world=tracy.world, clock=lambda: rig.observer.elapsed_seconds
+        )
+        with (
+            recorder as bag,
+            ExecutionEnvironment(
+                execution_type=ExecutionType.REAL, collision_avoidance=True
+            ),
+        ):
+            rig.perform_and_record(park)
+            sorting.sort_every_piece()
+            rig.asks.ask_if_not_yet()
+        joints.stop()
+        logger.info("Sorting finished.")
+        trial = rig.observer.into(
+            RecordedTrial(
+                episode=episode,
+                outcome=outcome_of(
+                    [event for tick in rig.observer.ticks for event in tick.events],
+                    asked_about.root,
+                ),
+                duration=rig.observer.elapsed_seconds,
+            )
+        )
+        keep_the_episode(
+            trial,
+            joints.trace,
+            None if bag is None else Path(bag.output_directory),
+            database,
+        )
+
+
+def keep_the_episode(
+    trial: RecordedTrial,
+    joints: JointTrace,
+    bag_directory: Optional[Path],
+    database: ResultsDatabase,
+) -> EpisodeArtifacts:
+    """
+    Record the trial to the database the run was checked against and keep the run's
+    artifacts beside it: the transcript, the trace of the joints, and the bag if one
+    was recorded.
+
+    :param trial: The trial the run recorded.
+    :param joints: The trace of where every joint stood along it.
+    :param bag_directory: The bag the run recorded, or None for a run that recorded
+        none.
+    :param database: The database the trial is recorded to.
+    :return: The artifacts that were kept.
+    """
+    recording = open_recording(database)
+    try:
+        recording.record(trial)
+    finally:
+        recording.close()
+    artifacts = ArtifactDirectory().open_for(trial.episode)
+    artifacts.keep_transcript(Transcript(episode=trial.episode, trials=[trial]))
+    artifacts.trial(trial.number).keep_joint_trace(joints)
+    if bag_directory is not None:
+        artifacts.keep_directory(bag_directory)
+    logger.info(
+        "Episode %s recorded; artifacts in %s",
+        trial.episode.identifier,
+        artifacts.directory,
     )
-    with (
-        recorder,
-        ExecutionEnvironment(
-            execution_type=ExecutionType.REAL, collision_avoidance=False
-        ),
-    ):
-        park.perform()
-        rig.sort(cube, MontessoriShapeCategory.CUBE, CUBE_SIZE / 2)
-        for target, body in zip(PICK_TARGETS, shape_bodies):
-            rig.sort(body, target.category, target.half_height)
-    logger.info("Sorting finished.")
+    return artifacts
 
 
 if __name__ == "__main__":

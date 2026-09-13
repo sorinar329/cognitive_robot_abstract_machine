@@ -1,8 +1,8 @@
 """
-Tests for :mod:`experiments.tracy_experiments.pickup.pickup_demo_real`: loose shapes are
-spawned resting on the table with the grasp target lifted back to where the pick aimed
-before the spawn was lowered, and while a shape is carried the gripper is re-closed and
-watched for the shape slipping out.
+Tests for :mod:`experiments.tracy_experiments.pickup.pickup_demo_real`: a perceived
+piece is grasped with the target lifted back to where the pick aimed before the spawn
+was lowered, and while a piece is carried the gripper is re-closed and watched for the
+piece slipping out.
 """
 
 from __future__ import annotations
@@ -12,10 +12,22 @@ import time
 from dataclasses import dataclass, field
 
 import pytest
-
 from coraplex.datastructures.enums import Arms
-from experiments.montessori.pieces import CUBE_EDGE, KNOWN_PIECE_BY_CATEGORY
+from segmind.datastructures.events import PickUpEvent
+
+from experiments.episodes.artifacts import (
+    ARTIFACT_DIRECTORY_ENVIRONMENT_VARIABLE,
+    Transcript,
+)
+from experiments.episodes.trace import JointTrace
+from experiments.montessori.results_database import (
+    IN_MEMORY_DATABASE_URI,
+    InMemoryDatabaseRefused,
+    ResultsDatabase,
+)
 from experiments.montessori.semantics import MontessoriShapeCategory
+from experiments.orm.ormatic_interface import RecordedTrialDAO
+from experiments.scenarios.trial import TrialOutcome
 from experiments.tracy_experiments.montessori.gripper_feedback import (
     FULLY_CLOSED_KNUCKLE_POSITION,
     RECLOSE_MARGIN,
@@ -25,43 +37,30 @@ from experiments.tracy_experiments.montessori.gripper_feedback import (
 )
 from experiments.tracy_experiments.montessori.grasp_widths import (
     RECTANGULAR_PRISM_CLOSE_SETPOINT,
-    GraspCloseTable,
 )
 from experiments.tracy_experiments.pickup.pickup_demo_real import (
     GRASP_HEIGHT_OFFSET,
-    PICK_TARGETS,
     POST_LIFT_SETTLE_SECONDS,
-    SHAPE_SCALE,
-    _add_cube,
-    _add_montessori_shape,
+    DemoOption,
+    PieceNotSeenError,
     _grasp_target_pose,
-    _shape_half_height,
-    _spawn_shape_body,
     _SortingRig,
+    keep_the_episode,
+    main,
+    outcome_of,
+    piece_asked_about,
 )
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
-from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.world_entity import Body
 
-TABLE_TOP_Z = 0.75
-"""
-An arbitrary table-top height to spawn against.
-"""
+from .test_episode_recording import (
+    UNREACHABLE_URI,
+    finished_trial,
+    recorded_count,
+    sorting_episode,
+)
 
-
-def _world_with_root() -> World:
-    """
-    A world holding only its root body, ready for a shape to be added.
-    """
-    world = World()
-    with world.modify_world():
-        world.add_kinematic_structure_entity(
-            Body(name=PrefixedName(name="root", prefix="world"))
-        )
-    return world
-
-
-# %% spawn height and grasp offset
+# %% the grasp offset
 
 
 def test_grasp_target_pose_sits_the_offset_above_the_body_origin():
@@ -76,43 +75,6 @@ def test_grasp_target_pose_sits_the_offset_above_the_body_origin():
         GRASP_HEIGHT_OFFSET,
     ]
     assert pose.reference_frame is body
-
-
-def test_a_loose_shape_is_spawned_resting_on_the_table():
-    world = _world_with_root()
-    target = PICK_TARGETS[0]
-
-    body = _add_montessori_shape(world, TABLE_TOP_Z, target)
-
-    spawned_z = float(world.compute_forward_kinematics_np(world.root, body)[2, 3])
-    assert spawned_z == TABLE_TOP_Z + target.half_height
-
-
-def test_a_shape_body_is_spawned_standing_on_the_table_at_the_given_point():
-    world = _world_with_root()
-    category = MontessoriShapeCategory.RECTANGULAR_PRISM
-
-    body = _spawn_shape_body(world, "perceived_0", category, 1.09, 0.4, TABLE_TOP_Z)
-
-    placed = world.compute_forward_kinematics_np(world.root, body)
-    assert [float(placed[axis, 3]) for axis in range(3)] == [
-        1.09,
-        0.4,
-        TABLE_TOP_Z + _shape_half_height(category),
-    ]
-
-
-def test_the_grasp_is_aimed_where_the_pre_offset_spawn_put_it():
-    world = _world_with_root()
-    target = PICK_TARGETS[0]
-    body = _add_montessori_shape(world, TABLE_TOP_Z, target)
-
-    grasp_target = _grasp_target_pose(body, GRASP_HEIGHT_OFFSET)
-
-    world_grasp_z = float(
-        world.transform(grasp_target.to_homogeneous_matrix(), world.root)[2, 3]
-    )
-    assert world_grasp_z == TABLE_TOP_Z + target.half_height + GRASP_HEIGHT_OFFSET
 
 
 # %% slip watch while carrying
@@ -205,7 +167,6 @@ def _slip_watch_rig(
         gripper_listener=listener,
         grasp_description=None,
         tool_frame=None,
-        table_top_z=0.0,
         slip_watch_interval=0.01,
         post_lift_settle=0.0,
     )
@@ -332,45 +293,110 @@ def test_a_slip_streams_a_gripper_slip_event_to_the_feed():
     assert _no_slip_watch_thread_left_running()
 
 
-# %% shape scale
+# %% what the run records of itself
 
 
-def _collision_extents(body: Body) -> list[float]:
+def test_an_event_a_monitor_reports_reaches_the_dashboard_and_the_episode():
     """
-    :return: The extent of ``body``'s collision geometry along x, y and z.
+    An event goes to the live dashboard as before, and is kept as a tick of the trial
+    the run records, stamped with the moment it arrived.
     """
-    return [float(extent) for extent in body.collision.combined_mesh.extents]
+    feed = RecordingFeed()
+    rig = _slip_watch_rig(RecordingGripper(), _held(), feed)
+    piece = Body(name=PrefixedName("shape"))
+    picked_up = PickUpEvent(tracked_object=piece)
+
+    rig.note_event(piece.name.name, picked_up)
+
+    assert [published.event for published in feed.published] == [picked_up]
+    [tick] = rig.observer.ticks
+    assert tick.events == [picked_up]
+    assert 0.0 <= tick.moment <= rig.observer.elapsed_seconds
 
 
-def test_the_cube_is_spawned_at_the_scaled_edge_length():
-    world = _world_with_root()
+def test_a_plan_the_rig_performed_is_kept_for_the_episode():
+    rig = _slip_watch_rig(RecordingGripper(), _held())
+    plan = PerformedNothing()
 
-    cube = _add_cube(world, TABLE_TOP_Z)
+    rig.perform_and_record(plan)
 
-    assert _collision_extents(cube) == pytest.approx([CUBE_EDGE * SHAPE_SCALE] * 3)
+    assert plan.performed
+    assert [performed.plan for performed in rig.observer.plans] == [plan]
 
 
-def test_a_loose_shape_is_spawned_at_the_scaled_height():
-    world = _world_with_root()
-    target = PICK_TARGETS[0]
+@dataclass
+class PerformedNothing:
+    """
+    Stands in for a plan, remembering that it was performed.
+    """
 
-    body = _add_montessori_shape(world, TABLE_TOP_Z, target)
+    performed: bool = False
+    """
+    Whether :meth:`perform` was called.
+    """
 
-    assert _collision_extents(body)[2] == pytest.approx(
-        KNOWN_PIECE_BY_CATEGORY[target.category].height * SHAPE_SCALE
+    def perform(self) -> None:
+        self.performed = True
+
+
+def test_the_run_succeeded_when_its_monitors_saw_the_asked_piece_picked_up():
+    piece = Body(name=PrefixedName("shape"))
+    another = Body(name=PrefixedName("another"))
+
+    assert outcome_of([PickUpEvent(tracked_object=piece)], piece) is (
+        TrialOutcome.SUCCEEDED
+    )
+    assert outcome_of([PickUpEvent(tracked_object=another)], piece) is (
+        TrialOutcome.FAILED
     )
 
 
-def test_every_loose_shape_is_seated_half_its_own_height_above_the_table():
-    world = _world_with_root()
-
-    for target in PICK_TARGETS:
-        body = _add_montessori_shape(world, TABLE_TOP_Z, target)
-
-        assert target.half_height == pytest.approx(_collision_extents(body)[2] / 2)
+def test_asking_about_a_piece_the_look_did_not_find_says_so():
+    with pytest.raises(PieceNotSeenError) as raised:
+        piece_asked_about(LookedAndFound(pieces=[]), MontessoriShapeCategory.CUBE)
+    assert raised.value.category is MontessoriShapeCategory.CUBE
 
 
-def test_the_rig_closes_to_the_setpoints_for_the_scaled_pieces():
-    rig = _slip_watch_rig(RecordingGripper(), _held())
+@dataclass
+class LookedAndFound:
+    """
+    Stands in for a run that has looked, holding the pieces the look found.
+    """
 
-    assert rig.close_table == GraspCloseTable().for_pieces_scaled_by(SHAPE_SCALE)
+    pieces: list
+    """
+    The pieces, as the world holds them.
+    """
+
+
+# %% the database the sorting is recorded to
+
+
+def test_the_demo_refuses_a_database_that_dies_with_the_run():
+    """
+    A sorting run against a stopped database used to be sorted anyway and recorded to
+    memory, so the episode was lost without anyone being told.
+    """
+    with pytest.raises(InMemoryDatabaseRefused):
+        main([DemoOption.DATABASE_URI, UNREACHABLE_URI])
+
+
+def test_the_demo_refuses_an_in_memory_database_asked_for_by_name():
+    with pytest.raises(InMemoryDatabaseRefused):
+        main([DemoOption.DATABASE_URI, IN_MEMORY_DATABASE_URI])
+
+
+def test_the_episode_is_kept_in_the_database_the_run_was_checked_against(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setenv(ARTIFACT_DIRECTORY_ENVIRONMENT_VARIABLE, str(tmp_path))
+    database = ResultsDatabase(uri="sqlite:///%s" % (tmp_path / "episodes.db"))
+    trial = finished_trial(sorting_episode())
+
+    artifacts = keep_the_episode(trial, JointTrace(), None, database)
+
+    assert recorded_count(database, RecordedTrialDAO) == 1
+    assert (
+        Transcript(episode=trial.episode, trials=[trial]).render()
+        == artifacts.transcript.read_text()
+    )
