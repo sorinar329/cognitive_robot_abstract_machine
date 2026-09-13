@@ -175,7 +175,7 @@ def _monitored_goal_of(executable):
     return monitored_goal
 
 
-def _parse_and_compile(plan, world, context):
+def parse_and_compile(plan, world, context):
     """
     Parse `plan` and compile its motion state chart.
 
@@ -204,7 +204,7 @@ def test_pause_monitor_pauses_the_children_goal(immutable_model_world, rclpy_nod
     plan = pause_while(
         [MoveTorsoAction(TorsoState.HIGH)], monitor=monitor, context=context
     )
-    executable = _parse_and_compile(plan, world, context)
+    executable = parse_and_compile(plan, world, context)
 
     monitored_goal = _monitored_goal_of(executable)
     assert type(monitored_goal) is PausedWhileTrue
@@ -227,7 +227,7 @@ def test_pause_until_monitor_pauses_the_children_goal(
     plan = pause_until(
         [MoveTorsoAction(TorsoState.HIGH)], monitor=monitor, context=context
     )
-    executable = _parse_and_compile(plan, world, context)
+    executable = parse_and_compile(plan, world, context)
 
     monitored_goal = _monitored_goal_of(executable)
     assert type(monitored_goal) is PausedUntilTrue
@@ -244,7 +244,7 @@ def test_cancel_monitor_ends_the_children_goal(immutable_model_world, rclpy_node
     plan = cancel_when(
         [MoveTorsoAction(TorsoState.HIGH)], monitor=monitor, context=context
     )
-    executable = _parse_and_compile(plan, world, context)
+    executable = parse_and_compile(plan, world, context)
 
     monitored_goal = _monitored_goal_of(executable)
     assert type(monitored_goal) is CancelledWhenTrue
@@ -267,7 +267,7 @@ def test_cancel_monitor_ends_the_motion_when_the_monitor_fires(
     plan = cancel_when(
         [MoveTorsoAction(TorsoState.HIGH)], monitor=monitor, context=context
     )
-    executable = _parse_and_compile(plan, world, context)
+    executable = parse_and_compile(plan, world, context)
 
     monitored_goal = _monitored_goal_of(executable)
     [cancelled] = [
@@ -297,7 +297,7 @@ def test_monitored_subtree_nested_in_a_sequence_compiles(
         ],
         context=context,
     )
-    executable = _parse_and_compile(plan, world, context)
+    executable = parse_and_compile(plan, world, context)
 
     assert len(executable.motion_state_chart.get_nodes_by_type(CancelledWhenTrue)) == 1
 
@@ -318,7 +318,7 @@ def test_repeat_node_wraps_its_children_in_a_repeating_goal(
     plan = repeat(
         [MoveTorsoAction(TorsoState.HIGH)], maximum_repetitions=3, context=context
     )
-    executable = _parse_and_compile(plan, world, context)
+    executable = parse_and_compile(plan, world, context)
 
     [loop] = executable.root_node.nodes
     assert type(loop) is RepeatOnStall
