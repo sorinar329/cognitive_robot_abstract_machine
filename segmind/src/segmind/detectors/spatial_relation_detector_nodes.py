@@ -1,18 +1,20 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import timedelta
 from typing import List, Dict, Set
+
+from typing_extensions import Generic, Tuple, Type, TypeVar
 
 from giskardpy.motion_statechart.context import MotionStatechartContext
 from segmind.datastructures.events import (
     DetectionEvent,
+    HoleContactEvent,
+    InsertionEvent,
+    LossOfHoleContactEvent,
     SupportEvent,
     LossOfSupportEvent,
     ContainmentEvent,
     LossOfContainmentEvent,
-    ContactEvent,
-    LossOfContactEvent,
 )
 
 from semantic_digital_twin.reasoning.predicates import (
@@ -27,7 +29,7 @@ from semantic_digital_twin.world_description.world_entity import (
     Region,
 )
 
-from segmind.detectors.base import AbstractDetector, SegmindContext
+from segmind.detectors.base import AbstractDetector, RuleDetector, SegmindContext
 from segmind.detectors.rules import insertion_rule
 
 HOLE_CONTACT_OVERLAP_THRESHOLD = 0.02
@@ -43,8 +45,16 @@ signal without being so low that mesh-boundary noise trips it.
 """
 
 
+THoleContactEvent = TypeVar("THoleContactEvent", bound=DetectionEvent)
+"""
+The kind of event a hole-contact detector detects.
+"""
+
+
 @dataclass(eq=False, repr=False)
-class BaseHoleContactDetector(AbstractDetector):
+class BaseHoleContactDetector(
+    AbstractDetector[THoleContactEvent], Generic[THoleContactEvent]
+):
     """
     Abstract base class for hole-contact-based detectors.
 
@@ -110,7 +120,7 @@ class BaseHoleContactDetector(AbstractDetector):
 
 
 @dataclass(eq=False, repr=False)
-class HoleContactDetector(BaseHoleContactDetector):
+class HoleContactDetector(BaseHoleContactDetector[HoleContactEvent]):
     """
     Detects when a tracked object's volume starts overlapping one of the scene's
     registered holes.
@@ -144,7 +154,7 @@ class HoleContactDetector(BaseHoleContactDetector):
                 latest_hole_contacts.setdefault(obj, set()).update(new_contacts)
                 events.extend(
                     [
-                        ContactEvent(tracked_object=obj, with_object=hole_root)
+                        HoleContactEvent(tracked_object=obj, with_object=hole_root)
                         for hole_root in new_contacts
                     ]
                 )
@@ -153,11 +163,15 @@ class HoleContactDetector(BaseHoleContactDetector):
 
 
 @dataclass(eq=False, repr=False)
-class LossOfHoleContactDetector(BaseHoleContactDetector):
+class LossOfHoleContactDetector(BaseHoleContactDetector[LossOfHoleContactEvent]):
     """
     Detects when a tracked object stops overlapping a hole it was previously touching
     (see :class:`HoleContactDetector`).
     """
+
+    @classmethod
+    def required_event_types(cls) -> Tuple[Type[DetectionEvent], ...]:
+        return (HoleContactEvent,)
 
     def update_context_and_events(
         self,
@@ -189,7 +203,9 @@ class LossOfHoleContactDetector(BaseHoleContactDetector):
 
                 events.extend(
                     [
-                        LossOfContactEvent(tracked_object=obj, with_object=hole_root)
+                        LossOfHoleContactEvent(
+                            tracked_object=obj, with_object=hole_root
+                        )
                         for hole_root in loss_contacts
                     ]
                 )
@@ -198,7 +214,7 @@ class LossOfHoleContactDetector(BaseHoleContactDetector):
 
 
 @dataclass(eq=False, repr=False)
-class SupportDetector(AbstractDetector):
+class SupportDetector(AbstractDetector[SupportEvent]):
     """
     Class for detecting and updating newly established support relationships.
 
@@ -248,7 +264,7 @@ class SupportDetector(AbstractDetector):
 
 
 @dataclass(eq=False, repr=False)
-class LossOfSupportDetector(AbstractDetector):
+class LossOfSupportDetector(AbstractDetector[LossOfSupportEvent]):
     """
     Detects and manages the loss of support relationships among objects.
 
@@ -259,6 +275,10 @@ class LossOfSupportDetector(AbstractDetector):
     simulation or analysis scenarios where maintaining updated context for object
     interactions is essential.
     """
+
+    @classmethod
+    def required_event_types(cls) -> Tuple[Type[DetectionEvent], ...]:
+        return (SupportEvent,)
 
     def update_context_and_events(
         self,
@@ -299,8 +319,16 @@ class LossOfSupportDetector(AbstractDetector):
         return events
 
 
+TContainmentEvent = TypeVar("TContainmentEvent", bound=DetectionEvent)
+"""
+The kind of event a containment detector detects.
+"""
+
+
 @dataclass(eq=False, repr=False)
-class BaseContainmentDetector(AbstractDetector):
+class BaseContainmentDetector(
+    AbstractDetector[TContainmentEvent], Generic[TContainmentEvent]
+):
     """
     Abstract base class for contaiment-based detectors.
 
@@ -353,7 +381,7 @@ class BaseContainmentDetector(AbstractDetector):
 
 
 @dataclass(eq=False, repr=False)
-class ContainmentDetector(BaseContainmentDetector):
+class ContainmentDetector(BaseContainmentDetector[ContainmentEvent]):
     """
     Handles detection of containment events between objects.
 
@@ -400,7 +428,7 @@ class ContainmentDetector(BaseContainmentDetector):
 
 
 @dataclass(eq=False, repr=False)
-class LossOfContainmentDetector(BaseContainmentDetector):
+class LossOfContainmentDetector(BaseContainmentDetector[LossOfContainmentEvent]):
     """
     Detects and processes loss of containment events.
 
@@ -409,8 +437,11 @@ class LossOfContainmentDetector(BaseContainmentDetector):
     and generates a list of events representing these loss of containment occurrences. This
     class extends BaseContainmentDetector and utilizes its utilities for containment
     verification and context management.
-
     """
+
+    @classmethod
+    def required_event_types(cls) -> Tuple[Type[DetectionEvent], ...]:
+        return (ContainmentEvent,)
 
     def update_context_and_events(
         self,
@@ -455,20 +486,18 @@ class LossOfContainmentDetector(BaseContainmentDetector):
 
 
 @dataclass(eq=False, repr=False)
-class InsertionDetector(AbstractDetector):
+class InsertionDetector(
+    RuleDetector[InsertionEvent, HoleContactEvent, ContainmentEvent]
+):
     """
-    Detects insertion events based on object interaction context.
+    Detects that an object was inserted through a hole: it touched one of the scene's
+    holes and came to be contained in something soon after, correlated by
+    :func:`~segmind.detectors.rules.insertion_rule`.
 
-    The InsertionDetector class is used to analyze the interaction between tracked
-    objects and identify insertion events. It tracks specific events such as
-    contacts and containment, and generates an InsertionEvent when specific
-    conditions are met. The class leverages a context that holds relevant
-    event logs and tracked objects.
-    """
-
-    shift_threshold: timedelta = timedelta(seconds=15.0)
-    """
-    The threshold for the time difference between two events to be considered an insertion.
+    ..note:: The rule reads any :class:`~segmind.datastructures.events.ContactEvent` and
+       keeps the ones with a hole's root; this detector binds
+       :class:`~segmind.datastructures.events.HoleContactEvent` as what it needs, since
+       only a hole-contact detector ever produces such a contact.
     """
 
     def update_context_and_events(

@@ -316,6 +316,25 @@ class LossOfContactEvent(AbstractContactEvent):
     ...
 
 
+@dataclass(init=False, unsafe_hash=True)
+class HoleContactEvent(ContactEvent):
+    """
+    Represents an event where an object starts overlapping one of the scene's holes; its
+    :attr:`~EventWithTrackedObjects.with_object` is the hole's own ``Region`` root.
+    """
+
+    ...
+
+
+@dataclass(init=False, unsafe_hash=True)
+class LossOfHoleContactEvent(LossOfContactEvent):
+    """
+    Represents an event where an object stops overlapping a hole it was touching.
+    """
+
+    ...
+
+
 @dataclass
 class AgentInteractionEvent(EventWithTrackedObjects, ABC):
     """

@@ -826,7 +826,7 @@ def test_lift_detector_requires_grasp():
 
     assert len(events_of(segmind_context, LiftEvent)) == 0
 
-    segmind_context.latest_grasp.add(shape)
+    segmind_context.latest_grasp[shape] = {tool_frame}
     for i in range(5, 10):
         shape.parent_connection.origin = HomogeneousTransformationMatrix.from_xyz_rpy(
             z=i * 0.1, reference_frame=shape.parent_connection.parent
@@ -849,7 +849,7 @@ def test_stop_lift_detector():
         0, 0, 0, reference_frame=shape.parent_connection.parent
     )
     executor.compile(statechart)
-    segmind_context.latest_grasp.add(shape)
+    segmind_context.latest_grasp[shape] = {tool_frame}
     executor.tick()
 
     for i in range(5):
@@ -1187,3 +1187,85 @@ def test_stop_translation(_simple_apartment_setup):
     milk.parent_connection.origin = HomogeneousTransformationMatrix.from_xyz_rpy(
         -1.7, 0, 1.07, yaw=np.pi, reference_frame=milk.parent_connection.parent
     )
+
+
+def _second_gripper_away_from_the_first(world: World) -> tuple[Body, Body, Body]:
+    """
+    Add the bodies of a second gripper to a world built by :func:`_build_grasp_world`,
+    far from where the first one grasps.
+
+    :return: The second gripper's thumb tip, finger tip and tool frame.
+    """
+    bodies = []
+    with world.modify_world():
+        for name, scale in (
+            ("second_thumb_tip", Scale(0.1, 0.1, 0.1)),
+            ("second_finger_tip", Scale(0.1, 0.1, 0.1)),
+            ("second_tool_frame", None),
+        ):
+            shapes = (
+                {}
+                if scale is None
+                else {
+                    "collision": ShapeCollection([Box(scale=scale)]),
+                    "visual": ShapeCollection([Box(scale=scale)]),
+                }
+            )
+            body = Body(name=PrefixedName(name), **shapes)
+            world.add_connection(
+                FixedConnection(
+                    parent=world.root,
+                    child=body,
+                    parent_T_connection_expression=HomogeneousTransformationMatrix.from_xyz_rpy(
+                        5, 5, 5, reference_frame=world.root
+                    ),
+                )
+            )
+            bodies.append(body)
+    return bodies[0], bodies[1], bodies[2]
+
+
+def test_a_grasp_by_one_gripper_is_not_reported_lost_by_another_grippers_detector():
+    world, shape, left_finger, right_finger, tool_frame = _build_grasp_world()
+    second_thumb, second_finger, second_tool_frame = (
+        _second_gripper_away_from_the_first(world)
+    )
+    context = MotionStatechartContext(world=world)
+    executor = EpisodeSegmenterExecutor(context=context)
+    segmind_context = executor.context.require_extension(SegmindContext)
+    statechart = SegmindStatechart().build_statechart(
+        [
+            GraspDetector(
+                tracked_object=shape,
+                finger_tips=[left_finger, right_finger],
+                tool_frame=tool_frame,
+            ),
+            GraspDetector(
+                tracked_object=shape,
+                finger_tips=[second_thumb, second_finger],
+                tool_frame=second_tool_frame,
+            ),
+            LossOfGraspDetector(
+                tracked_object=shape,
+                finger_tips=[left_finger, right_finger],
+                tool_frame=tool_frame,
+            ),
+            LossOfGraspDetector(
+                tracked_object=shape,
+                finger_tips=[second_thumb, second_finger],
+                tool_frame=second_tool_frame,
+            ),
+        ]
+    )
+    executor.compile(statechart)
+
+    shape.parent_connection.origin = HomogeneousTransformationMatrix.from_xyz_rpy(
+        0, 0, 0, reference_frame=world.root
+    )
+    executor.tick()
+    executor.tick()
+
+    assert [event.with_object for event in events_of(segmind_context, GraspEvent)] == [
+        tool_frame
+    ]
+    assert events_of(segmind_context, LossOfGraspEvent) == []

@@ -4,6 +4,11 @@ from abc import abstractmethod, ABC
 from dataclasses import dataclass, field
 from typing import Optional, Dict, Set, List, Callable
 
+from datetime import timedelta
+
+from typing_extensions import TYPE_CHECKING, Generic, Self, Tuple, Type, TypeVar
+
+from krrood.patterns.subclass_safe_generic import SubClassSafeGeneric
 from giskardpy.motion_statechart.context import (
     MotionStatechartContext,
     ContextExtension,
@@ -23,6 +28,9 @@ from semantic_digital_twin.semantic_annotations.semantic_annotations import Aper
 from semantic_digital_twin.spatial_types.numeric import NumericPose
 from semantic_digital_twin.world_description.connections import Connection6DoF
 from semantic_digital_twin.world_description.world_entity import Body, Region
+
+if TYPE_CHECKING:
+    from segmind.scene_parts import SceneParts
 
 
 @dataclass
@@ -88,11 +96,11 @@ class SegmindContext(ContextExtension):
     Dictionary mapping each body to its currently active lift event, if any.
     """
 
-    latest_grasp: Set[Body] = field(default_factory=set)
+    latest_grasp: IndexedBodyPairs = field(default_factory=dict)
     """
-    Bodies currently considered grasped (in contact with both of a gripper's fingers and
-    close to its tool center point; see
-    :class:`~segmind.detectors.grasp_detector_nodes.GraspDetector`).
+    Each body currently considered grasped, mapped to the tool frames of the grippers
+    holding it (in contact with both of a gripper's fingers and close to its tool center
+    point; see :class:`~segmind.detectors.grasp_detector_nodes.GraspDetector`).
 
     Read by :class:`~segmind.detectors.atomic_event_detectors_nodes.LiftDetector` to
     gate lifting on the object actually being held, not just moving upward on its own.
@@ -138,10 +146,21 @@ class SegmindContext(ContextExtension):
     """
 
 
+TDetectedEvent = TypeVar("TDetectedEvent", bound=DetectionEvent)
+"""
+The kind of event a detector detects.
+"""
+
+
 @dataclass(repr=False, eq=False)
-class AbstractDetector(MotionStatechartNode, ABC):
+class AbstractDetector(
+    MotionStatechartNode, Generic[TDetectedEvent], SubClassSafeGeneric, ABC
+):
     """
     Abstract base class for all detectors.
+
+    A detector binds the kind of event it detects, and states the kinds of event it
+    cannot detect without (see :class:`~segmind.detector_set.DetectorSet`).
     """
 
     tracked_object: Optional[Body] = field(kw_only=True, default=None)
@@ -149,6 +168,43 @@ class AbstractDetector(MotionStatechartNode, ABC):
     :param tracked_object: Optional body that should be monitored.
     If None, all trackable objects in the world are checked.
     """
+
+    @classmethod
+    def detected_event_type(cls) -> Type[DetectionEvent]:
+        """
+        :return: The kind of event this detector detects.
+        """
+        return cls.get_generic_type_parameters()[0]
+
+    @classmethod
+    def required_event_types(cls) -> Tuple[Type[DetectionEvent], ...]:
+        """
+        :return: The kinds of event this detector cannot detect without, because it
+            continues or concludes from them; none for a detector that reads only the
+            world.
+        """
+        return ()
+
+    @classmethod
+    def instances_for(
+        cls, tracked_object: Optional[Body], scene: SceneParts
+    ) -> List[Self]:
+        """
+        The detectors of this kind that watch one object in a scene.
+
+        :param tracked_object: The body to watch, or None for every trackable body.
+        :param scene: The parts of the scene detectors read.
+        :return: One detector for a kind that watches only the object; one per part for
+            a kind that also watches a part of the scene, none when the scene has none.
+        """
+        return [cls(tracked_object=tracked_object)]
+
+    def watched_entities(self) -> Tuple[Optional[Body], ...]:
+        """
+        :return: What this detector watches, which tells it apart from another detector
+            of the same kind.
+        """
+        return (self.tracked_object,)
 
     def on_tick(
         self, context: MotionStatechartContext
@@ -265,3 +321,57 @@ class AbstractDetector(MotionStatechartNode, ABC):
                  in this cycle. Returns an empty list if no events were found.
         """
         pass
+
+
+DEFAULT_SHIFT_THRESHOLD = timedelta(seconds=15)
+"""
+The default for :attr:`RuleDetector.shift_threshold`.
+"""
+
+TFirstEvidence = TypeVar("TFirstEvidence", bound=DetectionEvent)
+"""
+The first kind of event a rule detector concludes from.
+"""
+
+TSecondEvidence = TypeVar("TSecondEvidence", bound=DetectionEvent)
+"""
+The second kind of event a rule detector concludes from.
+"""
+
+
+@dataclass(repr=False, eq=False)
+class RuleDetector(
+    AbstractDetector[TDetectedEvent],
+    Generic[TDetectedEvent, TFirstEvidence, TSecondEvidence],
+    ABC,
+):
+    """
+    A detector that concludes its event from two earlier kinds of event by a rule (see
+    :mod:`segmind.detectors.rules`), instead of reading the world.
+
+    The two kinds it binds are the ones it needs, so a set of detectors brings along the
+    detectors producing them.
+    """
+
+    shift_threshold: timedelta = DEFAULT_SHIFT_THRESHOLD
+    """
+    How far apart in time the two events may be and still be one occurrence.
+    """
+
+    @classmethod
+    def first_evidence_type(cls) -> Type[DetectionEvent]:
+        """
+        :return: The first kind of event the rule concludes from.
+        """
+        return cls.get_generic_type_parameters()[1]
+
+    @classmethod
+    def second_evidence_type(cls) -> Type[DetectionEvent]:
+        """
+        :return: The second kind of event the rule concludes from.
+        """
+        return cls.get_generic_type_parameters()[2]
+
+    @classmethod
+    def required_event_types(cls) -> Tuple[Type[DetectionEvent], ...]:
+        return (cls.first_evidence_type(), cls.second_evidence_type())

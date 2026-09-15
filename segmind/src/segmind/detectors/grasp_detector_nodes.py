@@ -1,38 +1,53 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import List
 
 from giskardpy.motion_statechart.context import MotionStatechartContext
-from segmind.datastructures.events import DetectionEvent, GraspEvent, LossOfGraspEvent
-from segmind.detectors.base import AbstractDetector, SegmindContext
 from semantic_digital_twin.reasoning.predicates import contact
 from semantic_digital_twin.world_description.world_entity import Body
+from typing_extensions import (
+    TYPE_CHECKING,
+    Generic,
+    List,
+    Optional,
+    Self,
+    Tuple,
+    Type,
+    TypeVar,
+)
+
+from segmind.datastructures.events import DetectionEvent, GraspEvent, LossOfGraspEvent
+from segmind.detectors.base import AbstractDetector, SegmindContext
+
+if TYPE_CHECKING:
+    from segmind.scene_parts import SceneParts
 
 TCP_PROXIMITY_THRESHOLD = 0.05
 """
 Maximum distance, in metres, between a tracked object and a gripper's tool center point
 for :class:`GraspDetector` to consider it close enough to be grasped.
 
-The tool center point is a massless URDF link with no collision geometry of its own, so
+The tool center point is a massless link with no collision geometry of its own, so
 unlike the two fingers it can never register a real mesh contact; a properly grasped
-object's own centre sits close to it by construction (a pick action aims the gripper's
-own finger midpoint, which the tool center point tracks, at the object's centre -- see
-:func:`~experiments.tracy_experiments.pick_and_place_action._top_down_pose_builder`).
-Not yet empirically validated against a real grasp on any particular robot's own scale
-of object -- tune down if it is triggering while the object is still merely nearby, or
-up if a genuine grasp is not being recognized.
+object's own centre sits close to it. Not yet empirically validated against a real grasp
+on any particular robot's own scale of object -- tune down if it is triggering while the
+object is still merely nearby, or up if a genuine grasp is not being recognized.
+"""
+
+TGraspEvent = TypeVar("TGraspEvent", bound=DetectionEvent)
+"""
+The kind of event a grasp detector detects.
 """
 
 
 @dataclass(eq=False, repr=False)
-class BaseGraspDetector(AbstractDetector):
+class BaseGraspDetector(AbstractDetector[TGraspEvent], Generic[TGraspEvent]):
     """
-    Abstract base class for grasp-based detectors.
+    Abstract base class for grasp-based detectors, each watching one gripper.
 
     Provides shared functionality for checking whether a tracked object is currently
-    held by a gripper: in contact with both of its fingers, and close to its tool center
-    point (see :data:`TCP_PROXIMITY_THRESHOLD`).
+    held by the gripper: in contact with both of its fingers, and close to its tool
+    center point (see :data:`TCP_PROXIMITY_THRESHOLD`).
     """
 
     finger_tips: List[Body] = field(default_factory=list, kw_only=True)
@@ -41,7 +56,7 @@ class BaseGraspDetector(AbstractDetector):
     tracked object for it to count as grasped.
     """
 
-    tool_frame: Body = field(kw_only=True, default=None)
+    tool_frame: Optional[Body] = field(kw_only=True, default=None)
     """
     The gripper's own tool center point body.
     """
@@ -50,6 +65,28 @@ class BaseGraspDetector(AbstractDetector):
     """
     See :data:`TCP_PROXIMITY_THRESHOLD`.
     """
+
+    @classmethod
+    def instances_for(
+        cls, tracked_object: Optional[Body], scene: SceneParts
+    ) -> List[Self]:
+        """
+        One detector of this kind per gripper the scene holds.
+
+        :param tracked_object: The body to watch, or None for every trackable body.
+        :param scene: The parts of the scene detectors read.
+        """
+        return [
+            cls(
+                tracked_object=tracked_object,
+                finger_tips=list(gripper.finger_tips),
+                tool_frame=gripper.tool_frame,
+            )
+            for gripper in scene.grippers
+        ]
+
+    def watched_entities(self) -> Tuple[Optional[Body], ...]:
+        return (self.tracked_object, self.tool_frame)
 
     def get_grasped_objects(self, tracked_objects: List[Body]) -> List[Body]:
         """
@@ -72,9 +109,9 @@ class BaseGraspDetector(AbstractDetector):
 
 
 @dataclass(eq=False, repr=False)
-class GraspDetector(BaseGraspDetector):
+class GraspDetector(BaseGraspDetector[GraspEvent]):
     """
-    Detects when a tracked object starts being grasped by a gripper.
+    Detects when a tracked object starts being grasped by the gripper.
     """
 
     def update_context_and_events(
@@ -84,7 +121,7 @@ class GraspDetector(BaseGraspDetector):
         tracked_objects: List[Body],
     ) -> List[DetectionEvent]:
         """
-        Detects newly grasped objects.
+        Detects objects this gripper newly grasps.
 
         :param context: The current motion statechart context.
         :param segmind_context: The shared SegmindContext containing the information required to track events.
@@ -93,20 +130,25 @@ class GraspDetector(BaseGraspDetector):
         """
         events = []
         for obj in self.get_grasped_objects(tracked_objects):
-            if obj in segmind_context.latest_grasp:
+            holders = segmind_context.latest_grasp.setdefault(obj, set())
+            if self.tool_frame in holders:
                 continue
-            segmind_context.latest_grasp.add(obj)
+            holders.add(self.tool_frame)
             events.append(GraspEvent(tracked_object=obj, with_object=self.tool_frame))
 
         return events
 
 
 @dataclass(eq=False, repr=False)
-class LossOfGraspDetector(BaseGraspDetector):
+class LossOfGraspDetector(BaseGraspDetector[LossOfGraspEvent]):
     """
-    Detects when a tracked object previously grasped by a gripper (see
-    :class:`GraspDetector`) is no longer held.
+    Detects when a tracked object this gripper held (see :class:`GraspDetector`) is no
+    longer held by it.
     """
+
+    @classmethod
+    def required_event_types(cls) -> Tuple[Type[DetectionEvent], ...]:
+        return (GraspEvent,)
 
     def update_context_and_events(
         self,
@@ -115,7 +157,7 @@ class LossOfGraspDetector(BaseGraspDetector):
         tracked_objects: List[Body],
     ) -> List[DetectionEvent]:
         """
-        Detects grasps that are no longer held.
+        Detects grasps by this gripper that are no longer held.
 
         :param context: The current motion statechart context.
         :param segmind_context: The shared SegmindContext containing the information required to track events.
@@ -126,9 +168,12 @@ class LossOfGraspDetector(BaseGraspDetector):
 
         events = []
         for obj in tracked_objects:
-            if obj not in segmind_context.latest_grasp or obj in still_grasped:
+            holders = segmind_context.latest_grasp.get(obj, set())
+            if self.tool_frame not in holders or obj in still_grasped:
                 continue
-            segmind_context.latest_grasp.discard(obj)
+            holders.discard(self.tool_frame)
+            if not holders:
+                segmind_context.latest_grasp.pop(obj)
             events.append(
                 LossOfGraspEvent(tracked_object=obj, with_object=self.tool_frame)
             )

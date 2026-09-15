@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import timedelta
-from typing import List
 
 from giskardpy.motion_statechart.context import MotionStatechartContext
 from semantic_digital_twin.world_description.world_entity import Body
+from typing_extensions import Generic, List
 
 from segmind.datastructures.events import (
     DetectionEvent,
@@ -16,32 +15,25 @@ from segmind.datastructures.events import (
     SupportEvent,
     TranslationEvent,
 )
-from segmind.detectors.base import AbstractDetector, SegmindContext
+from segmind.detectors.base import (
+    RuleDetector,
+    SegmindContext,
+    TDetectedEvent,
+    TFirstEvidence,
+    TSecondEvidence,
+)
 from segmind.detectors.rules import interaction_rule
 
 
-@dataclass
-class AbstractInteractionDetector(AbstractDetector):
+@dataclass(eq=False, repr=False)
+class InteractionDetector(
+    RuleDetector[TDetectedEvent, TFirstEvidence, TSecondEvidence],
+    Generic[TDetectedEvent, TFirstEvidence, TSecondEvidence],
+):
     """
-    Abstract base class for interaction-based detectors.
-
-    Provides shared functionality for monitoring interactions of
-    bodies and generating events when detected.
-    """
-
-    shift_threshold: timedelta = timedelta(seconds=15)
-    """
-    The threshold for the time difference between two events to be considered an interaction.
-    """
-
-
-@dataclass
-class PlacingDetector(AbstractInteractionDetector):
-    """
-    Detects that an object was placed on another one.
-
-    A placement is an object coming to a stop and being supported by something soon
-    after, correlated by :func:`~segmind.detectors.rules.interaction_rule`.
+    A detector concluding an interaction from two events about the same object close in
+    time, by :func:`~segmind.detectors.rules.interaction_rule`: the object is taken from
+    the first event, what it interacted with from the second.
     """
 
     def update_context_and_events(
@@ -51,53 +43,39 @@ class PlacingDetector(AbstractInteractionDetector):
         tracked_objects: List[Body],
     ) -> List[DetectionEvent]:
         """
-        Concludes a placing event for every object that stopped moving and came to rest
-        on something within :attr:`~AbstractInteractionDetector.shift_threshold`, and
-        that was not already placed on that same thing.
+        Concludes an interaction for every object whose two events happened within
+        :attr:`~segmind.detectors.base.RuleDetector.shift_threshold`, and that was not
+        already concluded for the same two entities.
 
         :param context: The current motion statechart context.
         :param segmind_context: The shared SegmindContext containing the information required to track events.
-        :param tracked_objects: List of bodies to analyze for potential placing events.
-        :return: List of generated placing events based on observed interactions.
+        :param tracked_objects: List of bodies to analyze for potential interactions.
+        :return: The interactions concluded.
         """
         return interaction_rule(
-            event_type=PlacingEvent,
-            primary_event_type=StopTranslationEvent,
-            secondary_event_type=SupportEvent,
+            event_type=self.detected_event_type(),
+            primary_event_type=self.first_evidence_type(),
+            secondary_event_type=self.second_evidence_type(),
             logged_events=segmind_context.logger.get_events(),
             shift_threshold=self.shift_threshold,
         ).tolist()
 
 
-@dataclass
-class PickUpDetector(AbstractInteractionDetector):
+@dataclass(eq=False, repr=False)
+class PlacingDetector(
+    InteractionDetector[PlacingEvent, StopTranslationEvent, SupportEvent]
+):
     """
-    Detects that an object was picked up off whatever was supporting it.
-
-    A pick-up is an object starting to move and losing its support soon after,
-    correlated by :func:`~segmind.detectors.rules.interaction_rule`.
+    Detects that an object was placed on another one: it came to a stop and was
+    supported by something soon after.
     """
 
-    def update_context_and_events(
-        self,
-        context: MotionStatechartContext,
-        segmind_context: SegmindContext,
-        tracked_objects: List[Body],
-    ) -> List[DetectionEvent]:
-        """
-        Concludes a pick-up event for every object that started moving and lost its
-        support within :attr:`~AbstractInteractionDetector.shift_threshold`, and that was
-        not already picked up off that same support.
 
-        :param context: The current motion statechart context.
-        :param segmind_context: The shared SegmindContext containing the information required to track events.
-        :param tracked_objects: List of bodies to analyze for potential pickup events.
-        :return: List of generated pickup events based on observed interactions.
-        """
-        return interaction_rule(
-            event_type=PickUpEvent,
-            primary_event_type=TranslationEvent,
-            secondary_event_type=LossOfSupportEvent,
-            logged_events=segmind_context.logger.get_events(),
-            shift_threshold=self.shift_threshold,
-        ).tolist()
+@dataclass(eq=False, repr=False)
+class PickUpDetector(
+    InteractionDetector[PickUpEvent, TranslationEvent, LossOfSupportEvent]
+):
+    """
+    Detects that an object was picked up off whatever was supporting it: it started
+    moving and lost its support soon after.
+    """

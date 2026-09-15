@@ -4,10 +4,13 @@ from abc import abstractmethod
 from dataclasses import dataclass, field
 from typing import Optional, List, Dict
 
+from typing_extensions import Generic, Tuple, Type, TypeVar
+
 from giskardpy.motion_statechart.context import MotionStatechartContext
 from segmind.datastructures.events import (
     DetectionEvent,
     ContactEvent,
+    GraspEvent,
     LiftEvent,
     LossOfContactEvent,
     TranslationEvent,
@@ -23,7 +26,7 @@ from semantic_digital_twin.world_description.world_entity import Body
 
 
 @dataclass(eq=False, repr=False)
-class ContactDetector(AbstractDetector):
+class ContactDetector(AbstractDetector[ContactEvent]):
     """
     Detector responsible for identifying newly established contacts between bodies.
     """
@@ -69,11 +72,15 @@ class ContactDetector(AbstractDetector):
 
 
 @dataclass(eq=False, repr=False)
-class LossOfContactDetector(AbstractDetector):
+class LossOfContactDetector(AbstractDetector[LossOfContactEvent]):
     """
     Detector responsible for identifying when previously existing contacts between
     bodies are lost.
     """
+
+    @classmethod
+    def required_event_types(cls) -> Tuple[Type[DetectionEvent], ...]:
+        return (ContactEvent,)
 
     def update_context_and_events(
         self,
@@ -119,8 +126,14 @@ class LossOfContactDetector(AbstractDetector):
         return events
 
 
+TMotionEvent = TypeVar("TMotionEvent", bound=DetectionEvent)
+"""
+The kind of event a motion detector detects.
+"""
+
+
 @dataclass(eq=False, repr=False)
-class MotionDetector(AbstractDetector):
+class MotionDetector(AbstractDetector[TMotionEvent], Generic[TMotionEvent]):
     """
     Base class for motion-based detectors.
 
@@ -236,7 +249,7 @@ class MotionDetector(AbstractDetector):
 
 
 @dataclass(eq=False, repr=False)
-class TranslationDetector(MotionDetector):
+class TranslationDetector(MotionDetector[TranslationEvent]):
     """
     Detector for translation events.
 
@@ -335,12 +348,16 @@ class TranslationDetector(MotionDetector):
 
 
 @dataclass(eq=False, repr=False)
-class StopTranslationDetector(MotionDetector):
+class StopTranslationDetector(MotionDetector[StopTranslationEvent]):
     """
     Detector for stop translation events.
 
     Triggers a StopTranslationEvent when an object that was moving stops.
     """
+
+    @classmethod
+    def required_event_types(cls) -> Tuple[Type[DetectionEvent], ...]:
+        return (TranslationEvent,)
 
     def _check_and_trigger_event(
         self, context: SegmindContext, obj: Body, poses: List[NumericPose]
@@ -377,7 +394,7 @@ class StopTranslationDetector(MotionDetector):
 
 
 @dataclass(eq=False, repr=False)
-class RotationDetector(MotionDetector):
+class RotationDetector(MotionDetector[RotationEvent]):
     """
     Detector for rotation events.
 
@@ -416,12 +433,16 @@ class RotationDetector(MotionDetector):
 
 
 @dataclass(eq=False, repr=False)
-class StopRotationDetector(MotionDetector):
+class StopRotationDetector(MotionDetector[StopRotationEvent]):
     """
     Detector for stop rotation events.
 
     Triggers a StopRotationEvent when an object that was rotating stops.
     """
+
+    @classmethod
+    def required_event_types(cls) -> Tuple[Type[DetectionEvent], ...]:
+        return (RotationEvent,)
 
     def _check_and_trigger_event(
         self, context: SegmindContext, obj: Body, poses: List[NumericPose]
@@ -457,12 +478,16 @@ class StopRotationDetector(MotionDetector):
 
 
 @dataclass(eq=False, repr=False)
-class LiftDetector(MotionDetector):
+class LiftDetector(MotionDetector[LiftEvent]):
     """
     Detector for lift events.
 
     Triggers a LiftEvent when a grasped object starts moving upward along the Z axis.
     """
+
+    @classmethod
+    def required_event_types(cls) -> Tuple[Type[DetectionEvent], ...]:
+        return (GraspEvent,)
 
     def _check_and_trigger_event(
         self, context: SegmindContext, obj: Body, poses: List[NumericPose]
@@ -500,12 +525,16 @@ class LiftDetector(MotionDetector):
 
 
 @dataclass(eq=False, repr=False)
-class StopLiftDetector(MotionDetector):
+class StopLiftDetector(MotionDetector[StopLiftEvent]):
     """
     Detector for stop lift events.
 
     Triggers a StopLiftEvent when an object that was being lifted stops moving upward.
     """
+
+    @classmethod
+    def required_event_types(cls) -> Tuple[Type[DetectionEvent], ...]:
+        return (LiftEvent,)
 
     def _check_and_trigger_event(
         self, context: SegmindContext, obj: Body, poses: List[NumericPose]

@@ -16,6 +16,9 @@ import segmind
 # imported so that every symbolic operation segmind declares is declared by the time the
 # ignored classes below are read
 import segmind.detectors.rules
+from segmind.detector_set import DetectorIdentity, DetectorSet
+from segmind.exceptions import NoDetectorDetectsEvent
+from segmind.scene_parts import Gripper, SceneParts
 
 # imported for its alternative mappings, which are collected through a global subclass
 # scan: without it segmind's spatial fields degrade to JSON columns
@@ -32,6 +35,12 @@ ignored_classes = {
     # A symbolic operation is a step of a rule, not something an episode stores, so none
     # of them is mapped.
     *recursive_subclasses(SymbolicCallable),
+    # How detectors are put together for a run, not something an episode stores.
+    DetectorIdentity,
+    DetectorSet,
+    Gripper,
+    SceneParts,
+    NoDetectorDetectsEvent,
 }
 
 dependencies = [semantic_digital_twin.orm.ormatic_interface]
