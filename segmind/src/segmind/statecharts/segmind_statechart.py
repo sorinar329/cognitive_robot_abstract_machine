@@ -1,15 +1,29 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import List
 
 from giskardpy.motion_statechart.motion_statechart import MotionStatechart
-from segmind.detectors.atomic_event_detectors_nodes import ContactDetector, LossOfContactDetector, TranslationDetector, \
-    StopTranslationDetector, RotationDetector, StopRotationDetector
+from segmind.detectors.atomic_event_detectors_nodes import (
+    ContactDetector,
+    LossOfContactDetector,
+    TranslationDetector,
+    StopTranslationDetector,
+)
 from segmind.detectors.base import DetectorStateChart, AbstractDetector
-from segmind.detectors.coarse_event_detector_nodes import PlacingDetector, PickUpDetector
-from segmind.detectors.spatial_relation_detector_nodes import SupportDetector, LossOfSupportDetector, \
-    ContainmentDetector, InsertionDetector, LossOfContainmentDetector
+from segmind.detectors.coarse_event_detector_nodes import (
+    PlacingDetector,
+    PickUpDetector,
+)
+from segmind.detectors.spatial_relation_detector_nodes import (
+    SupportDetector,
+    LossOfSupportDetector,
+    ContainmentDetector,
+    InsertionDetector,
+    LossOfContainmentDetector,
+    HoleContactDetector,
+    LossOfHoleContactDetector,
+)
 
 
 @dataclass
@@ -22,8 +36,9 @@ class SegmindStatechart(MotionStatechart):
     name and a shared context. These detectors are then added as nodes to the statechart.
     """
 
-
-    def build_statechart(self, detectors:List[AbstractDetector]=None) -> DetectorStateChart:
+    def build_statechart(
+        self, detectors: List[AbstractDetector] = None
+    ) -> DetectorStateChart:
         """
         Build a statechart with various detector nodes.
 
@@ -40,6 +55,8 @@ class SegmindStatechart(MotionStatechart):
         default_detectors = [
             ContactDetector(),
             LossOfContactDetector(),
+            HoleContactDetector(),
+            LossOfHoleContactDetector(),
             SupportDetector(),
             LossOfSupportDetector(),
             ContainmentDetector(),
@@ -54,6 +71,5 @@ class SegmindStatechart(MotionStatechart):
         detectors = detectors if detectors else default_detectors
 
         sc.add_nodes(detectors)
-
 
         return sc

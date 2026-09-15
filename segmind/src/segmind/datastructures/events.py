@@ -7,6 +7,8 @@ from functools import cached_property
 
 from typing_extensions import Optional, List
 
+from krrood.entity_query_language.explanation.explanation import explain_inference
+from krrood.symbol_graph.symbol_graph import Symbol
 from segmind.datastructures.object_tracker import (
     ObjectEventTracker,
     ObjectTrackerFactory,
@@ -14,11 +16,21 @@ from segmind.datastructures.object_tracker import (
 from semantic_digital_twin.semantic_annotations.semantic_annotations import Aperture
 from semantic_digital_twin.spatial_types.numeric import NumericPose
 from semantic_digital_twin.world_description.geometry import VolumetricBoundingBox
-from semantic_digital_twin.world_description.world_entity import Body
+from semantic_digital_twin.world_description.world_entity import (
+    Body,
+    KinematicStructureEntity,
+)
 
 
 @dataclass
-class DetectionEvent(ABC):
+class DetectionEvent(Symbol, ABC):
+    """
+    Something the segmentation saw happen.
+
+    A symbol, so that what the robot has seen is part of what it can be asked about
+    without anyone having to hand the events to the question.
+    """
+
     timestamp: datetime = field(default_factory=datetime.now)
     """
     The time at which the event occurred, defaults to current time.
@@ -39,6 +51,21 @@ class DetectionEvent(ABC):
     def __repr__(self):
         return self.__str__()
 
+    def participating_events(self) -> List[DetectionEvent]:
+        """
+        The events a rule consumed to conclude this one.
+
+        Empty for an event no rule produced, such as one an atomic detector built
+        directly.
+        """
+        explanation = explain_inference(self)
+        if explanation is None:
+            return []
+        consumed = explanation.get_values_of_variable_nodes_of_given_type(
+            DetectionEvent
+        )
+        return [event for event in consumed.tolist() if event is not self]
+
 
 @dataclass(kw_only=True)
 class EventWithTrackedObjects(DetectionEvent, ABC):
@@ -50,13 +77,24 @@ class EventWithTrackedObjects(DetectionEvent, ABC):
     """
 
     tracked_object: Body
-    """The primary object involved in this event."""
+    """
+    The primary object involved in this event.
+    """
 
-    with_object: Optional[Body] = None
-    """The secondary object involved in this event, if any."""
+    with_object: Optional[KinematicStructureEntity] = None
+    """
+    The secondary object involved in this event, if any.
+
+    Usually a :class:`~semantic_digital_twin.world_description.world_entity.Body`; a
+    hole-related event (e.g. contact with an
+    :class:`~semantic_digital_twin.semantic_annotations.semantic_annotations.Aperture`)
+    sets this to that aperture's own
+    :class:`~semantic_digital_twin.world_description.world_entity.Region` root instead,
+    since an aperture is a virtual opening rather than a collidable body.
+    """
 
     @property
-    def tracked_objects(self) -> List[Body]:
+    def tracked_objects(self) -> List[KinematicStructureEntity]:
         """
         :return: the primary object, plus the secondary object when present.
         """
@@ -108,26 +146,30 @@ class EventWithTrackedObjects(DetectionEvent, ABC):
         return hash((self.__class__, tuple(self.tracked_objects), self.timestamp))
 
 
+# %% relations that begin and end
+
+
 @dataclass(unsafe_hash=True)
 class SupportEvent(EventWithTrackedObjects):
     """
-    The SupportEvent class is used to represent an event that involves an object that is supported by another object.
+    The SupportEvent class is used to represent an event that involves an object that is
+    supported by another object.
     """
 
 
 @dataclass(unsafe_hash=True)
 class LossOfSupportEvent(EventWithTrackedObjects):
     """
-    The LossOfSupportEvent class is used to represent an event that involves an object that was supported by another
-    object and then lost support.
+    The LossOfSupportEvent class is used to represent an event that involves an object
+    that was supported by another object and then lost support.
     """
 
 
 @dataclass(unsafe_hash=True)
 class MotionEvent(EventWithTrackedObjects, ABC):
     """
-    Used to represent an event that involves an object that was stationary and then moved or
-    vice versa.
+    Used to represent an event that involves an object that was stationary and then
+    moved or vice versa.
     """
 
     start_pose: NumericPose = field(kw_only=True)
@@ -177,6 +219,24 @@ class StopRotationEvent(MotionEvent):
     ...
 
 
+@dataclass(init=False, unsafe_hash=True)
+class LiftEvent(MotionEvent):
+    """
+    Represents an event where a grasped object starts moving upward along the Z axis.
+    """
+
+    ...
+
+
+@dataclass(init=False, unsafe_hash=True)
+class StopLiftEvent(MotionEvent):
+    """
+    Represents an event where a lifted object stops moving upward.
+    """
+
+    ...
+
+
 @dataclass(unsafe_hash=True)
 class AbstractContactEvent(EventWithTrackedObjects, ABC):
     """
@@ -216,15 +276,23 @@ class AbstractContactEvent(EventWithTrackedObjects, ABC):
     """
 
     def __post_init__(self):
+        # an event read back from a record is about a body that stands in no world any
+        # more, so there is nothing to read its pose off; the numbers it read when it
+        # happened are the record's
+        if self.tracked_object._world is None:
+            return
+        # combined_mesh (not tracked_object.collision.combined_mesh directly) so this
+        # also works when with_object is a hole's Region root, which exposes its
+        # geometry via .area rather than .collision.
         self.bounding_box = VolumetricBoundingBox.from_mesh(
-            self.tracked_object.collision.combined_mesh,
+            self.tracked_object.combined_mesh,
             origin=self.tracked_object.numeric_global_transform,
         )
         self.pose = self.tracked_object.numeric_global_pose
 
         if self.with_object is not None:
             self.with_object_bounding_box = VolumetricBoundingBox.from_mesh(
-                self.with_object.collision.combined_mesh,
+                self.with_object.combined_mesh,
                 origin=self.with_object.numeric_global_transform,
             )
             self.with_object_pose = self.with_object.numeric_global_pose
@@ -248,38 +316,80 @@ class LossOfContactEvent(AbstractContactEvent):
     ...
 
 
+@dataclass
+class AgentInteractionEvent(EventWithTrackedObjects, ABC):
+    """
+    An event in which an agent acted on the tracked object rather than one where the
+    object was only observed.
+
+    The object acted on is the one the event already tracks, so asking which objects an
+    agent acted on is asking these events for their :attr:`tracked_object`.
+    """
+
+
 @dataclass(unsafe_hash=True)
-class PickUpEvent(EventWithTrackedObjects):
+class GraspEvent(EventWithTrackedObjects):
+    """
+    Represents an event where an object starts being held by a gripper: in contact with
+    both of the gripper's fingers, and close to its tool center point.
+
+    :attr:`~EventWithTrackedObjects.with_object` is the gripper's own tool center point
+    body (its ``tool_frame``), not either finger individually.
+    """
+
+    ...
+
+
+@dataclass(unsafe_hash=True)
+class LossOfGraspEvent(EventWithTrackedObjects):
+    """
+    Represents an event where an object previously held by a gripper (see
+    :class:`GraspEvent`) is no longer in contact with both of its fingers and close to
+    its tool center point.
+    """
+
+    ...
+
+
+@dataclass(unsafe_hash=True)
+class PickUpEvent(AgentInteractionEvent):
     """
     Represents an event where an object is picked up by another object.
     """
 
-    ...
-
 
 @dataclass(unsafe_hash=True)
-class PlacingEvent(EventWithTrackedObjects):
+class PlacingEvent(AgentInteractionEvent):
     """
     Represents an event where an object is placed on another object.
     """
 
-    ...
-
 
 @dataclass(unsafe_hash=True)
-class InsertionEvent(EventWithTrackedObjects):
+class InsertionEvent(AgentInteractionEvent):
     """
     Represents an event where an object is inserted into another object.
     """
 
-    inserted_into_objects: List[Body] = field(default_factory=list)
+    inserted_into_objects: List[KinematicStructureEntity] = field(default_factory=list)
     """
     List of objects into which the object was inserted.
+
+    A hole-related insertion sets this to the hole's own ``Region`` root (see
+    :class:`~semantic_digital_twin.semantic_annotations.semantic_annotations.Aperture`),
+    not a ``Body``, which is why this is stated over their common base.
     """
 
-    @property
-    def through_hole(self) -> Aperture:
-        return self.with_object.get_semantic_annotations_by_type(type_=Aperture)[0]
+    through_hole: Optional[Aperture] = None
+    """
+    The aperture :attr:`~EventWithTrackedObjects.with_object` (its own ``Region`` root)
+    was detected passing through.
+
+    Set directly by the detector that builds this event, which already has the aperture
+    in hand (via ``SegmindContext.hole_regions``) rather than derived from
+    ``with_object`` here: a hole's root is a virtual ``Region``, not a ``Body``, and has
+    no reliable way to look its owning annotation back up on its own.
+    """
 
     def __str__(self) -> str:
         with_object_name = " - " + " - ".join(
