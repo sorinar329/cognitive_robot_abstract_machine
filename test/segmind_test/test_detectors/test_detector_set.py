@@ -38,6 +38,7 @@ from segmind.detectors.atomic_event_detectors_nodes import (
 )
 from segmind.detectors.base import AbstractDetector, SegmindContext
 from segmind.detectors.coarse_event_detector_nodes import (
+    GraspingDetector,
     PickUpDetector,
     PlacingDetector,
 )
@@ -301,6 +302,7 @@ def test_the_set_of_all_detectors_holds_every_detector_segmind_defines(
         PickUpDetector,
         PlacingDetector,
         InsertionDetector,
+        GraspingDetector,
     }
 
 

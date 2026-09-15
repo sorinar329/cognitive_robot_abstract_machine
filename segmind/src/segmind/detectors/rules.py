@@ -10,6 +10,7 @@ back off the rule that ran (see
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import Enum, auto
 from datetime import timedelta
 
 from krrood.entity_query_language.factories import (
@@ -34,6 +35,7 @@ from krrood.entity_query_language.verbalization.vocabulary.parts_of_speech impor
     FunctionVerbalizationTemplates,
     Noun,
 )
+from semantic_digital_twin.semantic_annotations.mixins import HasHandle
 from semantic_digital_twin.semantic_annotations.semantic_annotations import Aperture
 from semantic_digital_twin.world_description.world_entity import (
     KinematicStructureEntity,
@@ -46,6 +48,7 @@ from segmind.datastructures.events import (
     DetectionEvent,
     EventWithTrackedObjects,
     InsertionEvent,
+    JointDirection,
 )
 
 # %% the vocabulary the rules are stated in
@@ -107,6 +110,22 @@ class ObjectsInsertedInto(SymbolicFunction):
         return Noun(fields["containing_object"]).as_fragment()
 
 
+class Evidence(Enum):
+    """
+    One of the two events a rule concludes an interaction from.
+    """
+
+    FIRST = auto()
+    """
+    The event the interaction takes its tracked object from.
+    """
+
+    SECOND = auto()
+    """
+    The event correlated against the first.
+    """
+
+
 def interaction_event_detected_before(
     event_type: Type[EventWithTrackedObjects],
     tracked_object: KinematicStructureEntity,
@@ -145,6 +164,7 @@ def interaction_rule(
     secondary_event_type: Type[EventWithTrackedObjects],
     logged_events: Iterable[DetectionEvent],
     shift_threshold: timedelta,
+    with_object_from: Evidence = Evidence.SECOND,
 ) -> Entity[EventWithTrackedObjects]:
     """
     An interaction concluded from two events about the same object close in time.
@@ -159,12 +179,16 @@ def interaction_rule(
     :param logged_events: The events the rule ranges over.
     :param shift_threshold: How far apart the two events may be and still be one
         interaction.
+    :param with_object_from: Which of the two events the interaction takes what the
+        object interacted with from.
     :return: The interactions found, one per pair of entities.
     """
     primary_event = variable(primary_event_type, logged_events)
     secondary_event = variable(secondary_event_type, logged_events)
     tracked_object = primary_event.tracked_object
-    with_object = secondary_event.with_object
+    with_object = (
+        secondary_event if with_object_from is Evidence.SECOND else primary_event
+    ).with_object
     return (
         entity(
             inference(event_type)(
@@ -227,6 +251,57 @@ def insertion_rule(
             not_(
                 interaction_event_detected_before(
                     InsertionEvent, tracked_object, with_object, logged_events
+                )
+            ),
+        )
+        .distinct(tracked_object, with_object)
+    )
+
+
+def articulation_rule(
+    event_type: Type[EventWithTrackedObjects],
+    direction: JointDirection,
+    grasp_event_type: Type[EventWithTrackedObjects],
+    joint_motion_event_type: Type[EventWithTrackedObjects],
+    logged_events: Iterable[DetectionEvent],
+    articulated_parts: Iterable[HasHandle],
+    shift_threshold: timedelta,
+) -> Entity[EventWithTrackedObjects]:
+    """
+    A part moved by its handle, concluded from a grasp of the handle and the part's joint
+    moving the given way, close in time.
+
+    :param event_type: The interaction to conclude, e.g.
+        :class:`~segmind.datastructures.events.OpeningEvent`.
+    :param direction: The way the joint moves in that interaction.
+    :param grasp_event_type: The grasp the interaction takes the gripper from.
+    :param joint_motion_event_type: The joint motion the interaction takes the part from.
+    :param logged_events: The events the rule ranges over.
+    :param articulated_parts: The parts of the scene that move on a joint and have a
+        handle.
+    :param shift_threshold: How far apart the grasp and the joint motion may be and still
+        be one interaction.
+    :return: The interactions found, one per part and gripper.
+    """
+    grasp_event = variable(grasp_event_type, logged_events)
+    joint_motion_event = variable(joint_motion_event_type, logged_events)
+    part = variable(HasHandle, articulated_parts)
+    tracked_object = joint_motion_event.tracked_object
+    with_object = grasp_event.with_object
+    return (
+        entity(
+            inference(event_type)(
+                tracked_object=tracked_object, with_object=with_object
+            )
+        )
+        .where(
+            part.root == tracked_object,
+            part.handle.root == grasp_event.tracked_object,
+            joint_motion_event.direction == direction,
+            TimeDifference(grasp_event, joint_motion_event) <= shift_threshold,
+            not_(
+                interaction_event_detected_before(
+                    event_type, tracked_object, with_object, logged_events
                 )
             ),
         )

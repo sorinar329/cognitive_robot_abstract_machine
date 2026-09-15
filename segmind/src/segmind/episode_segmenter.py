@@ -16,7 +16,8 @@ from semantic_digital_twin.world_description.connections import (
 from semantic_digital_twin.world_description.geometry import Mesh
 from semantic_digital_twin.world_description.shape_collection import ShapeCollection
 from semantic_digital_twin.world_description.world_entity import Body
-from .detectors.base import DetectorStateChart, SegmindContext
+from segmind.detectors.base import DetectorStateChart, SegmindContext
+from segmind.scene_parts import SceneParts
 from .episode_player import EpisodePlayer
 
 logger = logging.getLogger(__name__)
@@ -78,6 +79,7 @@ class EpisodeSegmenterExecutor(Executor):
         super().compile(motion_statechart)
         self.read_geometry_out()
         self.detect_holes()
+        self.detect_articulated_parts()
         if self.player:
             self.player.start()
 
@@ -113,6 +115,17 @@ class EpisodeSegmenterExecutor(Executor):
                 Aperture
             )
         }
+
+    def detect_articulated_parts(self):
+        """
+        Records every part of the world that moves on a joint and has a handle in
+        ``SegmindContext.articulated_parts`` (see
+        :attr:`~segmind.scene_parts.SceneParts.articulated_parts`).
+        """
+        segmind_context = self.context.require_extension(SegmindContext)
+        segmind_context.articulated_parts = SceneParts.of_world(
+            self.context.world
+        ).articulated_parts
 
     def spawn_scene(self, models_dir, file_resolver: Optional[FileUriResolver] = None):
         """

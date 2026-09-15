@@ -24,6 +24,7 @@ from segmind.datastructures.events import (
 )
 from segmind.datastructures.object_tracker import ObjectTrackerFactory
 from segmind.event_logger import EventLogger
+from semantic_digital_twin.semantic_annotations.mixins import HasMechanicalJoint
 from semantic_digital_twin.semantic_annotations.semantic_annotations import Aperture
 from semantic_digital_twin.spatial_types.numeric import NumericPose
 from semantic_digital_twin.world_description.connections import Connection6DoF
@@ -140,6 +141,12 @@ class SegmindContext(ContextExtension):
     every hole entry the very next tick.
     """
 
+    articulated_parts: List[HasMechanicalJoint] = field(default_factory=list)
+    """
+    Every part of the scene that moves on a joint and has a handle (see
+    :attr:`~segmind.scene_parts.SceneParts.articulated_parts`).
+    """
+
     tracker_registry: ObjectTrackerFactory = field(default_factory=ObjectTrackerFactory)
     """
     The object tracker registry.    
@@ -222,15 +229,7 @@ class AbstractDetector(
         """
         segmind_context_extension = context.require_extension(SegmindContext)
 
-        objects_to_check = (
-            [self.tracked_object]
-            if self.tracked_object
-            else [
-                body
-                for body in context.world.bodies
-                if type(body.parent_connection) is Connection6DoF
-            ]
-        )
+        objects_to_check = self.bodies_to_check(context)
         events = self.update_context_and_events(
             context, segmind_context_extension, objects_to_check
         )
@@ -239,6 +238,20 @@ class AbstractDetector(
                 e, segmind_context_extension.tracker_registry
             )
         return ObservationStateValues.TRUE if events else ObservationStateValues.FALSE
+
+    def bodies_to_check(self, context: MotionStatechartContext) -> List[Body]:
+        """
+        :param context: The current motion statechart context.
+        :return: The bodies this detector checks in a tick: its tracked object, or every
+            body free to move in the world when it tracks none.
+        """
+        if self.tracked_object is not None:
+            return [self.tracked_object]
+        return [
+            body
+            for body in context.world.bodies
+            if type(body.parent_connection) is Connection6DoF
+        ]
 
     def get_relation(
         self,

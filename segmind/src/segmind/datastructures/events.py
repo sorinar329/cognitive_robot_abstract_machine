@@ -3,6 +3,7 @@ from __future__ import annotations
 from abc import abstractmethod, ABC
 from dataclasses import dataclass, field
 from datetime import datetime
+from enum import StrEnum
 from functools import cached_property
 
 from typing_extensions import Optional, List
@@ -433,3 +434,72 @@ class LossOfContainmentEvent(EventWithTrackedObjects):
     """
 
     ...
+
+
+# %% handling articulated parts and grasped objects
+
+
+class JointDirection(StrEnum):
+    """
+    Which way a joint moves.
+    """
+
+    TOWARDS_UPPER_LIMIT = "towards_upper_limit"
+    """
+    Its position increases, as it does when the part it moves is opened.
+    """
+
+    TOWARDS_LOWER_LIMIT = "towards_lower_limit"
+    """
+    Its position decreases, as it does when the part it moves is closed.
+    """
+
+
+@dataclass(unsafe_hash=True, kw_only=True)
+class JointMotionEvent(EventWithTrackedObjects):
+    """
+    Represents an event where the joint an articulated part moves on starts moving; its
+    :attr:`~EventWithTrackedObjects.tracked_object` is the part's root.
+    """
+
+    start_position: float
+    """
+    The joint's position when the motion began.
+    """
+
+    current_position: float
+    """
+    The joint's position when the motion was detected.
+    """
+
+    direction: JointDirection
+    """
+    Which way the joint moves.
+    """
+
+
+@dataclass(unsafe_hash=True)
+class OpeningEvent(AgentInteractionEvent):
+    """
+    Represents an event where a part is opened by its handle; its
+    :attr:`~EventWithTrackedObjects.with_object` is the tool frame of the gripper that
+    held the handle.
+    """
+
+
+@dataclass(unsafe_hash=True)
+class ClosingEvent(AgentInteractionEvent):
+    """
+    Represents an event where a part is closed by its handle; its
+    :attr:`~EventWithTrackedObjects.with_object` is the tool frame of the gripper that
+    held the handle.
+    """
+
+
+@dataclass(unsafe_hash=True)
+class GraspingEvent(AgentInteractionEvent):
+    """
+    Represents an event where an object is grasped and picked up; its
+    :attr:`~EventWithTrackedObjects.with_object` is the tool frame of the gripper that
+    grasped it.
+    """

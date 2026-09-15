@@ -88,6 +88,18 @@ class BaseGraspDetector(AbstractDetector[TGraspEvent], Generic[TGraspEvent]):
     def watched_entities(self) -> Tuple[Optional[Body], ...]:
         return (self.tracked_object, self.tool_frame)
 
+    def bodies_to_check(self, context: MotionStatechartContext) -> List[Body]:
+        """
+        :param context: The current motion statechart context.
+        :return: Besides the bodies every detector checks, the handles of the scene's
+            articulated parts, which do not move freely but are grasped all the same.
+        """
+        bodies = super().bodies_to_check(context)
+        if self.tracked_object is not None:
+            return bodies
+        articulated_parts = context.require_extension(SegmindContext).articulated_parts
+        return bodies + [part.handle.root for part in articulated_parts]
+
     def get_grasped_objects(self, tracked_objects: List[Body]) -> List[Body]:
         """
         Which of ``tracked_objects`` are currently grasped.

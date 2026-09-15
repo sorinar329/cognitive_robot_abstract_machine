@@ -17,6 +17,7 @@ from segmind.detectors import (
     atomic_event_detectors_nodes,
     coarse_event_detector_nodes,
     grasp_detector_nodes,
+    joint_detector_nodes,
     spatial_relation_detector_nodes,
 )
 from segmind.detectors.base import AbstractDetector, DetectorStateChart
@@ -27,6 +28,7 @@ DETECTOR_MODULES = (
     atomic_event_detectors_nodes,
     coarse_event_detector_nodes,
     grasp_detector_nodes,
+    joint_detector_nodes,
     spatial_relation_detector_nodes,
 )
 """

@@ -8,6 +8,8 @@ from typing_extensions import Generic, List
 
 from segmind.datastructures.events import (
     DetectionEvent,
+    GraspEvent,
+    GraspingEvent,
     LossOfSupportEvent,
     PickUpEvent,
     PlacingEvent,
@@ -22,7 +24,7 @@ from segmind.detectors.base import (
     TFirstEvidence,
     TSecondEvidence,
 )
-from segmind.detectors.rules import interaction_rule
+from segmind.detectors.rules import Evidence, interaction_rule
 
 
 @dataclass(eq=False, repr=False)
@@ -33,8 +35,17 @@ class InteractionDetector(
     """
     A detector concluding an interaction from two events about the same object close in
     time, by :func:`~segmind.detectors.rules.interaction_rule`: the object is taken from
-    the first event, what it interacted with from the second.
+    the first event, what it interacted with from the event :meth:`with_object_evidence`
+    names.
     """
+
+    @classmethod
+    def with_object_evidence(cls) -> Evidence:
+        """
+        :return: Which of the two events the interaction takes what the object interacted
+            with from; the second by default.
+        """
+        return Evidence.SECOND
 
     def update_context_and_events(
         self,
@@ -58,6 +69,7 @@ class InteractionDetector(
             secondary_event_type=self.second_evidence_type(),
             logged_events=segmind_context.logger.get_events(),
             shift_threshold=self.shift_threshold,
+            with_object_from=self.with_object_evidence(),
         ).tolist()
 
 
@@ -79,3 +91,15 @@ class PickUpDetector(
     Detects that an object was picked up off whatever was supporting it: it started
     moving and lost its support soon after.
     """
+
+
+@dataclass(eq=False, repr=False)
+class GraspingDetector(InteractionDetector[GraspingEvent, GraspEvent, PickUpEvent]):
+    """
+    Detects that an object was grasped and picked up: a gripper grasped it and it was
+    picked up soon after, the gripper being what it happened with.
+    """
+
+    @classmethod
+    def with_object_evidence(cls) -> Evidence:
+        return Evidence.FIRST

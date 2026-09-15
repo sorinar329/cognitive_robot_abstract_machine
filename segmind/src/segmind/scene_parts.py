@@ -7,6 +7,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from semantic_digital_twin.robots.robot_part_mixins import HasTwoFingers
+from semantic_digital_twin.semantic_annotations.mixins import (
+    HasHandle,
+    HasMechanicalJoint,
+)
 from semantic_digital_twin.robots.robot_parts import EndEffector
 from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.world_entity import Body
@@ -41,6 +45,12 @@ class SceneParts:
     Every two-fingered gripper in the scene.
     """
 
+    articulated_parts: List[HasMechanicalJoint] = field(default_factory=list)
+    """
+    Every part of the scene that moves on a joint and has a handle it is opened and
+    closed by.
+    """
+
     @classmethod
     def of_world(cls, world: World) -> SceneParts:
         """
@@ -56,5 +66,12 @@ class SceneParts:
                 )
                 for end_effector in world.get_semantic_annotations_by_type(EndEffector)
                 if isinstance(end_effector, HasTwoFingers)
-            ]
+            ],
+            articulated_parts=[
+                part
+                for part in world.get_semantic_annotations_by_type(HasMechanicalJoint)
+                if isinstance(part, HasHandle)
+                and part.mechanical_joint is not None
+                and part.handle is not None
+            ],
         )
