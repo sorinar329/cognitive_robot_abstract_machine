@@ -18,6 +18,12 @@ import segmind
 import segmind.detectors.rules
 from segmind.detector_set import DetectorIdentity, DetectorSet
 from segmind.exceptions import NoDetectorDetectsEvent
+from segmind.monitor import (
+    SegmindMonitor,
+    TickedByCaller,
+    TickedOnOwnThread,
+    TickSpacing,
+)
 from segmind.scene_parts import Gripper, SceneParts
 
 # imported for its alternative mappings, which are collected through a global subclass
@@ -41,6 +47,11 @@ ignored_classes = {
     Gripper,
     SceneParts,
     NoDetectorDetectsEvent,
+    # How a run is watched, not something an episode stores.
+    SegmindMonitor,
+    TickSpacing,
+    TickedByCaller,
+    TickedOnOwnThread,
 }
 
 dependencies = [semantic_digital_twin.orm.ormatic_interface]
