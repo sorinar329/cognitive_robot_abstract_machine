@@ -5,6 +5,7 @@ Exceptions raised by segmind.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import StrEnum
 
 from krrood.exceptions import DataclassException
 from typing_extensions import TYPE_CHECKING, Optional, Type
@@ -43,3 +44,30 @@ class NoDetectorDetectsEvent(DataclassException):
             "Declare in the world the part of the scene that kind of detector watches, "
             "such as a gripper, or leave out the detector that needs it."
         )
+
+
+class OptionalDependency(StrEnum):
+    """
+    A package segmind uses only for a feature installed as one of its extras.
+    """
+
+    FLASK = "flask"
+    """
+    Serves the live event dashboard (segmind's ``dashboard`` extra).
+    """
+
+
+@dataclass
+class DashboardNeedsFlask(DataclassException):
+    """
+    Raised when the live event dashboard is loaded without flask installed.
+    """
+
+    def error_message(self) -> str:
+        return (
+            f"The live event dashboard needs {OptionalDependency.FLASK}, which is not "
+            f"installed."
+        )
+
+    def suggest_correction(self) -> str:
+        return "Install segmind with its dashboard extra: pip install 'segmind[dashboard]'."

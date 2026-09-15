@@ -6,6 +6,7 @@
 # information on how to map them.
 # ----------------------------------------------------------------------------------------------------------------------
 from __future__ import annotations
+import importlib.util
 import logging
 from pathlib import Path
 
@@ -17,7 +18,12 @@ import segmind
 # ignored classes below are read
 import segmind.detectors.rules
 from segmind.detector_set import DetectorIdentity, DetectorSet
-from segmind.exceptions import NoDetectorDetectsEvent
+from segmind.event_feed import EventFeed, EventRow, Subscription
+from segmind.exceptions import (
+    DashboardNeedsFlask,
+    NoDetectorDetectsEvent,
+    OptionalDependency,
+)
 from segmind.monitor import (
     SegmindMonitor,
     TickedByCaller,
@@ -52,7 +58,19 @@ ignored_classes = {
     TickSpacing,
     TickedByCaller,
     TickedOnOwnThread,
+    # What a run shows while it watches, not something an episode stores.
+    EventFeed,
+    EventRow,
+    Subscription,
+    DashboardNeedsFlask,
 }
+
+# The dashboard needs flask; without it the package scan skips the dashboard's modules,
+# so there is nothing of it to leave out.
+if importlib.util.find_spec(OptionalDependency.FLASK) is not None:
+    from segmind.dashboard.server import DashboardAddress, LiveEventDashboard
+
+    ignored_classes |= {DashboardAddress, LiveEventDashboard}
 
 dependencies = [semantic_digital_twin.orm.ormatic_interface]
 
