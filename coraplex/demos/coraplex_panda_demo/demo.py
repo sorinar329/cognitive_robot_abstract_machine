@@ -1,6 +1,8 @@
 import os
 import threading
 import time
+from contextlib import AbstractContextManager, nullcontext
+from pathlib import Path
 import numpy
 import rclpy
 from rclpy.executors import MultiThreadedExecutor
@@ -8,7 +10,12 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from coraplex.datastructures.dataclasses import Context
-from coraplex.datastructures.enums import Arms, ApproachDirection, VerticalAlignment, ExecutionType
+from coraplex.datastructures.enums import (
+    Arms,
+    ApproachDirection,
+    VerticalAlignment,
+    ExecutionType,
+)
 from coraplex.datastructures.grasp import GraspDescription
 
 from coraplex.execution_environment import ExecutionEnvironment
@@ -22,12 +29,16 @@ from coraplex.robot_plans.actions.core.robot_body import ParkArmsAction
 from krrood.ormatic.data_access_objects.helper import to_dao
 from krrood.ormatic.utils import create_engine
 
+from live_events import EventWatch, LiveEventPage
+
 from semantic_digital_twin.adapters.mjcf import MJCFParser
 from semantic_digital_twin.adapters.multi_sim import MujocoSim, MujocoBody
-from semantic_digital_twin.adapters.ros.visualization.viz_marker import VizMarkerPublisher
+from semantic_digital_twin.adapters.ros.visualization.viz_marker import (
+    VizMarkerPublisher,
+)
 from semantic_digital_twin.robots.panda import Panda
 from semantic_digital_twin.spatial_types.spatial_types import Pose
-
+from typing_extensions import Optional
 
 time.sleep(8)  # Wait for the launch file to start
 
@@ -43,9 +54,7 @@ executor.add_node(node)
 thread = threading.Thread(target=executor.spin, daemon=True, name="rclpy-executor")
 thread.start()
 
-world = MJCFParser(
-    "/home/sorin/dev/manipulation_experiments/resources/generated/stacking_scene.xml"
-).parse()
+world = MJCFParser(str(Path(__file__).parent / "stacking_scene.xml")).parse()
 Panda.from_world(world)
 publisher = VizMarkerPublisher(_world=world, node=node).with_tf_publisher()
 
@@ -105,7 +114,9 @@ def print_positions():
     is" is visible directly.
     """
     tool_frame_kinematic = numpy.array(
-        world.compute_forward_kinematics(world.root, tool_frame).to_position().evaluate()[:3],
+        world.compute_forward_kinematics(world.root, tool_frame)
+        .to_position()
+        .evaluate()[:3],
         dtype=float,
     )
     box_kinematic = numpy.array(
@@ -136,6 +147,15 @@ printing_thread = threading.Thread(
     target=print_positions_periodically, args=(stop_printing,), daemon=True
 )
 printing_thread.start()
+
+SHOW_LIVE_EVENTS = True
+"""
+Whether the demo serves a page listing the events SegMind detects as it stacks, at
+http://127.0.0.1:5000 while the run lasts.
+
+It needs flask, which the demo's other dependencies do not bring along, so nothing
+here needs it while this is off.
+"""
 
 NUMBER_OF_ITERATIONS = 10
 """
@@ -273,6 +293,17 @@ def reset_cubes() -> None:
         )
 
 
+def setting_the_scene_up_again() -> AbstractContextManager:
+    """
+    Keeps the cubes being put back off the live event page, which shows what the run
+    did: a cube teleported to where it started reads as it having been picked up and put
+    down, and nothing picked it up.
+    """
+    if live_event_watch is None:
+        return nullcontext()
+    return live_event_watch.not_telling_the_feed()
+
+
 def _build_stack_plan(object_body, target_body, picking_arm) -> PlanNode:
     """
     Builds (without performing) a park/pick/place/park plan that stacks ``object_body``
@@ -332,8 +363,12 @@ def _cube_is_stacked(object_body, target_body) -> bool:
     gates persistence -- every step's plan is persisted regardless of this outcome; see
     ``demo2.py`` for the success-gated version.
     """
-    object_height = multi_sim.simulator.get_body_position(object_body.name.name).result[2]
-    target_height = multi_sim.simulator.get_body_position(target_body.name.name).result[2]
+    object_height = multi_sim.simulator.get_body_position(object_body.name.name).result[
+        2
+    ]
+    target_height = multi_sim.simulator.get_body_position(target_body.name.name).result[
+        2
+    ]
     return object_height - target_height > STACK_HEIGHT_OFFSET / 2
 
 
@@ -383,7 +418,7 @@ def print_iteration_summary(iteration_index: int) -> None:
 database_session = _create_database_session(DATABASE_URI)
 persist_world_snapshot()
 
-#constraints = SimulatorConstraints(max_number_of_steps=10000)
+# constraints = SimulatorConstraints(max_number_of_steps=10000)
 multi_sim.start_simulation()
 
 # MujocoSim rebuilds a fresh MuJoCo model from the World object rather than
@@ -398,6 +433,18 @@ if hasattr(viewer, "cam"):
     viewer.cam.elevation = -20
     viewer.cam.distance = 1.2
     viewer.cam.lookat[:] = [0.3, 0.0, 0.35]
+
+# %% live segmind events
+
+live_event_watch: Optional[EventWatch] = None
+live_event_page: Optional[LiveEventPage] = None
+if SHOW_LIVE_EVENTS:
+    live_event_watch = EventWatch.watching(world)
+    live_event_page = LiveEventPage.watching(live_event_watch)
+    live_event_page.start()
+    live_event_watch.start()
+    print(f"SegMind live events: {live_event_page.url}", flush=True)
+
 iteration_durations = []
 with ExecutionEnvironment(
     execution_type=execition_mode,
@@ -414,8 +461,9 @@ with ExecutionEnvironment(
     for iteration in range(1, NUMBER_OF_ITERATIONS + 1):
         iteration_start = time.time()
         print(f"=== starting iteration {iteration}/{NUMBER_OF_ITERATIONS} ===")
-        reset_cubes()
-        time.sleep(1.5)
+        with setting_the_scene_up_again():
+            reset_cubes()
+            time.sleep(1.5)
 
         iteration_plans: list[tuple[str, PlanNode]] = []
 
@@ -432,7 +480,9 @@ with ExecutionEnvironment(
                     "attempts and moving to the next iteration"
                 )
                 break
-            plan, stacked = attempt_stack(cube_to_pick, cube_to_stack_on, Arms.LEFT, step_label)
+            plan, stacked = attempt_stack(
+                cube_to_pick, cube_to_stack_on, Arms.LEFT, step_label
+            )
             iteration_plans.append((step_label, plan))
             print(
                 f"[info] {step_label} {'stacked' if stacked else 'did NOT stack'} "
@@ -456,6 +506,10 @@ with ExecutionEnvironment(
             f"{iteration_durations[-1]:.1f}s (average so far: {average_duration:.1f}s) ==="
         )
 
+if live_event_watch is not None:
+    live_event_watch.stop()
+    live_event_page.stop()
+
 stop_printing.set()
 print("--- final positions ---")
 print_positions()
@@ -464,7 +518,9 @@ try:
     persisted_plan_count = database_session.execute(
         text('SELECT COUNT(*) FROM "SequentialNodeDAO"')
     ).scalar()
-    print(f"[database] Total persisted plans (SequentialNodeDAO): {persisted_plan_count}")
+    print(
+        f"[database] Total persisted plans (SequentialNodeDAO): {persisted_plan_count}"
+    )
 except Exception as exc:
     print(f"[database] Could not read row count: {exc}")
 database_session.close()

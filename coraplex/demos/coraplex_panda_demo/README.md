@@ -12,6 +12,8 @@ stacks `cube2` on `cube3`. The demo ends when the viewer is closed.
 | `demo.py` | The plan and its simulation setup |
 | `stacking_scene.xml` | MJCF scene: Panda, table, four cubes |
 | `panda_assets.py` | Downloads the Panda meshes on first run |
+| `live_events.py` | The SegMind detectors watching the run, and the page showing what they detect |
+| `live_events.html` | That page |
 
 Both `demo.py` and `stacking_scene.xml` use paths relative to their own
 location, so the demo runs from any working directory and any checkout.
@@ -27,6 +29,31 @@ drift out of step with the scene.
 
 This needs network access the first time only. Pin `PandaMeshAssets.revision`
 to a commit if you need the meshes to stay fixed against upstream changes.
+
+## The live event page
+
+While the demo stacks, SegMind's detectors watch the same world on a thread of their
+own and a page at <http://127.0.0.1:5000> lists what they detect, newest first:
+
+```
+cube1 LossOfSupportEvent floor
+cube1 PickUpEvent
+cube1 SupportEvent       cube0
+cube1 PlacingEvent       cube0
+```
+
+Its second tab draws the statechart those detectors tick in, as they stand, so each one
+shows the state it is in. Set `SHOW_LIVE_EVENTS = False` in `demo.py` to run without it;
+it is the only part of the demo that needs `flask`, and the statechart tab also needs
+graphviz's `dot`.
+
+A tick reads the world while holding its lock, so watching costs the run time. The watch
+keeps to `EventWatch.share_of_the_time_watching` of it, and at the default the stacking
+runs at close to the pace it has unwatched.
+
+What the demo does to its own scene is kept off the page: the cubes being teleported back
+between iterations, and their settling afterwards, would otherwise read as them being
+picked up and placed by nobody.
 
 ## What makes this demo different
 

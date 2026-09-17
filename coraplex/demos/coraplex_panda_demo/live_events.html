@@ -1,0 +1,155 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SegMind Live Events &mdash; Panda stacking</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --ground: #fbfbfc;
+    --text: #1c1f24;
+    --muted: #6b7079;
+    --rule: #d9dce1;
+    --accent: #2f5fb3;
+    --drawing-ground: #ffffff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ground: #15171b;
+      --text: #e4e6ea;
+      --muted: #9a9fa8;
+      --rule: #33363d;
+      --accent: #7fa6ea;
+    }
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: var(--ground); color: var(--text);
+    margin: 0; padding: 1.5rem 16px;
+  }
+  header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.5rem 1.5rem; }
+  h1 { font-size: 1.25rem; margin: 0; }
+  #status { color: var(--muted); font-size: 0.9rem; }
+  nav { display: flex; gap: 0.25rem; margin: 1rem 0; border-bottom: 1px solid var(--rule); }
+  nav button {
+    font: inherit; color: var(--muted); background: none; cursor: pointer;
+    border: 0; border-bottom: 2px solid transparent; padding: 0.5rem 0.9rem;
+  }
+  nav button[aria-selected="true"] { color: var(--text); border-bottom-color: var(--accent); }
+  nav button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  [role="tabpanel"][hidden] { display: none; }
+  #events-panel { max-width: 900px; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.4rem 0.6rem; border-bottom: 1px solid var(--rule); }
+  tbody tr:first-child td { font-weight: 600; }
+  .event-type { font-family: ui-monospace, monospace; }
+  .drawing-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; font-size: 0.9rem; }
+  .drawing-tools button, .drawing-tools a {
+    font: inherit; color: var(--text); background: none; cursor: pointer; text-decoration: none;
+    border: 1px solid var(--rule); border-radius: 4px; padding: 0.2rem 0.6rem;
+  }
+  #zoom-level { color: var(--muted); font-variant-numeric: tabular-nums; min-width: 3.5rem; }
+  #drawing-frame {
+    overflow: auto; height: calc(100vh - 11rem); min-height: 20rem;
+    border: 1px solid var(--rule); background: var(--drawing-ground);
+  }
+  #statechart { display: block; width: 100%; height: auto; }
+</style>
+<header>
+  <h1>SegMind Live Events</h1>
+  <div id="status">connecting...</div>
+</header>
+<nav role="tablist">
+  <button role="tab" id="{{ tabs.EVENTS }}-tab" data-tab="{{ tabs.EVENTS }}" aria-controls="{{ tabs.EVENTS }}-panel" aria-selected="true">Events</button>
+  {% if statechart_route %}
+  <button role="tab" id="{{ tabs.STATECHART }}-tab" data-tab="{{ tabs.STATECHART }}" aria-controls="{{ tabs.STATECHART }}-panel" aria-selected="false">Statechart</button>
+  {% endif %}
+</nav>
+<section role="tabpanel" id="{{ tabs.EVENTS }}-panel" aria-labelledby="{{ tabs.EVENTS }}-tab">
+  <table>
+    <thead><tr><th>Time</th><th>Object</th><th>Event</th><th>With</th></tr></thead>
+    <tbody id="rows"></tbody>
+  </table>
+</section>
+{% if statechart_route %}
+<section role="tabpanel" id="{{ tabs.STATECHART }}-panel" aria-labelledby="{{ tabs.STATECHART }}-tab" hidden>
+  <div class="drawing-tools">
+    <button type="button" id="zoom-out" aria-label="Zoom out">&minus;</button>
+    <span id="zoom-level">100%</span>
+    <button type="button" id="zoom-in" aria-label="Zoom in">+</button>
+    <button type="button" id="zoom-fit">Fit width</button>
+    <a href="{{ statechart_route }}" target="_blank" rel="noopener">Open drawing</a>
+  </div>
+  <div id="drawing-frame">
+    <img id="statechart" src="{{ statechart_route }}" alt="The statechart this run ticks">
+  </div>
+</section>
+{% endif %}
+<script>
+  const rows = document.getElementById("rows");
+  const status = document.getElementById("status");
+
+  function cell(text, className) {
+    const td = document.createElement("td");
+    td.textContent = text ?? "";
+    if (className) { td.className = className; }
+    return td;
+  }
+
+  function prependRow(entry) {
+    const row = document.createElement("tr");
+    row.append(
+      cell(new Date(entry["{{ fields.TIMESTAMP }}"]).toLocaleTimeString()),
+      cell(entry["{{ fields.TRACKED_OBJECT }}"]),
+      cell(entry["{{ fields.EVENT_TYPE }}"], "event-type"),
+      cell(entry["{{ fields.WITH_OBJECT }}"]),
+    );
+    rows.insertBefore(row, rows.firstChild);
+  }
+
+  const source = new EventSource("{{ event_stream_route }}");
+  source.onopen = () => { status.textContent = "connected"; };
+  source.onerror = () => { status.textContent = "disconnected, retrying..."; };
+  source.onmessage = (message) => { prependRow(JSON.parse(message.data)); };
+
+  const tabs = Array.from(document.querySelectorAll("[role=tab]"));
+  let shownTab = "{{ tabs.EVENTS }}";
+  function show(name) {
+    shownTab = name;
+    for (const tab of tabs) {
+      const selected = tab.dataset.tab === name;
+      tab.setAttribute("aria-selected", String(selected));
+      document.getElementById(tab.getAttribute("aria-controls")).hidden = !selected;
+    }
+  }
+  tabs.forEach((tab) => tab.addEventListener("click", () => show(tab.dataset.tab)));
+
+  const statechart = document.getElementById("statechart");
+  if (statechart) {
+    // zoom 0 means the drawing is fitted to the width of the page
+    let zoom = 0;
+    const zoomLevel = document.getElementById("zoom-level");
+    function applyZoom() {
+      if (zoom === 0) {
+        statechart.style.width = "100%";
+        zoomLevel.textContent = "fit";
+      } else {
+        statechart.style.width = statechart.naturalWidth * zoom + "px";
+        zoomLevel.textContent = Math.round(zoom * 100) + "%";
+      }
+    }
+    function currentZoom() {
+      return zoom || statechart.clientWidth / statechart.naturalWidth;
+    }
+    document.getElementById("zoom-in").onclick = () => { zoom = currentZoom() * 1.25; applyZoom(); };
+    document.getElementById("zoom-out").onclick = () => { zoom = currentZoom() / 1.25; applyZoom(); };
+    document.getElementById("zoom-fit").onclick = () => { zoom = 0; applyZoom(); };
+    statechart.addEventListener("load", applyZoom);
+
+    // the statechart is drawn as it stands, so asking again shows each node's state now
+    setInterval(() => {
+      if (shownTab === "{{ tabs.STATECHART }}") {
+        statechart.src = "{{ statechart_route }}?at=" + Date.now();
+      }
+    }, 2000);
+  }
+</script>
