@@ -176,7 +176,8 @@ class LossOfHoleContactDetector(BaseHoleContactDetector):
         still_touching = self.get_touching_hole_roots(segmind_context, tracked_objects)
 
         events = []
-        for obj, holes in list(segmind_context.latest_hole_contacts.items()):
+        for obj in tracked_objects:
+            holes = segmind_context.latest_hole_contacts.get(obj, set())
             loss_contacts = (
                 holes.copy()
                 if obj not in still_touching
@@ -281,7 +282,8 @@ class LossOfSupportDetector(AbstractDetector):
             context, objects_to_check, is_supported_by
         )
 
-        for body, support in list(latest_support.items()):
+        for body in objects_to_check:
+            support = latest_support.get(body, set())
             loss_supports = support - new_support_pairs.get(body, set())
 
             if not loss_supports:
@@ -434,7 +436,8 @@ class LossOfContainmentDetector(BaseContainmentDetector):
         new_containment_pairs = self.get_containment_pairs(context, objects_to_check)
         latest_containment = segmind_context.latest_containments
         events = []
-        for obj, containment_list in list(latest_containment.items()):
+        for obj in objects_to_check:
+            containment_list = latest_containment.get(obj, set())
             lost_containments = (
                 containment_list.copy()
                 if obj not in new_containment_pairs

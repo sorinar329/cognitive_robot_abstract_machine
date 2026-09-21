@@ -217,17 +217,26 @@ class SimulatedCamera:
         self._mirror = None
 
     @property
+    def _drawn_from(self) -> MujocoSim:
+        """
+        The simulation the pictures are drawn from.
+
+        :raises SimulatedCameraIsNotLooking: If the camera has not been started.
+        """
+        if self.drawn_by is not None:
+            return self.drawn_by
+        if self._mirror is None:
+            raise SimulatedCameraIsNotLooking(self.camera.name)
+        return self._mirror
+
+    @property
     def _simulator(self) -> MujocoSimulator:
         """
         What the pictures are drawn from.
 
         :raises SimulatedCameraIsNotLooking: If the camera has not been started.
         """
-        if self.drawn_by is not None:
-            return self.drawn_by.simulator
-        if self._mirror is None:
-            raise SimulatedCameraIsNotLooking(self.camera.name)
-        return self._mirror.simulator
+        return self._drawn_from.simulator
 
     def __enter__(self) -> Self:
         self.start()
@@ -248,6 +257,11 @@ class SimulatedCamera:
         :raises SimulatedCameraIsNotLooking: If the camera has not been started.
         """
         simulator = self._simulator
+        # Asked for again per picture rather than once at the start: a simulation this
+        # camera draws from rebuilds its model whenever the world's model changes, and
+        # a rebuilt model carries MuJoCo's own offscreen size again rather than the room
+        # made for this camera's pictures.
+        self._drawn_from.make_room_for_a_picture(self.width, self.height)
         # Only MuJoCo's own stepping recomputes body poses from the joint values, and
         # this mirror is not stepped in the background, so a world moved since the last
         # picture needs the poses worked out again before anything is drawn. Held under

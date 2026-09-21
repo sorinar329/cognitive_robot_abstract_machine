@@ -163,7 +163,7 @@ closes the gripper about 25x faster than the original limit.
 """
 
 
-def _raise_gripper_velocity_limits(world: World, robot: Tracy) -> None:
+def raise_gripper_velocity_limits(world: World, robot: Tracy) -> None:
     """
     Raise every gripper joint's own degree of freedom velocity limit to
     :data:`GRIPPER_JOINT_VELOCITY_LIMIT`; see its own docstring for why.
@@ -496,13 +496,13 @@ def equip_grippers_with_servos(world: World, robot: Tracy) -> Dict[str, Actuator
     :func:`equip_arms_with_servos` for the end effectors it does not cover.
 
     Also raises every gripper joint's own velocity limit; see
-    :func:`_raise_gripper_velocity_limits`'s own docstring for why.
+    :func:`raise_gripper_velocity_limits`'s own docstring for why.
 
     :param world: The world to add the actuators to, modified in place.
     :param robot: The robot whose grippers are driven.
     :return: Each driven degree of freedom's own actuator, keyed by joint name.
     """
-    _raise_gripper_velocity_limits(world, robot)
+    raise_gripper_velocity_limits(world, robot)
     connections = [
         connection
         for arm in robot.get_arms()

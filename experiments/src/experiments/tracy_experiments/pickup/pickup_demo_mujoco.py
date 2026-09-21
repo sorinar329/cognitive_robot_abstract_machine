@@ -55,8 +55,9 @@ from experiments.episodes.trace import JointTrace, TimedFrames
 from experiments.questions.after_the_move import QuestionAfterTheMove
 from experiments.montessori.event_monitoring import (
     MontessoriEventMonitor,
-    build_shape_monitor_in_scene,
+    build_monitor_for_shapes_in_scene,
 )
+from experiments.montessori.live_event_page import LiveEventPage
 from experiments.montessori.perception.camera import RgbdFrame
 from experiments.montessori.perception.detections import MontessoriScene
 from experiments.montessori.perception.overlay import CameraView, DetectionOverlay
@@ -89,6 +90,7 @@ from experiments.tracy_experiments.equipment import (
     exclude_self_collision,
     joint_state_of_type,
     parse_tracy,
+    raise_gripper_velocity_limits,
     tracy_table_mount_position,
 )
 from experiments.tracy_experiments.grasp_contact import (
@@ -471,6 +473,11 @@ class SimulatedLab:
         belief = parse_tracy()
         believed_robot = Tracy.from_world(belief)
         cls._park(belief, believed_robot)
+        # Every motion is planned in the belief, and a plan is only as fast as the
+        # limits the world it was planned in states: left as the description declares
+        # them, closing the gripper is planned at 0.032 rad/s, which is twenty seconds
+        # of simulated time for one grasp.
+        raise_gripper_velocity_limits(belief, believed_robot)
 
         camera = SimulatedCamera(
             world=reality,
@@ -559,6 +566,13 @@ class SimulatedLab:
             self.reality.root, tracy_root
         )
         return (reality_T_tracy_root @ tracy_root_T_piece)[:3, 3]
+
+    def real_pieces(self) -> List[MontessoriShape]:
+        """
+        :return: Every piece the reality stands on the table, which is the set it was
+            built with rather than every kind the tape has a place for.
+        """
+        return self.reality.get_semantic_annotations_by_type(MontessoriShape)
 
     def real_piece_of(self, category: MontessoriShapeCategory) -> MontessoriShape:
         """
@@ -722,6 +736,9 @@ class SimulationFilm(SimulationObserver):
         simulator = self.simulation.multi_sim.simulator
         with simulator._model_lock:
             if self._renderer is None:
+                self.simulation.multi_sim.make_room_for_a_picture(
+                    self.resolution.width, self.resolution.height
+                )
                 self._renderer = mujoco.Renderer(
                     simulator._mj_model, self.resolution.height, self.resolution.width
                 )
@@ -883,6 +900,12 @@ class SimulatedPickupDemo:
     Where the trial the run makes goes once it has finished.
     """
 
+    live_events: Optional[LiveEventPage] = None
+    """
+    The page showing what the event monitor detects while the run goes, or None for a
+    run nobody watches that way.
+    """
+
     observer: EpisodeObserver = field(default_factory=EpisodeObserver)
     """
     What collects, while the run goes, what its trial records: the monitor's ticks,
@@ -954,12 +977,15 @@ class SimulatedPickupDemo:
             robot=self.lab.robot,
             listener=ObserverListener(self.observer),
         )
+        monitor = build_monitor_for_shapes_in_scene(
+            self.lab.reality, self.lab.real_pieces(), listener=self.asks
+        )
+        if self.live_events is not None:
+            self.live_events.watch(monitor, told_as_well=[self.asks])
         self.tracing = TrialTracing(
             world=self.lab.reality,
             observer=self.observer,
-            monitor=build_shape_monitor_in_scene(
-                self.lab.reality, watched, listener=self.asks
-            ),
+            monitor=monitor,
         )
         overview_camera = camera_looking_at(
             self.lab.reality,
@@ -1142,6 +1168,13 @@ def parse_arguments() -> argparse.Namespace:
         help="run without opening MuJoCo's viewer window, as fast as the machine allows",
     )
     parser.add_argument(
+        "--live-events",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="serve a page at http://127.0.0.1:5000 listing the events SegMind detects "
+        "while the run goes, with the statechart its detectors tick in",
+    )
+    parser.add_argument(
         "--video-directory",
         type=Path,
         default=Path.cwd() / "pickup_demo_videos",
@@ -1152,14 +1185,21 @@ def parse_arguments() -> argparse.Namespace:
 
 def main() -> None:
     arguments = parse_arguments()
+    live_events = LiveEventPage() if arguments.live_events else None
     demo = SimulatedPickupDemo(
         lab=SimulatedLab.build(),
         headless=arguments.headless,
         paced_to_the_wall_clock=not arguments.headless,
+        live_events=live_events,
     )
+    if live_events is not None:
+        live_events.start()
+        logger.info("SegMind live events: %s", live_events.url)
     demo.perform()
     for written in demo.write_artifacts(arguments.video_directory):
         logger.info("Written %s.", written)
+    if live_events is not None:
+        live_events.stop()
 
 
 if __name__ == "__main__":

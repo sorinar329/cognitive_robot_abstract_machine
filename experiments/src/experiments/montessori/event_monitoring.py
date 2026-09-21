@@ -28,6 +28,7 @@ from experiments.montessori.semantics import MontessoriShape, ShapeSortingBoard
 from experiments.montessori.world import MontessoriWorld
 from giskardpy.executor import Executor
 from giskardpy.motion_statechart.context import MotionStatechartContext
+from giskardpy.motion_statechart.motion_statechart import MotionStatechart
 from segmind.datastructures.events import DetectionEvent
 from segmind.detectors.atomic_event_detectors_nodes import (
     ContactDetector,
@@ -108,6 +109,46 @@ def build_shape_monitor_in_scene(
     :param listener: Told what each tick detected, for a run that wants the events as
         they happen rather than once the attempt they fell within has finished.
     """
+    return MontessoriEventMonitor(
+        world=world, detectors=shape_detectors(world, shape), listener=listener
+    )
+
+
+def build_monitor_for_shapes_in_scene(
+    world: World,
+    shapes: List[MontessoriShape],
+    listener: Optional[ReceivesDetectedEvents] = None,
+) -> MontessoriEventMonitor:
+    """
+    Build a :class:`MontessoriEventMonitor` tracking every one of ``shapes``, so a run
+    sorting several pieces is watched throughout rather than only while the one piece it
+    is asked about moves.
+
+    :param world: The world the board and the shapes stand in.
+    :param shapes: The loose shapes to track.
+    :param listener: Told what each tick detected.
+
+    ..note:: A tick costs about 12 ms per shape tracked and runs on the thread planning
+        the motion, so watching a whole table costs that many times over; see
+        :class:`ControlCycleTicking` for what the tick is and why it runs there.
+    """
+    return MontessoriEventMonitor(
+        world=world,
+        detectors=[
+            detector for shape in shapes for detector in shape_detectors(world, shape)
+        ],
+        listener=listener,
+    )
+
+
+def shape_detectors(world: World, shape: MontessoriShape) -> List[AbstractDetector]:
+    """
+    The detectors watching one loose shape's pick-up and insertion into its own matching
+    hole.
+
+    :param world: The world the board and the shape stand in.
+    :param shape: The loose shape to track.
+    """
     [board] = world.get_semantic_annotations_by_type(ShapeSortingBoard)
     hole = board.hole_for(shape)
     landing_region = hole.landing_region
@@ -145,7 +186,7 @@ def build_shape_monitor_in_scene(
         PlacingDetector(tracked_object=shape.root),
         InsertionDetector(tracked_object=shape.root),
     ]
-    return MontessoriEventMonitor(world=world, detectors=detectors, listener=listener)
+    return detectors
 
 
 class TicksDetectors(Protocol):
@@ -170,6 +211,28 @@ class ReceivesDetectedEvents(Protocol):
 
         :param events: The newly detected events.
         """
+
+
+@dataclass
+class EventsToldToEach:
+    """
+    One listener standing for several, so a monitor that tells one thing what it noticed
+    tells them all.
+    """
+
+    listeners: List[ReceivesDetectedEvents]
+    """
+    Told in turn, each getting the same events.
+    """
+
+    def receive(self, events: List[DetectionEvent]) -> None:
+        """
+        Tell every listener what was detected.
+
+        :param events: The newly detected events, oldest first.
+        """
+        for listener in self.listeners:
+            listener.receive(events)
 
 
 class WatchesForEvents(Protocol):
@@ -412,6 +475,13 @@ class MontessoriEventMonitor:
         Every event detected so far.
         """
         return self.context.require_extension(SegmindContext).logger.get_events()
+
+    @property
+    def statechart(self) -> MotionStatechart:
+        """
+        The statechart the detectors tick in, in the state its last tick left it.
+        """
+        return self._executor.motion_statechart
 
     def tick(self) -> None:
         """

@@ -101,7 +101,8 @@ class LossOfContactDetector(AbstractDetector):
         new_contact_pairs = self.get_relation(context, tracked_objects, contact)
 
         events = []
-        for obj, contact_list in list(segmind_context.latest_contact_bodies.items()):
+        for obj in tracked_objects:
+            contact_list = segmind_context.latest_contact_bodies.get(obj, set())
             loss_contacts = (
                 contact_list.copy()
                 if obj not in new_contact_pairs
