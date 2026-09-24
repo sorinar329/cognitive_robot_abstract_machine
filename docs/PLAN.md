@@ -160,10 +160,12 @@ CRAM check, build and look at the CRAMERA bundle, and get your review.
 
 Rough size: about 60–80 parts, about 45 faults, about 70 inspection points.
 
-## 8. Open questions
+## 8. Decisions
 
-1. **Tower entrance:** real towers have outside stairs up to the door, which the G1's
-   omni-drive model cannot climb. Use a ramp, or treat the tower inside as a separate
-   start zone?
-2. **Where the model lives:** keep it as its own repo and bundles, or as a package
-   inside the `cramera-port` monorepo next to `precision_lab`?
+- **Own repository:** this project stays in its own git repository, not a package
+  inside `cramera-port`. Scenes reach CRAMERA as bundles in `~/.cramera/scenes`.
+- **Zones are separate start areas for now.** The G1 does not walk from one zone to the
+  next (no stairs, ladders or lift). Each robot task starts inside its zone: T0/T1 on
+  the ground around the tower, T2 on the nacelle walkway next to the tower access
+  hatch, and the tower interior later with its own start. Moving between zones can come
+  later, by lift or by teleport.
