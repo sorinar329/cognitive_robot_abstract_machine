@@ -1,0 +1,6 @@
+# A consistent story: the input seal leaks, so the oil level has dropped.
+view: nacelle
+description: Gearbox input seal leaking, oil level low
+faults:
+  - gearbox.oil_leak_input_seal
+  - gearbox.oil_level_low

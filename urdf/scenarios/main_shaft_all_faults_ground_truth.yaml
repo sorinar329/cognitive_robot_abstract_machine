@@ -1,0 +1,60 @@
+scenario: main_shaft_all_faults
+faults:
+- id: main_bearing.grease_leak_front_seal
+  part: main_shaft
+  component: main bearing upwind seal
+  description: 'Seal worn: grease pushed out and running onto foot and bedplate'
+  severity: medium
+  inspection_point: main_bearing_inspect_front_seal
+  observable_by:
+  - rgb
+- id: main_bearing.grease_collector_full
+  part: main_shaft
+  component: grease collector
+  description: Used-grease collector full, must be emptied
+  severity: low
+  inspection_point: main_bearing_inspect_grease_collector
+  observable_by:
+  - rgb
+- id: main_shaft.shrink_disc_bolt_loose
+  part: main_shaft
+  component: shrink disc
+  description: One shrink disc bolt backed out, torque marker no longer aligned
+  severity: high
+  inspection_point: main_shaft_inspect_shrink_disc
+  observable_by:
+  - rgb
+- id: main_shaft.fretting_corrosion
+  part: main_shaft
+  component: shaft / shrink disc interface
+  description: 'Fretting corrosion: red-brown powder where the shaft enters the shrink
+    disc'
+  severity: medium
+  inspection_point: main_shaft_inspect_shrink_disc
+  observable_by:
+  - rgb
+- id: rotor_lock.left_engaged
+  part: main_shaft
+  component: rotor lock
+  description: Rotor lock pin left engaged after maintenance
+  severity: high
+  inspection_point: rotor_lock_inspect
+  observable_by:
+  - rgb
+initial_joint_states:
+  rotor_lock_pin_joint: 0.18
+signals:
+  earthing_resistance_ohm: 2.1
+  anemometer_plausible: true
+  aviation_light_on: true
+  power_curve_deficit_percent: 0.0
+  blade_1_lightning_counter: 0
+  blade_2_lightning_counter: 0
+  blade_3_lightning_counter: 0
+  main_bearing_temperature_c: 58
+  drivetrain_vibration_mm_s: 4.8
+  gearbox_oil_level: 1.0
+  gearbox_oil_temperature_c: 62
+  gearbox_filter_dp_bar: 0.8
+  gearbox_oil_particle_count: 300
+  gearbox_vibration_mm_s: 2.1

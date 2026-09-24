@@ -1,0 +1,13 @@
+description: Every outside fault
+faults:
+  - foundation.plinth_crack
+  - foundation.grout_breakout
+  - foundation.earthing_disconnected
+  - tower.anchor_nut_corrosion
+  - tower.base_coating_damage
+  - blade_1.leading_edge_erosion
+  - blade_1.lightning_damage
+  - blade_1.trailing_edge_crack
+  - nacelle.anemometer_damaged
+  - nacelle.aviation_light_failed
+  - nacelle.cover_crack

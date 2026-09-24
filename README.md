@@ -1,0 +1,105 @@
+# windturbine_model
+
+A whole onshore wind turbine (IEA-3.4-130-RWT: 110 m hub height, 130 m rotor) as an
+inspection environment for CRAM, shown in CRAMERA. The plan and task ladder are in
+`docs/PLAN.md`; the reference data are in `references/iea34/`.
+
+Robot task T0 (Unitree G1 walks to the tower door and looks at it):
+
+    source /opt/ros/jazzy/setup.bash && source ~/workspace/segmind_ws/install/setup.bash && source install/setup.bash
+    ~/.virtualenvs/cram2-env/bin/python scripts/g1_t0_look_at_door.py
+
+Interior of a geared ~2 MW wind turbine nacelle as a URDF environment for CRAM
+(`semantic_digital_twin`), laid out like `iai_maps/iai_kit_mobile_lab`:
+`models/<part>/*.obj` meshes referenced via `package://windturbine_model/...`.
+
+## Viewing in CRAMERA
+
+The nacelle is packaged like CRAMERA's `precision_lab` (branch `cramera-port` of
+sunava/cognitive_robot_abstract_machine). Each part is also exported as GLB with PBR
+materials. `scripts/build_cramera_bundle.py` writes one scene bundle per scenario to
+`~/.cramera/scenes/windturbine[_<scenario>]`:
+`scene.json`, `environment.urdf` (GLB visuals under `assets/`), `trajectory.json`
+(initial joint state, e.g. an engaged rotor lock) and `semantics.json` (inspection
+points, active faults, sensor signals). The nacelle cover visual is left out so you can
+see inside (`--with-cover` keeps it); its collision boxes stay.
+
+    ./view.sh --cramera                                    # healthy
+    ./view.sh --cramera windturbine_after_maintenance
+
+The viewer comes from `~/workspace/cramera-port` (its own `.venv`, `pip install -e cramera krrood`).
+Movable joints appear under *Doors & drawers* in the scene panel.
+
+## Layout
+
+- `turbine/dims.py`: all dimensions, shared by Blender and the URDF generator
+- `blender/parts/<part>.py`: geometry, mesh variants and fault overlays per part
+- `turbine/parts/<part>.py`: links, collisions, inspection points, faults, sensor signals
+- `scenarios/*.yaml`: fault scenarios (`faults: [ids]`)
+
+## Workflow (one part at a time)
+
+1. Model the part in `blender/parts/<part>.py` (geometry in its link frame)
+2. `./blender/build.sh <part>` → `models/<part>/*.obj` + `blender/parts/<part>.blend`
+3. Describe links, inspection points and faults in `turbine/parts/<part>.py`, register it in `turbine/parts/__init__.py`
+4. Generate:
+   - `python3 scripts/generate_urdf.py`: healthy `urdf/windturbine.urdf` + `urdf/inspection_points.yaml`
+   - `python3 scripts/generate_urdf.py --scenario scenarios/gearbox_seal_leak.yaml`
+   - `python3 scripts/generate_urdf.py --random 2 --seed 7`
+   - `python3 scripts/generate_urdf.py --list`
+   Scenario output goes to `urdf/scenarios/<name>.urdf` + `<name>_ground_truth.yaml`
+5. Check in CRAM: `~/cram/cram_venv/bin/python scripts/check_cram.py`
+6. Render overview + one close-up per inspection point:
+   `blender -b --factory-startup -P scripts/render_preview.py -- <urdf> <out_dir>`
+
+## Fault model
+
+- **Variant links**: components whose look changes (sight glass, filter indicator,
+  bolts, bushing) are their own fixed links with one mesh per state; the first state
+  is healthy.
+- **Overlay links**: faults that add something (oil streak, puddle) add extra links.
+- **Inspection points**: fixed frames named `<part>_inspect_<what>` on the thing to look
+  at. `urdf/inspection_points.yaml` also gives `view_from`, a direction for the camera.
+- **Joint states**: faults can set joints (e.g. rotor lock left engaged). URDF has no
+  initial state, so these go to `initial_joint_states` in the ground truth.
+  `check_cram.py` and `render_preview.py` both apply them.
+- **Ground truth**: which faults are active, where to see them, their severity, the
+  initial joint states, and the non-visual sensor signals (temperature, vibration,
+  filter pressure, ...).
+
+## Frame convention
+
+Frame `nacelle`: origin on the yaw axis at the top of the floor, X points upwind
+(towards the hub), Z up. The drivetrain axis is at z = 1.5 m; the gearbox output is 0.3 m higher. The real 4–6° shaft
+tilt is left out so the floor stays level for mobile robots.
+
+## Reference layout (from research)
+
+Nacelle envelope after the Vestas V90-2MW: 10.4 m long, 3.5 m wide. We use 3.4 m
+interior height. Drivetrain uses three-point suspension, following NREL 5 MW:
+rotor → main shaft on a main bearing → gearbox on two torque arms on the bedplate →
+high-speed shaft with disc brake and coupling → generator. The yaw bearing and yaw
+drives sit at the tower/nacelle interface. The controller, converter, hydraulics
+and cooling are at the rear. A service crane runs under the roof.
+
+| # | Part | Status |
+|---|------|--------|
+| 1 | Nacelle cover, floor grating, tower access hatch (revolute) | done |
+| 2 | Bedplate: girders, main bearing seat, torque arm brackets, deck with cable hole | done |
+| 3 | Main bearing + grease collector, main shaft (continuous) with shrink disc and lock disc, rotor lock (prismatic pin); 5 faults | done |
+| 4 | Gearbox (3-stage planetary/helical), torque arms, oil cooler, filter, sight glass; 5 faults | done |
+| 5 | High-speed shaft, disc brake, coupling | todo |
+| 6 | Generator | todo |
+| 7 | Yaw bearing ring gear + 4 yaw drives | todo |
+| 8 | Control / converter cabinets (doors as revolute joints) | todo |
+| 9 | Hydraulic unit, cooling / radiator | todo |
+| 10 | Service crane (rail + trolley as prismatic joints) | todo |
+| 11 | Hub interior / pitch drives (optional) | todo |
+| 12 | Tower top platform + ladder (optional) | todo |
+
+## Known limitations
+
+- The generator end (fast shaft, brake, coupling, generator, rear frame) is still
+  missing, so the gearbox output stub ends in the air.
+- The torque arms and girders leave only ~0.37–0.44 m of walkway on each side. That is realistic for a
+  2 MW nacelle, but too narrow for most mobile bases.

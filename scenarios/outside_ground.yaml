@@ -1,0 +1,9 @@
+# What the G1 can find walking around the tower base (tasks T0/T1).
+view: tower_base
+description: Foundation and tower base damage
+faults:
+  - foundation.plinth_crack
+  - foundation.grout_breakout
+  - foundation.earthing_disconnected
+  - tower.anchor_nut_corrosion
+  - tower.base_coating_damage

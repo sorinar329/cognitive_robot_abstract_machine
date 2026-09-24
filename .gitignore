@@ -1,0 +1,7 @@
+*.blend
+*.blend1
+preview/
+__pycache__/
+build/
+install/
+log/

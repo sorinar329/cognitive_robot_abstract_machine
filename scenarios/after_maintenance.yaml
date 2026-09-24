@@ -1,0 +1,6 @@
+# The technicians left: rotor lock still engaged, a shrink disc bolt was not re-torqued.
+view: nacelle
+description: Sloppy maintenance
+faults:
+  - rotor_lock.left_engaged
+  - main_shaft.shrink_disc_bolt_loose

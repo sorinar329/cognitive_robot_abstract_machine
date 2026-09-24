@@ -1,0 +1,8 @@
+view: nacelle
+description: All main bearing / main shaft / rotor lock faults
+faults:
+  - main_bearing.grease_leak_front_seal
+  - main_bearing.grease_collector_full
+  - main_shaft.shrink_disc_bolt_loose
+  - main_shaft.fretting_corrosion
+  - rotor_lock.left_engaged

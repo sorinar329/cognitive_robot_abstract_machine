@@ -1,0 +1,61 @@
+scenario: gearbox_all_faults
+faults:
+- id: gearbox.oil_leak_input_seal
+  part: gearbox
+  component: input shaft seal
+  description: 'Worn input shaft seal: oil runs down the front cover and pools on
+    the floor'
+  severity: high
+  inspection_point: gearbox_inspect_input_seal
+  observable_by:
+  - rgb
+- id: gearbox.oil_level_low
+  part: gearbox
+  component: oil sump
+  description: Oil level below minimum in the sight glass
+  severity: high
+  inspection_point: gearbox_inspect_sight_glass
+  observable_by:
+  - rgb
+- id: gearbox.filter_clogged
+  part: gearbox
+  component: offline oil filter
+  description: Oil filter clogged, differential pressure indicator popped out
+  severity: medium
+  inspection_point: gearbox_inspect_filter
+  observable_by:
+  - rgb
+- id: gearbox.cover_bolt_missing
+  part: gearbox
+  component: inspection cover
+  description: One inspection cover bolt missing (loosened by vibration)
+  severity: low
+  inspection_point: gearbox_inspect_cover
+  observable_by:
+  - rgb
+- id: gearbox.torque_arm_bushing_cracked
+  part: gearbox
+  component: torque arm bushing (-Y)
+  description: 'Elastomer bushing aged: torn and bulging out of the arm eye, gearbox
+    vibrates more'
+  severity: medium
+  inspection_point: gearbox_inspect_bushing_left
+  observable_by:
+  - rgb
+  - vibration
+initial_joint_states: {}
+signals:
+  earthing_resistance_ohm: 2.1
+  anemometer_plausible: true
+  aviation_light_on: true
+  power_curve_deficit_percent: 0.0
+  blade_1_lightning_counter: 0
+  blade_2_lightning_counter: 0
+  blade_3_lightning_counter: 0
+  main_bearing_temperature_c: 41
+  drivetrain_vibration_mm_s: 1.6
+  gearbox_oil_level: 0.2
+  gearbox_oil_temperature_c: 78
+  gearbox_filter_dp_bar: 3.2
+  gearbox_oil_particle_count: 1800
+  gearbox_vibration_mm_s: 7.5

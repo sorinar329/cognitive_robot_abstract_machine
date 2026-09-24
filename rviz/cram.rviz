@@ -1,0 +1,48 @@
+Panels:
+  - Class: rviz_common/Displays
+    Name: Displays
+    Expanded:
+      - /CRAM world1
+      - /CRAM world1/Status1
+    Splitter Ratio: 0.6
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Class: rviz_default_plugins/Grid
+      Name: Grid
+      Enabled: true
+      Offset:
+        X: 0
+        Y: 0
+        Z: -0.12
+    - Class: rviz_default_plugins/MarkerArray
+      Name: CRAM world
+      Enabled: true
+      Topic:
+        Value: /semworld/viz_marker
+        Durability Policy: Transient Local
+        Depth: 10
+        Reliability Policy: Reliable
+    - Class: rviz_default_plugins/TF
+      Name: TF (inspection points)
+      Enabled: false
+      Show Names: true
+      Marker Scale: 0.3
+  Global Options:
+    Fixed Frame: __ROOT_FRAME__
+    Background Color: 48; 48; 48
+  Views:
+    Current:
+      Class: rviz_default_plugins/Orbit
+      Distance: 11
+      Focal Point:
+        X: -1.5
+        Y: 0
+        Z: 1.2
+      Pitch: 0.45
+      Yaw: 4.2
+Window Geometry:
+  Width: 1500
+  Height: 950
+  X: 150
+  Y: 60

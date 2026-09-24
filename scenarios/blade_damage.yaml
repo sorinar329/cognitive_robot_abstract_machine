@@ -1,0 +1,7 @@
+# Typical drone inspection findings.
+description: Blade damage after a stormy winter
+faults:
+  - blade_1.leading_edge_erosion
+  - blade_2.lightning_damage
+  - blade_3.trailing_edge_crack
+  - nacelle.aviation_light_failed

@@ -1,0 +1,107 @@
+scenario: outside_all_faults
+faults:
+- id: foundation.plinth_crack
+  part: site
+  component: foundation plinth
+  description: Crack running down the plinth and across its top towards the grout
+  severity: medium
+  inspection_point: foundation_inspect_plinth
+  observable_by:
+  - rgb
+- id: foundation.grout_breakout
+  part: site
+  component: grout joint
+  description: Grout broken out under the base flange, debris on the plinth
+  severity: high
+  inspection_point: foundation_inspect_grout
+  observable_by:
+  - rgb
+- id: foundation.earthing_disconnected
+  part: site
+  component: earthing strap
+  description: Earthing strap torn off the tower flange, lying on the plinth
+  severity: high
+  inspection_point: foundation_inspect_earthing
+  observable_by:
+  - rgb
+- id: tower.anchor_nut_corrosion
+  part: site
+  component: anchor bolts
+  description: Corroded anchor nuts in one sector, rust running onto the plinth
+  severity: medium
+  inspection_point: tower_inspect_anchor_nuts
+  observable_by:
+  - rgb
+- id: tower.base_coating_damage
+  part: site
+  component: tower coating
+  description: Paint damage with rust patches and a rust streak near the tower base
+  severity: low
+  inspection_point: tower_inspect_base_coating
+  observable_by:
+  - rgb
+- id: blade_1.leading_edge_erosion
+  part: rotor
+  component: blade 1 leading edge
+  description: 'Leading-edge erosion on the outer blade: gelcoat worn through to the
+    laminate'
+  severity: medium
+  inspection_point: blade_1_inspect_leading_edge
+  observable_by:
+  - drone_rgb
+- id: blade_1.lightning_damage
+  part: rotor
+  component: blade 1 tip
+  description: 'Lightning strike next to the tip receptor: burnt and delaminated shell'
+  severity: high
+  inspection_point: blade_1_inspect_tip_receptor
+  observable_by:
+  - drone_rgb
+- id: blade_1.trailing_edge_crack
+  part: rotor
+  component: blade 1 trailing edge
+  description: Trailing-edge bond line split open near the maximum chord
+  severity: high
+  inspection_point: blade_1_inspect_trailing_edge
+  observable_by:
+  - drone_rgb
+- id: nacelle.anemometer_damaged
+  part: nacelle
+  component: anemometer
+  description: 'Cup anemometer damaged: one cup torn off, one arm bent'
+  severity: medium
+  inspection_point: nacelle_inspect_weather_mast
+  observable_by:
+  - drone_rgb
+- id: nacelle.aviation_light_failed
+  part: nacelle
+  component: aviation obstruction light
+  description: Aviation light dark with a broken dome
+  severity: high
+  inspection_point: nacelle_inspect_weather_mast
+  observable_by:
+  - drone_rgb
+- id: nacelle.cover_crack
+  part: nacelle
+  component: nacelle cover
+  description: Crack in the GRP cover on the -Y side, rain can get in
+  severity: low
+  inspection_point: nacelle_inspect_cover
+  observable_by:
+  - drone_rgb
+initial_joint_states: {}
+signals:
+  earthing_resistance_ohm: 999.0
+  anemometer_plausible: false
+  aviation_light_on: false
+  power_curve_deficit_percent: 2.5
+  blade_1_lightning_counter: 1
+  blade_2_lightning_counter: 0
+  blade_3_lightning_counter: 0
+  main_bearing_temperature_c: 41
+  drivetrain_vibration_mm_s: 1.6
+  gearbox_oil_level: 1.0
+  gearbox_oil_temperature_c: 62
+  gearbox_filter_dp_bar: 0.8
+  gearbox_oil_particle_count: 300
+  gearbox_vibration_mm_s: 2.1

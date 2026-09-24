@@ -1,0 +1,35 @@
+scenario: gearbox_seal_leak
+faults:
+- id: gearbox.oil_leak_input_seal
+  part: gearbox
+  component: input shaft seal
+  description: 'Worn input shaft seal: oil runs down the front cover and pools on
+    the floor'
+  severity: high
+  inspection_point: gearbox_inspect_input_seal
+  observable_by:
+  - rgb
+- id: gearbox.oil_level_low
+  part: gearbox
+  component: oil sump
+  description: Oil level below minimum in the sight glass
+  severity: high
+  inspection_point: gearbox_inspect_sight_glass
+  observable_by:
+  - rgb
+initial_joint_states: {}
+signals:
+  earthing_resistance_ohm: 2.1
+  anemometer_plausible: true
+  aviation_light_on: true
+  power_curve_deficit_percent: 0.0
+  blade_1_lightning_counter: 0
+  blade_2_lightning_counter: 0
+  blade_3_lightning_counter: 0
+  main_bearing_temperature_c: 41
+  drivetrain_vibration_mm_s: 1.6
+  gearbox_oil_level: 0.2
+  gearbox_oil_temperature_c: 78
+  gearbox_filter_dp_bar: 0.8
+  gearbox_oil_particle_count: 300
+  gearbox_vibration_mm_s: 2.1

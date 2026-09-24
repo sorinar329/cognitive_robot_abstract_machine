@@ -1,0 +1,35 @@
+scenario: after_maintenance
+faults:
+- id: rotor_lock.left_engaged
+  part: main_shaft
+  component: rotor lock
+  description: Rotor lock pin left engaged after maintenance
+  severity: high
+  inspection_point: rotor_lock_inspect
+  observable_by:
+  - rgb
+- id: main_shaft.shrink_disc_bolt_loose
+  part: main_shaft
+  component: shrink disc
+  description: One shrink disc bolt backed out, torque marker no longer aligned
+  severity: high
+  inspection_point: main_shaft_inspect_shrink_disc
+  observable_by:
+  - rgb
+initial_joint_states:
+  rotor_lock_pin_joint: 0.18
+signals:
+  earthing_resistance_ohm: 2.1
+  anemometer_plausible: true
+  aviation_light_on: true
+  power_curve_deficit_percent: 0.0
+  blade_1_lightning_counter: 0
+  blade_2_lightning_counter: 0
+  blade_3_lightning_counter: 0
+  main_bearing_temperature_c: 41
+  drivetrain_vibration_mm_s: 1.6
+  gearbox_oil_level: 1.0
+  gearbox_oil_temperature_c: 62
+  gearbox_filter_dp_bar: 0.8
+  gearbox_oil_particle_count: 300
+  gearbox_vibration_mm_s: 2.1

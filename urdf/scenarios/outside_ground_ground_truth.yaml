@@ -1,0 +1,58 @@
+scenario: outside_ground
+faults:
+- id: foundation.plinth_crack
+  part: site
+  component: foundation plinth
+  description: Crack running down the plinth and across its top towards the grout
+  severity: medium
+  inspection_point: foundation_inspect_plinth
+  observable_by:
+  - rgb
+- id: foundation.grout_breakout
+  part: site
+  component: grout joint
+  description: Grout broken out under the base flange, debris on the plinth
+  severity: high
+  inspection_point: foundation_inspect_grout
+  observable_by:
+  - rgb
+- id: foundation.earthing_disconnected
+  part: site
+  component: earthing strap
+  description: Earthing strap torn off the tower flange, lying on the plinth
+  severity: high
+  inspection_point: foundation_inspect_earthing
+  observable_by:
+  - rgb
+- id: tower.anchor_nut_corrosion
+  part: site
+  component: anchor bolts
+  description: Corroded anchor nuts in one sector, rust running onto the plinth
+  severity: medium
+  inspection_point: tower_inspect_anchor_nuts
+  observable_by:
+  - rgb
+- id: tower.base_coating_damage
+  part: site
+  component: tower coating
+  description: Paint damage with rust patches and a rust streak near the tower base
+  severity: low
+  inspection_point: tower_inspect_base_coating
+  observable_by:
+  - rgb
+initial_joint_states: {}
+signals:
+  earthing_resistance_ohm: 999.0
+  anemometer_plausible: true
+  aviation_light_on: true
+  power_curve_deficit_percent: 0.0
+  blade_1_lightning_counter: 0
+  blade_2_lightning_counter: 0
+  blade_3_lightning_counter: 0
+  main_bearing_temperature_c: 41
+  drivetrain_vibration_mm_s: 1.6
+  gearbox_oil_level: 1.0
+  gearbox_oil_temperature_c: 62
+  gearbox_filter_dp_bar: 0.8
+  gearbox_oil_particle_count: 300
+  gearbox_vibration_mm_s: 2.1

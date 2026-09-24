@@ -1,0 +1,51 @@
+scenario: blade_damage
+faults:
+- id: blade_1.leading_edge_erosion
+  part: rotor
+  component: blade 1 leading edge
+  description: 'Leading-edge erosion on the outer blade: gelcoat worn through to the
+    laminate'
+  severity: medium
+  inspection_point: blade_1_inspect_leading_edge
+  observable_by:
+  - drone_rgb
+- id: blade_2.lightning_damage
+  part: rotor
+  component: blade 2 tip
+  description: 'Lightning strike next to the tip receptor: burnt and delaminated shell'
+  severity: high
+  inspection_point: blade_2_inspect_tip_receptor
+  observable_by:
+  - drone_rgb
+- id: blade_3.trailing_edge_crack
+  part: rotor
+  component: blade 3 trailing edge
+  description: Trailing-edge bond line split open near the maximum chord
+  severity: high
+  inspection_point: blade_3_inspect_trailing_edge
+  observable_by:
+  - drone_rgb
+- id: nacelle.aviation_light_failed
+  part: nacelle
+  component: aviation obstruction light
+  description: Aviation light dark with a broken dome
+  severity: high
+  inspection_point: nacelle_inspect_weather_mast
+  observable_by:
+  - drone_rgb
+initial_joint_states: {}
+signals:
+  earthing_resistance_ohm: 2.1
+  anemometer_plausible: true
+  aviation_light_on: false
+  power_curve_deficit_percent: 2.5
+  blade_1_lightning_counter: 0
+  blade_2_lightning_counter: 1
+  blade_3_lightning_counter: 0
+  main_bearing_temperature_c: 41
+  drivetrain_vibration_mm_s: 1.6
+  gearbox_oil_level: 1.0
+  gearbox_oil_temperature_c: 62
+  gearbox_filter_dp_bar: 0.8
+  gearbox_oil_particle_count: 300
+  gearbox_vibration_mm_s: 2.1

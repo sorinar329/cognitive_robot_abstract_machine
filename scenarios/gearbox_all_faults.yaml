@@ -1,0 +1,9 @@
+# Every gearbox fault at once, for checking meshes and perception.
+view: nacelle
+description: All gearbox faults
+faults:
+  - gearbox.oil_leak_input_seal
+  - gearbox.oil_level_low
+  - gearbox.filter_clogged
+  - gearbox.cover_bolt_missing
+  - gearbox.torque_arm_bushing_cracked
