@@ -48,7 +48,8 @@ Movable joints appear under *Doors & drawers* in the scene panel.
    - `python3 scripts/generate_urdf.py --random 2 --seed 7`
    - `python3 scripts/generate_urdf.py --list`
    Scenario output goes to `urdf/scenarios/<name>.urdf` + `<name>_ground_truth.yaml`
-5. Check in CRAM: `~/cram/cram_venv/bin/python scripts/check_cram.py`
+5. Check in CRAM: `~/cram/cram_venv/bin/python scripts/check_cram.py`; check the G1 can take every nacelle view:
+   `python3 scripts/check_inspection_points.py`
 6. Render overview + one close-up per inspection point:
    `blender -b --factory-startup -P scripts/render_preview.py -- <urdf> <out_dir>`
 
@@ -82,20 +83,7 @@ high-speed shaft with disc brake and coupling → generator. The yaw bearing and
 drives sit at the tower/nacelle interface. The controller, converter, hydraulics
 and cooling are at the rear. A service crane runs under the roof.
 
-| # | Part | Status |
-|---|------|--------|
-| 1 | Nacelle cover, floor grating, tower access hatch (revolute) | done |
-| 2 | Bedplate: girders, main bearing seat, torque arm brackets, deck with cable hole | done |
-| 3 | Main bearing + grease collector, main shaft (continuous) with shrink disc and lock disc, rotor lock (prismatic pin); 5 faults | done |
-| 4 | Gearbox (3-stage planetary/helical), torque arms, oil cooler, filter, sight glass; 5 faults | done |
-| 5 | High-speed shaft, disc brake, coupling | todo |
-| 6 | Generator | todo |
-| 7 | Yaw bearing ring gear + 4 yaw drives | todo |
-| 8 | Control / converter cabinets (doors as revolute joints) | todo |
-| 9 | Hydraulic unit, cooling / radiator | todo |
-| 10 | Service crane (rail + trolley as prismatic joints) | todo |
-| 11 | Hub interior / pitch drives (optional) | todo |
-| 12 | Tower top platform + ladder (optional) | todo |
+Progress and the part list are tracked in `docs/PLAN.md`.
 
 ## Known limitations
 

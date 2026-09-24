@@ -15,6 +15,7 @@ COLLISIONS = [
     x_cylinder(d.GB_FRONT_COVER_R, (d.GB_FRONT_COVER_X[0], d.GB_INPUT_X[1])),
     x_cylinder(d.GB_PLANET_R, d.GB_PLANET_X),
     span_box(d.GB_HELICAL_X, d.GB_HELICAL_Y, d.GB_HELICAL_Z),
+    x_cylinder(d.GB_PLANET2_R, d.GB_PLANET2_X),
     span_box(d.GB_ARM_X, (-d.GB_ARM_Y_OUT, d.GB_ARM_Y_OUT), d.GB_ARM_Z),
     span_box(d.GB_COOLER_X, d.GB_COOLER_Y, (top, d.GB_COOLER_Z[1] + 0.03)),
     span_box((fx - d.GB_FILTER_R, fx + d.GB_FILTER_R), (fy - d.GB_FILTER_R, d.GB_HELICAL_Y[0]), d.GB_FILTER_Z),
@@ -27,7 +28,7 @@ def component(name, variants):
 
 
 LINKS = [
-    link("gearbox", "bedplate", mesh=M + "gearbox.obj", xyz=d.GEARBOX_XYZ, collisions=COLLISIONS),
+    link("gearbox", "drivetrain", mesh=M + "gearbox.obj", xyz=(d.GEARBOX_X, 0, 0), collisions=COLLISIONS),
     component("gearbox_sight_glass", {"ok": "sight_glass_ok.obj", "low": "sight_glass_low.obj"}),
     component("gearbox_filter_indicator", {"ok": "filter_indicator_ok.obj", "clogged": "filter_indicator_clogged.obj"}),
     component("gearbox_cover_bolts", {"ok": "cover_bolts_ok.obj", "missing": "cover_bolts_missing.obj"}),
@@ -35,14 +36,15 @@ LINKS = [
 ]
 
 INSPECTION_POINTS = [
-    inspection_point("gearbox_inspect_sight_glass", "gearbox", (gx, d.GB_HELICAL_Y[0] - 0.02, gz), (0, -1, 0.3),
-                     "oil level in the sight glass"),
-    inspection_point("gearbox_inspect_filter", "gearbox", (fx, fy, d.GB_FILTER_Z[1]), (0.3, -1, 0.8),
-                     "oil filter clogging indicator (green = ok, red pin out = clogged)"),
-    inspection_point("gearbox_inspect_input_seal", "gearbox", (0.0, 0.0, -d.GB_INPUT_R), (1, -0.6, 0),
-                     "input shaft seal and front cover, below it the floor"),
-    inspection_point("gearbox_inspect_cover", "gearbox", (sum(d.GB_COVER_X) / 2, 0, top), (0, -0.6, 1),
-                     "inspection cover bolts"),
+    # cameras over the walkways at G1 head height (checked by scripts/check_inspection_points.py)
+    inspection_point("gearbox_inspect_sight_glass", "gearbox", (gx, d.GB_HELICAL_Y[0] - 0.02, gz), (0.14, -1, 0.74),
+                     "oil level in the sight glass", distance=1.17),
+    inspection_point("gearbox_inspect_filter", "gearbox", (fx, fy, d.GB_FILTER_Z[1]), (0.23, -1, 0.22),
+                     "oil filter clogging indicator (green = ok, red pin out = clogged)", distance=0.81),
+    inspection_point("gearbox_inspect_input_seal", "gearbox", (0.0, -d.MS_SHRINK_R - 0.07, -0.35), (0.56, -1, 0.3),
+                     "input shaft seal and front cover, below it the floor", distance=1.35),
+    inspection_point("gearbox_inspect_cover", "gearbox", (sum(d.GB_COVER_X) / 2, d.GB_HELICAL_Y[1] + 0.03, sum(d.GB_COVER_Z) / 2),
+                     (0.18, 1, 0.16), "side inspection cover bolts", distance=0.95),
     inspection_point("gearbox_inspect_bushing_left", "gearbox", (d.GB_BUSHING_X[1], -d.GB_BUSHING_Y, d.GB_BUSHING_Z),
                      (0.6, -0.3, 0.75), "torque arm elastomer bushing (-Y side)", distance=0.7),
     inspection_point("gearbox_inspect_bushing_right", "gearbox", (d.GB_BUSHING_X[1], d.GB_BUSHING_Y, d.GB_BUSHING_Z),
@@ -55,9 +57,9 @@ FAULTS = {
         "gearbox_inspect_input_seal", ["rgb"], severity="high",
         overlays=[
             link("gearbox_fault_oil_streak", "gearbox", mesh=M + "fault_oil_streak.obj"),
-            # dripped onto the bedplate deck below the gearbox, spreading to the -Y side
-            link("gearbox_fault_oil_puddle", "bedplate", mesh=M + "fault_oil_puddle.obj",
-                 xyz=(d.GEARBOX_XYZ[0] - 0.3, -0.4, d.BP_DECK_Z)),
+            # dripped onto the nacelle floor below the gearbox front, between the girders
+            link("gearbox_fault_oil_puddle", "nacelle", mesh=M + "fault_oil_puddle.obj",
+                 xyz=(d.drivetrain_to_nacelle(d.GEARBOX_X - 0.3)[0], -0.45, 0.001)),
         ],
         signals={"gearbox_oil_level": 0.8}),
     "gearbox.oil_level_low": fault(

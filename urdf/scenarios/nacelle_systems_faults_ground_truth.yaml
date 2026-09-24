@@ -1,0 +1,67 @@
+scenario: nacelle_systems_faults
+faults:
+- id: converter.fault_light
+  part: systems
+  component: converter cabinet
+  description: 'Converter reports a fault: red status light on the cabinet door'
+  severity: high
+  inspection_point: converter_inspect_status
+  observable_by:
+  - rgb
+- id: controller.door_left_open
+  part: systems
+  component: controller cabinet
+  description: Controller cabinet door left open after maintenance
+  severity: low
+  inspection_point: controller_inspect_door
+  observable_by:
+  - rgb
+- id: hydraulic.hose_leak
+  part: systems
+  component: hydraulic unit
+  description: 'Brake hose fitting leaking: oil down the tank and onto the walkway'
+  severity: medium
+  inspection_point: hydraulic_inspect
+  observable_by:
+  - rgb
+- id: cooling.coolant_low
+  part: systems
+  component: cooling unit
+  description: Coolant below the minimum mark in the expansion tank
+  severity: medium
+  inspection_point: cooling_inspect_level
+  observable_by:
+  - rgb
+- id: safety.extinguisher_missing
+  part: systems
+  component: fire extinguisher
+  description: Fire extinguisher missing from its bracket
+  severity: high
+  inspection_point: safety_inspect_extinguisher
+  observable_by:
+  - rgb
+initial_joint_states:
+  cabinet_controller_door_joint: 1.3
+signals:
+  earthing_resistance_ohm: 2.1
+  anemometer_plausible: true
+  aviation_light_on: true
+  main_bearing_temperature_c: 41
+  drivetrain_vibration_mm_s: 1.6
+  power_curve_deficit_percent: 0.0
+  blade_1_lightning_counter: 0
+  blade_2_lightning_counter: 0
+  blade_3_lightning_counter: 0
+  gearbox_oil_level: 1.0
+  gearbox_oil_temperature_c: 62
+  gearbox_filter_dp_bar: 0.8
+  gearbox_oil_particle_count: 300
+  gearbox_vibration_mm_s: 2.1
+  brake_pad_wear_percent: 20
+  brake_disc_temperature_c: 55
+  generator_vibration_mm_s: 1.9
+  generator_brush_wear_percent: 30
+  generator_terminal_temperature_c: 46
+  converter_fault_code: 3107
+  hydraulic_pressure_bar: 118
+  generator_winding_temperature_c: 128

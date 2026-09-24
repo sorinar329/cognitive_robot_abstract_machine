@@ -1,0 +1,8 @@
+view: nacelle
+description: Brake, coupling and generator faults
+faults:
+  - brake.pads_worn
+  - brake.disc_overheated
+  - coupling.disc_pack_cracked
+  - generator.slip_ring_carbon_dust
+  - generator.terminal_box_overheating

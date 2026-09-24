@@ -1,0 +1,196 @@
+scenario: nacelle_all_faults
+faults:
+- id: gearbox.oil_leak_input_seal
+  part: gearbox
+  component: input shaft seal
+  description: 'Worn input shaft seal: oil runs down the front cover and pools on
+    the floor'
+  severity: high
+  inspection_point: gearbox_inspect_input_seal
+  observable_by:
+  - rgb
+- id: gearbox.oil_level_low
+  part: gearbox
+  component: oil sump
+  description: Oil level below minimum in the sight glass
+  severity: high
+  inspection_point: gearbox_inspect_sight_glass
+  observable_by:
+  - rgb
+- id: gearbox.filter_clogged
+  part: gearbox
+  component: offline oil filter
+  description: Oil filter clogged, differential pressure indicator popped out
+  severity: medium
+  inspection_point: gearbox_inspect_filter
+  observable_by:
+  - rgb
+- id: gearbox.cover_bolt_missing
+  part: gearbox
+  component: inspection cover
+  description: One inspection cover bolt missing (loosened by vibration)
+  severity: low
+  inspection_point: gearbox_inspect_cover
+  observable_by:
+  - rgb
+- id: gearbox.torque_arm_bushing_cracked
+  part: gearbox
+  component: torque arm bushing (-Y)
+  description: 'Elastomer bushing aged: torn and bulging out of the arm eye, gearbox
+    vibrates more'
+  severity: medium
+  inspection_point: gearbox_inspect_bushing_left
+  observable_by:
+  - rgb
+  - vibration
+- id: main_bearing.grease_leak_front_seal
+  part: main_shaft
+  component: main bearing upwind seal
+  description: 'Front main bearing downwind seal worn: grease pushed out and running
+    onto the bearing foot'
+  severity: medium
+  inspection_point: main_bearing_inspect_front_seal
+  observable_by:
+  - rgb
+- id: main_bearing.grease_collector_full
+  part: main_shaft
+  component: grease collector
+  description: Used-grease collector full, must be emptied
+  severity: low
+  inspection_point: main_bearing_inspect_grease_collector
+  observable_by:
+  - rgb
+- id: main_shaft.shrink_disc_bolt_loose
+  part: main_shaft
+  component: shrink disc
+  description: One shrink disc bolt backed out, torque marker no longer aligned
+  severity: high
+  inspection_point: main_shaft_inspect_shrink_disc
+  observable_by:
+  - rgb
+- id: main_shaft.fretting_corrosion
+  part: main_shaft
+  component: shaft / shrink disc interface
+  description: 'Fretting corrosion: red-brown powder where the shaft enters the shrink
+    disc'
+  severity: medium
+  inspection_point: main_shaft_inspect_shrink_disc
+  observable_by:
+  - rgb
+- id: rotor_lock.left_engaged
+  part: main_shaft
+  component: rotor lock
+  description: Rotor lock pin left engaged after maintenance
+  severity: high
+  inspection_point: rotor_lock_inspect
+  observable_by:
+  - rgb
+- id: brake.pads_worn
+  part: generator
+  component: brake pads
+  description: Brake pads worn to the backing plate, wear pin out, brake dust below
+  severity: medium
+  inspection_point: brake_inspect_caliper
+  observable_by:
+  - rgb
+- id: brake.disc_overheated
+  part: generator
+  component: brake disc
+  description: 'Brake disc overheated: blue temper colours on the friction faces'
+  severity: high
+  inspection_point: brake_inspect_caliper
+  observable_by:
+  - rgb
+  - thermal
+- id: coupling.disc_pack_cracked
+  part: generator
+  component: flexible coupling
+  description: Crack through the gearbox-side coupling disc pack, a segment displaced
+  severity: high
+  inspection_point: coupling_inspect
+  observable_by:
+  - rgb
+  - vibration
+- id: generator.slip_ring_carbon_dust
+  part: generator
+  component: slip ring / brushes
+  description: 'Worn slip-ring brushes: carbon dust below the housing and on the cover'
+  severity: medium
+  inspection_point: generator_inspect_slip_ring
+  observable_by:
+  - rgb
+- id: generator.terminal_box_overheating
+  part: generator
+  component: terminal box
+  description: Loose power connection overheating the terminal box, paint scorched
+  severity: high
+  inspection_point: generator_inspect_terminal_box
+  observable_by:
+  - thermal
+  - rgb
+- id: converter.fault_light
+  part: systems
+  component: converter cabinet
+  description: 'Converter reports a fault: red status light on the cabinet door'
+  severity: high
+  inspection_point: converter_inspect_status
+  observable_by:
+  - rgb
+- id: controller.door_left_open
+  part: systems
+  component: controller cabinet
+  description: Controller cabinet door left open after maintenance
+  severity: low
+  inspection_point: controller_inspect_door
+  observable_by:
+  - rgb
+- id: hydraulic.hose_leak
+  part: systems
+  component: hydraulic unit
+  description: 'Brake hose fitting leaking: oil down the tank and onto the walkway'
+  severity: medium
+  inspection_point: hydraulic_inspect
+  observable_by:
+  - rgb
+- id: cooling.coolant_low
+  part: systems
+  component: cooling unit
+  description: Coolant below the minimum mark in the expansion tank
+  severity: medium
+  inspection_point: cooling_inspect_level
+  observable_by:
+  - rgb
+- id: safety.extinguisher_missing
+  part: systems
+  component: fire extinguisher
+  description: Fire extinguisher missing from its bracket
+  severity: high
+  inspection_point: safety_inspect_extinguisher
+  observable_by:
+  - rgb
+initial_joint_states:
+  rotor_lock_pin_joint: 0.18
+  cabinet_controller_door_joint: 1.3
+signals:
+  earthing_resistance_ohm: 2.1
+  anemometer_plausible: true
+  aviation_light_on: true
+  main_bearing_temperature_c: 58
+  drivetrain_vibration_mm_s: 4.8
+  power_curve_deficit_percent: 0.0
+  blade_1_lightning_counter: 0
+  blade_2_lightning_counter: 0
+  blade_3_lightning_counter: 0
+  gearbox_oil_level: 0.2
+  gearbox_oil_temperature_c: 78
+  gearbox_filter_dp_bar: 3.2
+  gearbox_oil_particle_count: 1800
+  gearbox_vibration_mm_s: 7.5
+  brake_pad_wear_percent: 92
+  brake_disc_temperature_c: 185
+  generator_vibration_mm_s: 6.8
+  generator_brush_wear_percent: 85
+  generator_terminal_temperature_c: 104
+  converter_fault_code: 3107
+  hydraulic_pressure_bar: 118
+  generator_winding_temperature_c: 128

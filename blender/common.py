@@ -45,6 +45,16 @@ COLORS = {
     "copper": (0.72, 0.45, 0.2, 1.0),
     "light_red": (0.95, 0.08, 0.05, 1.0),      # aviation obstruction light, glowing
     "dead_glass": (0.35, 0.3, 0.3, 1.0),       # broken, unlit light dome
+    "heat_blue": (0.5, 0.42, 0.95, 1.0),       # temper colours of an overheated brake disc
+    "carbon": (0.14, 0.14, 0.15, 1.0),         # brush dust
+    "heat_brown": (0.5, 0.33, 0.18, 1.0),      # scorched paint
+    "generator_paint": (0.3, 0.42, 0.55, 1.0),
+    "cabinet_grey": (0.78, 0.78, 0.76, 1.0),   # RAL 7035 switch cabinets
+    "resin": (0.2, 0.22, 0.2, 1.0),            # cast resin transformer coils
+    "coolant": (0.2, 0.75, 0.3, 1.0),          # green glycol
+    "led_green": (0.1, 0.95, 0.2, 1.0),
+    "led_red": (1.0, 0.1, 0.05, 1.0),
+    "hydraulic_oil": (0.55, 0.4, 0.1, 1.0),
 }
 
 # PBR finish per material: (roughness, metallic, transmission); default (0.5, 0, 0)
@@ -72,10 +82,20 @@ FINISHES = {
     "copper": (0.3, 1.0, 0.0),
     "light_red": (0.2, 0.0, 0.0),
     "dead_glass": (0.3, 0.0, 0.0),
+    "heat_blue": (0.35, 0.25, 0.0),
+    "carbon": (0.95, 0.0, 0.0),
+    "heat_brown": (0.8, 0.0, 0.0),
+    "generator_paint": (0.35, 0.1, 0.0),
+    "cabinet_grey": (0.45, 0.0, 0.0),
+    "resin": (0.35, 0.0, 0.0),
+    "coolant": (0.1, 0.0, 0.3),
+    "led_green": (0.2, 0.0, 0.0),
+    "led_red": (0.2, 0.0, 0.0),
+    "hydraulic_oil": (0.08, 0.0, 0.0),
 }
 
 # emissive materials: (strength); colour = base colour
-EMISSION = {"light_red": 6.0}
+EMISSION = {"light_red": 6.0, "led_green": 4.0, "led_red": 4.0}
 
 
 def reset_scene():

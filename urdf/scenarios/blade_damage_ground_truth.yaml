@@ -38,14 +38,22 @@ signals:
   earthing_resistance_ohm: 2.1
   anemometer_plausible: true
   aviation_light_on: false
+  main_bearing_temperature_c: 41
+  drivetrain_vibration_mm_s: 1.6
   power_curve_deficit_percent: 2.5
   blade_1_lightning_counter: 0
   blade_2_lightning_counter: 1
   blade_3_lightning_counter: 0
-  main_bearing_temperature_c: 41
-  drivetrain_vibration_mm_s: 1.6
   gearbox_oil_level: 1.0
   gearbox_oil_temperature_c: 62
   gearbox_filter_dp_bar: 0.8
   gearbox_oil_particle_count: 300
   gearbox_vibration_mm_s: 2.1
+  brake_pad_wear_percent: 20
+  brake_disc_temperature_c: 55
+  generator_vibration_mm_s: 1.9
+  generator_brush_wear_percent: 30
+  generator_terminal_temperature_c: 46
+  converter_fault_code: 0
+  hydraulic_pressure_bar: 160
+  generator_winding_temperature_c: 95

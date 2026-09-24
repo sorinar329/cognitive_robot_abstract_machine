@@ -80,7 +80,7 @@ inspection_points:
 - name: nacelle_inspect_weather_mast
   parent: nacelle
   xyz:
-  - -7.9
+  - -8.9
   - 0.2
   - 5.920000000000001
   view_from:
@@ -103,6 +103,58 @@ inspection_points:
   distance: 4.0
   what: 'nacelle cover, -Y side: cracks in the GRP shell'
   outside: true
+- name: main_bearing_inspect_front_seal
+  parent: drivetrain
+  xyz:
+  - -3.23
+  - 0.3
+  - -0.3
+  view_from:
+  - -0.2
+  - 1
+  - 0.3
+  distance: 1.45
+  what: 'front main bearing, downwind seal: grease leaking out'
+  outside: false
+- name: main_bearing_inspect_grease_collector
+  parent: drivetrain
+  xyz:
+  - -2.85
+  - -0.95
+  - -0.5465107771836796
+  view_from:
+  - 0.2
+  - -1
+  - 0.5
+  distance: 1.1
+  what: used-grease collector fill level
+  outside: false
+- name: main_shaft_inspect_shrink_disc
+  parent: drivetrain
+  xyz:
+  - -5.5
+  - -0.3
+  - 0.0
+  view_from:
+  - 0.5
+  - -1
+  - 0.2
+  distance: 1.6
+  what: shrink disc bolts (torque markers) and fretting
+  outside: false
+- name: rotor_lock_inspect
+  parent: drivetrain
+  xyz:
+  - -2.6700000000000004
+  - -0.76
+  - 0.0
+  view_from:
+  - 0.23
+  - -1
+  - 0.03
+  distance: 0.92
+  what: rotor lock pin position (must be retracted in operation)
+  outside: false
 - name: blade_1_inspect_leading_edge
   parent: blade_1
   xyz:
@@ -220,115 +272,63 @@ inspection_points:
   distance: 5.0
   what: 'blade 3 trailing edge near the maximum chord: cracks, split bond line'
   outside: true
-- name: main_bearing_inspect_front_seal
-  parent: main_bearing
-  xyz:
-  - 0.27
-  - 0.15
-  - -0.38
-  view_from:
-  - 0.45
-  - 1
-  - -0.1
-  distance: 0.65
-  what: 'main bearing upwind seal: grease leaking out'
-  outside: false
-- name: main_bearing_inspect_grease_collector
-  parent: main_bearing
-  xyz:
-  - 0.12
-  - -0.7
-  - -0.3500000000000001
-  view_from:
-  - 0.4
-  - -1
-  - 0.4
-  distance: 1.0
-  what: used-grease collector fill level
-  outside: false
-- name: main_shaft_inspect_shrink_disc
-  parent: main_bearing
-  xyz:
-  - -1.44
-  - -0.3
-  - 0.0
-  view_from:
-  - 1
-  - -0.9
-  - 0.3
-  distance: 1.0
-  what: shrink disc bolts (torque markers) and fretting
-  outside: false
-- name: rotor_lock_inspect
-  parent: main_bearing
-  xyz:
-  - 0.55
-  - -0.5
-  - 0.0
-  view_from:
-  - 0.2
-  - -1
-  - 0.5
-  distance: 1.0
-  what: rotor lock pin position (must be retracted in operation)
-  outside: false
 - name: gearbox_inspect_sight_glass
   parent: gearbox
   xyz:
-  - -1.7
-  - -0.72
-  - -0.45
+  - -2.35
+  - -0.77
+  - -0.3
   view_from:
-  - 0
+  - 0.14
   - -1
-  - 0.3
-  distance: 1.0
+  - 0.74
+  distance: 1.17
   what: oil level in the sight glass
   outside: false
 - name: gearbox_inspect_filter
   parent: gearbox
   xyz:
-  - -2.05
-  - -0.86
-  - 0.3
+  - -1.95
+  - -0.92
+  - 0.45
   view_from:
-  - 0.3
+  - 0.23
   - -1
-  - 0.8
-  distance: 1.0
+  - 0.22
+  distance: 0.81
   what: oil filter clogging indicator (green = ok, red pin out = clogged)
   outside: false
 - name: gearbox_inspect_input_seal
   parent: gearbox
   xyz:
   - 0.0
-  - 0.0
-  - -0.28
+  - -0.5700000000000001
+  - -0.35
   view_from:
-  - 1
-  - -0.6
-  - 0
-  distance: 1.0
+  - 0.56
+  - -1
+  - 0.3
+  distance: 1.35
   what: input shaft seal and front cover, below it the floor
   outside: false
 - name: gearbox_inspect_cover
   parent: gearbox
   xyz:
-  - -1.5
-  - 0
-  - 0.8
+  - -2.1
+  - 0.78
+  - 0.30000000000000004
   view_from:
-  - 0
-  - -0.6
+  - 0.18
   - 1
-  distance: 1.0
-  what: inspection cover bolts
+  - 0.16
+  distance: 0.95
+  what: side inspection cover bolts
   outside: false
 - name: gearbox_inspect_bushing_left
   parent: gearbox
   xyz:
-  - -0.4
-  - -1.12
+  - -0.3
+  - -1.1
   - -0.05
   view_from:
   - 0.6
@@ -340,8 +340,8 @@ inspection_points:
 - name: gearbox_inspect_bushing_right
   parent: gearbox
   xyz:
-  - -0.4
-  - 1.12
+  - -0.3
+  - 1.1
   - -0.05
   view_from:
   - 0.6
@@ -349,4 +349,121 @@ inspection_points:
   - 0.75
   distance: 0.7
   what: torque arm elastomer bushing (+Y side)
+  outside: false
+- name: brake_inspect_caliper
+  parent: brake_caliper
+  xyz:
+  - -8.735
+  - -0.25
+  - 0.1
+  view_from:
+  - 0.33
+  - -1
+  - -0.03
+  distance: 1.47
+  what: brake pads (thickness, wear pin) and the disc's friction face
+  outside: false
+- name: coupling_inspect
+  parent: brake_caliper
+  xyz:
+  - -9.325
+  - -0.3
+  - 0.0
+  view_from:
+  - 0.03
+  - -1
+  - 0.05
+  distance: 1.3
+  what: 'flexible coupling disc packs: cracks, loose bolts'
+  outside: false
+- name: generator_inspect_slip_ring
+  parent: generator
+  xyz:
+  - -12.475
+  - -0.45
+  - -0.2
+  view_from:
+  - 0.0
+  - -1
+  - 0.4
+  distance: 1.3
+  what: 'slip-ring housing and brush cover: carbon dust'
+  outside: false
+- name: generator_inspect_terminal_box
+  parent: generator
+  xyz:
+  - -11.0
+  - -0.3
+  - 0.98
+  view_from:
+  - 0.14
+  - -1
+  - -0.44
+  distance: 1.54
+  what: 'generator terminal box: overheating (thermal camera), scorched paint'
+  outside: false
+- name: converter_inspect_status
+  parent: cabinet_converter
+  xyz:
+  - -9.065
+  - 1.69
+  - 1.85
+  view_from:
+  - 1
+  - 0.0
+  - -0.3
+  distance: 1.1
+  what: converter cabinet status light (green = ok)
+  outside: false
+- name: controller_inspect_door
+  parent: cabinet_controller
+  xyz:
+  - -9.07
+  - -1.525
+  - 1.2
+  view_from:
+  - 1
+  - 0.0
+  - 0.2
+  distance: 1.3
+  what: 'controller cabinet: door closed, emergency stop not pressed'
+  outside: false
+- name: hydraulic_inspect
+  parent: hydraulic_unit
+  xyz:
+  - -4.7
+  - 1.3
+  - 0.8500000000000001
+  view_from:
+  - 0.8
+  - 0.9
+  - 1.0
+  distance: 0.78
+  what: 'hydraulic unit: hose fitting and tank, oil on the walkway'
+  outside: false
+- name: cooling_inspect_level
+  parent: cooling_unit
+  xyz:
+  - -5.85
+  - -1.3
+  - 1.0
+  view_from:
+  - 0.6
+  - -1
+  - 0.7
+  distance: 0.57
+  what: coolant expansion tank level tube (above the red mark)
+  outside: false
+- name: safety_inspect_extinguisher
+  parent: nacelle
+  xyz:
+  - -1.6
+  - -1.92
+  - 0.65
+  view_from:
+  - 1
+  - 0.35
+  - 0.35
+  distance: 1.2
+  what: fire extinguisher in its bracket by the tower hatch
   outside: false

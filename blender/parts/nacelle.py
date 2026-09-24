@@ -22,7 +22,7 @@ bevel = shell.modifiers.new("round_roof", "BEVEL")
 bevel.width, bevel.segments = 0.25, 4
 c.bpy.context.view_layer.objects.active = shell
 c.bpy.ops.object.modifier_apply(modifier=bevel.name)
-shaft_hole = c.cylinder("shaft_hole", d.SHAFT_HOLE_R, 0.5, (X[1], 0, d.SHAFT_Z), rotation=(0, 1.5708, 0))
+shaft_hole = c.cylinder("shaft_hole", d.SHAFT_HOLE_R, 0.5, (X[1], 0, d.SHAFT_HOLE_Z), rotation=(0, 1.5708, 0))
 roof_hatch = c.box("roof_hatch", d.ROOF_HATCH_X, d.ROOF_HATCH_Y, (Z[1] - 0.5, Z[1] + 0.5))
 c.cut(shell, inner, shaft_hole, roof_hatch)
 

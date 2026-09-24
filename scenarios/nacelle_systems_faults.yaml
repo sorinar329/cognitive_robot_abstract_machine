@@ -1,0 +1,8 @@
+view: nacelle
+description: Electrical, hydraulic, cooling and safety findings
+faults:
+  - converter.fault_light
+  - controller.door_left_open
+  - hydraulic.hose_leak
+  - cooling.coolant_low
+  - safety.extinguisher_missing

@@ -1,0 +1,23 @@
+view: nacelle
+description: Every nacelle fault at once
+faults:
+  - gearbox.oil_leak_input_seal
+  - gearbox.oil_level_low
+  - gearbox.filter_clogged
+  - gearbox.cover_bolt_missing
+  - gearbox.torque_arm_bushing_cracked
+  - main_bearing.grease_leak_front_seal
+  - main_bearing.grease_collector_full
+  - main_shaft.shrink_disc_bolt_loose
+  - main_shaft.fretting_corrosion
+  - rotor_lock.left_engaged
+  - brake.pads_worn
+  - brake.disc_overheated
+  - coupling.disc_pack_cracked
+  - generator.slip_ring_carbon_dust
+  - generator.terminal_box_overheating
+  - converter.fault_light
+  - controller.door_left_open
+  - hydraulic.hose_leak
+  - cooling.coolant_low
+  - safety.extinguisher_missing

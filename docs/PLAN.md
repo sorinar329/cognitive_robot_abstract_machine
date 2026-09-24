@@ -140,9 +140,11 @@ face the target.
    lightning strike, trailing-edge crack, tower paint damage and corrosion, plinth
    crack, broken-out grout, damaged anemometer, broken aviation light.
    ✅ **Robot task T0** on the flat ground around the tower (`scripts/g1_t0_look_at_door.py`).
-2. **Nacelle in full detail** (zones E + F), rebuilt to IEA dimensions with 0.65 m
+2. ✅ **Nacelle in full detail** (zones E + F), rebuilt to IEA dimensions with 0.69 m
    walkways: two main bearings, a three-stage gearbox, brake, coupling, generator,
-   transformer, cabinets, crane, hatches. The existing faults move over. **Robot task T2.**
+   transformer, cabinets, crane, hatches. The existing faults move over (37 faults in total now; every nacelle view
+   is reachable from a walkway at G1 camera height, `scripts/check_inspection_points.py`).
+   **Robot task T2** is next.
 3. **Hub** (zone G).
 4. **Yaw deck** (zone D).
 5. **Tower inside** (zones B + C). How the G1 gets in is open: stairs versus a ramp or

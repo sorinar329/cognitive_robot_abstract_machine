@@ -1,5 +1,6 @@
-"""Part: 3-stage gearbox (1 planetary + 2 helical) with torque arms, oil cooler,
-offline oil filter, sight glass and a bolted inspection cover.
+"""Part: 3-stage gearbox (IEA: two planetary stages + one parallel stage, 1:97)
+with torque arms, oil cooler, offline oil filter, sight glass and a bolted
+inspection cover.
 
 Link frame ``gearbox``: on the input axis at the front face of the input stub,
 X upwind, Z up. Outputs:
@@ -35,6 +36,7 @@ parts = [
     xcyl("input_stub", d.GB_INPUT_R, d.GB_INPUT_X, mat="pipe_steel"),
     xcyl("front_cover", d.GB_FRONT_COVER_R, d.GB_FRONT_COVER_X),
     xcyl("planet_housing", d.GB_PLANET_R, d.GB_PLANET_X),
+    xcyl("planet2_housing", d.GB_PLANET2_R, d.GB_PLANET2_X),
 ]
 for i, x in enumerate(d.GB_RIB_X):  # stiffening ribs
     parts.append(xcyl(f"rib{i}", d.GB_PLANET_R + 0.03, (x - 0.03, x + 0.03)))
@@ -64,7 +66,8 @@ cx = sum(d.GB_COOLER_X) / 2
 parts.append(c.cylinder("fan_guard", 0.19, 0.03, (cx, 0, d.GB_COOLER_Z[1] + 0.015), mat="bolt_black"))
 
 # inspection cover plate (bolts are a variant)
-parts.append(c.box("insp_cover", d.GB_COVER_X, d.GB_COVER_Y, (d.GB_HELICAL_Z[1], d.GB_HELICAL_Z[1] + d.GB_COVER_T), mat="steel_grey"))
+yc = d.GB_HELICAL_Y[1]
+parts.append(c.box("insp_cover", d.GB_COVER_X, (yc, yc + d.GB_COVER_T), d.GB_COVER_Z, mat="steel_grey"))
 
 # sight glass frame on the -Y face
 gx, gz = d.GB_GLASS_XZ
@@ -113,18 +116,19 @@ def filter_indicator(clogged):
 
 
 def cover_bolts(missing):
+    """Bolts around the side inspection cover (heads pointing +Y, to the walkway)."""
     x0, x1 = d.GB_COVER_X
-    y0, y1 = d.GB_COVER_Y
-    z = d.GB_HELICAL_Z[1] + d.GB_COVER_T + 0.007
+    z0, z1 = d.GB_COVER_Z
+    y = d.GB_HELICAL_Y[1] + d.GB_COVER_T + 0.007
     m = 0.04
-    spots = [(x, y) for x in (x0 + m, (x0 + x1) / 2, x1 - m) for y in (y0 + m, y1 - m)]
-    spots += [(x, (y0 + y1) / 2) for x in (x0 + m, x1 - m)]
+    spots = [(x, z) for x in (x0 + m, (x0 + x1) / 2, x1 - m) for z in (z1 - m, z0 + m)]
+    spots += [(x, (z0 + z1) / 2) for x in (x0 + m, x1 - m)]
     objs = []
-    for i, (x, y) in enumerate(spots):
-        if missing and i == 1:   # front -Y bolt gone: leave the empty thread hole
-            objs.append(c.cylinder("hole", 0.011, 0.002, (x, y, z - 0.006), mat="crack"))
+    for i, (x, z) in enumerate(spots):
+        if missing and i == 1:   # a top bolt gone: leave the empty thread hole
+            objs.append(c.cylinder("hole", 0.011, 0.002, (x, y - 0.006, z), rotation=(math.pi / 2, 0, 0), mat="crack"))
         else:
-            objs.append(c.hex_bolt(f"bolt{i}", (x, y, z)))
+            objs.append(c.hex_bolt(f"bolt{i}", (x, y, z), axis="Y"))
     return objs
 
 
@@ -163,8 +167,9 @@ for name, objs in (
 
 # --------------------------------------------------------------- fault overlays
 # oil running down the front cover from the input shaft seal, dripping off the housing
-streak = [
-    c.box("streak", (0.0, 0.004), (-0.035, 0.03), (-d.GB_FRONT_COVER_R + 0.02, -d.GB_INPUT_R), mat="oil"),
+streak = [   # oil from the seal runs round the stub and down the cover's -Y side, beside the shrink disc
+    c.box("streak_top", (0.0, 0.004), (-d.MS_SHRINK_R - 0.08, -d.GB_INPUT_R + 0.02), (-0.06, 0.0), mat="oil"),
+    c.box("streak", (0.0, 0.004), (-d.MS_SHRINK_R - 0.1, -d.MS_SHRINK_R - 0.04), (-d.GB_FRONT_COVER_R + 0.2, 0.0), mat="oil"),
     c.box("streak_under", (-0.6, 0.0), (-0.03, 0.03), (-d.GB_PLANET_R - 0.004, -d.GB_PLANET_R + 0.02), mat="oil"),
 ]
 drop = c.bpy.ops.mesh.primitive_uv_sphere_add(radius=0.012, location=(-0.3, 0, -d.GB_PLANET_R - 0.02))

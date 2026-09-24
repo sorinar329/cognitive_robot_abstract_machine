@@ -2675,75 +2675,75 @@
     </visual>
     <collision>
       <geometry>
-        <box size="7.54 4.08 0.08"/>
+        <box size="8.79 4.08 0.08"/>
       </geometry>
-      <origin xyz="-4.97 0 -0.04" rpy="0 0 0"/>
+      <origin xyz="-5.345 0 -0.04" rpy="0 0 0"/>
     </collision>
     <collision>
       <geometry>
-        <box size="3.24 4.08 0.08"/>
+        <box size="2.99 4.08 0.08"/>
       </geometry>
-      <origin xyz="1.12 0 -0.04" rpy="0 0 0"/>
+      <origin xyz="1.245 0 -0.04" rpy="0 0 0"/>
     </collision>
     <collision>
       <geometry>
-        <box size="0.7 3.37 0.08"/>
+        <box size="0.7 3.4 0.08"/>
       </geometry>
-      <origin xyz="-0.85 0.355 -0.04" rpy="0 0 0"/>
+      <origin xyz="-0.6 0.34 -0.04" rpy="0 0 0"/>
     </collision>
     <collision>
       <geometry>
-        <box size="0.7 0.07 0.08"/>
+        <box size="0.7 0.04 0.08"/>
       </geometry>
-      <origin xyz="-0.85 -2.005 -0.04" rpy="0 0 0"/>
+      <origin xyz="-0.6 -2.02 -0.04" rpy="0 0 0"/>
     </collision>
     <collision>
       <geometry>
-        <box size="11.6 0.06 4.2"/>
+        <box size="12.6 0.06 4.2"/>
       </geometry>
-      <origin xyz="-3 -2.07 2.1" rpy="0 0 0"/>
+      <origin xyz="-3.5 -2.07 2.1" rpy="0 0 0"/>
     </collision>
     <collision>
       <geometry>
-        <box size="11.6 0.06 4.2"/>
+        <box size="12.6 0.06 4.2"/>
       </geometry>
-      <origin xyz="-3 2.07 2.1" rpy="0 0 0"/>
+      <origin xyz="-3.5 2.07 2.1" rpy="0 0 0"/>
     </collision>
     <collision>
       <geometry>
         <box size="0.06 4.2 4.2"/>
       </geometry>
-      <origin xyz="-8.77 0 2.1" rpy="0 0 0"/>
+      <origin xyz="-9.77 0 2.1" rpy="0 0 0"/>
     </collision>
     <collision>
       <geometry>
-        <box size="11.6 4.2 0.06"/>
+        <box size="12.6 4.2 0.06"/>
       </geometry>
-      <origin xyz="-3 0 4.17" rpy="0 0 0"/>
+      <origin xyz="-3.5 0 4.17" rpy="0 0 0"/>
     </collision>
     <collision>
       <geometry>
-        <box size="0.06 4.2 0.75"/>
+        <box size="0.06 4.2 0.457539"/>
       </geometry>
-      <origin xyz="2.77 0 0.375" rpy="0 0 0"/>
+      <origin xyz="2.77 0 0.22877" rpy="0 0 0"/>
     </collision>
     <collision>
       <geometry>
-        <box size="0.06 4.2 1.95"/>
+        <box size="0.06 4.2 1.74246"/>
       </geometry>
-      <origin xyz="2.77 0 3.225" rpy="0 0 0"/>
+      <origin xyz="2.77 0 3.32877" rpy="0 0 0"/>
     </collision>
     <collision>
       <geometry>
-        <box size="0.06 1.35 1.5"/>
+        <box size="0.06 1.1 2"/>
       </geometry>
-      <origin xyz="2.77 -1.425 1.5" rpy="0 0 0"/>
+      <origin xyz="2.77 -1.55 1.45754" rpy="0 0 0"/>
     </collision>
     <collision>
       <geometry>
-        <box size="0.06 1.35 1.5"/>
+        <box size="0.06 1.1 2"/>
       </geometry>
-      <origin xyz="2.77 1.425 1.5" rpy="0 0 0"/>
+      <origin xyz="2.77 1.55 1.45754" rpy="0 0 0"/>
     </collision>
   </link>
   <joint name="nacelle_joint" type="continuous">
@@ -2774,7 +2774,7 @@
   <joint name="nacelle_floor_hatch_joint" type="revolute">
     <parent link="nacelle"/>
     <child link="nacelle_floor_hatch"/>
-    <origin xyz="-0.85 -1.33 0" rpy="0 0 0"/>
+    <origin xyz="-0.6 -1.36 0" rpy="0 0 0"/>
     <axis xyz="-1 0 0"/>
     <limit lower="0.0" upper="1.9" effort="100" velocity="1.0"/>
   </joint>
@@ -2794,7 +2794,7 @@
       <geometry>
         <box size="0.1 1.1 1.8"/>
       </geometry>
-      <origin xyz="-7.9 0 5.1" rpy="0 0 0"/>
+      <origin xyz="-8.9 0 5.1" rpy="0 0 0"/>
     </collision>
   </link>
   <joint name="weather_mast_joint" type="fixed">
@@ -2838,6 +2838,291 @@
     <child link="aviation_light"/>
     <origin xyz="0 0 0" rpy="0 0 0"/>
   </joint>
+  <link name="bedplate">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="1.0"/>
+      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="package://windturbine_model/models/bedplate/bedplate.obj"/>
+      </geometry>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="3.2 2.6 0.45"/>
+      </geometry>
+      <origin xyz="1.1 0 0.225" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="6.1 0.4 0.45"/>
+      </geometry>
+      <origin xyz="-0.35 -1.1 0.225" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="6.3 0.3 0.3"/>
+      </geometry>
+      <origin xyz="-6.55 -0.65 0.15" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.1 0.24 0.693217"/>
+      </geometry>
+      <origin xyz="-1.81958 -1.1 0.796609" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.1 0.24 0.780367"/>
+      </geometry>
+      <origin xyz="-0.823385 -1.1 0.840183" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="6.1 0.4 0.45"/>
+      </geometry>
+      <origin xyz="-0.35 1.1 0.225" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="6.3 0.3 0.3"/>
+      </geometry>
+      <origin xyz="-6.55 0.65 0.15" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.1 0.24 0.693217"/>
+      </geometry>
+      <origin xyz="-1.81958 1.1 0.796609" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.1 0.24 0.780367"/>
+      </geometry>
+      <origin xyz="-0.823385 1.1 0.840183" rpy="0 0 0"/>
+    </collision>
+  </link>
+  <joint name="bedplate_joint" type="fixed">
+    <parent link="nacelle"/>
+    <child link="bedplate"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+  <link name="drivetrain">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="1.0"/>
+      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
+    </inertial>
+  </link>
+  <joint name="drivetrain_joint" type="fixed">
+    <parent link="nacelle"/>
+    <child link="drivetrain"/>
+    <origin xyz="5 0 1.65" rpy="0 -0.08726 0"/>
+  </joint>
+  <link name="main_bearing">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="1.0"/>
+      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="package://windturbine_model/models/main_shaft/main_bearing.obj"/>
+      </geometry>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </visual>
+    <collision>
+      <geometry>
+        <cylinder radius="0.62" length="0.52"/>
+      </geometry>
+      <origin xyz="-2.95 0 0" rpy="0 1.5708 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.52 2.3 0.35"/>
+      </geometry>
+      <origin xyz="-2.95 0 -0.821511" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.42 1.1 0.646511"/>
+      </geometry>
+      <origin xyz="-2.95 0 -0.623255" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <cylinder radius="0.62" length="0.52"/>
+      </geometry>
+      <origin xyz="-4.75 0 0" rpy="0 1.5708 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.52 2.3 0.35"/>
+      </geometry>
+      <origin xyz="-4.75 0 -0.664043" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.42 1.1 0.489043"/>
+      </geometry>
+      <origin xyz="-4.75 0 -0.544521" rpy="0 0 0"/>
+    </collision>
+  </link>
+  <joint name="main_bearing_joint" type="fixed">
+    <parent link="drivetrain"/>
+    <child link="main_bearing"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+  <link name="main_bearing_grease_collector">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="1.0"/>
+      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="package://windturbine_model/models/main_shaft/grease_collector_ok.obj"/>
+      </geometry>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </visual>
+  </link>
+  <joint name="main_bearing_grease_collector_joint" type="fixed">
+    <parent link="main_bearing"/>
+    <child link="main_bearing_grease_collector"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+  <link name="main_shaft">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="1.0"/>
+      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="package://windturbine_model/models/main_shaft/main_shaft.obj"/>
+      </geometry>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </visual>
+    <collision>
+      <geometry>
+        <cylinder radius="0.9" length="0.2"/>
+      </geometry>
+      <origin xyz="-1.9 0 0" rpy="0 1.5708 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <cylinder radius="0.9" length="0.1"/>
+      </geometry>
+      <origin xyz="-2.57 0 0" rpy="0 1.5708 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <cylinder radius="0.5" length="0.2"/>
+      </geometry>
+      <origin xyz="-5.6 0 0" rpy="0 1.5708 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <cylinder radius="0.42" length="0.25"/>
+      </geometry>
+      <origin xyz="-2.125 0 0" rpy="0 1.5708 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <cylinder radius="0.33" length="1.05"/>
+      </geometry>
+      <origin xyz="-2.775 0 0" rpy="0 1.5708 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <cylinder radius="0.3" length="1.2"/>
+      </geometry>
+      <origin xyz="-3.9 0 0" rpy="0 1.5708 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <cylinder radius="0.32" length="0.6"/>
+      </geometry>
+      <origin xyz="-4.8 0 0" rpy="0 1.5708 0"/>
+    </collision>
+  </link>
+  <joint name="main_shaft_joint" type="continuous">
+    <parent link="drivetrain"/>
+    <child link="main_shaft"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <axis xyz="1 0 0"/>
+  </joint>
+  <link name="main_shaft_shrink_disc_bolts">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="1.0"/>
+      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="package://windturbine_model/models/main_shaft/shrink_disc_bolts_loose.obj"/>
+      </geometry>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </visual>
+  </link>
+  <joint name="main_shaft_shrink_disc_bolts_joint" type="fixed">
+    <parent link="main_shaft"/>
+    <child link="main_shaft_shrink_disc_bolts"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+  <link name="rotor_lock">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="1.0"/>
+      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="package://windturbine_model/models/main_shaft/rotor_lock.obj"/>
+      </geometry>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="0.38 0.2 0.2"/>
+      </geometry>
+      <origin xyz="-2.91 -0.76 0" rpy="0 0 0"/>
+    </collision>
+  </link>
+  <joint name="rotor_lock_joint" type="fixed">
+    <parent link="main_bearing"/>
+    <child link="rotor_lock"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+  <link name="rotor_lock_pin">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="1.0"/>
+      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="package://windturbine_model/models/main_shaft/rotor_lock_pin.obj"/>
+      </geometry>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </visual>
+    <collision>
+      <geometry>
+        <cylinder radius="0.045" length="0.02"/>
+      </geometry>
+      <origin xyz="-0.01 0 0" rpy="0 1.5708 0"/>
+    </collision>
+  </link>
+  <joint name="rotor_lock_pin_joint" type="prismatic">
+    <parent link="rotor_lock"/>
+    <child link="rotor_lock_pin"/>
+    <origin xyz="-2.72 -0.76 0" rpy="0 0 0"/>
+    <axis xyz="1 0 0"/>
+    <limit lower="0.0" upper="0.18" effort="100" velocity="1.0"/>
+  </joint>
   <link name="hub">
     <inertial>
       <origin xyz="0 0 0" rpy="0 0 0"/>
@@ -2857,11 +3142,10 @@
       <origin xyz="0.4 0 0" rpy="0 1.5708 0"/>
     </collision>
   </link>
-  <joint name="hub_joint" type="continuous">
-    <parent link="nacelle"/>
+  <joint name="hub_joint" type="fixed">
+    <parent link="main_shaft"/>
     <child link="hub"/>
-    <origin xyz="5 0 1.65" rpy="0 -0.08726 0"/>
-    <axis xyz="1 0 0"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
   </joint>
   <link name="blade_1">
     <inertial>
@@ -3031,243 +3315,6 @@
     <axis xyz="0 0 1"/>
     <limit lower="-0.08726646259971647" upper="1.6580627893946132" effort="100" velocity="1.0"/>
   </joint>
-  <link name="bedplate">
-    <inertial>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-      <mass value="1.0"/>
-      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
-    </inertial>
-    <visual>
-      <geometry>
-        <mesh filename="package://windturbine_model/models/bedplate/bedplate.obj"/>
-      </geometry>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-    </visual>
-    <collision>
-      <geometry>
-        <box size="0.8 2.5 0.7"/>
-      </geometry>
-      <origin xyz="2.6 0 0.35" rpy="0 0 0"/>
-    </collision>
-    <collision>
-      <geometry>
-        <box size="2.5 1.8 0.25"/>
-      </geometry>
-      <origin xyz="0.95 0 0.125" rpy="0 0 0"/>
-    </collision>
-    <collision>
-      <geometry>
-        <box size="3.3 0.35 0.7"/>
-      </geometry>
-      <origin xyz="1.35 -1.075 0.35" rpy="0 0 0"/>
-    </collision>
-    <collision>
-      <geometry>
-        <box size="0.1 0.24 0.89"/>
-      </geometry>
-      <origin xyz="-0.29 -1.12 1.145" rpy="0 0 0"/>
-    </collision>
-    <collision>
-      <geometry>
-        <box size="0.1 0.24 0.89"/>
-      </geometry>
-      <origin xyz="0.89 -1.12 1.145" rpy="0 0 0"/>
-    </collision>
-    <collision>
-      <geometry>
-        <box size="3.3 0.35 0.7"/>
-      </geometry>
-      <origin xyz="1.35 1.075 0.35" rpy="0 0 0"/>
-    </collision>
-    <collision>
-      <geometry>
-        <box size="0.1 0.24 0.89"/>
-      </geometry>
-      <origin xyz="-0.29 1.12 1.145" rpy="0 0 0"/>
-    </collision>
-    <collision>
-      <geometry>
-        <box size="0.1 0.24 0.89"/>
-      </geometry>
-      <origin xyz="0.89 1.12 1.145" rpy="0 0 0"/>
-    </collision>
-  </link>
-  <joint name="bedplate_joint" type="fixed">
-    <parent link="nacelle"/>
-    <child link="bedplate"/>
-    <origin xyz="-0.9 0 0" rpy="0 0 0"/>
-  </joint>
-  <link name="main_bearing">
-    <inertial>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-      <mass value="1.0"/>
-      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
-    </inertial>
-    <visual>
-      <geometry>
-        <mesh filename="package://windturbine_model/models/main_shaft/main_bearing.obj"/>
-      </geometry>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-    </visual>
-    <collision>
-      <geometry>
-        <cylinder radius="0.62" length="0.5"/>
-      </geometry>
-      <origin xyz="0 0 0" rpy="0 1.5708 0"/>
-    </collision>
-    <collision>
-      <geometry>
-        <box size="0.5 1.7 0.5"/>
-      </geometry>
-      <origin xyz="0 0 -0.55" rpy="0 0 0"/>
-    </collision>
-  </link>
-  <joint name="main_bearing_joint" type="fixed">
-    <parent link="bedplate"/>
-    <child link="main_bearing"/>
-    <origin xyz="2.65 0 1.5" rpy="0 0 0"/>
-  </joint>
-  <link name="main_bearing_grease_collector">
-    <inertial>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-      <mass value="1.0"/>
-      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
-    </inertial>
-    <visual>
-      <geometry>
-        <mesh filename="package://windturbine_model/models/main_shaft/grease_collector_ok.obj"/>
-      </geometry>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-    </visual>
-  </link>
-  <joint name="main_bearing_grease_collector_joint" type="fixed">
-    <parent link="main_bearing"/>
-    <child link="main_bearing_grease_collector"/>
-    <origin xyz="0 0 0" rpy="0 0 0"/>
-  </joint>
-  <link name="main_shaft">
-    <inertial>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-      <mass value="1.0"/>
-      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
-    </inertial>
-    <visual>
-      <geometry>
-        <mesh filename="package://windturbine_model/models/main_shaft/main_shaft.obj"/>
-      </geometry>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-    </visual>
-    <collision>
-      <geometry>
-        <cylinder radius="0.66" length="0.12"/>
-      </geometry>
-      <origin xyz="1.03 0 0" rpy="0 1.5708 0"/>
-    </collision>
-    <collision>
-      <geometry>
-        <cylinder radius="0.62" length="0.1"/>
-      </geometry>
-      <origin xyz="0.65 0 0" rpy="0 1.5708 0"/>
-    </collision>
-    <collision>
-      <geometry>
-        <cylinder radius="0.45" length="0.18"/>
-      </geometry>
-      <origin xyz="-1.53 0 0" rpy="0 1.5708 0"/>
-    </collision>
-    <collision>
-      <geometry>
-        <cylinder radius="0.4" length="0.17"/>
-      </geometry>
-      <origin xyz="0.885 0 0" rpy="0 1.5708 0"/>
-    </collision>
-    <collision>
-      <geometry>
-        <cylinder radius="0.36" length="0.54"/>
-      </geometry>
-      <origin xyz="0.53 0 0" rpy="0 1.5708 0"/>
-    </collision>
-    <collision>
-      <geometry>
-        <cylinder radius="0.33" length="1.19"/>
-      </geometry>
-      <origin xyz="-0.855 0 0" rpy="0 1.5708 0"/>
-    </collision>
-  </link>
-  <joint name="main_shaft_joint" type="continuous">
-    <parent link="main_bearing"/>
-    <child link="main_shaft"/>
-    <origin xyz="0 0 0" rpy="0 0 0"/>
-    <axis xyz="1 0 0"/>
-  </joint>
-  <link name="main_shaft_shrink_disc_bolts">
-    <inertial>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-      <mass value="1.0"/>
-      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
-    </inertial>
-    <visual>
-      <geometry>
-        <mesh filename="package://windturbine_model/models/main_shaft/shrink_disc_bolts_loose.obj"/>
-      </geometry>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-    </visual>
-  </link>
-  <joint name="main_shaft_shrink_disc_bolts_joint" type="fixed">
-    <parent link="main_shaft"/>
-    <child link="main_shaft_shrink_disc_bolts"/>
-    <origin xyz="0 0 0" rpy="0 0 0"/>
-  </joint>
-  <link name="rotor_lock">
-    <inertial>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-      <mass value="1.0"/>
-      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
-    </inertial>
-    <visual>
-      <geometry>
-        <mesh filename="package://windturbine_model/models/main_shaft/rotor_lock.obj"/>
-      </geometry>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-    </visual>
-    <collision>
-      <geometry>
-        <box size="0.22 0.24 0.24"/>
-      </geometry>
-      <origin xyz="0.39 -0.5 0" rpy="0 0 0"/>
-    </collision>
-  </link>
-  <joint name="rotor_lock_joint" type="fixed">
-    <parent link="main_bearing"/>
-    <child link="rotor_lock"/>
-    <origin xyz="0 0 0" rpy="0 0 0"/>
-  </joint>
-  <link name="rotor_lock_pin">
-    <inertial>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-      <mass value="1.0"/>
-      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
-    </inertial>
-    <visual>
-      <geometry>
-        <mesh filename="package://windturbine_model/models/main_shaft/rotor_lock_pin.obj"/>
-      </geometry>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-    </visual>
-    <collision>
-      <geometry>
-        <cylinder radius="0.045" length="0.02"/>
-      </geometry>
-      <origin xyz="-0.01 0 0" rpy="0 1.5708 0"/>
-    </collision>
-  </link>
-  <joint name="rotor_lock_pin_joint" type="prismatic">
-    <parent link="rotor_lock"/>
-    <child link="rotor_lock_pin"/>
-    <origin xyz="0.5 -0.5 0" rpy="0 0 0"/>
-    <axis xyz="1 0 0"/>
-    <limit lower="0.0" upper="0.18" effort="100" velocity="1.0"/>
-  </joint>
   <link name="gearbox">
     <inertial>
       <origin xyz="0 0 0" rpy="0 0 0"/>
@@ -3282,45 +3329,51 @@
     </visual>
     <collision>
       <geometry>
-        <cylinder radius="0.8" length="0.35"/>
+        <cylinder radius="0.9" length="0.55"/>
       </geometry>
-      <origin xyz="0.025 0 0" rpy="0 1.5708 0"/>
+      <origin xyz="0.125 0 0" rpy="0 1.5708 0"/>
     </collision>
     <collision>
       <geometry>
-        <cylinder radius="0.95" length="1.05"/>
+        <cylinder radius="1" length="0.9"/>
       </geometry>
-      <origin xyz="-0.675 0 0" rpy="0 1.5708 0"/>
+      <origin xyz="-0.6 0 0" rpy="0 1.5708 0"/>
     </collision>
     <collision>
       <geometry>
-        <box size="1.15 1.4 1.6"/>
+        <box size="0.8 1.5 1.75"/>
       </geometry>
-      <origin xyz="-1.725 0 0" rpy="0 0 0"/>
+      <origin xyz="-2.1 0 0.125" rpy="0 0 0"/>
     </collision>
     <collision>
       <geometry>
-        <box size="0.5 2.64 0.5"/>
+        <cylinder radius="0.85" length="0.65"/>
       </geometry>
-      <origin xyz="-0.7 0 -0.05" rpy="0 0 0"/>
+      <origin xyz="-1.375 0 0" rpy="0 1.5708 0"/>
     </collision>
     <collision>
       <geometry>
-        <box size="0.45 1 0.48"/>
+        <box size="0.5 2.6 0.5"/>
       </geometry>
-      <origin xyz="-2.025 0 1.04" rpy="0 0 0"/>
+      <origin xyz="-0.6 0 -0.05" rpy="0 0 0"/>
     </collision>
     <collision>
       <geometry>
-        <box size="0.22 0.27 0.65"/>
+        <box size="0.4 1 0.48"/>
       </geometry>
-      <origin xyz="-2.05 -0.835 -0.025" rpy="0 0 0"/>
+      <origin xyz="-2.25 0 1.24" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.22 0.28 0.65"/>
+      </geometry>
+      <origin xyz="-1.95 -0.89 0.125" rpy="0 0 0"/>
     </collision>
   </link>
   <joint name="gearbox_joint" type="fixed">
-    <parent link="bedplate"/>
+    <parent link="drivetrain"/>
     <child link="gearbox"/>
-    <origin xyz="1 0 1.5" rpy="0 0 0"/>
+    <origin xyz="-5.75 0 0" rpy="0 0 0"/>
   </joint>
   <link name="gearbox_sight_glass">
     <inertial>
@@ -3392,6 +3445,459 @@
   <joint name="gearbox_bushing_left_joint" type="fixed">
     <parent link="gearbox"/>
     <child link="gearbox_bushing_left"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+  <link name="fast_shaft">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="1.0"/>
+      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="package://windturbine_model/models/generator/fast_shaft.obj"/>
+      </geometry>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </visual>
+    <collision>
+      <geometry>
+        <cylinder radius="0.144" length="1.3"/>
+      </geometry>
+      <origin xyz="-9.1 0 0" rpy="0 1.5708 0"/>
+    </collision>
+  </link>
+  <joint name="fast_shaft_joint" type="continuous">
+    <parent link="drivetrain"/>
+    <child link="fast_shaft"/>
+    <origin xyz="0 0 0.55" rpy="0 0 0"/>
+    <axis xyz="1 0 0"/>
+  </joint>
+  <link name="fast_shaft_brake_disc">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="1.0"/>
+      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="package://windturbine_model/models/generator/brake_disc_ok.obj"/>
+      </geometry>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </visual>
+    <collision>
+      <geometry>
+        <cylinder radius="0.45" length="0.06"/>
+      </geometry>
+      <origin xyz="-8.77 0 0" rpy="0 1.5708 0"/>
+    </collision>
+  </link>
+  <joint name="fast_shaft_brake_disc_joint" type="fixed">
+    <parent link="fast_shaft"/>
+    <child link="fast_shaft_brake_disc"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+  <link name="fast_shaft_coupling">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="1.0"/>
+      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="package://windturbine_model/models/generator/coupling_ok.obj"/>
+      </geometry>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </visual>
+    <collision>
+      <geometry>
+        <cylinder radius="0.3" length="0.55"/>
+      </geometry>
+      <origin xyz="-9.325 0 0" rpy="0 1.5708 0"/>
+    </collision>
+  </link>
+  <joint name="fast_shaft_coupling_joint" type="fixed">
+    <parent link="fast_shaft"/>
+    <child link="fast_shaft_coupling"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+  <link name="brake_caliper">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="1.0"/>
+      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="package://windturbine_model/models/generator/brake_caliper_ok.obj"/>
+      </geometry>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="0.3 0.28 0.59"/>
+      </geometry>
+      <origin xyz="-8.77 0 0.575" rpy="0 0 0"/>
+    </collision>
+  </link>
+  <joint name="brake_caliper_joint" type="fixed">
+    <parent link="drivetrain"/>
+    <child link="brake_caliper"/>
+    <origin xyz="0 0 0.55" rpy="0 0 0"/>
+  </joint>
+  <link name="generator">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="1.0"/>
+      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="package://windturbine_model/models/generator/generator.obj"/>
+      </geometry>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="2.45 1.7 1.63"/>
+      </geometry>
+      <origin xyz="-10.975 0 0.035" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.8 0.6 0.33"/>
+      </geometry>
+      <origin xyz="-11 0 1.015" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.55 0.92 0.9"/>
+      </geometry>
+      <origin xyz="-12.475 -0.01 0" rpy="0 0 0"/>
+    </collision>
+  </link>
+  <joint name="generator_joint" type="fixed">
+    <parent link="drivetrain"/>
+    <child link="generator"/>
+    <origin xyz="0 0 0.55" rpy="0 0 0"/>
+  </joint>
+  <link name="transformer">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="1.0"/>
+      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="package://windturbine_model/models/systems/transformer.obj"/>
+      </geometry>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="1.65 1.8 2.3"/>
+      </geometry>
+      <origin xyz="-8.825 0 1.15" rpy="0 0 0"/>
+    </collision>
+  </link>
+  <joint name="transformer_joint" type="fixed">
+    <parent link="nacelle"/>
+    <child link="transformer"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+  <link name="cabinet_converter">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="1.0"/>
+      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="package://windturbine_model/models/systems/cabinet_converter.obj"/>
+      </geometry>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="0.6 0.85 2"/>
+      </geometry>
+      <origin xyz="-9.4 1.525 1" rpy="0 0 0"/>
+    </collision>
+  </link>
+  <joint name="cabinet_converter_joint" type="fixed">
+    <parent link="nacelle"/>
+    <child link="cabinet_converter"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+  <link name="cabinet_converter_door">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="1.0"/>
+      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="package://windturbine_model/models/systems/cabinet_converter_door.obj"/>
+      </geometry>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="0.03 0.83 1.86"/>
+      </geometry>
+      <origin xyz="0.015 -0.415 1.05" rpy="0 0 0"/>
+    </collision>
+  </link>
+  <joint name="cabinet_converter_door_joint" type="revolute">
+    <parent link="cabinet_converter"/>
+    <child link="cabinet_converter_door"/>
+    <origin xyz="-9.1 1.94 0" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="0.0" upper="1.9" effort="100" velocity="1.0"/>
+  </joint>
+  <link name="converter_status_light">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="1.0"/>
+      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="package://windturbine_model/models/systems/status_light_ok_p.obj"/>
+      </geometry>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </visual>
+  </link>
+  <joint name="converter_status_light_joint" type="fixed">
+    <parent link="cabinet_converter_door"/>
+    <child link="converter_status_light"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+  <link name="cabinet_controller">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="1.0"/>
+      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="package://windturbine_model/models/systems/cabinet_controller.obj"/>
+      </geometry>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="0.6 0.85 2"/>
+      </geometry>
+      <origin xyz="-9.4 -1.525 1" rpy="0 0 0"/>
+    </collision>
+  </link>
+  <joint name="cabinet_controller_joint" type="fixed">
+    <parent link="nacelle"/>
+    <child link="cabinet_controller"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+  <link name="cabinet_controller_door">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="1.0"/>
+      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="package://windturbine_model/models/systems/cabinet_controller_door.obj"/>
+      </geometry>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="0.03 0.83 1.86"/>
+      </geometry>
+      <origin xyz="0.015 0.415 1.05" rpy="0 0 0"/>
+    </collision>
+  </link>
+  <joint name="cabinet_controller_door_joint" type="revolute">
+    <parent link="cabinet_controller"/>
+    <child link="cabinet_controller_door"/>
+    <origin xyz="-9.1 -1.94 0" rpy="0 0 0"/>
+    <axis xyz="0 0 -1"/>
+    <limit lower="0.0" upper="1.9" effort="100" velocity="1.0"/>
+  </joint>
+  <link name="hydraulic_unit">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="1.0"/>
+      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="package://windturbine_model/models/systems/hydraulic_unit.obj"/>
+      </geometry>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="0.9 0.45 1.25"/>
+      </geometry>
+      <origin xyz="-4.95 1.075 0.625" rpy="0 0 0"/>
+    </collision>
+  </link>
+  <joint name="hydraulic_unit_joint" type="fixed">
+    <parent link="nacelle"/>
+    <child link="hydraulic_unit"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+  <link name="cooling_unit">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="1.0"/>
+      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="package://windturbine_model/models/systems/cooling_unit.obj"/>
+      </geometry>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="0.9 0.45 1.25"/>
+      </geometry>
+      <origin xyz="-5.85 -1.075 0.625" rpy="0 0 0"/>
+    </collision>
+  </link>
+  <joint name="cooling_unit_joint" type="fixed">
+    <parent link="nacelle"/>
+    <child link="cooling_unit"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+  <link name="cooling_level">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="1.0"/>
+      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="package://windturbine_model/models/systems/coolant_level_ok.obj"/>
+      </geometry>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </visual>
+  </link>
+  <joint name="cooling_level_joint" type="fixed">
+    <parent link="cooling_unit"/>
+    <child link="cooling_level"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+  <link name="crane_rail">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="1.0"/>
+      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="package://windturbine_model/models/systems/crane_rail.obj"/>
+      </geometry>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="10.7 0.18 0.28"/>
+      </geometry>
+      <origin xyz="-4.15 0 4.025" rpy="0 0 0"/>
+    </collision>
+  </link>
+  <joint name="crane_rail_joint" type="fixed">
+    <parent link="nacelle"/>
+    <child link="crane_rail"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+  <link name="crane_trolley">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="1.0"/>
+      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="package://windturbine_model/models/systems/crane_trolley.obj"/>
+      </geometry>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="0.5 0.28 0.3"/>
+      </geometry>
+      <origin xyz="0 0 -0.18" rpy="0 0 0"/>
+    </collision>
+  </link>
+  <joint name="crane_trolley_joint" type="prismatic">
+    <parent link="crane_rail"/>
+    <child link="crane_trolley"/>
+    <origin xyz="-9 0 3.9" rpy="0 0 0"/>
+    <axis xyz="1 0 0"/>
+    <limit lower="0.0" upper="9.6" effort="100" velocity="1.0"/>
+  </joint>
+  <link name="crane_hook">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="1.0"/>
+      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="package://windturbine_model/models/systems/crane_hook.obj"/>
+      </geometry>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="0.14 0.08 0.24"/>
+      </geometry>
+      <origin xyz="0 0 0.02" rpy="0 0 0"/>
+    </collision>
+  </link>
+  <joint name="crane_hook_joint" type="prismatic">
+    <parent link="crane_trolley"/>
+    <child link="crane_hook"/>
+    <origin xyz="0 0 -0.95" rpy="0 0 0"/>
+    <axis xyz="0 0 -1"/>
+    <limit lower="0.0" upper="2.8" effort="100" velocity="1.0"/>
+  </joint>
+  <link name="fire_extinguisher">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="1.0"/>
+      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="package://windturbine_model/models/systems/extinguisher_present.obj"/>
+      </geometry>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </visual>
+  </link>
+  <joint name="fire_extinguisher_joint" type="fixed">
+    <parent link="nacelle"/>
+    <child link="fire_extinguisher"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+  <link name="safety_equipment">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="1.0"/>
+      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="package://windturbine_model/models/systems/safety.obj"/>
+      </geometry>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </visual>
+  </link>
+  <joint name="safety_equipment_joint" type="fixed">
+    <parent link="nacelle"/>
+    <child link="safety_equipment"/>
     <origin xyz="0 0 0" rpy="0 0 0"/>
   </joint>
   <link name="tower_inspect_door">
@@ -3476,7 +3982,7 @@
   <joint name="nacelle_inspect_weather_mast_joint" type="fixed">
     <parent link="nacelle"/>
     <child link="nacelle_inspect_weather_mast"/>
-    <origin xyz="-7.9 0 5.9" rpy="0 0 0"/>
+    <origin xyz="-8.9 0.2 5.92" rpy="0 0 0"/>
   </joint>
   <link name="nacelle_inspect_cover">
     <inertial>
@@ -3489,6 +3995,54 @@
     <parent link="nacelle"/>
     <child link="nacelle_inspect_cover"/>
     <origin xyz="-5.3 -2.1 2.6" rpy="0 0 0"/>
+  </joint>
+  <link name="main_bearing_inspect_front_seal">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="1.0"/>
+      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
+    </inertial>
+  </link>
+  <joint name="main_bearing_inspect_front_seal_joint" type="fixed">
+    <parent link="drivetrain"/>
+    <child link="main_bearing_inspect_front_seal"/>
+    <origin xyz="-3.23 0.3 -0.3" rpy="0 0 0"/>
+  </joint>
+  <link name="main_bearing_inspect_grease_collector">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="1.0"/>
+      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
+    </inertial>
+  </link>
+  <joint name="main_bearing_inspect_grease_collector_joint" type="fixed">
+    <parent link="drivetrain"/>
+    <child link="main_bearing_inspect_grease_collector"/>
+    <origin xyz="-2.85 -0.95 -0.546511" rpy="0 0 0"/>
+  </joint>
+  <link name="main_shaft_inspect_shrink_disc">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="1.0"/>
+      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
+    </inertial>
+  </link>
+  <joint name="main_shaft_inspect_shrink_disc_joint" type="fixed">
+    <parent link="drivetrain"/>
+    <child link="main_shaft_inspect_shrink_disc"/>
+    <origin xyz="-5.5 -0.3 0" rpy="0 0 0"/>
+  </joint>
+  <link name="rotor_lock_inspect">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="1.0"/>
+      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
+    </inertial>
+  </link>
+  <joint name="rotor_lock_inspect_joint" type="fixed">
+    <parent link="drivetrain"/>
+    <child link="rotor_lock_inspect"/>
+    <origin xyz="-2.67 -0.76 0" rpy="0 0 0"/>
   </joint>
   <link name="blade_1_inspect_leading_edge">
     <inertial>
@@ -3598,54 +4152,6 @@
     <child link="blade_3_inspect_trailing_edge"/>
     <origin xyz="-0.374195 3.17487 15.12" rpy="0 0 0"/>
   </joint>
-  <link name="main_bearing_inspect_front_seal">
-    <inertial>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-      <mass value="1.0"/>
-      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
-    </inertial>
-  </link>
-  <joint name="main_bearing_inspect_front_seal_joint" type="fixed">
-    <parent link="main_bearing"/>
-    <child link="main_bearing_inspect_front_seal"/>
-    <origin xyz="0.27 0.15 -0.38" rpy="0 0 0"/>
-  </joint>
-  <link name="main_bearing_inspect_grease_collector">
-    <inertial>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-      <mass value="1.0"/>
-      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
-    </inertial>
-  </link>
-  <joint name="main_bearing_inspect_grease_collector_joint" type="fixed">
-    <parent link="main_bearing"/>
-    <child link="main_bearing_inspect_grease_collector"/>
-    <origin xyz="0.12 -0.7 -0.35" rpy="0 0 0"/>
-  </joint>
-  <link name="main_shaft_inspect_shrink_disc">
-    <inertial>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-      <mass value="1.0"/>
-      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
-    </inertial>
-  </link>
-  <joint name="main_shaft_inspect_shrink_disc_joint" type="fixed">
-    <parent link="main_bearing"/>
-    <child link="main_shaft_inspect_shrink_disc"/>
-    <origin xyz="-1.44 -0.3 0" rpy="0 0 0"/>
-  </joint>
-  <link name="rotor_lock_inspect">
-    <inertial>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-      <mass value="1.0"/>
-      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
-    </inertial>
-  </link>
-  <joint name="rotor_lock_inspect_joint" type="fixed">
-    <parent link="main_bearing"/>
-    <child link="rotor_lock_inspect"/>
-    <origin xyz="0.55 -0.5 0" rpy="0 0 0"/>
-  </joint>
   <link name="gearbox_inspect_sight_glass">
     <inertial>
       <origin xyz="0 0 0" rpy="0 0 0"/>
@@ -3656,7 +4162,7 @@
   <joint name="gearbox_inspect_sight_glass_joint" type="fixed">
     <parent link="gearbox"/>
     <child link="gearbox_inspect_sight_glass"/>
-    <origin xyz="-1.7 -0.72 -0.45" rpy="0 0 0"/>
+    <origin xyz="-2.35 -0.77 -0.3" rpy="0 0 0"/>
   </joint>
   <link name="gearbox_inspect_filter">
     <inertial>
@@ -3668,7 +4174,7 @@
   <joint name="gearbox_inspect_filter_joint" type="fixed">
     <parent link="gearbox"/>
     <child link="gearbox_inspect_filter"/>
-    <origin xyz="-2.05 -0.86 0.3" rpy="0 0 0"/>
+    <origin xyz="-1.95 -0.92 0.45" rpy="0 0 0"/>
   </joint>
   <link name="gearbox_inspect_input_seal">
     <inertial>
@@ -3680,7 +4186,7 @@
   <joint name="gearbox_inspect_input_seal_joint" type="fixed">
     <parent link="gearbox"/>
     <child link="gearbox_inspect_input_seal"/>
-    <origin xyz="0 0 -0.28" rpy="0 0 0"/>
+    <origin xyz="0 -0.57 -0.35" rpy="0 0 0"/>
   </joint>
   <link name="gearbox_inspect_cover">
     <inertial>
@@ -3692,7 +4198,7 @@
   <joint name="gearbox_inspect_cover_joint" type="fixed">
     <parent link="gearbox"/>
     <child link="gearbox_inspect_cover"/>
-    <origin xyz="-1.5 0 0.8" rpy="0 0 0"/>
+    <origin xyz="-2.1 0.78 0.3" rpy="0 0 0"/>
   </joint>
   <link name="gearbox_inspect_bushing_left">
     <inertial>
@@ -3704,7 +4210,7 @@
   <joint name="gearbox_inspect_bushing_left_joint" type="fixed">
     <parent link="gearbox"/>
     <child link="gearbox_inspect_bushing_left"/>
-    <origin xyz="-0.4 -1.12 -0.05" rpy="0 0 0"/>
+    <origin xyz="-0.3 -1.1 -0.05" rpy="0 0 0"/>
   </joint>
   <link name="gearbox_inspect_bushing_right">
     <inertial>
@@ -3716,6 +4222,114 @@
   <joint name="gearbox_inspect_bushing_right_joint" type="fixed">
     <parent link="gearbox"/>
     <child link="gearbox_inspect_bushing_right"/>
-    <origin xyz="-0.4 1.12 -0.05" rpy="0 0 0"/>
+    <origin xyz="-0.3 1.1 -0.05" rpy="0 0 0"/>
+  </joint>
+  <link name="brake_inspect_caliper">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="1.0"/>
+      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
+    </inertial>
+  </link>
+  <joint name="brake_inspect_caliper_joint" type="fixed">
+    <parent link="brake_caliper"/>
+    <child link="brake_inspect_caliper"/>
+    <origin xyz="-8.735 -0.25 0.1" rpy="0 0 0"/>
+  </joint>
+  <link name="coupling_inspect">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="1.0"/>
+      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
+    </inertial>
+  </link>
+  <joint name="coupling_inspect_joint" type="fixed">
+    <parent link="brake_caliper"/>
+    <child link="coupling_inspect"/>
+    <origin xyz="-9.325 -0.3 0" rpy="0 0 0"/>
+  </joint>
+  <link name="generator_inspect_slip_ring">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="1.0"/>
+      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
+    </inertial>
+  </link>
+  <joint name="generator_inspect_slip_ring_joint" type="fixed">
+    <parent link="generator"/>
+    <child link="generator_inspect_slip_ring"/>
+    <origin xyz="-12.475 -0.45 -0.2" rpy="0 0 0"/>
+  </joint>
+  <link name="generator_inspect_terminal_box">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="1.0"/>
+      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
+    </inertial>
+  </link>
+  <joint name="generator_inspect_terminal_box_joint" type="fixed">
+    <parent link="generator"/>
+    <child link="generator_inspect_terminal_box"/>
+    <origin xyz="-11 -0.3 0.98" rpy="0 0 0"/>
+  </joint>
+  <link name="converter_inspect_status">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="1.0"/>
+      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
+    </inertial>
+  </link>
+  <joint name="converter_inspect_status_joint" type="fixed">
+    <parent link="cabinet_converter"/>
+    <child link="converter_inspect_status"/>
+    <origin xyz="-9.065 1.69 1.85" rpy="0 0 0"/>
+  </joint>
+  <link name="controller_inspect_door">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="1.0"/>
+      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
+    </inertial>
+  </link>
+  <joint name="controller_inspect_door_joint" type="fixed">
+    <parent link="cabinet_controller"/>
+    <child link="controller_inspect_door"/>
+    <origin xyz="-9.07 -1.525 1.2" rpy="0 0 0"/>
+  </joint>
+  <link name="hydraulic_inspect">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="1.0"/>
+      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
+    </inertial>
+  </link>
+  <joint name="hydraulic_inspect_joint" type="fixed">
+    <parent link="hydraulic_unit"/>
+    <child link="hydraulic_inspect"/>
+    <origin xyz="-4.7 1.3 0.85" rpy="0 0 0"/>
+  </joint>
+  <link name="cooling_inspect_level">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="1.0"/>
+      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
+    </inertial>
+  </link>
+  <joint name="cooling_inspect_level_joint" type="fixed">
+    <parent link="cooling_unit"/>
+    <child link="cooling_inspect_level"/>
+    <origin xyz="-5.85 -1.3 1" rpy="0 0 0"/>
+  </joint>
+  <link name="safety_inspect_extinguisher">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="1.0"/>
+      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
+    </inertial>
+  </link>
+  <joint name="safety_inspect_extinguisher_joint" type="fixed">
+    <parent link="nacelle"/>
+    <child link="safety_inspect_extinguisher"/>
+    <origin xyz="-1.6 -1.92 0.65" rpy="0 0 0"/>
   </joint>
 </robot>

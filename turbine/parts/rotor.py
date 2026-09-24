@@ -1,4 +1,4 @@
-"""Hub (continuous rotor joint, tilted 5 deg) and three pitchable blades lofted
+"""Hub (fixed to the main shaft, which turns about the 5 deg tilted axis) and three pitchable blades lofted
 from the IEA-3.4-130-RWT data, with blade faults a drone inspection finds."""
 from turbine import blade_geometry as bg
 from turbine import frames
@@ -17,8 +17,8 @@ def blade(i):
 
 
 LINKS = [
-    link("hub", "nacelle", mesh=M + "hub.obj", xyz=r.HUB_IN_NACELLE, rpy=(0.0, -r.TILT, 0.0),
-         joint="continuous", axis=(1, 0, 0), collisions=[x_cylinder(r.SPINNER_R, r.SPINNER_X)]),
+    # bolted to the main shaft flange: the rotor turns with main_shaft_joint, and the rotor lock holds it
+    link("hub", "main_shaft", mesh=M + "hub.obj", collisions=[x_cylinder(r.SPINNER_R, r.SPINNER_X)]),
 ] + [blade(i) for i in range(r.BLADES)]
 
 INSPECTION_POINTS, FAULTS = [], {}

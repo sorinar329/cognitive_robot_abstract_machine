@@ -7,7 +7,7 @@ from turbine.urdf import fault, inspection_point, link, span_box
 F, W = d.FLOOR, d.WALL
 NX, NY, NZ, IX, IY = d.NACELLE_X, d.NACELLE_Y, d.NACELLE_Z, d.INNER_X, d.INNER_Y
 HX, HY = d.FLOOR_HATCH_X, d.FLOOR_HATCH_Y
-SZ, SH = d.SHAFT_Z, d.SHAFT_HOLE_R
+SZ, SH = d.SHAFT_HOLE_Z, d.SHAFT_HOLE_R
 
 COLLISIONS = [
     # floor, split around the tower access opening

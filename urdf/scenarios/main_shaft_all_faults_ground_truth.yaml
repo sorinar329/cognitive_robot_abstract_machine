@@ -3,7 +3,8 @@ faults:
 - id: main_bearing.grease_leak_front_seal
   part: main_shaft
   component: main bearing upwind seal
-  description: 'Seal worn: grease pushed out and running onto foot and bedplate'
+  description: 'Front main bearing downwind seal worn: grease pushed out and running
+    onto the bearing foot'
   severity: medium
   inspection_point: main_bearing_inspect_front_seal
   observable_by:
@@ -47,14 +48,22 @@ signals:
   earthing_resistance_ohm: 2.1
   anemometer_plausible: true
   aviation_light_on: true
+  main_bearing_temperature_c: 58
+  drivetrain_vibration_mm_s: 4.8
   power_curve_deficit_percent: 0.0
   blade_1_lightning_counter: 0
   blade_2_lightning_counter: 0
   blade_3_lightning_counter: 0
-  main_bearing_temperature_c: 58
-  drivetrain_vibration_mm_s: 4.8
   gearbox_oil_level: 1.0
   gearbox_oil_temperature_c: 62
   gearbox_filter_dp_bar: 0.8
   gearbox_oil_particle_count: 300
   gearbox_vibration_mm_s: 2.1
+  brake_pad_wear_percent: 20
+  brake_disc_temperature_c: 55
+  generator_vibration_mm_s: 1.9
+  generator_brush_wear_percent: 30
+  generator_terminal_temperature_c: 46
+  converter_fault_code: 0
+  hydraulic_pressure_bar: 160
+  generator_winding_temperature_c: 95

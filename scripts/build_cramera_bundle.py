@@ -39,7 +39,7 @@ VIEWS = {
     # view: (camera, show the nacelle cover)
     "turbine": ({"position": [150.0, -210.0, 90.0], "target": [0.0, 0.0, 85.0]}, True),
     "tower_base": ({"position": [11.0, -17.0, 5.3], "target": [0.0, -2.0, 1.5]}, True),
-    "nacelle": ({"position": [2.0, -12.5, _N + 8.5], "target": [-2.5, 0.0, _N + 0.8]}, False),
+    "nacelle": ({"position": [-1.5, -14.0, _N + 8.5], "target": [-3.5, 0.0, _N + 0.8]}, False),
 }
 MAX_CAMERA_DISTANCE = 320.0   # read by CRAMERA (rendering.maxCameraDistance) so the whole turbine fits
 
