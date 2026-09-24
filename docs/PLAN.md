@@ -102,9 +102,11 @@ in segmind_ws), already used by `coraplex/demos/coraplex_unitree_g1_warehouse_de
 - **Base:** an omni drive on the pelvis. Walking is abstracted as moving across the
   floor, so the robot needs **flat floor and no stairs**. The pelvis sits 0.79 m above
   the floor.
-- **Camera:** a D435 fixed to the torso (field of view 57°×43°) at 1.27–1.60 m height.
-  There are no neck joints, so aiming the camera means turning the base and using the
-  waist joints (yaw, roll, pitch).
+- **Camera:** a D435 fixed to the torso (field of view 57°×43°) at 1.27 m, tilted about
+  48° down (the optical axis is the link's x axis; CRAM's annotation says z, which the
+  scripts correct at runtime). With the waist pitch limit of 0.52 rad the G1 only sees
+  things at or below its camera height: rotor lock, filter indicator, brake, terminal
+  box and converter light are out of its view.
 - **Size:** about 1.3 m tall and about 0.45 m across the shoulders. That needs
   **walkways ≥ 0.65 m** and hatches or doors ≥ 0.7 m wide.
 - **Arms:** two 7-DoF arms with 3-finger hands, for later tasks (hatches, buttons,
@@ -116,7 +118,7 @@ in segmind_ws), already used by `coraplex/demos/coraplex_unitree_g1_warehouse_de
 |---|---|---|---|
 | **T0** | **Look at one inspection point**: walk from the start to the standpoint in front of the tower door and aim the camera at it | `NavigateAction`, `LookAtAction` | the target lies inside the D435 field of view (checked geometrically in the world) and CRAMERA shows the run |
 | T1 | Walk around the tower base on flat ground: visit every ground-level inspection point and report its state | loop of T0 + reading the state | the report matches the scenario's ground truth (first read from the ground truth, later from rendered camera images) |
-| T2 | Nacelle: walk along the drivetrain and read the gearbox sight glass, filter indicator and grease collector | T1 in tight space | correct report; no collisions on 0.65 m walkways |
+| T2 | Nacelle: walk along the drivetrain and check sight glass, grease collector, shrink disc, input seal, torque arm bushing, slip ring | T1 in tight space | correct report on the 0.69 m walkway (straight base moves; the route planner needs more room) |
 | T3 | Interact: open the floor hatch, check the rotor lock, press a button | `PickUp`/pull, `MoveJointsMotion` | joint state changed as intended |
 
 Standpoints are computed from each inspection point's `view_from` and `distance`:
@@ -139,12 +141,13 @@ face the target.
    Joints: yaw, rotor, pitch ×3, tower door. Faults: blade leading-edge erosion,
    lightning strike, trailing-edge crack, tower paint damage and corrosion, plinth
    crack, broken-out grout, damaged anemometer, broken aviation light.
-   ✅ **Robot task T0** on the flat ground around the tower (`scripts/g1_t0_look_at_door.py`).
+   ✅ **Robot task T0** on the flat ground around the tower (`scripts/g1_inspection_round.py`).
 2. ✅ **Nacelle in full detail** (zones E + F), rebuilt to IEA dimensions with 0.69 m
    walkways: two main bearings, a three-stage gearbox, brake, coupling, generator,
    transformer, cabinets, crane, hatches. The existing faults move over (37 faults in total now; every nacelle view
    is reachable from a walkway at G1 camera height, `scripts/check_inspection_points.py`).
-   **Robot task T2** is next.
+   ✅ **Robot tasks T1 and T2** run in CRAM and are recorded for CRAMERA
+   (`windturbine_g1_t1`, `windturbine_g1_t2`): 6/6 points seen each.
 3. **Hub** (zone G).
 4. **Yaw deck** (zone D).
 5. **Tower inside** (zones B + C). How the G1 gets in is open: stairs versus a ramp or

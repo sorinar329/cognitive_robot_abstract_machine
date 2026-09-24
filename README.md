@@ -4,10 +4,25 @@ A whole onshore wind turbine (IEA-3.4-130-RWT: 110 m hub height, 130 m rotor) as
 inspection environment for CRAM, shown in CRAMERA. The plan and task ladder are in
 `docs/PLAN.md`; the reference data are in `references/iea34/`.
 
-Robot task T0 (Unitree G1 walks to the tower door and looks at it):
+Unitree G1 inspection tasks (T0 door, T1 tower base round, T2 nacelle walkway round).
+Run them in the full CRAM stack of the `cramera-port` checkout (`uv sync` there), with
+ROS, `~/workspace/segmind_ws` (G1 model) and this package sourced:
 
-    source /opt/ros/jazzy/setup.bash && source ~/workspace/segmind_ws/install/setup.bash && source install/setup.bash
-    ~/.virtualenvs/cram2-env/bin/python scripts/g1_t0_look_at_door.py
+    PY=~/workspace/cramera-port/.venv/bin/python
+    $PY scripts/g1_inspection_round.py --zone ground --points tower_inspect_door        # T0
+    $PY scripts/g1_inspection_round.py --zone ground --scenario outside_ground          # T1
+    $PY scripts/g1_inspection_round.py --zone nacelle --scenario nacelle_all_faults     # T2
+
+Record a run for CRAMERA and tidy the bundle (robot naming, GLB materials, camera):
+
+    $PY -m cramera.onboard.demo scripts/g1_inspection_round.py --name windturbine_g1_t1 -- --zone ground --scenario outside_ground
+    python3 scripts/finish_recording.py ~/.cramera/scenes/windturbine_g1_t1 --view g1_ground
+    # T2: --name windturbine_g1_t2 -- --zone nacelle --scenario nacelle_all_faults, then --view g1_nacelle
+
+The G1's D435 looks ~48 deg down and the waist pitches at most 0.52 rad, so it only
+sees things at or below its camera height (1.27 m); `scripts/check_inspection_points.py`
+flags the inspection points above that. Findings are still read from the scenario's
+ground truth; recognising them in camera images is the next step.
 
 Interior of a geared ~2 MW wind turbine nacelle as a URDF environment for CRAM
 (`semantic_digital_twin`), laid out like `iai_maps/iai_kit_mobile_lab`:

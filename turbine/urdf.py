@@ -43,6 +43,23 @@ def ring_boxes(radius_at, wall_at, z0, z1, segments=16, band=10.8, skip=None):
     return boxes
 
 
+def disk_boxes(radius, z, segments=24, rim=None):
+    """Solid vertical cylinder as boxes: an inscribed square plus a rim of radial boxes.
+    Planners that use axis-aligned bounds of each shape (coraplex navigation) then see a
+    near-round footprint instead of the cylinder's bounding square."""
+    rim = rim or radius * (1 - math.cos(math.pi / 4)) + 0.02
+    half = radius * math.cos(math.pi / 4)
+    boxes = [span_box((-half, half), (-half, half), z)]
+    r_in = radius - rim
+    chord = 2 * radius * math.tan(math.pi / segments) + 0.02
+    for k in range(segments):
+        a = 2 * math.pi * k / segments
+        rm = (r_in + radius) / 2
+        boxes.append(dict(type="box", size=(rim, chord, z[1] - z[0]),
+                          xyz=(rm * math.cos(a), rm * math.sin(a), (z[0] + z[1]) / 2), rpy=(0, 0, a)))
+    return boxes
+
+
 def x_cylinder(radius, x, y=0.0, z=0.0):
     return dict(type="cylinder", radius=radius, length=x[1] - x[0],
                 xyz=((x[0] + x[1]) / 2, y, z), rpy=X_AXIS_RPY)

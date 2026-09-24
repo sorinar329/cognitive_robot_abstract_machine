@@ -17,7 +17,11 @@ sys.path.insert(0, ROOT)
 from turbine import dims as d  # noqa: E402
 from turbine import parts  # noqa: E402
 
-CAMERA_Z = (1.0, 1.75)        # G1 D435 at 1.27-1.60 m, some slack for waist pitch and crouching
+CAMERA_Z = (1.0, 1.75)        # camera positions near G1 head height
+G1_CAMERA_HEIGHT = 1.27       # D435 above the floor, G1 standing
+G1_MAX_ELEVATION = math.radians(3.0)
+"""The D435 looks ~48 deg down; with the waist pitched back 30 deg (its limit) and half the
+vertical field of view (21.5 deg) the G1 sees at most ~4 deg above its camera height."""
 FREE_REAR_X = d.GEN_X[0]      # behind the generator the floor is free across the width (drivetrain x)
 
 
@@ -65,9 +69,12 @@ def main():
             height_ok = CAMERA_Z[0] <= cam[2] <= CAMERA_Z[1]
             ok = over_floor and inside and height_ok
             bad += not ok
+            horizontal = math.hypot(cam[0] - target[0], cam[1] - target[1])
+            g1_sees = math.atan2(target[2] - G1_CAMERA_HEIGHT, horizontal) <= G1_MAX_ELEVATION
             print(f"{'ok ' if ok else 'BAD'} {p['name']:40s} camera x={cam[0]:6.2f} y={cam[1]:5.2f} z={cam[2]:4.2f}"
                   + ("" if over_floor else "  not over a walkway") + ("" if inside else "  outside the nacelle")
-                  + ("" if height_ok else "  camera height"))
+                  + ("" if height_ok else "  camera height")
+                  + ("" if g1_sees else f"  (above the G1's view: target at {target[2]:.2f} m)"))
     sys.exit(1 if bad else 0)
 
 

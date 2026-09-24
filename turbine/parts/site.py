@@ -6,7 +6,7 @@ Ground-level inspection points are what the G1 reaches on flat ground (task T0/T
 import math
 
 from turbine.dims import site as s
-from turbine.urdf import fault, inspection_point, link, ring_boxes, span_box, z_cylinder
+from turbine.urdf import disk_boxes, fault, inspection_point, link, ring_boxes, span_box, z_cylinder
 
 M = "site/"
 BASE = s.TOWER_BASE_Z
@@ -54,7 +54,7 @@ LINKS = [
     link("ground", "world", mesh=M + "ground.obj",
          collisions=[span_box((-s.GROUND_RADIUS, s.GROUND_RADIUS), (-s.GROUND_RADIUS, s.GROUND_RADIUS), (-0.05, 0.0))]),
     link("foundation", "world", mesh=M + "foundation.obj",
-         collisions=[z_cylinder(s.PLINTH_R, (0.0, s.PLINTH_Z[1]))]),
+         collisions=disk_boxes(s.PLINTH_R, (0.0, s.PLINTH_Z[1]))),
     link("foundation_grout", "foundation", variants={"ok": M + "grout_ok.obj", "broken": M + "grout_broken.obj"}),
     link("foundation_earthing", "foundation", variants={"ok": M + "earthing_ok.obj", "loose": M + "earthing_loose.obj"}),
     section(1), section(2), section(3), section(4),
@@ -67,8 +67,9 @@ LINKS = [
 ]
 
 INSPECTION_POINTS = [
-    inspection_point("tower_inspect_door", "tower_section_1", (0.0, -RD - 0.05, s.DOOR_SILL_Z + 1.0), (0, -1, 0.05),
-                     "tower entrance door (closed, undamaged, locked)", distance=5.0, outside=True),
+    # the G1's camera looks down: the door (above its camera) only fits in the image from further away
+    inspection_point("tower_inspect_door", "tower_section_1", (0.0, -RD - 0.05, s.DOOR_SILL_Z + 0.35), (0, -1, 0.0),
+                     "tower entrance door (closed, undamaged)", distance=14.0, outside=True),
     inspection_point("foundation_inspect_plinth", "foundation", radial(s.PLINTH_R, -45, 0.12), outward(-45, 0.4),
                      "foundation plinth concrete: cracks, spalling", distance=2.0, outside=True),
     inspection_point("foundation_inspect_grout", "foundation", radial(s.GROUT_R[1], -30, s.GROUT_Z[1]), outward(-30, 0.6),
@@ -77,7 +78,7 @@ INSPECTION_POINTS = [
                      "earthing strap from the tower flange to the plinth terminal", distance=1.8, outside=True),
     inspection_point("tower_inspect_anchor_nuts", "tower_section_1", radial(s.ANCHOR_NUT_R, -150, s.BASE_FLANGE_H), outward(-150, 0.8),
                      "anchor bolt nuts on the base flange", distance=1.8, outside=True),
-    inspection_point("tower_inspect_base_coating", "tower_section_1", radial(s.tower_radius(1.3), -56, 1.3), outward(-56, 0.1),
+    inspection_point("tower_inspect_base_coating", "tower_section_1", radial(s.tower_radius(0.6), -56, 0.6), outward(-56, 0.15),
                      "tower coating near the base: corrosion, paint damage", distance=3.0, outside=True),
 ]
 
