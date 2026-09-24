@@ -84,6 +84,16 @@ class Context(PlanEntity):
     Should pre -and postconditions of actions be evaluated in this plan.
     """
 
+    update_world_model_attachment: bool = field(default=True)
+    """
+    Should taking hold of a body move it under the hand in the world model.
+
+    A kinematically moved world has to be told what the hand now carries, because nothing
+    else would make the body follow it. A physically simulated one must not be told: there
+    the fingers already hold the body through contact, and moving it under the hand as
+    well would stack a second set of degrees of freedom on it that the simulator rejects.
+    """
+
     query_backend: QueryBackend = field(
         default_factory=EntityQueryLanguageGenerativeBackend
     )

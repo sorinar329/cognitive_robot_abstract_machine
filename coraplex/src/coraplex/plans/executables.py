@@ -11,6 +11,7 @@ from coraplex.exceptions import (
     ConditionNotSatisfied,
     UnknownExecutionType,
 )
+from giskardpy.executor import NoPacing, Pacer
 from giskardpy.motion_statechart.context import MotionStatechartContext
 from giskardpy.motion_statechart.data_types import LifeCycleValues
 from giskardpy.motion_statechart.goals.collision_avoidance import (
@@ -135,6 +136,15 @@ class GiskardExecutable(Executable):
     to the motion state chart.
     """
 
+    simulation_pacer: ClassVar[Optional[Pacer]] = None
+    """
+    What holds the control loop of a simulated execution between two ticks.
+
+    Without one the loop runs as fast as the hardware allows, which is what a
+    kinematically moved world wants. A physically simulated world sets a pacer that
+    steps its physics instead, so the controller and the physics advance in lockstep.
+    """
+
     @property
     def giskard_executables(self) -> List[GiskardExecutable]:
         """
@@ -248,6 +258,7 @@ class GiskardExecutable(Executable):
         Compiles the motion state chart and ticks it in the world of the context until
         it is done.
         """
+        pacer = GiskardExecutable.simulation_pacer
         executor = Ros2Executor(
             context=MotionStatechartContext(
                 world=self.context.world,
@@ -256,6 +267,7 @@ class GiskardExecutable(Executable):
                 ),
             ),
             ros_node=self.context.ros_node,
+            pacer=NoPacing() if pacer is None else pacer,
         )
         motion_state_chart = self.motion_state_chart
         executor.compile(motion_state_chart)
@@ -263,6 +275,7 @@ class GiskardExecutable(Executable):
         counter = 0
         while counter < len(self.motion_mappings) * self.context.ticks_per_motion:
             executor.tick()
+            executor.pacer.sleep()
             counter += 1
             if executor.motion_statechart.is_end_motion():
                 break
@@ -332,6 +345,8 @@ class MoveBranchExecutable(Executable):
     """
 
     def execute(self) -> None:
+        if not self.context.update_world_model_attachment:
+            return
         self.context.world.move_branch(self.body, self.new_parent)
 
 
