@@ -30,6 +30,15 @@ def collect():
     return links, points, faults, signals
 
 
+def extras(names):
+    """Link specs for a scenario's ``extras`` (e.g. a technician)."""
+    available = {k: v for part in parts.ALL for k, v in getattr(part, "EXTRAS", {}).items()}
+    unknown = set(names) - set(available)
+    if unknown:
+        sys.exit(f"unknown extras {unknown}, available: {sorted(available)}")
+    return [spec for n in names for spec in available[n]]
+
+
 def build(fault_ids, links, points, faults, signals):
     variants = {l["name"]: l["variants"] for l in links if l["variants"]}
     states, extra, active, joint_states = {}, [], [], {}
@@ -84,6 +93,7 @@ def main():
             scenario = yaml.safe_load(fh)
         name = os.path.splitext(os.path.basename(args.scenario))[0]
         fault_ids = scenario.get("faults") or []
+        links = links + extras(scenario.get("extras") or [])
     elif args.random is not None:
         name = f"random_{args.seed}"
         fault_ids = sorted(random.Random(args.seed).sample(sorted(faults), min(args.random, len(faults))))

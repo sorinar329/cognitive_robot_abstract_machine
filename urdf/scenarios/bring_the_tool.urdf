@@ -3128,7 +3128,7 @@
     </inertial>
     <visual>
       <geometry>
-        <mesh filename="package://windturbine_model/models/main_shaft/grease_collector_full.obj"/>
+        <mesh filename="package://windturbine_model/models/main_shaft/grease_collector_ok.obj"/>
       </geometry>
       <origin xyz="0 0 0" rpy="0 0 0"/>
     </visual>
@@ -3527,7 +3527,7 @@
     </inertial>
     <visual>
       <geometry>
-        <mesh filename="package://windturbine_model/models/gearbox/sight_glass_low.obj"/>
+        <mesh filename="package://windturbine_model/models/gearbox/sight_glass_ok.obj"/>
       </geometry>
       <origin xyz="0 0 0" rpy="0 0 0"/>
     </visual>
@@ -3545,7 +3545,7 @@
     </inertial>
     <visual>
       <geometry>
-        <mesh filename="package://windturbine_model/models/gearbox/filter_indicator_clogged.obj"/>
+        <mesh filename="package://windturbine_model/models/gearbox/filter_indicator_ok.obj"/>
       </geometry>
       <origin xyz="0 0 0" rpy="0 0 0"/>
     </visual>
@@ -3563,7 +3563,7 @@
     </inertial>
     <visual>
       <geometry>
-        <mesh filename="package://windturbine_model/models/gearbox/cover_bolts_missing.obj"/>
+        <mesh filename="package://windturbine_model/models/gearbox/cover_bolts_ok.obj"/>
       </geometry>
       <origin xyz="0 0 0" rpy="0 0 0"/>
     </visual>
@@ -3581,7 +3581,7 @@
     </inertial>
     <visual>
       <geometry>
-        <mesh filename="package://windturbine_model/models/gearbox/bushing_left_cracked.obj"/>
+        <mesh filename="package://windturbine_model/models/gearbox/bushing_left_ok.obj"/>
       </geometry>
       <origin xyz="0 0 0" rpy="0 0 0"/>
     </visual>
@@ -3624,7 +3624,7 @@
     </inertial>
     <visual>
       <geometry>
-        <mesh filename="package://windturbine_model/models/generator/brake_disc_overheated.obj"/>
+        <mesh filename="package://windturbine_model/models/generator/brake_disc_ok.obj"/>
       </geometry>
       <origin xyz="0 0 0" rpy="0 0 0"/>
     </visual>
@@ -3648,7 +3648,7 @@
     </inertial>
     <visual>
       <geometry>
-        <mesh filename="package://windturbine_model/models/generator/coupling_cracked.obj"/>
+        <mesh filename="package://windturbine_model/models/generator/coupling_ok.obj"/>
       </geometry>
       <origin xyz="0 0 0" rpy="0 0 0"/>
     </visual>
@@ -3672,7 +3672,7 @@
     </inertial>
     <visual>
       <geometry>
-        <mesh filename="package://windturbine_model/models/generator/brake_caliper_worn.obj"/>
+        <mesh filename="package://windturbine_model/models/generator/brake_caliper_ok.obj"/>
       </geometry>
       <origin xyz="0 0 0" rpy="0 0 0"/>
     </visual>
@@ -3806,7 +3806,7 @@
     </inertial>
     <visual>
       <geometry>
-        <mesh filename="package://windturbine_model/models/systems/status_light_error_p.obj"/>
+        <mesh filename="package://windturbine_model/models/systems/status_light_ok_p.obj"/>
       </geometry>
       <origin xyz="0 0 0" rpy="0 0 0"/>
     </visual>
@@ -3922,7 +3922,7 @@
     </inertial>
     <visual>
       <geometry>
-        <mesh filename="package://windturbine_model/models/systems/coolant_level_low.obj"/>
+        <mesh filename="package://windturbine_model/models/systems/coolant_level_ok.obj"/>
       </geometry>
       <origin xyz="0 0 0" rpy="0 0 0"/>
     </visual>
@@ -4016,7 +4016,7 @@
     </inertial>
     <visual>
       <geometry>
-        <mesh filename="package://windturbine_model/models/systems/extinguisher_missing.obj"/>
+        <mesh filename="package://windturbine_model/models/systems/extinguisher_present.obj"/>
       </geometry>
       <origin xyz="0 0 0" rpy="0 0 0"/>
     </visual>
@@ -4098,7 +4098,7 @@
     <child link="tool_tray"/>
     <origin xyz="0 0 0" rpy="0 0 0"/>
   </joint>
-  <link name="gearbox_fault_oil_streak">
+  <link name="technician">
     <inertial>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <mass value="1.0"/>
@@ -4106,123 +4106,21 @@
     </inertial>
     <visual>
       <geometry>
-        <mesh filename="package://windturbine_model/models/gearbox/fault_oil_streak.obj"/>
+        <mesh filename="package://windturbine_model/models/systems/technician.obj"/>
       </geometry>
       <origin xyz="0 0 0" rpy="0 0 0"/>
     </visual>
-  </link>
-  <joint name="gearbox_fault_oil_streak_joint" type="fixed">
-    <parent link="gearbox"/>
-    <child link="gearbox_fault_oil_streak"/>
-    <origin xyz="0 0 0" rpy="0 0 0"/>
-  </joint>
-  <link name="gearbox_fault_oil_puddle">
-    <inertial>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-      <mass value="1.0"/>
-      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
-    </inertial>
-    <visual>
+    <collision>
       <geometry>
-        <mesh filename="package://windturbine_model/models/gearbox/fault_oil_puddle.obj"/>
+        <box size="0.44 0.28 1.78"/>
       </geometry>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-    </visual>
+      <origin xyz="0 0.01 0.89" rpy="0 0 0"/>
+    </collision>
   </link>
-  <joint name="gearbox_fault_oil_puddle_joint" type="fixed">
+  <joint name="technician_joint" type="fixed">
     <parent link="nacelle"/>
-    <child link="gearbox_fault_oil_puddle"/>
-    <origin xyz="-1.02698 -0.45 0.001" rpy="0 0 0"/>
-  </joint>
-  <link name="main_bearing_fault_grease_leak">
-    <inertial>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-      <mass value="1.0"/>
-      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
-    </inertial>
-    <visual>
-      <geometry>
-        <mesh filename="package://windturbine_model/models/main_shaft/fault_grease_leak.obj"/>
-      </geometry>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-    </visual>
-  </link>
-  <joint name="main_bearing_fault_grease_leak_joint" type="fixed">
-    <parent link="main_bearing"/>
-    <child link="main_bearing_fault_grease_leak"/>
-    <origin xyz="0 0 0" rpy="0 0 0"/>
-  </joint>
-  <link name="main_shaft_fault_fretting">
-    <inertial>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-      <mass value="1.0"/>
-      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
-    </inertial>
-    <visual>
-      <geometry>
-        <mesh filename="package://windturbine_model/models/main_shaft/fault_fretting.obj"/>
-      </geometry>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-    </visual>
-  </link>
-  <joint name="main_shaft_fault_fretting_joint" type="fixed">
-    <parent link="main_shaft"/>
-    <child link="main_shaft_fault_fretting"/>
-    <origin xyz="0 0 0" rpy="0 0 0"/>
-  </joint>
-  <link name="generator_fault_carbon_dust">
-    <inertial>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-      <mass value="1.0"/>
-      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
-    </inertial>
-    <visual>
-      <geometry>
-        <mesh filename="package://windturbine_model/models/generator/fault_carbon_dust.obj"/>
-      </geometry>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-    </visual>
-  </link>
-  <joint name="generator_fault_carbon_dust_joint" type="fixed">
-    <parent link="generator"/>
-    <child link="generator_fault_carbon_dust"/>
-    <origin xyz="0 0 0" rpy="0 0 0"/>
-  </joint>
-  <link name="generator_fault_terminal_heat">
-    <inertial>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-      <mass value="1.0"/>
-      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
-    </inertial>
-    <visual>
-      <geometry>
-        <mesh filename="package://windturbine_model/models/generator/fault_terminal_heat.obj"/>
-      </geometry>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-    </visual>
-  </link>
-  <joint name="generator_fault_terminal_heat_joint" type="fixed">
-    <parent link="generator"/>
-    <child link="generator_fault_terminal_heat"/>
-    <origin xyz="0 0 0" rpy="0 0 0"/>
-  </joint>
-  <link name="hydraulic_fault_leak">
-    <inertial>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-      <mass value="1.0"/>
-      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
-    </inertial>
-    <visual>
-      <geometry>
-        <mesh filename="package://windturbine_model/models/systems/fault_hydraulic_leak.obj"/>
-      </geometry>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-    </visual>
-  </link>
-  <joint name="hydraulic_fault_leak_joint" type="fixed">
-    <parent link="hydraulic_unit"/>
-    <child link="hydraulic_fault_leak"/>
-    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <child link="technician"/>
+    <origin xyz="2 -1.7 0" rpy="0 0 0"/>
   </joint>
   <link name="tower_inspect_door">
     <inertial>

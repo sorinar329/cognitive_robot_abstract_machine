@@ -1,0 +1,8 @@
+# Task T3: the G1 finds the loose shrink disc bolt by its torque marking and brings
+# the torque tool case from the rack at the rear to the technician's tray.
+view: nacelle
+description: Loose shrink disc bolt, technician waiting for the torque tool
+extras:
+  - technician
+faults:
+  - main_shaft.shrink_disc_bolt_loose

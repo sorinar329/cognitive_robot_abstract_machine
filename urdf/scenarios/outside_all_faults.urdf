@@ -4044,6 +4044,60 @@
     <child link="safety_equipment"/>
     <origin xyz="0 0 0" rpy="0 0 0"/>
   </joint>
+  <link name="tool_rack">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="1.0"/>
+      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="package://windturbine_model/models/systems/tool_rack.obj"/>
+      </geometry>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="0.6 0.32 0.03"/>
+      </geometry>
+      <origin xyz="-8.65 -1.88 0.835" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.6 0.02 1.3"/>
+      </geometry>
+      <origin xyz="-8.65 -2.03 0.65" rpy="0 0 0"/>
+    </collision>
+  </link>
+  <joint name="tool_rack_joint" type="fixed">
+    <parent link="nacelle"/>
+    <child link="tool_rack"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+  <link name="tool_tray">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="1.0"/>
+      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="package://windturbine_model/models/systems/tool_tray.obj"/>
+      </geometry>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="0.4 0.27 0.025"/>
+      </geometry>
+      <origin xyz="1.2 -1.115 0.8375" rpy="0 0 0"/>
+    </collision>
+  </link>
+  <joint name="tool_tray_joint" type="fixed">
+    <parent link="nacelle"/>
+    <child link="tool_tray"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
   <link name="foundation_fault_plinth_crack">
     <inertial>
       <origin xyz="0 0 0" rpy="0 0 0"/>

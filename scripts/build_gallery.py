@@ -33,7 +33,7 @@ SHOTS = os.path.join(ROOT, "preview")
 SCENARIOS = {"H": "windturbine", "FN": "scenarios/nacelle_all_faults", "FO": "scenarios/outside_all_faults"}
 CRAMERA_SCENES = {   # screenshot file -> CRAMERA scene
     "windturbine": "windturbine", "windturbine_outside_ground": "windturbine_outside_ground",
-    "windturbine_nacelle_all": "windturbine_nacelle_all_faults", "g1_t1": "windturbine_g1_t1", "g1_t2": "windturbine_g1_t2",
+    "windturbine_nacelle_all": "windturbine_nacelle_all_faults", "g1_t1": "windturbine_g1_t1", "g1_t2": "windturbine_g1_t2", "g1_t3": "windturbine_g1_t3",
 }
 VIEWER = "http://localhost:8711/?scene="
 PANEL = (17, 192, 791, 875)          # the 3D panel in a 1600x1000 CRAMERA screenshot

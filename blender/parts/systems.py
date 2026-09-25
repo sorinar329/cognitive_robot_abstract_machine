@@ -148,5 +148,45 @@ safety += [c.box("estop_box", (sx - 0.07, sx + 0.07), (wall, wall + 0.08), (sz -
            c.cylinder("estop", 0.035, 0.04, (sx, wall + 0.1, sz), rotation=(math.pi / 2, 0, 0), mat="alarm_red")]
 export("safety", safety)
 
+# %% task equipment: tool rack (rear, -Y wall), tool tray on the -Y girder, technician placeholder
+rx, ry, rt = d.TOOL_RACK_X, d.TOOL_RACK_Y, d.TOOL_RACK_TOP
+rack = [c.box("rack_shelf", rx, ry, (rt - 0.03, rt), mat="steel_grey"),
+        c.box("rack_shelf_low", rx, ry, (0.35, 0.38), mat="steel_grey"),
+        c.box("rack_lip", rx, (ry[1] - 0.015, ry[1]), (rt, rt + 0.04), mat="hatch_yellow")]
+for x in rx:
+    rack.append(c.box("rack_side", (x - 0.015, x + 0.015), ry, (0.0, rt + 0.45), mat="steel_grey"))
+rack.append(c.box("rack_back", rx, (ry[0], ry[0] + 0.02), (0.0, rt + 0.45), mat="steel_grey"))
+export("tool_rack", rack)
+tx, ty, tt = d.TOOL_TRAY_X, d.TOOL_TRAY_Y, d.TOOL_TRAY_TOP
+tray = [c.box("tray", tx, ty, (tt - 0.025, tt), mat="hatch_yellow"),
+        c.box("tray_rim_x0", (tx[0], tx[0] + 0.015), ty, (tt, tt + 0.03), mat="hatch_yellow"),
+        c.box("tray_rim_x1", (tx[1] - 0.015, tx[1]), ty, (tt, tt + 0.03), mat="hatch_yellow"),
+        c.box("tray_post", (sum(tx) / 2 - 0.03, sum(tx) / 2 + 0.03), (sum(ty) / 2 - 0.03, sum(ty) / 2 + 0.03),
+              (d.BP_TOP_Z, tt - 0.025), mat="steel_grey")]
+export("tool_tray", tray)
+
+
+def technician():
+    """Placeholder person (1.78 m) in the link frame at the feet, facing +Y."""
+    body = []
+    for sx in (-0.1, 0.1):
+        body.append(c.rod("leg", (sx, 0, 0.05), (sx, 0, 0.88), 0.07, mat="alarm_red", vertices=16))
+        body.append(c.box("boot", (sx - 0.06, sx + 0.06), (-0.06, 0.14), (0.0, 0.08), mat="bolt_black"))
+        body.append(c.rod("arm", (sx * 2.2, 0.0, 1.42), (sx * 2.3, 0.12, 0.98), 0.05, mat="alarm_red", vertices=12))
+    body.append(c.box("torso", (-0.19, 0.19), (-0.11, 0.11), (0.85, 1.48), mat="alarm_red"))
+    body.append(c.box("harness", (-0.2, 0.2), (-0.115, 0.115), (1.05, 1.1), mat="bolt_black"))
+    c.bpy.ops.mesh.primitive_uv_sphere_add(radius=0.11, location=(0, 0, 1.6))
+    body.append(c.bpy.context.active_object)
+    body[-1].data.materials.append(c.material("bottle_white"))
+    c.bpy.ops.mesh.primitive_uv_sphere_add(radius=0.125, location=(0, 0.01, 1.66))
+    hat = c.bpy.context.active_object
+    hat.data.materials.append(c.material("hatch_yellow"))
+    c.cut(hat, c.box("below", (-1, 1), (-1, 1), (0.0, 1.66)))
+    body.append(hat)
+    return body
+
+
+export("technician", technician())
+
 c.save_blend("systems")
 print("built systems")

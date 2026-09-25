@@ -43,7 +43,18 @@ LINKS = [
     link("fire_extinguisher", "nacelle",
          variants={"present": M + "extinguisher_present.obj", "missing": M + "extinguisher_missing.obj"}),
     link("safety_equipment", "nacelle", mesh=M + "safety.obj"),
+    link("tool_rack", "nacelle", mesh=M + "tool_rack.obj",
+         collisions=[span_box(d.TOOL_RACK_X, d.TOOL_RACK_Y, (d.TOOL_RACK_TOP - 0.03, d.TOOL_RACK_TOP)),
+                     span_box(d.TOOL_RACK_X, (d.TOOL_RACK_Y[0], d.TOOL_RACK_Y[0] + 0.02), (0.0, d.TOOL_RACK_TOP + 0.45))]),
+    link("tool_tray", "nacelle", mesh=M + "tool_tray.obj",
+         collisions=[span_box(d.TOOL_TRAY_X, d.TOOL_TRAY_Y, (d.TOOL_TRAY_TOP - 0.025, d.TOOL_TRAY_TOP))]),
 ]
+
+# optional additions a scenario can ask for (``extras:`` in its YAML)
+EXTRAS = {
+    "technician": [link("technician", "nacelle", mesh=M + "technician.obj", xyz=(*d.TECHNICIAN_XY, 0.0),
+                        collisions=[span_box((-0.22, 0.22), (-0.13, 0.15), (0.0, 1.78))])],
+}
 
 WALL = d.INNER_Y[0]
 INSPECTION_POINTS = [

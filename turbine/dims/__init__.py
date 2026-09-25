@@ -130,3 +130,9 @@ MAST_X = NACELLE_X[0] + 0.9
 MAST_HEIGHT = 1.6
 MAST_ARM = 0.55                 # crossbar half length (anemometer at +Y, wind vane at -Y)
 COVER_CRACK_XZ = (-5.8, 2.6)    # on the -Y side wall
+
+# ------------------------------------------------------------------ task T3: bring the tool (nacelle frame)
+TOOL_RACK_X, TOOL_RACK_Y, TOOL_RACK_TOP = (-8.95, -8.35), (INNER_Y[0], -1.72), 0.85   # rear, -Y wall
+TOOL_TRAY_X, TOOL_TRAY_Y, TOOL_TRAY_TOP = (1.0, 1.4), (-1.25, -0.98), 0.85           # on the -Y girder
+TOOL_CASE = (0.09, 0.09, 0.2)             # torque tool case (socket set), small enough for the G1 hand
+TECHNICIAN_XY = (2.0, -1.7)               # on the -Y walkway by the front main bearing, facing the machine

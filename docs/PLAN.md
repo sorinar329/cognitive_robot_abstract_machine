@@ -119,7 +119,8 @@ in segmind_ws), already used by `coraplex/demos/coraplex_unitree_g1_warehouse_de
 | **T0** | **Look at one inspection point**: walk from the start to the standpoint in front of the tower door and aim the camera at it | `NavigateAction`, `LookAtAction` | the target lies inside the D435 field of view (checked geometrically in the world) and CRAMERA shows the run |
 | T1 | Walk around the tower base on flat ground: visit every ground-level inspection point and report its state | loop of T0 + reading the state | the report matches the scenario's ground truth (first read from the ground truth, later from rendered camera images) |
 | T2 | Nacelle: walk along the drivetrain and check sight glass, grease collector, shrink disc, input seal, torque arm bushing, slip ring | T1 in tight space | correct report on the 0.69 m walkway (straight base moves; the route planner needs more room) |
-| T3 | Interact: open the floor hatch, check the rotor lock, press a button | `PickUp`/pull, `MoveJointsMotion` | joint state changed as intended |
+| ✅ T3 | Assist a technician: find the loose shrink-disc bolt by its torque marking, fetch the torque tool case from the rack, set it on the tray next to the technician | inspection + `PickUpAction`, `PlaceAction` | bolt found; case on the tray (`scripts/g1_bring_the_tool.py`, recorded as `windturbine_g1_t3`) |
+| T4 | Interact: open the floor hatch, press a button, empty the grease collector | pull, `MoveJointsMotion`, pick and place | joint state changed / part swapped |
 
 Standpoints are computed from each inspection point's `view_from` and `distance`:
 project the point onto the floor, set the camera height to 1.27–1.60 m, and turn to

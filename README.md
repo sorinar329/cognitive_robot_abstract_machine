@@ -12,6 +12,7 @@ ROS, `~/workspace/segmind_ws` (G1 model) and this package sourced:
     $PY scripts/g1_inspection_round.py --zone ground --points tower_inspect_door        # T0
     $PY scripts/g1_inspection_round.py --zone ground --scenario outside_ground          # T1
     $PY scripts/g1_inspection_round.py --zone nacelle --scenario nacelle_all_faults     # T2
+    $PY scripts/g1_bring_the_tool.py                                                    # T3 (scenario bring_the_tool)
 
 Record a run for CRAMERA and tidy the bundle (robot naming, GLB materials, camera):
 

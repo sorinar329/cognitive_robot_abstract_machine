@@ -27,7 +27,7 @@ import yaml
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, ROOT)
 sys.path.insert(0, os.path.join(ROOT, "scripts"))
-from generate_urdf import build, collect  # noqa: E402
+from generate_urdf import build, collect, extras  # noqa: E402
 from turbine import urdf  # noqa: E402
 
 PREFIX = "windturbine"
@@ -43,6 +43,7 @@ VIEWS = {
     # robot recordings: the G1's start and its round around the tower base / along the nacelle walkway
     "g1_ground": ({"position": [19.0, -25.0, 9.0], "target": [2.0, -7.0, 1.0]}, True),
     "g1_nacelle": ({"position": [1.5, -9.5, _N + 5.5], "target": [-1.5, -1.2, _N + 0.9]}, False),
+    "g1_nacelle_wide": ({"position": [-2.5, -14.5, _N + 8.0], "target": [-3.3, -1.0, _N + 0.8]}, False),
 }
 MAX_CAMERA_DISTANCE = 320.0   # read by CRAMERA (rendering.maxCameraDistance) so the whole turbine fits
 
@@ -57,9 +58,10 @@ def write_json(path, payload):
         f.write("\n")
 
 
-def bundle(name, description, fault_ids, out_root, view="turbine"):
+def bundle(name, description, fault_ids, out_root, view="turbine", extra_names=()):
     camera, with_cover = VIEWS[view]
     links, points, faults, signals = collect()
+    links = links + extras(extra_names)
     all_links, states, truth = build(fault_ids, links, points, faults, signals)
     out = os.path.join(out_root, name)
     if os.path.isdir(out):
@@ -124,7 +126,8 @@ def main():
         with open(path) as f:
             spec = yaml.safe_load(f)
         name = f"{PREFIX}_{os.path.splitext(os.path.basename(path))[0]}"
-        bundle(name, spec.get("description", ""), spec.get("faults") or [], args.output, spec.get("view", "turbine"))
+        bundle(name, spec.get("description", ""), spec.get("faults") or [], args.output, spec.get("view", "turbine"),
+               spec.get("extras") or [])
 
 
 if __name__ == "__main__":
