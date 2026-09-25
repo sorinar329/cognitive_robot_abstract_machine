@@ -55,3 +55,28 @@ design study and has none. What exists openly:
   principles), maintenance typically once or twice a year.
 
 A maintenance plan for our model turbine can be compiled from these sources.
+
+## Bolted joints (checking and re-tightening)
+
+- **Anchor bolts** (ACP RP 401): tension check on a random 10% of the anchor bolts
+  (every 10th bolt, counted clockwise from the bolt under the tower door) once a year in
+  years 1-5, then on 20% of the turbines every 5 years. A single bolt below 85% of the
+  specified tension, or an average below 90%, means re-tensioning all bolts of that
+  tower. Corroded nuts count as a warning sign: they may be seized and no longer hold
+  tension.
+- **Construction and end of warranty** (ACP RP 901, RP 701): 10% checks for the tower
+  base, blade-to-hub bolts and the turbine after erection; bolt torque tests in the
+  end-of-warranty plan.
+- **Electrical module** (GE 3 MW manual): check fasteners for movement "by the torque
+  marking and/or" re-torquing; tightening torques for power cable terminals; bolted
+  platform plates, railings and ladders; discoloured zinc coating at bolted joints.
+- **Vestas V90 safety regulations**: "look very closely for oil spills and loose bolts
+  ... Loose bolts in the structure mean danger. They must be tightened immediately." The
+  manual rotor lock uses 16 M42 bolts, with the M16 bolts tightened to 70 Nm and then
+  140 Nm in a circular sequence.
+
+In the model: torque markings on the shrink disc bolts (`main_shaft.shrink_disc_bolt_loose`),
+a missing gearbox cover bolt, corroded anchor nuts. The large joints need hydraulic
+tensioners or torque wrenches of several hundred to thousands of Nm, well beyond what a
+G1 arm can apply. So the robot's part is finding loose bolts by their markings and
+bringing the tools.
