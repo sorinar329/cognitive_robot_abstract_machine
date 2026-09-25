@@ -1,0 +1,36 @@
+scenario: tower_climb
+faults:
+- id: tower.cable_loop_chafed
+  part: tower_interior
+  component: cable loop
+  description: Cable loop rubbed through at the saddle edge, copper showing, insulation
+    flakes on the deck
+  severity: high
+  inspection_point: tower_inspect_cable_loop
+  observable_by:
+  - rgb
+initial_joint_states:
+  tower_door_joint: 1.5
+signals:
+  earthing_resistance_ohm: 2.1
+  anemometer_plausible: true
+  aviation_light_on: true
+  main_bearing_temperature_c: 41
+  drivetrain_vibration_mm_s: 1.6
+  power_curve_deficit_percent: 0.0
+  blade_1_lightning_counter: 0
+  blade_2_lightning_counter: 0
+  blade_3_lightning_counter: 0
+  gearbox_oil_level: 1.0
+  gearbox_oil_temperature_c: 62
+  gearbox_filter_dp_bar: 0.8
+  gearbox_oil_particle_count: 300
+  gearbox_vibration_mm_s: 2.1
+  brake_pad_wear_percent: 20
+  brake_disc_temperature_c: 55
+  generator_vibration_mm_s: 1.9
+  generator_brush_wear_percent: 30
+  generator_terminal_temperature_c: 46
+  converter_fault_code: 0
+  hydraulic_pressure_bar: 160
+  generator_winding_temperature_c: 95

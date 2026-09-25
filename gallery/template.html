@@ -100,13 +100,13 @@ footer code{font-family:var(--mono);font-size:12px}
 <header>
   <div class="eyebrow">IEA-3.4-130-RWT · digital twin for robot inspection</div>
   <h1>Wind Turbine <span>Twin</span></h1>
-  <p class="lede">A complete onshore turbine modelled in Blender, loaded as a CRAM world and shown in CRAMERA. __FAULTS__ faults can be switched on; a Unitree G1 walks inspection rounds at the tower base and in the nacelle.</p>
+  <p class="lede">A complete onshore turbine modelled in Blender, loaded as a CRAM world and shown in CRAMERA. __FAULTS__ faults can be switched on; a Unitree G1 inspects the tower base, rides the tower lift to the yaw deck and is hoisted by the service crane into the nacelle.</p>
   <ul class="specs">
     <li><b>Hub height</b>110 m</li><li><b>Rotor</b>Ø 130 m</li><li><b>Tower</b>108 m, 4 sections</li>
     <li><b>Rating</b>3.4 MW, geared DFIG</li><li><b>Nacelle</b>12.6 × 4.2 m</li><li><b>Faults</b>__FAULTS__</li>
   </ul>
   <nav aria-label="Sections">
-    <a href="#turbine">Turbine</a><a href="#tower">Tower base</a><a href="#nacelle">Nacelle</a><a href="#robot">G1 robot</a><a href="#faults">Faults</a>
+    <a href="#turbine">Turbine</a><a href="#tower">Tower base</a><a href="#inside">Inside the tower</a><a href="#nacelle">Nacelle</a><a href="#robot">G1 robot</a><a href="#climb">Getting up</a><a href="#faults">Faults</a>
   </nav>
 </header>
 
@@ -123,10 +123,19 @@ footer code{font-family:var(--mono);font-size:12px}
 
 <section id="tower">
   <h2>Tower base <small>foundation · entrance</small></h2>
-  <p class="intro">Concrete plinth with grout joint, base flange with 96 anchor nuts, earthing strap, entrance door and outside stairs. This is where the G1 does its first round.</p>
+  <p class="intro">Concrete plinth flush with the ground, grout joint, base flange with 96 anchor nuts, earthing strap and the entrance door at ground level, so the G1 can walk straight in. This is where it does its first round.</p>
   <div class="pair">
     <figure><img src="img/cramera_windturbine_outside_ground.jpg" alt="Tower base with faults in CRAMERA" loading="lazy"><figcaption><span class="src">CRAMERA</span><strong>Scenario “outside_ground”:</strong> rust on the tower coating, plinth crack, broken grout, loose earthing strap, corroded anchor nuts.</figcaption></figure>
     <figure><img src="img/render_tower_base.jpg" alt="Tower base render" loading="lazy"><figcaption><span class="src">Blender</span>Healthy tower base.</figcaption></figure>
+  </div>
+</section>
+
+<section id="inside">
+  <h2>Inside the tower <small>platforms · lift · yaw deck</small></h2>
+  <p class="intro">Rest platforms 1.1 m under each flange joint, a ladder with fall-arrest rail, power cables, wall lamps and a service lift that runs 105 m from the ground floor to the yaw deck, 2.6 m under the tower top. From there the power cables hang in a loop through the deck, so the nacelle can yaw.</p>
+  <div class="pair">
+    <figure><img src="img/render_tower_inside.jpg" alt="Tower ground floor with the lift car, ladder and ground controller" loading="lazy"><figcaption><span class="src">Blender</span>Ground floor: lift car (door towards the centre), ladder, ground controller.</figcaption></figure>
+    <figure><img src="img/render_yaw_deck.jpg" alt="Yaw deck with the lift arriving and the cable loop" loading="lazy"><figcaption><span class="src">Blender</span>Yaw deck: lift shaft with railing, cable loop through the deck, ladder up to the nacelle hatch.</figcaption></figure>
   </div>
 </section>
 
@@ -145,17 +154,27 @@ footer code{font-family:var(--mono);font-size:12px}
   <p class="intro">The G1 is planned and moved by CRAM (coraplex planner, giskardpy controller) and recorded with CRAMERA’s onboarder. At each inspection point it walks to a standpoint and aims its head camera, a D435 tilted 48° down.</p>
   <div class="robot">
     <figure><img src="img/cramera_g1_t1.jpg" alt="G1 at the start of the tower base round" loading="lazy">
-      <figcaption><span class="src">T1</span><strong>Tower base round:</strong> 6 of 6 points seen, 5 faults reported. 2:24 recording.</figcaption></figure>
+      <figcaption><span class="src">T1</span><strong>Tower base round:</strong> 6 of 6 points seen, 5 faults reported. __LEN_g1_t1__ recording.</figcaption></figure>
     <figure><img src="img/cramera_g1_t2.jpg" alt="G1 on the nacelle walkway" loading="lazy">
-      <figcaption><span class="src">T2</span><strong>Nacelle walkway round:</strong> 6 of 6 points seen, 7 faults reported. 1:25 recording.</figcaption></figure>
+      <figcaption><span class="src">T2</span><strong>Nacelle walkway round:</strong> 6 of 6 points seen, 7 faults reported. __LEN_g1_t2__ recording.</figcaption></figure>
   </div>
   <figure><video class="clip" src="video/g1_t3.mp4" poster="img/cramera_g1_t3.jpg" controls playsinline muted preload="metadata" aria-label="G1 bringing the torque tool case to the technician"></video>
-    <figcaption><span class="src">T3</span><strong>Find the loose bolt, bring the tool:</strong> the G1 spots the shrink-disc bolt whose torque marking no longer lines up, fetches the torque tool case from the rack at the rear, carries it about 10 m along the walkway and sets it on the tray next to the technician (1 mm from the tray centre). Video replayed from the CRAMERA recording of the CRAM plan (coraplex actions, giskardpy motion), 1:10. Tightening itself stays with the technician: those bolts need far more torque than a G1 arm can give.</figcaption></figure>
+    <figcaption><span class="src">T3</span><strong>Find the loose bolt, bring the tool:</strong> the G1 spots the shrink-disc bolt whose torque marking no longer lines up, fetches the torque tool case from the rack at the rear, carries it about 10 m along the walkway and sets it on the tray next to the technician (1 mm from the tray centre). Video replayed from the CRAMERA recording of the CRAM plan (coraplex actions, giskardpy motion), __LEN_g1_t3__. Tightening itself stays with the technician: those bolts need far more torque than a G1 arm can give.</figcaption></figure>
   <ul class="facts">
     <li><b>Camera</b>Sees only things at or below its own height (1.27 m): the waist bends at most 0.52 rad.</li>
-    <li><b>Tasks</b>T1 and T2 inspect; T3 assists a technician (pick up, carry, set down).</li>
+    <li><b>Tasks</b>T1 and T2 inspect; T3 assists a technician (pick up, carry, set down); T4 and T5 get it up the turbine.</li>
     <li><b>Findings</b>Taken from the scenario’s ground truth for now; recognising faults in camera images is the next step.</li>
   </ul>
+</section>
+
+<section id="climb">
+  <h2>Getting up <small>lift and crane hoist</small></h2>
+  <p class="intro">The G1 walks on flat floors only. The ladder is out of reach for it, and the opening from the yaw deck into the nacelle is taken up by the drivetrain. So it rides: the tower lift gets it to the yaw deck, and the nacelle’s own service crane gets it into the nacelle. The crane lowers a lifting platform through a hatch in the rear floor. In CRAM the robot’s odom frame is attached to the moving platform or lift car, and one joint motion drives the hoist.</p>
+  <figure><video class="clip" src="video/g1_t4.mp4" poster="img/cramera_g1_t4.jpg" controls playsinline muted preload="metadata" aria-label="G1 hoisted into the nacelle by the service crane"></video>
+    <figcaption><span class="src">T4</span><strong>Into the nacelle:</strong> from the tower door round to the lifting platform behind the tower, hoisted 108 m through the open rear hatch, onto the nacelle floor (0 mm step). There it checks the controller cabinet and walks onto the walkway. Recorded CRAM plan, __LEN_g1_t4__.</figcaption></figure>
+  <figure><video class="clip" src="video/g1_t5.mp4" poster="img/cramera_g1_t5.jpg" controls playsinline muted preload="metadata" aria-label="G1 riding the tower lift to the yaw deck"></video>
+    <figcaption><span class="src">T5</span><strong>Up the tower:</strong> in through the door and into the lift car, up 105 m to the yaw deck, round the cable opening. It finds the cable loop rubbed through at the saddle, with copper showing. Tower wall cut away for the video. Recorded CRAM plan, __LEN_g1_t5__.</figcaption></figure>
+  <figure><img src="img/render_hoist.jpg" alt="Lifting platform lowered to the ground on the crane rope" loading="lazy"><figcaption><span class="src">Blender</span>Scenario “hoist_access”: the platform waiting on the ground behind the tower.</figcaption></figure>
 </section>
 
 <section id="faults">
@@ -164,6 +183,7 @@ footer code{font-family:var(--mono);font-size:12px}
   <div class="browser">
     <div class="zones" role="group" aria-label="Zone">
       <button class="chip" id="z-nacelle" data-zone="nacelle" aria-pressed="true">Nacelle</button>
+      <button class="chip" id="z-tower" data-zone="tower" aria-pressed="false">Tower</button>
       <button class="chip" id="z-outside" data-zone="outside" aria-pressed="false">Outside</button>
     </div>
     <div class="layout">
@@ -192,7 +212,7 @@ footer code{font-family:var(--mono);font-size:12px}
 const POINTS = __POINTS__;
 const pretty = s => s.replace(/_inspect_/, ": ").replace(/_/g, " ");
 let zone = "nacelle", state = "bad", current = null;
-try { const z = localStorage.getItem("wtt-zone"); if (z === "outside" || z === "nacelle") zone = z; } catch (e) {}
+try { const z = localStorage.getItem("wtt-zone"); if (z === "outside" || z === "nacelle" || z === "tower") zone = z; } catch (e) {}
 const list = document.getElementById("list"), shots = document.getElementById("shots");
 function img(kind, p){ return `<div class="shot"><span class="tag">${kind === "ok" ? "Healthy" : "Faulty"}</span><img src="img/${kind}_${p.name}.jpg" alt="${kind === "ok" ? "Healthy" : "Faulty"}: ${p.what}"></div>`; }
 function show(p){

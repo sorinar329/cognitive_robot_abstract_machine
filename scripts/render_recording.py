@@ -1,6 +1,6 @@
 """Render a CRAMERA recording (a cramera-onboard bundle) to an MP4 video.
 
-  blender -b --factory-startup -P scripts/render_recording.py -- BUNDLE OUT.mp4 [--step N] [--view NAME]
+  blender -b --factory-startup -P scripts/render_recording.py -- BUNDLE OUT.mp4 [--step N] [--view NAME] [--stills F,F,..]
 
 Replays the bundle's trajectory: every model's joints (keyed ``prefix/joint``),
 the robot base pose and the tracked objects. The turbine is built from the
@@ -25,6 +25,8 @@ argv = sys.argv[sys.argv.index("--") + 1:]
 bundle, out = os.path.expanduser(argv[0]), argv[1]
 step = int(argv[argv.index("--step") + 1]) if "--step" in argv else 2
 view = argv[argv.index("--view") + 1] if "--view" in argv else None
+stills = [float(v) for v in argv[argv.index("--stills") + 1].split(",")] if "--stills" in argv else None
+"""--stills 0.1,0.5,0.9: instead of the video, PNGs at these fractions of the run (OUT is a directory)."""
 
 with open(os.path.join(bundle, "scene.json")) as f:
     scene_spec = json.load(f)
@@ -107,7 +109,7 @@ class Model:
         if self.robot and base_body in linked:        # the recorded base pose belongs to this body
             self.root = base_body
 
-    def transforms(self, positions, base):
+    def transforms(self, positions, base, links=None):
         cache = {}
 
         def tf(link):
@@ -126,7 +128,22 @@ class Model:
                 m = tf(j["parent"]) @ j["origin"] @ motion
             cache[link] = m
             return m
-        return {link: tf(link) for link, _, _ in self.visuals}
+        return {link: tf(link) for link in (links or [v[0] for v in self.visuals])}
+
+    def moving_links(self, frames):
+        """Links below a joint whose position changes during the recording."""
+        def value(frame, j):
+            return frame.get(f"{self.prefix}/{j['name']}", frame.get(j["name"], 0.0))
+        moving = {child for child, j in self.joints.items() if j["type"] != "fixed"
+                  and any(abs(value(f, j) - value(frames[0], j)) > 1e-4 for f in frames)}
+
+        def below(link):
+            while link is not None:
+                if link in moving:
+                    return True
+                link = self.joints[link]["parent"] if link in self.joints else None
+            return False
+        return {link for link, _, _ in self.visuals if below(link)}
 
 
 def pose_matrix(p):
@@ -148,21 +165,76 @@ for spec in scene_spec.get("objects") or []:
         o.data.materials.append(mat)
         objects[spec["key"]] = o
 
+# %% view: camera, optional robot-following and tower cutaway
+if view:
+    sys.path.insert(0, ROOT)
+    from turbine.views import VIEWS  # noqa: E402
+    camera = VIEWS[view][0]
+else:
+    camera = scene_spec.get("camera") or {"position": [10, -10, 8], "target": [0, 0, 1]}
+if camera.get("cut_tower"):
+    import bmesh
+    side = Vector(camera["cut_tower"] + [0.0]).normalized()
+    for model in models:
+        for link, vis_origin, obj in model.visuals:
+            if not link.startswith("tower_section"):
+                continue
+            m = model.transforms(traj["frames"][0], Matrix.Identity(4), [link])[link] @ vis_origin
+            bm = bmesh.new()
+            bm.from_mesh(obj.data)
+            doomed = [f for f in bm.faces if (m @ f.calc_center_median()).xy.dot(side.xy) > 0.2]
+            bmesh.ops.delete(bm, geom=doomed, context="FACES")
+            bm.to_mesh(obj.data)
+            bm.free()
+
+# hoist rope: drawn between the crane trolley and the hook (the URDF cannot stretch a mesh)
+rope = None
+env = next((m for m in models if not m.robot and "crane_hook" in m.joints), None)
+if env:
+    bpy.ops.mesh.primitive_cylinder_add(vertices=8, radius=0.012, depth=1.0)
+    rope = bpy.context.active_object
+    rope.data.transform(Matrix.Translation((0, 0, 0.5)))
+    rope_mat = bpy.data.materials.new("rope")
+    rope_mat.diffuse_color = (0.08, 0.08, 0.08, 1.0)
+    rope.data.materials.append(rope_mat)
+
 # %% keyframes
 frames = list(range(0, len(traj["frames"]), step))
+moving = {id(m): (m.moving_links([traj["frames"][i] for i in frames]) if not m.robot else None) for m in models}
+robot_model = next((m for m in models if m.robot), None)
+cam_data = bpy.data.cameras.new("cam")
+cam_data.lens, cam_data.clip_start, cam_data.clip_end = 22, 0.05, 2000
+cam = bpy.data.objects.new("cam", cam_data)
+scene.collection.objects.link(cam)
 for k, i in enumerate(frames):
     positions = traj["frames"][i]
     base = pose_matrix(traj["base"][i]) if traj.get("base") and traj["base"][i] else Matrix.Identity(4)
     for model in models:
-        if k > 0 and not model.robot:
-            continue                            # the environment only moves if its joints do; keep it static
+        animated = moving[id(model)]
+        if k > 0 and not model.robot and not animated:
+            continue                            # the environment only moves if its joints do
         tfs = model.transforms(positions, base)
         for link, vis_origin, obj in model.visuals:
+            if k > 0 and not model.robot and link not in animated:
+                continue
             obj.matrix_world = tfs[link] @ vis_origin
-            if model.robot:
+            if model.robot or link in animated:
                 obj.rotation_mode = "QUATERNION"
                 obj.keyframe_insert("location", frame=k + 1)
                 obj.keyframe_insert("rotation_quaternion", frame=k + 1)
+    if rope:
+        t = env.transforms(positions, base, ["crane_trolley", "crane_hook"])
+        top, bottom = t["crane_trolley"] @ Vector((0, 0, -0.33)), t["crane_hook"] @ Vector((0, 0, 0.6))
+        length = max((top - bottom).length, 1e-3)
+        rope.matrix_world = Matrix.Translation(bottom) @ Matrix.Diagonal((1, 1, length, 1))
+        rope.keyframe_insert("location", frame=k + 1)
+        rope.keyframe_insert("scale", frame=k + 1)
+    if "follow" in camera and robot_model:
+        at = base.translation
+        cam.location = at + Vector(camera["follow"])
+        cam.rotation_euler = (at + Vector(camera["look"]) - cam.location).to_track_quat("-Z", "Y").to_euler()
+        cam.keyframe_insert("location", frame=k + 1)
+        cam.keyframe_insert("rotation_euler", frame=k + 1)
     tracked = traj["objects"][i] if traj.get("objects") and i < len(traj["objects"]) else {}
     for key, obj in objects.items():
         if key in tracked:
@@ -172,18 +244,9 @@ for k, i in enumerate(frames):
             obj.keyframe_insert("rotation_quaternion", frame=k + 1)
 
 # %% camera, look, output
-if view:
-    sys.path.insert(0, ROOT)
-    from turbine.views import VIEWS  # noqa: E402
-    camera = VIEWS[view][0]
-else:
-    camera = scene_spec.get("camera") or {"position": [10, -10, 8], "target": [0, 0, 1]}
-cam_data = bpy.data.cameras.new("cam")
-cam_data.lens, cam_data.clip_start, cam_data.clip_end = 22, 0.05, 2000
-cam = bpy.data.objects.new("cam", cam_data)
-scene.collection.objects.link(cam)
-cam.location = Vector(camera["position"])
-cam.rotation_euler = (Vector(camera["target"]) - cam.location).to_track_quat("-Z", "Y").to_euler()
+if "follow" not in camera:
+    cam.location = Vector(camera["position"])
+    cam.rotation_euler = (Vector(camera["target"]) - cam.location).to_track_quat("-Z", "Y").to_euler()
 scene.camera = cam
 
 scene.render.engine = "BLENDER_WORKBENCH"
@@ -204,6 +267,16 @@ scene.render.ffmpeg.format = "MPEG4"
 scene.render.ffmpeg.codec = "H264"
 scene.render.ffmpeg.constant_rate_factor = "MEDIUM"
 scene.render.filepath = os.path.abspath(out)
-print(f"rendering {len(frames)} frames at {scene.render.fps} fps to {out}", flush=True)
-bpy.ops.render.render(animation=True)
-print("wrote", out)
+if stills:
+    if hasattr(settings, "media_type"):
+        settings.media_type = "IMAGE"
+    settings.file_format = "PNG"
+    for fraction in stills:
+        scene.frame_set(1 + round(fraction * (len(frames) - 1)))
+        scene.render.filepath = os.path.join(os.path.abspath(out), f"still_{fraction:.2f}.png")
+        bpy.ops.render.render(write_still=True)
+        print("wrote", scene.render.filepath)
+else:
+    print(f"rendering {len(frames)} frames at {scene.render.fps} fps to {out}", flush=True)
+    bpy.ops.render.render(animation=True)
+    print("wrote", out)

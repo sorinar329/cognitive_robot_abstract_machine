@@ -39,153 +39,153 @@
     </visual>
     <collision>
       <geometry>
-        <box size="5.51543 5.51543 0.24"/>
+        <box size="5.51543 5.51543 0"/>
       </geometry>
-      <origin xyz="0 0 0.12" rpy="0 0 0"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
     </collision>
     <collision>
       <geometry>
-        <box size="1.16228 1.04689 0.24"/>
+        <box size="1.16228 1.04689 0"/>
       </geometry>
-      <origin xyz="3.31886 0 0.12" rpy="0 0 0"/>
+      <origin xyz="3.31886 0 0" rpy="0 0 0"/>
     </collision>
     <collision>
       <geometry>
-        <box size="1.16228 1.04689 0.24"/>
+        <box size="1.16228 1.04689 0"/>
       </geometry>
-      <origin xyz="3.20577 0.858984 0.12" rpy="0 0 0.261799"/>
+      <origin xyz="3.20577 0.858984 0" rpy="0 0 0.261799"/>
     </collision>
     <collision>
       <geometry>
-        <box size="1.16228 1.04689 0.24"/>
+        <box size="1.16228 1.04689 0"/>
       </geometry>
-      <origin xyz="2.87422 1.65943 0.12" rpy="0 0 0.523599"/>
+      <origin xyz="2.87422 1.65943 0" rpy="0 0 0.523599"/>
     </collision>
     <collision>
       <geometry>
-        <box size="1.16228 1.04689 0.24"/>
+        <box size="1.16228 1.04689 0"/>
       </geometry>
-      <origin xyz="2.34679 2.34679 0.12" rpy="0 0 0.785398"/>
+      <origin xyz="2.34679 2.34679 0" rpy="0 0 0.785398"/>
     </collision>
     <collision>
       <geometry>
-        <box size="1.16228 1.04689 0.24"/>
+        <box size="1.16228 1.04689 0"/>
       </geometry>
-      <origin xyz="1.65943 2.87422 0.12" rpy="0 0 1.0472"/>
+      <origin xyz="1.65943 2.87422 0" rpy="0 0 1.0472"/>
     </collision>
     <collision>
       <geometry>
-        <box size="1.16228 1.04689 0.24"/>
+        <box size="1.16228 1.04689 0"/>
       </geometry>
-      <origin xyz="0.858984 3.20577 0.12" rpy="0 0 1.309"/>
+      <origin xyz="0.858984 3.20577 0" rpy="0 0 1.309"/>
     </collision>
     <collision>
       <geometry>
-        <box size="1.16228 1.04689 0.24"/>
+        <box size="1.16228 1.04689 0"/>
       </geometry>
-      <origin xyz="2.03221e-16 3.31886 0.12" rpy="0 0 1.5708"/>
+      <origin xyz="2.03221e-16 3.31886 0" rpy="0 0 1.5708"/>
     </collision>
     <collision>
       <geometry>
-        <box size="1.16228 1.04689 0.24"/>
+        <box size="1.16228 1.04689 0"/>
       </geometry>
-      <origin xyz="-0.858984 3.20577 0.12" rpy="0 0 1.8326"/>
+      <origin xyz="-0.858984 3.20577 0" rpy="0 0 1.8326"/>
     </collision>
     <collision>
       <geometry>
-        <box size="1.16228 1.04689 0.24"/>
+        <box size="1.16228 1.04689 0"/>
       </geometry>
-      <origin xyz="-1.65943 2.87422 0.12" rpy="0 0 2.0944"/>
+      <origin xyz="-1.65943 2.87422 0" rpy="0 0 2.0944"/>
     </collision>
     <collision>
       <geometry>
-        <box size="1.16228 1.04689 0.24"/>
+        <box size="1.16228 1.04689 0"/>
       </geometry>
-      <origin xyz="-2.34679 2.34679 0.12" rpy="0 0 2.35619"/>
+      <origin xyz="-2.34679 2.34679 0" rpy="0 0 2.35619"/>
     </collision>
     <collision>
       <geometry>
-        <box size="1.16228 1.04689 0.24"/>
+        <box size="1.16228 1.04689 0"/>
       </geometry>
-      <origin xyz="-2.87422 1.65943 0.12" rpy="0 0 2.61799"/>
+      <origin xyz="-2.87422 1.65943 0" rpy="0 0 2.61799"/>
     </collision>
     <collision>
       <geometry>
-        <box size="1.16228 1.04689 0.24"/>
+        <box size="1.16228 1.04689 0"/>
       </geometry>
-      <origin xyz="-3.20577 0.858984 0.12" rpy="0 0 2.87979"/>
+      <origin xyz="-3.20577 0.858984 0" rpy="0 0 2.87979"/>
     </collision>
     <collision>
       <geometry>
-        <box size="1.16228 1.04689 0.24"/>
+        <box size="1.16228 1.04689 0"/>
       </geometry>
-      <origin xyz="-3.31886 4.06443e-16 0.12" rpy="0 0 3.14159"/>
+      <origin xyz="-3.31886 4.06443e-16 0" rpy="0 0 3.14159"/>
     </collision>
     <collision>
       <geometry>
-        <box size="1.16228 1.04689 0.24"/>
+        <box size="1.16228 1.04689 0"/>
       </geometry>
-      <origin xyz="-3.20577 -0.858984 0.12" rpy="0 0 3.40339"/>
+      <origin xyz="-3.20577 -0.858984 0" rpy="0 0 3.40339"/>
     </collision>
     <collision>
       <geometry>
-        <box size="1.16228 1.04689 0.24"/>
+        <box size="1.16228 1.04689 0"/>
       </geometry>
-      <origin xyz="-2.87422 -1.65943 0.12" rpy="0 0 3.66519"/>
+      <origin xyz="-2.87422 -1.65943 0" rpy="0 0 3.66519"/>
     </collision>
     <collision>
       <geometry>
-        <box size="1.16228 1.04689 0.24"/>
+        <box size="1.16228 1.04689 0"/>
       </geometry>
-      <origin xyz="-2.34679 -2.34679 0.12" rpy="0 0 3.92699"/>
+      <origin xyz="-2.34679 -2.34679 0" rpy="0 0 3.92699"/>
     </collision>
     <collision>
       <geometry>
-        <box size="1.16228 1.04689 0.24"/>
+        <box size="1.16228 1.04689 0"/>
       </geometry>
-      <origin xyz="-1.65943 -2.87422 0.12" rpy="0 0 4.18879"/>
+      <origin xyz="-1.65943 -2.87422 0" rpy="0 0 4.18879"/>
     </collision>
     <collision>
       <geometry>
-        <box size="1.16228 1.04689 0.24"/>
+        <box size="1.16228 1.04689 0"/>
       </geometry>
-      <origin xyz="-0.858984 -3.20577 0.12" rpy="0 0 4.45059"/>
+      <origin xyz="-0.858984 -3.20577 0" rpy="0 0 4.45059"/>
     </collision>
     <collision>
       <geometry>
-        <box size="1.16228 1.04689 0.24"/>
+        <box size="1.16228 1.04689 0"/>
       </geometry>
-      <origin xyz="-6.09664e-16 -3.31886 0.12" rpy="0 0 4.71239"/>
+      <origin xyz="-6.09664e-16 -3.31886 0" rpy="0 0 4.71239"/>
     </collision>
     <collision>
       <geometry>
-        <box size="1.16228 1.04689 0.24"/>
+        <box size="1.16228 1.04689 0"/>
       </geometry>
-      <origin xyz="0.858984 -3.20577 0.12" rpy="0 0 4.97419"/>
+      <origin xyz="0.858984 -3.20577 0" rpy="0 0 4.97419"/>
     </collision>
     <collision>
       <geometry>
-        <box size="1.16228 1.04689 0.24"/>
+        <box size="1.16228 1.04689 0"/>
       </geometry>
-      <origin xyz="1.65943 -2.87422 0.12" rpy="0 0 5.23599"/>
+      <origin xyz="1.65943 -2.87422 0" rpy="0 0 5.23599"/>
     </collision>
     <collision>
       <geometry>
-        <box size="1.16228 1.04689 0.24"/>
+        <box size="1.16228 1.04689 0"/>
       </geometry>
-      <origin xyz="2.34679 -2.34679 0.12" rpy="0 0 5.49779"/>
+      <origin xyz="2.34679 -2.34679 0" rpy="0 0 5.49779"/>
     </collision>
     <collision>
       <geometry>
-        <box size="1.16228 1.04689 0.24"/>
+        <box size="1.16228 1.04689 0"/>
       </geometry>
-      <origin xyz="2.87422 -1.65943 0.12" rpy="0 0 5.75959"/>
+      <origin xyz="2.87422 -1.65943 0" rpy="0 0 5.75959"/>
     </collision>
     <collision>
       <geometry>
-        <box size="1.16228 1.04689 0.24"/>
+        <box size="1.16228 1.04689 0"/>
       </geometry>
-      <origin xyz="3.20577 -0.858984 0.12" rpy="0 0 6.02139"/>
+      <origin xyz="3.20577 -0.858984 0" rpy="0 0 6.02139"/>
     </collision>
   </link>
   <joint name="foundation_joint" type="fixed">
@@ -486,6 +486,12 @@
         <box size="0.05697 0.806228 2.161"/>
       </geometry>
       <origin xyz="-0.76546 -2.85674 3.2415" rpy="0 0 4.45059"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.05697 0.806228 2.161"/>
+      </geometry>
+      <origin xyz="-5.43286e-16 -2.95751 3.2415" rpy="0 0 4.71239"/>
     </collision>
     <collision>
       <geometry>
@@ -1673,7 +1679,7 @@
   <joint name="tower_section_1_joint" type="fixed">
     <parent link="foundation"/>
     <child link="tower_section_1"/>
-    <origin xyz="0 0 0.3" rpy="0 0 0"/>
+    <origin xyz="0 0 0.06" rpy="0 0 0"/>
   </joint>
   <link name="tower_section_2">
     <inertial>
@@ -2711,69 +2717,9 @@
   <joint name="tower_door_joint" type="revolute">
     <parent link="tower_section_1"/>
     <child link="tower_door"/>
-    <origin xyz="0.45 -2.9583 0.96" rpy="0 0 0"/>
+    <origin xyz="0.45 -2.96117 -0.06" rpy="0 0 0"/>
     <axis xyz="0 0 1"/>
     <limit lower="0.0" upper="1.7" effort="100" velocity="1.0"/>
-  </joint>
-  <link name="entrance_stairs">
-    <inertial>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-      <mass value="1.0"/>
-      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
-    </inertial>
-    <visual>
-      <geometry>
-        <mesh filename="package://windturbine_model/models/site/entrance_stairs.obj"/>
-      </geometry>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-    </visual>
-    <collision>
-      <geometry>
-        <box size="1.4 1.4 0.08"/>
-      </geometry>
-      <origin xyz="0 -3.64233 0.92" rpy="0 0 0"/>
-    </collision>
-    <collision>
-      <geometry>
-        <box size="1.2 0.28 0.18"/>
-      </geometry>
-      <origin xyz="0 -5.88233 -0.21" rpy="0 0 0"/>
-    </collision>
-    <collision>
-      <geometry>
-        <box size="1.2 0.28 0.36"/>
-      </geometry>
-      <origin xyz="0 -5.60233 -0.12" rpy="0 0 0"/>
-    </collision>
-    <collision>
-      <geometry>
-        <box size="1.2 0.28 0.54"/>
-      </geometry>
-      <origin xyz="0 -5.32233 -0.03" rpy="0 0 0"/>
-    </collision>
-    <collision>
-      <geometry>
-        <box size="1.2 0.28 0.72"/>
-      </geometry>
-      <origin xyz="0 -5.04233 0.06" rpy="0 0 0"/>
-    </collision>
-    <collision>
-      <geometry>
-        <box size="1.2 0.28 0.9"/>
-      </geometry>
-      <origin xyz="0 -4.76233 0.15" rpy="0 0 0"/>
-    </collision>
-    <collision>
-      <geometry>
-        <box size="1.2 0.28 1.08"/>
-      </geometry>
-      <origin xyz="0 -4.48233 0.24" rpy="0 0 0"/>
-    </collision>
-  </link>
-  <joint name="entrance_stairs_joint" type="fixed">
-    <parent link="tower_section_1"/>
-    <child link="entrance_stairs"/>
-    <origin xyz="0 0 0" rpy="0 0 0"/>
   </joint>
   <link name="yaw_bearing">
     <inertial>
@@ -2799,6 +2745,806 @@
     <child link="yaw_bearing"/>
     <origin xyz="0 0 21.57" rpy="0 0 0"/>
   </joint>
+  <link name="platform_1">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="1.0"/>
+      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="package://windturbine_model/models/tower_interior/platform_1.obj"/>
+      </geometry>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="2.3606 0.251641 0.05"/>
+      </geometry>
+      <origin xyz="0 -2.51641 20.485" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="3.1291 0.251641 0.05"/>
+      </geometry>
+      <origin xyz="0.0662671 -2.26477 20.485" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="3.44749 0.251641 0.05"/>
+      </geometry>
+      <origin xyz="0.225458 -2.01313 20.485" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="3.69204 0.251641 0.05"/>
+      </geometry>
+      <origin xyz="0.347734 -1.76149 20.485" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.18899 0.251641 0.05"/>
+      </geometry>
+      <origin xyz="-2.29278 -1.50984 20.485" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="3.88556 0.251641 0.05"/>
+      </geometry>
+      <origin xyz="0.444495 -1.50984 20.485" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="5.08289 0.251641 0.05"/>
+      </geometry>
+      <origin xyz="0 -1.2582 20.485" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="5.32623 0.251641 0.05"/>
+      </geometry>
+      <origin xyz="0 -1.00656 20.485" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="5.51317 0.251641 0.05"/>
+      </geometry>
+      <origin xyz="0 -0.754922 20.485" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="1.44466 0.251641 0.05"/>
+      </geometry>
+      <origin xyz="-2.10233 -0.503281 20.485" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="3.14466 0.251641 0.05"/>
+      </geometry>
+      <origin xyz="1.25233 -0.503281 20.485" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="1.48915 0.251641 0.05"/>
+      </geometry>
+      <origin xyz="-2.12457 -0.251641 20.485" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="3.18915 0.251641 0.05"/>
+      </geometry>
+      <origin xyz="1.27457 -0.251641 20.485" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="1.51113 0.251641 0.05"/>
+      </geometry>
+      <origin xyz="-2.13557 -2.22045e-16 20.485" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="3.21113 0.251641 0.05"/>
+      </geometry>
+      <origin xyz="1.28557 -2.22045e-16 20.485" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="1.48915 0.251641 0.05"/>
+      </geometry>
+      <origin xyz="-2.12457 0.251641 20.485" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="3.18915 0.251641 0.05"/>
+      </geometry>
+      <origin xyz="1.27457 0.251641 20.485" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="1.44466 0.251641 0.05"/>
+      </geometry>
+      <origin xyz="-2.10233 0.503281 20.485" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="3.14466 0.251641 0.05"/>
+      </geometry>
+      <origin xyz="1.25233 0.503281 20.485" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="5.51317 0.251641 0.05"/>
+      </geometry>
+      <origin xyz="0 0.754922 20.485" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="5.32623 0.251641 0.05"/>
+      </geometry>
+      <origin xyz="0 1.00656 20.485" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="5.08289 0.251641 0.05"/>
+      </geometry>
+      <origin xyz="0 1.2582 20.485" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="4.77455 0.251641 0.05"/>
+      </geometry>
+      <origin xyz="0 1.50984 20.485" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="4.38751 0.251641 0.05"/>
+      </geometry>
+      <origin xyz="0 1.76149 20.485" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="3.8984 0.251641 0.05"/>
+      </geometry>
+      <origin xyz="0 2.01313 20.485" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="3.26164 0.251641 0.05"/>
+      </geometry>
+      <origin xyz="0 2.26477 20.485" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="2.3606 0.251641 0.05"/>
+      </geometry>
+      <origin xyz="0 2.51641 20.485" rpy="0 0 0"/>
+    </collision>
+  </link>
+  <joint name="platform_1_joint" type="fixed">
+    <parent link="tower_section_1"/>
+    <child link="platform_1"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+  <link name="platform_2">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="1.0"/>
+      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="package://windturbine_model/models/tower_interior/platform_2.obj"/>
+      </geometry>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="2.37447 0.253119 0.05"/>
+      </geometry>
+      <origin xyz="0 -2.53119 31.285" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="3.1507 0.253119 0.05"/>
+      </geometry>
+      <origin xyz="0.0650468 -2.27807 31.285" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="3.47096 0.253119 0.05"/>
+      </geometry>
+      <origin xyz="0.225173 -2.02495 31.285" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="3.71694 0.253119 0.05"/>
+      </geometry>
+      <origin xyz="0.348168 -1.77183 31.285" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.190993 0.253119 0.05"/>
+      </geometry>
+      <origin xyz="-2.3058 -1.51871 31.285" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="3.9116 0.253119 0.05"/>
+      </geometry>
+      <origin xyz="0.445496 -1.51871 31.285" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="5.11275 0.253119 0.05"/>
+      </geometry>
+      <origin xyz="0 -1.26559 31.285" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="5.35752 0.253119 0.05"/>
+      </geometry>
+      <origin xyz="0 -1.01248 31.285" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="5.54556 0.253119 0.05"/>
+      </geometry>
+      <origin xyz="0 -0.759357 31.285" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="1.46125 0.253119 0.05"/>
+      </geometry>
+      <origin xyz="-2.11063 -0.506238 31.285" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="3.16125 0.253119 0.05"/>
+      </geometry>
+      <origin xyz="1.26063 -0.506238 31.285" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="1.506 0.253119 0.05"/>
+      </geometry>
+      <origin xyz="-2.133 -0.253119 31.285" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="3.206 0.253119 0.05"/>
+      </geometry>
+      <origin xyz="1.283 -0.253119 31.285" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="1.52812 0.253119 0.05"/>
+      </geometry>
+      <origin xyz="-2.14406 2.22045e-16 31.285" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="3.22812 0.253119 0.05"/>
+      </geometry>
+      <origin xyz="1.29406 2.22045e-16 31.285" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="1.506 0.253119 0.05"/>
+      </geometry>
+      <origin xyz="-2.133 0.253119 31.285" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="3.206 0.253119 0.05"/>
+      </geometry>
+      <origin xyz="1.283 0.253119 31.285" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="1.46125 0.253119 0.05"/>
+      </geometry>
+      <origin xyz="-2.11063 0.506238 31.285" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="3.16125 0.253119 0.05"/>
+      </geometry>
+      <origin xyz="1.26063 0.506238 31.285" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="5.54556 0.253119 0.05"/>
+      </geometry>
+      <origin xyz="0 0.759357 31.285" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="5.35752 0.253119 0.05"/>
+      </geometry>
+      <origin xyz="0 1.01248 31.285" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="5.11275 0.253119 0.05"/>
+      </geometry>
+      <origin xyz="0 1.26559 31.285" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="4.80259 0.253119 0.05"/>
+      </geometry>
+      <origin xyz="0 1.51871 31.285" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="4.41328 0.253119 0.05"/>
+      </geometry>
+      <origin xyz="0 1.77183 31.285" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="3.9213 0.253119 0.05"/>
+      </geometry>
+      <origin xyz="0 2.02495 31.285" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="3.2808 0.253119 0.05"/>
+      </geometry>
+      <origin xyz="0 2.27807 31.285" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="2.37447 0.253119 0.05"/>
+      </geometry>
+      <origin xyz="0 2.53119 31.285" rpy="0 0 0"/>
+    </collision>
+  </link>
+  <joint name="platform_2_joint" type="fixed">
+    <parent link="tower_section_2"/>
+    <child link="platform_2"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+  <link name="platform_3">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="1.0"/>
+      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="package://windturbine_model/models/tower_interior/platform_3.obj"/>
+      </geometry>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="2.01347 0.25588 0.05"/>
+      </geometry>
+      <origin xyz="0.0167833 -1.79116 31.285" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="2.39147 0.25588 0.05"/>
+      </geometry>
+      <origin xyz="0.20578 -1.53528 31.285" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="2.64825 0.25588 0.05"/>
+      </geometry>
+      <origin xyz="0.334169 -1.2794 31.285" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.155224 0.25588 0.05"/>
+      </geometry>
+      <origin xyz="-1.76757 -1.02352 31.285" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="2.83513 0.25588 0.05"/>
+      </geometry>
+      <origin xyz="0.427612 -1.02352 31.285" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="3.96408 0.25588 0.05"/>
+      </geometry>
+      <origin xyz="0 -0.76764 31.285" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.69878 0.25588 0.05"/>
+      </geometry>
+      <origin xyz="-1.72939 -0.51176 31.285" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="2.39878 0.25588 0.05"/>
+      </geometry>
+      <origin xyz="0.87939 -0.51176 31.285" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.760847 0.25588 0.05"/>
+      </geometry>
+      <origin xyz="-1.76042 -0.25588 31.285" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="2.46085 0.25588 0.05"/>
+      </geometry>
+      <origin xyz="0.910423 -0.25588 31.285" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.791215 0.25588 0.05"/>
+      </geometry>
+      <origin xyz="-1.77561 0 31.285" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="2.49121 0.25588 0.05"/>
+      </geometry>
+      <origin xyz="0.925607 0 31.285" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.760847 0.25588 0.05"/>
+      </geometry>
+      <origin xyz="-1.76042 0.25588 31.285" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="2.46085 0.25588 0.05"/>
+      </geometry>
+      <origin xyz="0.910423 0.25588 31.285" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.69878 0.25588 0.05"/>
+      </geometry>
+      <origin xyz="-1.72939 0.51176 31.285" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="2.39878 0.25588 0.05"/>
+      </geometry>
+      <origin xyz="0.87939 0.51176 31.285" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="3.96408 0.25588 0.05"/>
+      </geometry>
+      <origin xyz="0 0.76764 31.285" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="3.69036 0.25588 0.05"/>
+      </geometry>
+      <origin xyz="0 1.02352 31.285" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="3.31659 0.25588 0.05"/>
+      </geometry>
+      <origin xyz="0 1.2794 31.285" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="2.80303 0.25588 0.05"/>
+      </geometry>
+      <origin xyz="0 1.53528 31.285" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="2.04704 0.25588 0.05"/>
+      </geometry>
+      <origin xyz="0 1.79116 31.285" rpy="0 0 0"/>
+    </collision>
+  </link>
+  <joint name="platform_3_joint" type="fixed">
+    <parent link="tower_section_3"/>
+    <child link="platform_3"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+  <link name="platform_4">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="1.0"/>
+      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="package://windturbine_model/models/tower_interior/platform_4.obj"/>
+      </geometry>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="1.37702 0.254656 0.05"/>
+      </geometry>
+      <origin xyz="0.156087 -1.14595 18.945" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="1.67128 0.254656 0.05"/>
+      </geometry>
+      <origin xyz="0.303216 -0.891296 18.945" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="1.64323 0.254656 0.05"/>
+      </geometry>
+      <origin xyz="0.501616 -0.63664 18.945" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.0605517 0.254656 0.05"/>
+      </geometry>
+      <origin xyz="-1.41028 -0.381984 18.945" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="1.76055 0.254656 0.05"/>
+      </geometry>
+      <origin xyz="0.560276 -0.381984 18.945" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.126565 0.254656 0.05"/>
+      </geometry>
+      <origin xyz="-1.44328 -0.127328 18.945" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.07 0.254656 0.05"/>
+      </geometry>
+      <origin xyz="-0.285 -0.127328 18.945" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="1.25656 0.254656 0.05"/>
+      </geometry>
+      <origin xyz="0.878282 -0.127328 18.945" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.126565 0.254656 0.05"/>
+      </geometry>
+      <origin xyz="-1.44328 0.127328 18.945" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.07 0.254656 0.05"/>
+      </geometry>
+      <origin xyz="-0.285 0.127328 18.945" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="1.25656 0.254656 0.05"/>
+      </geometry>
+      <origin xyz="0.878282 0.127328 18.945" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.0605517 0.254656 0.05"/>
+      </geometry>
+      <origin xyz="-1.41028 0.381984 18.945" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="1.76055 0.254656 0.05"/>
+      </geometry>
+      <origin xyz="0.560276 0.381984 18.945" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="1.64323 0.254656 0.05"/>
+      </geometry>
+      <origin xyz="0.501616 0.63664 18.945" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="2.27771 0.254656 0.05"/>
+      </geometry>
+      <origin xyz="0 0.891296 18.945" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="1.6892 0.254656 0.05"/>
+      </geometry>
+      <origin xyz="0 1.14595 18.945" rpy="0 0 0"/>
+    </collision>
+  </link>
+  <joint name="platform_4_joint" type="fixed">
+    <parent link="tower_section_4"/>
+    <child link="platform_4"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+  <link name="ladder_1">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="1.0"/>
+      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="package://windturbine_model/models/tower_interior/ladder_1.obj"/>
+      </geometry>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </visual>
+  </link>
+  <joint name="ladder_1_joint" type="fixed">
+    <parent link="tower_section_1"/>
+    <child link="ladder_1"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+  <link name="ladder_2">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="1.0"/>
+      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="package://windturbine_model/models/tower_interior/ladder_2.obj"/>
+      </geometry>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </visual>
+  </link>
+  <joint name="ladder_2_joint" type="fixed">
+    <parent link="tower_section_2"/>
+    <child link="ladder_2"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+  <link name="ladder_3">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="1.0"/>
+      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="package://windturbine_model/models/tower_interior/ladder_3.obj"/>
+      </geometry>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </visual>
+  </link>
+  <joint name="ladder_3_joint" type="fixed">
+    <parent link="tower_section_3"/>
+    <child link="ladder_3"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+  <link name="ladder_4">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="1.0"/>
+      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="package://windturbine_model/models/tower_interior/ladder_4.obj"/>
+      </geometry>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </visual>
+  </link>
+  <joint name="ladder_4_joint" type="fixed">
+    <parent link="tower_section_4"/>
+    <child link="ladder_4"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+  <link name="cable_loop">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="1.0"/>
+      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="package://windturbine_model/models/tower_interior/cable_loop.obj"/>
+      </geometry>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </visual>
+  </link>
+  <joint name="cable_loop_joint" type="fixed">
+    <parent link="tower_section_4"/>
+    <child link="cable_loop"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+  <link name="ground_controller">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="1.0"/>
+      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="package://windturbine_model/models/tower_interior/ground_controller.obj"/>
+      </geometry>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="0.9 0.55 2"/>
+      </geometry>
+      <origin xyz="0 2.61164 0.94" rpy="0 0 0"/>
+    </collision>
+  </link>
+  <joint name="ground_controller_joint" type="fixed">
+    <parent link="tower_section_1"/>
+    <child link="ground_controller"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+  <link name="lift_rails">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="1.0"/>
+      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="package://windturbine_model/models/tower_interior/lift_rails.obj"/>
+      </geometry>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </visual>
+  </link>
+  <joint name="lift_rails_joint" type="fixed">
+    <parent link="tower_section_1"/>
+    <child link="lift_rails"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+  <link name="service_lift">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="1.0"/>
+      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="package://windturbine_model/models/tower_interior/lift_car.obj"/>
+      </geometry>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="0.9 0.9 0.04"/>
+      </geometry>
+      <origin xyz="0 0 -0.02" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.9 0.02 1.1"/>
+      </geometry>
+      <origin xyz="0 -0.46 0.55" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.9 0.02 1.1"/>
+      </geometry>
+      <origin xyz="0 0.46 0.55" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.02 0.9 1.1"/>
+      </geometry>
+      <origin xyz="-0.46 0 0.55" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.9 0.9 0.3"/>
+      </geometry>
+      <origin xyz="0 0 2.35" rpy="0 0 0"/>
+    </collision>
+  </link>
+  <joint name="service_lift_joint" type="prismatic">
+    <parent link="tower_section_1"/>
+    <child link="service_lift"/>
+    <origin xyz="-0.85 0 -0.06" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="0.0" upper="105.66000000000001" effort="100" velocity="4.0"/>
+  </joint>
   <link name="nacelle">
     <inertial>
       <origin xyz="0 0 0" rpy="0 0 0"/>
@@ -2819,27 +3565,57 @@
     </visual>
     <collision>
       <geometry>
-        <box size="8.79 4.08 0.08"/>
+        <box size="12.48 1.16 0.08"/>
       </geometry>
-      <origin xyz="-5.345 0 -0.04" rpy="0 0 0"/>
+      <origin xyz="-3.5 -1.46 -0.04" rpy="0 0 0"/>
     </collision>
     <collision>
       <geometry>
-        <box size="2.99 4.08 0.08"/>
+        <box size="8.79 0.33 0.08"/>
       </geometry>
-      <origin xyz="1.245 0 -0.04" rpy="0 0 0"/>
+      <origin xyz="-5.345 -0.715 -0.04" rpy="0 0 0"/>
     </collision>
     <collision>
       <geometry>
-        <box size="0.7 3.4 0.08"/>
+        <box size="3.26 0.33 0.08"/>
       </geometry>
-      <origin xyz="-0.6 0.34 -0.04" rpy="0 0 0"/>
+      <origin xyz="1.11 -0.715 -0.04" rpy="0 0 0"/>
     </collision>
     <collision>
       <geometry>
-        <box size="0.7 0.04 0.08"/>
+        <box size="0.19 0.05 0.08"/>
       </geometry>
-      <origin xyz="-0.6 -2.02 -0.04" rpy="0 0 0"/>
+      <origin xyz="-9.645 -0.525 -0.04" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="7.5 0.05 0.08"/>
+      </geometry>
+      <origin xyz="-4.7 -0.525 -0.04" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="3.26 0.05 0.08"/>
+      </geometry>
+      <origin xyz="1.11 -0.525 -0.04" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.19 0.95 0.08"/>
+      </geometry>
+      <origin xyz="-9.645 -0.025 -0.04" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="11.19 0.95 0.08"/>
+      </geometry>
+      <origin xyz="-2.855 -0.025 -0.04" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="12.48 1.59 0.08"/>
+      </geometry>
+      <origin xyz="-3.5 1.245 -0.04" rpy="0 0 0"/>
     </collision>
     <collision>
       <geometry>
@@ -2910,15 +3686,41 @@
     </visual>
     <collision>
       <geometry>
-        <box size="0.7 0.64 0.03"/>
+        <box size="0.43 0.38 0.03"/>
       </geometry>
-      <origin xyz="0 -0.32 0.015" rpy="0 0 0"/>
+      <origin xyz="0 -0.19 0.015" rpy="0 0 0"/>
     </collision>
   </link>
   <joint name="nacelle_floor_hatch_joint" type="revolute">
     <parent link="nacelle"/>
     <child link="nacelle_floor_hatch"/>
-    <origin xyz="-0.6 -1.36 0" rpy="0 0 0"/>
+    <origin xyz="-0.735 -0.5 0" rpy="0 0 0"/>
+    <axis xyz="-1 0 0"/>
+    <limit lower="0.0" upper="1.9" effort="100" velocity="1.0"/>
+  </joint>
+  <link name="crane_hatch">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="1.0"/>
+      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="package://windturbine_model/models/nacelle/crane_hatch.obj"/>
+      </geometry>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="1.1 1 0.03"/>
+      </geometry>
+      <origin xyz="0 -0.5 0.015" rpy="0 0 0"/>
+    </collision>
+  </link>
+  <joint name="crane_hatch_joint" type="revolute">
+    <parent link="nacelle"/>
+    <child link="crane_hatch"/>
+    <origin xyz="-9 0.45 0" rpy="0 0 0"/>
     <axis xyz="-1 0 0"/>
     <limit lower="0.0" upper="1.9" effort="100" velocity="1.0"/>
   </joint>
@@ -3738,9 +4540,9 @@
     </visual>
     <collision>
       <geometry>
-        <box size="1.65 1.8 2.3"/>
+        <box size="1.3 1.4 2.3"/>
       </geometry>
-      <origin xyz="-8.825 0 1.15" rpy="0 0 0"/>
+      <origin xyz="-9 1.28 1.15" rpy="0 0 0"/>
     </collision>
   </link>
   <joint name="transformer_joint" type="fixed">
@@ -3762,9 +4564,9 @@
     </visual>
     <collision>
       <geometry>
-        <box size="0.6 0.85 2"/>
+        <box size="0.7 0.6 2"/>
       </geometry>
-      <origin xyz="-9.4 1.525 1" rpy="0 0 0"/>
+      <origin xyz="-8.6 -1.72 1" rpy="0 0 0"/>
     </collision>
   </link>
   <joint name="cabinet_converter_joint" type="fixed">
@@ -3786,15 +4588,15 @@
     </visual>
     <collision>
       <geometry>
-        <box size="0.03 0.83 1.86"/>
+        <box size="0.68 0.03 1.86"/>
       </geometry>
-      <origin xyz="0.015 -0.415 1.05" rpy="0 0 0"/>
+      <origin xyz="0.34 0.015 1.05" rpy="0 0 0"/>
     </collision>
   </link>
   <joint name="cabinet_converter_door_joint" type="revolute">
     <parent link="cabinet_converter"/>
     <child link="cabinet_converter_door"/>
-    <origin xyz="-9.1 1.94 0" rpy="0 0 0"/>
+    <origin xyz="-8.94 -1.42 0" rpy="0 0 0"/>
     <axis xyz="0 0 1"/>
     <limit lower="0.0" upper="1.9" effort="100" velocity="1.0"/>
   </joint>
@@ -3830,9 +4632,9 @@
     </visual>
     <collision>
       <geometry>
-        <box size="0.6 0.85 2"/>
+        <box size="0.7 0.6 2"/>
       </geometry>
-      <origin xyz="-9.4 -1.525 1" rpy="0 0 0"/>
+      <origin xyz="-9.35 -1.72 1" rpy="0 0 0"/>
     </collision>
   </link>
   <joint name="cabinet_controller_joint" type="fixed">
@@ -3854,16 +4656,16 @@
     </visual>
     <collision>
       <geometry>
-        <box size="0.03 0.83 1.86"/>
+        <box size="0.68 0.03 1.86"/>
       </geometry>
-      <origin xyz="0.015 0.415 1.05" rpy="0 0 0"/>
+      <origin xyz="0.34 0.015 1.05" rpy="0 0 0"/>
     </collision>
   </link>
   <joint name="cabinet_controller_door_joint" type="revolute">
     <parent link="cabinet_controller"/>
     <child link="cabinet_controller_door"/>
-    <origin xyz="-9.1 -1.94 0" rpy="0 0 0"/>
-    <axis xyz="0 0 -1"/>
+    <origin xyz="-9.69 -1.42 0" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
     <limit lower="0.0" upper="1.9" effort="100" velocity="1.0"/>
   </joint>
   <link name="hydraulic_unit">
@@ -4004,9 +4806,33 @@
   <joint name="crane_hook_joint" type="prismatic">
     <parent link="crane_trolley"/>
     <child link="crane_hook"/>
-    <origin xyz="0 0 -0.95" rpy="0 0 0"/>
+    <origin xyz="0 0 -1.765" rpy="0 0 0"/>
     <axis xyz="0 0 -1"/>
-    <limit lower="0.0" upper="2.8" effort="100" velocity="1.0"/>
+    <limit lower="0.0" upper="115.0" effort="100" velocity="4.0"/>
+  </joint>
+  <link name="lifting_platform">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="1.0"/>
+      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="package://windturbine_model/models/systems/lifting_platform.obj"/>
+      </geometry>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="0.9 0.9 0.1"/>
+      </geometry>
+      <origin xyz="0 0 -0.05" rpy="0 0 0"/>
+    </collision>
+  </link>
+  <joint name="lifting_platform_joint" type="fixed">
+    <parent link="crane_hook"/>
+    <child link="lifting_platform"/>
+    <origin xyz="0 0 -2" rpy="0 0 0"/>
   </joint>
   <link name="fire_extinguisher">
     <inertial>
@@ -4044,6 +4870,60 @@
     <child link="safety_equipment"/>
     <origin xyz="0 0 0" rpy="0 0 0"/>
   </joint>
+  <link name="tool_rack">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="1.0"/>
+      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="package://windturbine_model/models/systems/tool_rack.obj"/>
+      </geometry>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="0.6 0.32 0.03"/>
+      </geometry>
+      <origin xyz="-7.9 -1.88 0.835" rpy="0 0 0"/>
+    </collision>
+    <collision>
+      <geometry>
+        <box size="0.6 0.02 1.3"/>
+      </geometry>
+      <origin xyz="-7.9 -2.03 0.65" rpy="0 0 0"/>
+    </collision>
+  </link>
+  <joint name="tool_rack_joint" type="fixed">
+    <parent link="nacelle"/>
+    <child link="tool_rack"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+  <link name="tool_tray">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="1.0"/>
+      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="package://windturbine_model/models/systems/tool_tray.obj"/>
+      </geometry>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="0.4 0.27 0.025"/>
+      </geometry>
+      <origin xyz="1.2 -1.115 0.8375" rpy="0 0 0"/>
+    </collision>
+  </link>
+  <joint name="tool_tray_joint" type="fixed">
+    <parent link="nacelle"/>
+    <child link="tool_tray"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
   <link name="hydraulic_fault_leak">
     <inertial>
       <origin xyz="0 0 0" rpy="0 0 0"/>
@@ -4072,7 +4952,7 @@
   <joint name="tower_inspect_door_joint" type="fixed">
     <parent link="tower_section_1"/>
     <child link="tower_inspect_door"/>
-    <origin xyz="0 -3.04233 1.31" rpy="0 0 0"/>
+    <origin xyz="0 -3.04517 0.44" rpy="0 0 0"/>
   </joint>
   <link name="foundation_inspect_plinth">
     <inertial>
@@ -4084,7 +4964,7 @@
   <joint name="foundation_inspect_plinth_joint" type="fixed">
     <parent link="foundation"/>
     <child link="foundation_inspect_plinth"/>
-    <origin xyz="2.75772 -2.75772 0.12" rpy="0 0 0"/>
+    <origin xyz="2.58094 -2.58094 0" rpy="0 0 0"/>
   </joint>
   <link name="foundation_inspect_grout">
     <inertial>
@@ -4096,7 +4976,7 @@
   <joint name="foundation_inspect_grout_joint" type="fixed">
     <parent link="foundation"/>
     <child link="foundation_inspect_grout"/>
-    <origin xyz="2.7886 -1.61 0.3" rpy="0 0 0"/>
+    <origin xyz="2.7886 -1.61 0.06" rpy="0 0 0"/>
   </joint>
   <link name="foundation_inspect_earthing">
     <inertial>
@@ -4108,7 +4988,7 @@
   <joint name="foundation_inspect_earthing_joint" type="fixed">
     <parent link="foundation"/>
     <child link="foundation_inspect_earthing"/>
-    <origin xyz="-1.95 -3.3775 0.24" rpy="0 0 0"/>
+    <origin xyz="-1.775 -3.07439 0" rpy="0 0 0"/>
   </joint>
   <link name="tower_inspect_anchor_nuts">
     <inertial>
@@ -4133,6 +5013,18 @@
     <parent link="tower_section_1"/>
     <child link="tower_inspect_base_coating"/>
     <origin xyz="1.67385 -2.48159 0.6" rpy="0 0 0"/>
+  </joint>
+  <link name="tower_inspect_cable_loop">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="1.0"/>
+      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
+    </inertial>
+  </link>
+  <joint name="tower_inspect_cable_loop_joint" type="fixed">
+    <parent link="tower_section_4"/>
+    <child link="tower_inspect_cable_loop"/>
+    <origin xyz="0.139 -0.001 19.27" rpy="0 0 0"/>
   </joint>
   <link name="nacelle_inspect_weather_mast">
     <inertial>
@@ -4444,7 +5336,7 @@
   <joint name="converter_inspect_status_joint" type="fixed">
     <parent link="cabinet_converter"/>
     <child link="converter_inspect_status"/>
-    <origin xyz="-9.065 1.69 1.85" rpy="0 0 0"/>
+    <origin xyz="-8.69 -1.385 1.85" rpy="0 0 0"/>
   </joint>
   <link name="controller_inspect_door">
     <inertial>
@@ -4456,7 +5348,7 @@
   <joint name="controller_inspect_door_joint" type="fixed">
     <parent link="cabinet_controller"/>
     <child link="controller_inspect_door"/>
-    <origin xyz="-9.07 -1.525 1.2" rpy="0 0 0"/>
+    <origin xyz="-9.35 -1.39 1.2" rpy="0 0 0"/>
   </joint>
   <link name="hydraulic_inspect">
     <inertial>

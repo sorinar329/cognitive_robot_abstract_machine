@@ -4,7 +4,8 @@ A whole onshore wind turbine (IEA-3.4-130-RWT: 110 m hub height, 130 m rotor) as
 inspection environment for CRAM, shown in CRAMERA. The plan and task ladder are in
 `docs/PLAN.md`; the reference data are in `references/iea34/`.
 
-Unitree G1 inspection tasks (T0 door, T1 tower base round, T2 nacelle walkway round).
+Unitree G1 tasks (T0 door, T1 tower base round, T2 nacelle walkway round, T3 bring the
+tool, T4 crane hoist into the nacelle, T5 tower lift to the yaw deck).
 Run them in the full CRAM stack of the `cramera-port` checkout (`uv sync` there), with
 ROS, `~/workspace/segmind_ws` (G1 model) and this package sourced:
 
@@ -13,6 +14,8 @@ ROS, `~/workspace/segmind_ws` (G1 model) and this package sourced:
     $PY scripts/g1_inspection_round.py --zone ground --scenario outside_ground          # T1
     $PY scripts/g1_inspection_round.py --zone nacelle --scenario nacelle_all_faults     # T2
     $PY scripts/g1_bring_the_tool.py                                                    # T3 (scenario bring_the_tool)
+    $PY scripts/g1_climb.py --route hoist                                              # T4: crane hoist into the nacelle
+    $PY scripts/g1_climb.py --route lift                                               # T5: tower lift to the yaw deck
 
 Record a run for CRAMERA and tidy the bundle (robot naming, GLB materials, camera):
 
@@ -20,6 +23,8 @@ Record a run for CRAMERA and tidy the bundle (robot naming, GLB materials, camer
     python3 scripts/finish_recording.py ~/.cramera/scenes/windturbine_g1_t1 --view g1_ground
     # T2: --name windturbine_g1_t2 -- --zone nacelle --scenario nacelle_all_faults, then --view g1_nacelle
     # T3: $PY -m cramera.onboard.demo scripts/g1_bring_the_tool.py --name windturbine_g1_t3, then --view g1_nacelle_wide
+    # T4: $PY -m cramera.onboard.demo scripts/g1_climb.py --name windturbine_g1_t4 -- --route hoist, then --view g1_hoist
+    # T5: ... --name windturbine_g1_t5 -- --route lift, then --view g1_tower
 
 Watch a task live in CRAMERA while CRAM executes it (the open viewer tab attaches):
 
@@ -69,7 +74,7 @@ Movable joints appear under *Doors & drawers* in the scene panel.
 - `turbine/dims.py`: all dimensions, shared by Blender and the URDF generator
 - `blender/parts/<part>.py`: geometry, mesh variants and fault overlays per part
 - `turbine/parts/<part>.py`: links, collisions, inspection points, faults, sensor signals
-- `scenarios/*.yaml`: fault scenarios (`faults: [ids]`)
+- `scenarios/*.yaml`: scenarios (`faults: [ids]`, optional `extras`, `view` and `joint_states`, e.g. the open crane hatch and the lowered hook in `hoist_access`)
 
 ## Workflow (one part at a time)
 

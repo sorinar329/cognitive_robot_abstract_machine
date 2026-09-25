@@ -1,0 +1,9 @@
+# Task T4: the G1 reaches the nacelle. The rear crane hatch is open and the service
+# crane has lowered the lifting platform to the ground behind the tower; the G1 steps
+# on, rides up 108 m and walks off onto the nacelle floor.
+view: turbine
+description: Crane hatch open, lifting platform waiting on the ground
+joint_states:
+  crane_hatch_joint: math.pi / 2
+  crane_hook_joint: site.NACELLE_ORIGIN_Z + d.HOOK_AT_FLOOR
+faults: []

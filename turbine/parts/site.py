@@ -1,5 +1,5 @@
 """Outside at ground level up to the tower top: ground, foundation (plinth, grout,
-earthing), 4 tower sections, entrance door and stairs, yaw bearing.
+earthing), 4 tower sections, entrance door (at ground level), yaw bearing.
 
 Ground-level inspection points are what the G1 reaches on flat ground (task T0/T1).
 """
@@ -39,17 +39,6 @@ def section(k):
     return link(f"tower_section_{k}", parent, mesh=M + f"tower_section_{k}.obj", xyz=xyz, collisions=walls)
 
 
-# stairs collisions (section-1 frame, ground at -BASE)
-y_land = -RD + 0.05
-y_edge = y_land - s.LANDING_DEPTH
-n_steps = round((s.DOOR_SILL_Z + BASE) / s.STEP_RISE)
-rise = (s.DOOR_SILL_Z + BASE) / n_steps
-hw = s.STAIR_WIDTH / 2
-STAIRS = [span_box((-hw - 0.1, hw + 0.1), (y_edge, y_land), (s.DOOR_SILL_Z - 0.08, s.DOOR_SILL_Z))]
-for k in range(1, n_steps):
-    y1 = y_edge - (n_steps - 1 - k) * s.STEP_RUN
-    STAIRS.append(span_box((-hw, hw), (y1 - s.STEP_RUN, y1), (-BASE, -BASE + k * rise)))
-
 LINKS = [
     link("ground", "world", mesh=M + "ground.obj",
          collisions=[span_box((-s.GROUND_RADIUS, s.GROUND_RADIUS), (-s.GROUND_RADIUS, s.GROUND_RADIUS), (-0.05, 0.0))]),
@@ -61,20 +50,19 @@ LINKS = [
     link("tower_door", "tower_section_1", mesh=M + "tower_door.obj", xyz=HINGE,
          joint="revolute", axis=(0, 0, 1), limits=(0.0, 1.7),
          collisions=[span_box((-s.DOOR_WIDTH + 0.02, 0.0), (-0.1, 0.06), (0.01, s.DOOR_HEIGHT - 0.01))]),
-    link("entrance_stairs", "tower_section_1", mesh=M + "entrance_stairs.obj", collisions=STAIRS),
     link("yaw_bearing", "tower_section_4", mesh=M + "yaw_bearing.obj", xyz=(0, 0, ZS[4] - ZS[3]),
          collisions=[z_cylinder(s.YAW_BEARING_R[1], (0.0, s.YAW_BEARING_H))]),
 ]
 
 INSPECTION_POINTS = [
     # the G1's camera looks down: the door (above its camera) only fits in the image from further away
-    inspection_point("tower_inspect_door", "tower_section_1", (0.0, -RD - 0.05, s.DOOR_SILL_Z + 0.35), (0, -1, 0.0),
-                     "tower entrance door (closed, undamaged)", distance=14.0, outside=True),
-    inspection_point("foundation_inspect_plinth", "foundation", radial(s.PLINTH_R, -45, 0.12), outward(-45, 0.4),
+    inspection_point("tower_inspect_door", "tower_section_1", (0.0, -RD - 0.05, s.DOOR_SILL_Z + 0.5), (0, -1, 0.0),
+                     "tower entrance door (closed, undamaged)", distance=6.0, outside=True),
+    inspection_point("foundation_inspect_plinth", "foundation", radial(s.PLINTH_R - 0.25, -45, s.PLINTH_Z[1]), outward(-45, 1.2),
                      "foundation plinth concrete: cracks, spalling", distance=2.0, outside=True),
     inspection_point("foundation_inspect_grout", "foundation", radial(s.GROUT_R[1], -30, s.GROUT_Z[1]), outward(-30, 0.6),
                      "grout joint under the tower base flange", distance=1.8, outside=True),
-    inspection_point("foundation_inspect_earthing", "foundation", radial(s.PLINTH_R, -120, s.PLINTH_Z[1]), outward(-120, 0.6),
+    inspection_point("foundation_inspect_earthing", "foundation", radial(s.PLINTH_R - 0.35, -120, s.PLINTH_Z[1]), outward(-120, 0.9),
                      "earthing strap from the tower flange to the plinth terminal", distance=1.8, outside=True),
     inspection_point("tower_inspect_anchor_nuts", "tower_section_1", radial(s.ANCHOR_NUT_R, -150, s.BASE_FLANGE_H), outward(-150, 0.8),
                      "anchor bolt nuts on the base flange", distance=1.8, outside=True),

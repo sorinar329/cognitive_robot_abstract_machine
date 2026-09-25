@@ -29,7 +29,8 @@ c.cut(shell, inner, shaft_hole, roof_hatch)
 # --- floor grating with the tower access opening ----------------------------
 floor = c.box("nacelle_floor", d.INNER_X, d.INNER_Y, (-d.FLOOR, 0.0), mat="steel_grey")
 opening = c.box("floor_opening", d.FLOOR_HATCH_X, d.FLOOR_HATCH_Y, (-1, 1))
-c.cut(floor, opening)
+crane_opening = c.box("crane_opening", d.CRANE_HATCH_X, d.CRANE_HATCH_Y, (-1, 1))
+c.cut(floor, opening, crane_opening)
 
 c.export_part("nacelle", [shell], obj_name="cover")
 c.export_part("nacelle", [floor], obj_name="floor")
@@ -39,6 +40,12 @@ hx, hy = d.FLOOR_HATCH_X, d.FLOOR_HATCH_Y
 half_len = (hx[1] - hx[0]) / 2
 lid = c.box("floor_hatch_lid", (-half_len, half_len), (hy[0] - hy[1], 0.0), (0.0, d.HATCH_THICKNESS), mat="hatch_yellow")
 c.export_part("nacelle", [lid], obj_name="floor_hatch")
+
+# --- crane hatch lid (two-part cover in reality; one lid here), hinge along X at the +Y edge
+cx, cy = d.CRANE_HATCH_X, d.CRANE_HATCH_Y
+clid = [c.box("crane_hatch_lid", ((cx[0] - cx[1]) / 2, (cx[1] - cx[0]) / 2), (cy[0] - cy[1], 0.0), (0.0, d.HATCH_THICKNESS), mat="hatch_yellow"),
+        c.box("stripe", (-0.05, 0.05), (cy[0] - cy[1] + 0.05, -0.05), (d.HATCH_THICKNESS, d.HATCH_THICKNESS + 0.002), mat="bolt_black")]
+c.export_part("nacelle", [c.join("crane_hatch", clid)], obj_name="crane_hatch")
 
 # --- weather mast on the roof: anemometer, wind vane, aviation light (variants)
 roof = Z[1]

@@ -3,34 +3,36 @@ inspection_points:
   parent: tower_section_1
   xyz:
   - 0.0
-  - -3.042333333333333
-  - 1.31
+  - -3.0451666666666664
+  - 0.44
   view_from:
   - 0
   - -1
   - 0.0
-  distance: 14.0
+  distance: 6.0
   what: tower entrance door (closed, undamaged)
   outside: true
+  zone: outside
 - name: foundation_inspect_plinth
   parent: foundation
   xyz:
-  - 2.7577164466275357
-  - -2.7577164466275352
-  - 0.12
+  - 2.5809397513308987
+  - -2.5809397513308983
+  - 0.0
   view_from:
   - 0.7071067811865476
   - -0.7071067811865475
-  - 0.4
+  - 1.2
   distance: 2.0
   what: 'foundation plinth concrete: cracks, spalling'
   outside: true
+  zone: outside
 - name: foundation_inspect_grout
   parent: foundation
   xyz:
   - 2.788601800185893
   - -1.6099999999999999
-  - 0.3
+  - 0.06
   view_from:
   - 0.8660254037844387
   - -0.49999999999999994
@@ -38,19 +40,21 @@ inspection_points:
   distance: 1.8
   what: grout joint under the tower base flange
   outside: true
+  zone: outside
 - name: foundation_inspect_earthing
   parent: foundation
   xyz:
-  - -1.949999999999999
-  - -3.377499074759311
-  - 0.24
+  - -1.774999999999999
+  - -3.0743901834347573
+  - 0.0
   view_from:
   - -0.4999999999999998
   - -0.8660254037844387
-  - 0.6
+  - 0.9
   distance: 1.8
   what: earthing strap from the tower flange to the plinth terminal
   outside: true
+  zone: outside
 - name: tower_inspect_anchor_nuts
   parent: tower_section_1
   xyz:
@@ -64,6 +68,7 @@ inspection_points:
   distance: 1.8
   what: anchor bolt nuts on the base flange
   outside: true
+  zone: outside
 - name: tower_inspect_base_coating
   parent: tower_section_1
   xyz:
@@ -77,6 +82,21 @@ inspection_points:
   distance: 3.0
   what: 'tower coating near the base: corrosion, paint damage'
   outside: true
+  zone: outside
+- name: tower_inspect_cable_loop
+  parent: tower_section_4
+  xyz:
+  - 0.099
+  - 0.159
+  - 19.27
+  view_from:
+  - 0.3
+  - 0.95
+  - 0.95
+  distance: 1.45
+  what: 'power cable loop at the saddle on the yaw deck: chafed insulation'
+  outside: false
+  zone: tower
 - name: nacelle_inspect_weather_mast
   parent: nacelle
   xyz:
@@ -90,6 +110,7 @@ inspection_points:
   distance: 1.6
   what: anemometer, wind vane and aviation light on the roof
   outside: true
+  zone: outside
 - name: nacelle_inspect_cover
   parent: nacelle
   xyz:
@@ -103,6 +124,7 @@ inspection_points:
   distance: 4.0
   what: 'nacelle cover, -Y side: cracks in the GRP shell'
   outside: true
+  zone: outside
 - name: main_bearing_inspect_front_seal
   parent: drivetrain
   xyz:
@@ -116,6 +138,7 @@ inspection_points:
   distance: 1.45
   what: 'front main bearing, downwind seal: grease leaking out'
   outside: false
+  zone: nacelle
 - name: main_bearing_inspect_grease_collector
   parent: drivetrain
   xyz:
@@ -129,6 +152,7 @@ inspection_points:
   distance: 1.1
   what: used-grease collector fill level
   outside: false
+  zone: nacelle
 - name: main_shaft_inspect_shrink_disc
   parent: drivetrain
   xyz:
@@ -142,6 +166,7 @@ inspection_points:
   distance: 1.6
   what: shrink disc bolts (torque markers) and fretting
   outside: false
+  zone: nacelle
 - name: rotor_lock_inspect
   parent: drivetrain
   xyz:
@@ -155,6 +180,7 @@ inspection_points:
   distance: 0.92
   what: rotor lock pin position (must be retracted in operation)
   outside: false
+  zone: nacelle
 - name: blade_1_inspect_leading_edge
   parent: blade_1
   xyz:
@@ -168,6 +194,7 @@ inspection_points:
   distance: 5.0
   what: 'blade 1 leading edge, outer third: erosion'
   outside: true
+  zone: outside
 - name: blade_1_inspect_tip_receptor
   parent: blade_1
   xyz:
@@ -181,6 +208,7 @@ inspection_points:
   distance: 4.0
   what: blade 1 tip and lightning receptor, suction side
   outside: true
+  zone: outside
 - name: blade_1_inspect_trailing_edge
   parent: blade_1
   xyz:
@@ -194,6 +222,7 @@ inspection_points:
   distance: 5.0
   what: 'blade 1 trailing edge near the maximum chord: cracks, split bond line'
   outside: true
+  zone: outside
 - name: blade_2_inspect_leading_edge
   parent: blade_2
   xyz:
@@ -207,6 +236,7 @@ inspection_points:
   distance: 5.0
   what: 'blade 2 leading edge, outer third: erosion'
   outside: true
+  zone: outside
 - name: blade_2_inspect_tip_receptor
   parent: blade_2
   xyz:
@@ -220,6 +250,7 @@ inspection_points:
   distance: 4.0
   what: blade 2 tip and lightning receptor, suction side
   outside: true
+  zone: outside
 - name: blade_2_inspect_trailing_edge
   parent: blade_2
   xyz:
@@ -233,6 +264,7 @@ inspection_points:
   distance: 5.0
   what: 'blade 2 trailing edge near the maximum chord: cracks, split bond line'
   outside: true
+  zone: outside
 - name: blade_3_inspect_leading_edge
   parent: blade_3
   xyz:
@@ -246,6 +278,7 @@ inspection_points:
   distance: 5.0
   what: 'blade 3 leading edge, outer third: erosion'
   outside: true
+  zone: outside
 - name: blade_3_inspect_tip_receptor
   parent: blade_3
   xyz:
@@ -259,6 +292,7 @@ inspection_points:
   distance: 4.0
   what: blade 3 tip and lightning receptor, suction side
   outside: true
+  zone: outside
 - name: blade_3_inspect_trailing_edge
   parent: blade_3
   xyz:
@@ -272,6 +306,7 @@ inspection_points:
   distance: 5.0
   what: 'blade 3 trailing edge near the maximum chord: cracks, split bond line'
   outside: true
+  zone: outside
 - name: gearbox_inspect_sight_glass
   parent: gearbox
   xyz:
@@ -285,6 +320,7 @@ inspection_points:
   distance: 1.17
   what: oil level in the sight glass
   outside: false
+  zone: nacelle
 - name: gearbox_inspect_filter
   parent: gearbox
   xyz:
@@ -298,6 +334,7 @@ inspection_points:
   distance: 0.81
   what: oil filter clogging indicator (green = ok, red pin out = clogged)
   outside: false
+  zone: nacelle
 - name: gearbox_inspect_input_seal
   parent: gearbox
   xyz:
@@ -311,6 +348,7 @@ inspection_points:
   distance: 1.35
   what: input shaft seal and front cover, below it the floor
   outside: false
+  zone: nacelle
 - name: gearbox_inspect_cover
   parent: gearbox
   xyz:
@@ -324,6 +362,7 @@ inspection_points:
   distance: 0.95
   what: side inspection cover bolts
   outside: false
+  zone: nacelle
 - name: gearbox_inspect_bushing_left
   parent: gearbox
   xyz:
@@ -337,6 +376,7 @@ inspection_points:
   distance: 0.7
   what: torque arm elastomer bushing (-Y side)
   outside: false
+  zone: nacelle
 - name: gearbox_inspect_bushing_right
   parent: gearbox
   xyz:
@@ -350,6 +390,7 @@ inspection_points:
   distance: 0.7
   what: torque arm elastomer bushing (+Y side)
   outside: false
+  zone: nacelle
 - name: brake_inspect_caliper
   parent: brake_caliper
   xyz:
@@ -363,6 +404,7 @@ inspection_points:
   distance: 1.47
   what: brake pads (thickness, wear pin) and the disc's friction face
   outside: false
+  zone: nacelle
 - name: coupling_inspect
   parent: brake_caliper
   xyz:
@@ -376,6 +418,7 @@ inspection_points:
   distance: 1.3
   what: 'flexible coupling disc packs: cracks, loose bolts'
   outside: false
+  zone: nacelle
 - name: generator_inspect_slip_ring
   parent: generator
   xyz:
@@ -389,6 +432,7 @@ inspection_points:
   distance: 1.3
   what: 'slip-ring housing and brush cover: carbon dust'
   outside: false
+  zone: nacelle
 - name: generator_inspect_terminal_box
   parent: generator
   xyz:
@@ -402,32 +446,35 @@ inspection_points:
   distance: 1.54
   what: 'generator terminal box: overheating (thermal camera), scorched paint'
   outside: false
+  zone: nacelle
 - name: converter_inspect_status
   parent: cabinet_converter
   xyz:
-  - -9.065
-  - 1.69
+  - -8.69
+  - -1.385
   - 1.85
   view_from:
-  - 1
   - 0.0
+  - 1
   - -0.3
   distance: 1.1
   what: converter cabinet status light (green = ok)
   outside: false
+  zone: nacelle
 - name: controller_inspect_door
   parent: cabinet_controller
   xyz:
-  - -9.07
-  - -1.525
+  - -9.35
+  - -1.39
   - 1.2
   view_from:
-  - 1
   - 0.0
+  - 1
   - 0.2
   distance: 1.3
   what: 'controller cabinet: door closed, emergency stop not pressed'
   outside: false
+  zone: nacelle
 - name: hydraulic_inspect
   parent: hydraulic_unit
   xyz:
@@ -441,6 +488,7 @@ inspection_points:
   distance: 0.78
   what: 'hydraulic unit: hose fitting and tank, oil on the walkway'
   outside: false
+  zone: nacelle
 - name: cooling_inspect_level
   parent: cooling_unit
   xyz:
@@ -454,6 +502,7 @@ inspection_points:
   distance: 0.57
   what: coolant expansion tank level tube (above the red mark)
   outside: false
+  zone: nacelle
 - name: safety_inspect_extinguisher
   parent: nacelle
   xyz:
@@ -467,3 +516,4 @@ inspection_points:
   distance: 1.2
   what: fire extinguisher in its bracket by the tower hatch
   outside: false
+  zone: nacelle

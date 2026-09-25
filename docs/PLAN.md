@@ -120,7 +120,9 @@ in segmind_ws), already used by `coraplex/demos/coraplex_unitree_g1_warehouse_de
 | T1 | Walk around the tower base on flat ground: visit every ground-level inspection point and report its state | loop of T0 + reading the state | the report matches the scenario's ground truth (first read from the ground truth, later from rendered camera images) |
 | T2 | Nacelle: walk along the drivetrain and check sight glass, grease collector, shrink disc, input seal, torque arm bushing, slip ring | T1 in tight space | correct report on the 0.69 m walkway (straight base moves; the route planner needs more room) |
 | ✅ T3 | Assist a technician: find the loose shrink-disc bolt by its torque marking, fetch the torque tool case from the rack, set it on the tray next to the technician | inspection + `PickUpAction`, `PlaceAction` | bolt found; case on the tray (`scripts/g1_bring_the_tool.py`, recorded as `windturbine_g1_t3`) |
-| T4 | Interact: open the floor hatch, press a button, empty the grease collector | pull, `MoveJointsMotion`, pick and place | joint state changed / part swapped |
+| ✅ T4 | Reach the nacelle: walk from the tower door to the lifting platform the service crane lowered through the rear floor hatch, get hoisted 108 m, step off, check the controller cabinet, walk onto the walkway | odom re-parented to the platform + joint motion on `crane_hook_joint`, straight base moves, `LookAtAction` | on the nacelle floor (0 mm step) and walkway (`scripts/g1_climb.py --route hoist`, scenario `hoist_access`, recorded as `windturbine_g1_t4`) |
+| ✅ T5 | Up the tower: in through the door, into the service lift car, ride to the yaw deck, check the cable loop | odom re-parented to the car + joint motion on `service_lift_joint` | at the yaw deck; chafed cable found (`scripts/g1_climb.py --route lift`, scenario `tower_climb`, recorded as `windturbine_g1_t5`) |
+| T6 | Interact: open the floor hatch, press a button, empty the grease collector | pull, `MoveJointsMotion`, pick and place | joint state changed / part swapped |
 
 Standpoints are computed from each inspection point's `view_from` and `distance`:
 project the point onto the floor, set the camera height to 1.27–1.60 m, and turn to
@@ -133,7 +135,7 @@ face the target.
 1. ✅ **Outside** (zone I plus the visible part of the foundation):
    - a ground area,
    - the foundation plinth,
-   - a tower in 4 tapered sections with flanges, a door and stairs,
+   - a tower in 4 tapered sections with flanges and a door (at ground level since step 5),
    - the yaw bearing ring,
    - the nacelle cover at IEA size with a weather mast and aviation light,
    - hub and spinner,
@@ -151,8 +153,14 @@ face the target.
    (`windturbine_g1_t1`, `windturbine_g1_t2`): 6/6 points seen each.
 3. **Hub** (zone G).
 4. **Yaw deck** (zone D).
-5. **Tower inside** (zones B + C). How the G1 gets in is open: stairs versus a ramp or
-   lift.
+5. ✅ **Tower inside** (zone C) and **access for the G1**: rest platforms under the
+   flanges, a yaw deck 2.6 m under the tower top, ladders with fall-arrest rail, cables,
+   lamps, ground controller, and a service lift (prismatic joint, 105 m). The door is at
+   ground level (plinth flush with the ground, no stairs). The nacelle opening above the
+   yaw bearing is blocked by the drivetrain, so the G1 is lifted into the nacelle from
+   outside: the service crane lowers a lifting platform through a rear floor hatch
+   (`crane_hatch`, hook travel down to the ground). Fault: chafed cable loop.
+   ✅ **Robot tasks T4 and T5.**
 6. **Foundation cellar** (zone A).
 7. **Blade interior** (zone H).
 8. **Integration:**
@@ -170,8 +178,9 @@ Rough size: about 60–80 parts, about 45 faults, about 70 inspection points.
 
 - **Own repository:** this project stays in its own git repository, not a package
   inside `cramera-port`. Scenes reach CRAMERA as bundles in `~/.cramera/scenes`.
-- **Zones are separate start areas for now.** The G1 does not walk from one zone to the
-  next (no stairs, ladders or lift). Each robot task starts inside its zone: T0/T1 on
-  the ground around the tower, T2 on the nacelle walkway next to the tower access
-  hatch, and the tower interior later with its own start. Moving between zones can come
-  later, by lift or by teleport.
+- **Zones were separate start areas at first** (T0–T3 start inside their zone). Since
+  step 5 the G1 gets from the ground to the yaw deck by the tower lift (T5) and from the
+  ground into the nacelle by the crane hoist (T4). The lift cannot reach the nacelle:
+  the opening in the yaw bearing is under the drivetrain.
+- **Lift and hoist speed** are 4 m/s in the simulation (real: about 0.3 m/s), so the
+  recordings stay short.

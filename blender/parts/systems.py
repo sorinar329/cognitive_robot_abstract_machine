@@ -23,11 +23,11 @@ def export(name, objs):
 
 # %% transformer: three cast resin coils on a core frame, inside a mesh cage
 tx, ty, tz = d.TRAFO_X, d.TRAFO_Y, d.TRAFO_Z
-cx = sum(tx) / 2
+cx, cyc = sum(tx) / 2, sum(ty) / 2
 parts = [c.box("base", (tx[0] + 0.15, tx[1] - 0.15), (ty[0] + 0.15, ty[1] - 0.15), (0.0, 0.15), mat="steel_grey"),
          c.box("yoke_bottom", (cx - 0.25, cx + 0.25), (ty[0] + 0.2, ty[1] - 0.2), (0.15, 0.4), mat="bolt_black"),
          c.box("yoke_top", (cx - 0.25, cx + 0.25), (ty[0] + 0.2, ty[1] - 0.2), (1.75, 2.0), mat="bolt_black")]
-for i, y in enumerate((-0.5, 0.0, 0.5)):
+for i, y in enumerate((cyc - 0.5, cyc, cyc + 0.5)):
     parts.append(c.cylinder(f"coil{i}", 0.24, 1.35, (cx, y, 1.075), mat="resin"))
     parts.append(c.cylinder(f"bushing{i}", 0.03, 0.2, (cx + 0.2, y, 2.1), mat="bottle_white"))
 bars = []
@@ -38,35 +38,32 @@ for x0, x1, y0, y1 in ((tx[0], tx[1], ty[0], ty[0]), (tx[0], tx[1], ty[1], ty[1]
         bars.append(c.rod("bar", (x, y, 0.0), (x, y, tz[1]), 0.008, mat="steel_grey", vertices=6))
     for z in (0.05, tz[1] / 2, tz[1]):
         bars.append(c.rod("rail", (x0, y0, z), (x1, y1, z), 0.015, mat="steel_grey", vertices=6))
-bars.append(c.box("warning_sign", (tx[1] + 0.005, tx[1] + 0.01), (-0.15, 0.15), (1.3, 1.6), mat="hatch_yellow"))
+bars.append(c.box("warning_sign", (tx[1] + 0.005, tx[1] + 0.01), (cyc - 0.15, cyc + 0.15), (1.3, 1.6), mat="hatch_yellow"))
 export("transformer", parts + bars)
 
-# %% cabinets (+Y converter, -Y controller): body, and doors in their hinge frames
-for side, name in ((1, "converter"), (-1, "controller")):
-    ys = sorted((side * d.CABINET_Y[0], side * d.CABINET_Y[1]))
-    body = c.box("body", d.CABINET_X, ys, d.CABINET_Z, mat="cabinet_grey")
-    plinth = c.box("plinth", (d.CABINET_X[0] + 0.02, d.CABINET_X[1] - 0.02), (ys[0] + 0.02, ys[1] - 0.02), (0.0, 0.1), mat="bolt_black")
+# %% cabinets on the -Y wall (controller, converter), doors facing +Y, hinged at their -X edge
+y0, y1 = d.CABINET_Y
+for name, (x0, x1) in d.CABINET_XS.items():
+    body = c.box("body", (x0, x1), (y0, y1), d.CABINET_Z, mat="cabinet_grey")
+    plinth = c.box("plinth", (x0 + 0.02, x1 - 0.02), (y0 + 0.02, y1 - 0.02), (0.0, 0.1), mat="bolt_black")
     export(f"cabinet_{name}", [body, plinth])
-    w = d.CABINET_Y[1] - d.CABINET_Y[0] - 0.02
-    y_range = (-w, 0.0) if side > 0 else (0.0, w)       # hinge on the wall side
-    door = [c.box("door", (0.0, 0.025), y_range, (d.CABINET_Z[0] + 0.12, d.CABINET_Z[1] - 0.02), mat="cabinet_grey")]
-    free_edge = -side * (w - 0.08)
-    door.append(c.box("handle", (0.025, 0.06), (free_edge - 0.015, free_edge + 0.015), (1.0, 1.2), mat="bolt_black"))
-    door.append(c.box("label", (0.025, 0.028), (-side * 0.25 - 0.15, -side * 0.25 + 0.15), (1.55, 1.7), mat="bottle_white"))
+    w = x1 - x0 - 0.02                                   # door in its hinge frame: X along the door, Y out of the cabinet
+    door = [c.box("door", (0.0, w), (0.0, 0.025), (d.CABINET_Z[0] + 0.12, d.CABINET_Z[1] - 0.02), mat="cabinet_grey"),
+            c.box("handle", (w - 0.1, w - 0.07), (0.025, 0.06), (1.0, 1.2), mat="bolt_black"),
+            c.box("label", (0.12, 0.42), (0.025, 0.028), (1.55, 1.7), mat="bottle_white")]
     if name == "controller":   # emergency stop on the controller door
-        door.append(c.box("estop_plate", (0.025, 0.03), (side * -0.55 - 0.06, side * -0.55 + 0.06), (1.3, 1.42), mat="hatch_yellow"))
-        door.append(c.cylinder("estop", 0.035, 0.04, (0.05, side * -0.55, 1.36), rotation=(0, math.pi / 2, 0), mat="alarm_red"))
+        door.append(c.box("estop_plate", (w - 0.32, w - 0.2), (0.025, 0.03), (1.3, 1.42), mat="hatch_yellow"))
+        door.append(c.cylinder("estop", 0.035, 0.04, (w - 0.26, 0.05, 1.36), rotation=(math.pi / 2, 0, 0), mat="alarm_red"))
     export(f"cabinet_{name}_door", door)
 
 
-def status_light(ok, side):
-    """Status light on the door, in the door's hinge frame."""
-    y = -side * 0.25
-    return [c.cylinder("led", 0.025, 0.02, (0.035, y, 1.85), rotation=(0, math.pi / 2, 0), mat="led_green" if ok else "led_red")]
+def status_light(ok):
+    """Status light on the converter door, in the door's hinge frame."""
+    return [c.cylinder("led", 0.025, 0.02, (0.25, 0.035, 1.85), rotation=(math.pi / 2, 0, 0), mat="led_green" if ok else "led_red")]
 
 
-export("status_light_ok_p", status_light(True, 1))
-export("status_light_error_p", status_light(False, 1))
+export("status_light_ok_p", status_light(True))
+export("status_light_error_p", status_light(False))
 
 # %% hydraulic unit (+Y, beside the generator) and its hose to the brake caliper
 hx, hy, hz = d.HYDRAULIC_X, d.HYDRAULIC_Y, d.HYDRAULIC_Z
@@ -127,6 +124,17 @@ c.bpy.ops.mesh.primitive_torus_add(major_radius=0.05, minor_radius=0.013, locati
 hook.append(c.bpy.context.active_object)
 hook[-1].data.materials.append(c.material("pipe_steel"))
 export("crane_hook", hook)
+
+# lifting platform hung from the hook (frame at the platform floor centre)
+px, py = d.LIFT_PLATFORM
+lp = [c.box("deck", (-px / 2, px / 2), (-py / 2, py / 2), (-0.04, 0.0), mat="grating"),
+      c.box("frame", (-px / 2, px / 2), (-py / 2, py / 2), (-0.1, -0.04), mat="hatch_yellow")]
+for sx in (-1, 1):
+    for sy in (-1, 1):
+        lp.append(c.rod("sling", (sx * (px / 2 - 0.03), sy * (py / 2 - 0.03), 0.0), (0, 0, d.HOOK_TO_PLATFORM - 0.08), 0.008, mat="bolt_black", vertices=6))
+for sy in (-1, 1):   # toe boards on the +-Y edges; the +-X edges stay open for stepping on and off
+    lp.append(c.box("toe", (-px / 2, px / 2), sorted((sy * (py / 2 - 0.02), sy * py / 2)), (0.0, 0.08), mat="hatch_yellow"))
+export("lifting_platform", lp)
 
 # %% safety: fire extinguisher (variant), first-aid box, emergency stop by the tower hatch
 ex, ey = d.EXTINGUISHER_XY

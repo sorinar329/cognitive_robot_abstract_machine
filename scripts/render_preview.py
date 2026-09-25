@@ -89,6 +89,7 @@ for link in urdf.iter("link"):
             obj.name = link.get("name") + "/" + obj.name
 
 from turbine import dims as nd  # noqa: E402
+from turbine.dims import site as sd  # noqa: E402
 
 
 def apply_cutaway():
@@ -150,6 +151,14 @@ else:
     shoot("overview", (190, -265, 95), (0, 0, 88), 35)
     shoot("tower_base", tower_base + Vector((11, -17, 5)), tower_base + Vector((0, -2, 1.2)), 30)
     shoot("rotor", nacelle @ Vector((40, -38, 8)), nacelle @ Vector((4, 0, 2)), 28)
+    if "service_lift" in {l.get("name") for l in urdf.iter("link")}:
+        # inside the tower: the ground floor with the lift car, and the yaw deck under the tower top
+        t1 = world_tf("tower_section_1")
+        shoot("tower_inside", t1 @ Vector((1.9, -1.9, 1.7)), t1 @ Vector((-0.9, 0.3, 0.7)), 18)
+        deck = t1.translation.z + sd.platform_heights()[-1]
+        shoot("yaw_deck", Vector((1.0, -0.95, deck + 2.3)), Vector((-0.5, 0.35, deck + 0.2)), 11)
+        hook = world_tf("lifting_platform").translation
+        shoot("hoist", hook + Vector((9, -14, 6)), hook + Vector((0, 0, 1.0)), 30)
 if closeups and not view:
     link_names = {l.get("name") for l in urdf.iter("link")}
     points = [p for part in parts.ALL for p in part.INSPECTION_POINTS if p["name"] in link_names]

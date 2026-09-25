@@ -60,24 +60,49 @@ def disk_boxes(radius, z, segments=24, rim=None):
     return boxes
 
 
+def floor_boxes(z, x_range=None, y_range=None, radius=None, holes=(), strip=0.25):
+    """A flat deck (z range) as boxes, leaving out rectangular ``holes`` [(x range, y range)].
+    Rectangular deck: bounded by x/y ranges, split in rows at the holes' y edges.
+    Round deck of ``radius``: strips of ``strip`` along X, cut to the circle."""
+    if radius is not None:
+        n = max(1, round(2 * radius / strip))
+        ys = [-radius + 2 * radius * i / n for i in range(n + 1)]
+    else:
+        ys = sorted({y_range[0], y_range[1], *(min(max(e, y_range[0]), y_range[1]) for _, hy in holes for e in hy)})
+    boxes = []
+    for y0, y1 in zip(ys, ys[1:]):
+        if radius is not None:
+            half = math.sqrt(max(radius ** 2 - max(abs(y0), abs(y1)) ** 2, 0.0))
+            xs = (-half, half)
+        else:
+            xs = x_range
+        x = xs[0]
+        for c0, c1 in sorted(hx for hx, hy in holes if hy[0] < y1 - 1e-6 and hy[1] > y0 + 1e-6) + [(xs[1], xs[1])]:
+            if min(c0, xs[1]) > x + 0.02:
+                boxes.append(span_box((x, min(c0, xs[1])), (y0, y1), z))
+            x = max(x, c1)
+    return boxes
+
+
 def x_cylinder(radius, x, y=0.0, z=0.0):
     return dict(type="cylinder", radius=radius, length=x[1] - x[0],
                 xyz=((x[0] + x[1]) / 2, y, z), rpy=X_AXIS_RPY)
 
 
 def link(name, parent, mesh=None, variants=None, xyz=(0, 0, 0), rpy=(0, 0, 0),
-         joint="fixed", axis=None, limits=None, collisions=()):
+         joint="fixed", axis=None, limits=None, collisions=(), velocity=1.0):
     """``mesh`` is one path or a list; ``variants`` maps state -> mesh (first = healthy)."""
     return dict(name=name, parent=parent, mesh=mesh, variants=variants, xyz=xyz, rpy=rpy,
-                joint=joint, axis=axis, limits=limits, collisions=list(collisions))
+                joint=joint, axis=axis, limits=limits, collisions=list(collisions), velocity=velocity)
 
 
-def inspection_point(name, parent, xyz, view_from, what, distance=1.0, outside=False):
+def inspection_point(name, parent, xyz, view_from, what, distance=1.0, outside=False, zone=None):
     """A frame on the thing to look at. A good camera position is ``distance``
     metres from it along ``view_from`` (a direction in the parent frame).
-    ``outside``: seen from outside the turbine (ground robot or drone)."""
+    ``outside``: seen from outside the turbine (ground robot or drone).
+    ``zone``: where the robot stands: "outside", "tower" or "nacelle" (default from ``outside``)."""
     return dict(name=name, parent=parent, xyz=tuple(xyz), view_from=tuple(view_from), distance=distance,
-                what=what, outside=outside)
+                what=what, outside=outside, zone=zone or ("outside" if outside else "nacelle"))
 
 
 def fault(part, component, description, inspection_point, observable_by,
@@ -145,6 +170,6 @@ def write(path, name, links, states, mesh_uri=package_uri, skip_meshes=()):
             ET.SubElement(joint, "axis", xyz=_fmt(spec["axis"]))
         if spec["limits"]:
             ET.SubElement(joint, "limit", lower=str(spec["limits"][0]), upper=str(spec["limits"][1]),
-                          effort="100", velocity="1.0")
+                          effort="100", velocity=str(spec.get("velocity", 1.0)))
     with open(path, "w") as f:
         f.write(minidom.parseString(ET.tostring(robot)).toprettyxml(indent="  "))

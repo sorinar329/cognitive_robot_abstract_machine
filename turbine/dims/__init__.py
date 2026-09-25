@@ -25,7 +25,8 @@ WALKWAY_Y = 1.35               # walkways from +-1.35 m to the wall: ~0.69 m, en
 
 SHAFT_HOLE_R = 1.0             # front wall opening around the main shaft
 ROOF_HATCH_X, ROOF_HATCH_Y = (-6.2, -5.2), (-0.5, 0.5)
-FLOOR_HATCH_X, FLOOR_HATCH_Y = (-0.95, -0.25), (-2.0, -1.36)   # tower access, in the -Y walkway
+FLOOR_HATCH_X, FLOOR_HATCH_Y = (-0.95, -0.52), (-0.88, -0.5)   # tower access ladder, inside the yaw bearing opening
+CRANE_HATCH_X, CRANE_HATCH_Y = (-9.55, -8.45), (-0.55, 0.45)   # rear floor hatch under the crane rail (lifting from the ground)
 HATCH_THICKNESS = 0.03
 
 # ------------------------------------------------------------------ drivetrain frame
@@ -117,11 +118,18 @@ SLIP_X, SLIP_HALF = (-12.75, -12.2), 0.45                       # slip-ring hous
 GEN_TERMINAL_X = (-11.4, -10.6)
 
 # ------------------------------------------------------------------ electrical, systems (nacelle frame)
-TRAFO_X, TRAFO_Y, TRAFO_Z = (-9.65, -8.0), (-0.9, 0.9), (0.0, 2.3)
-CABINET_X, CABINET_Y, CABINET_Z = (-9.7, -9.1), (1.1, 1.95), (0.0, 2.0)   # mirrored: converter +Y, controller -Y
+TRAFO_X, TRAFO_Y, TRAFO_Z = (-9.65, -8.35), (0.58, 1.98), (0.0, 2.3)      # +Y rear corner
+CABINET_Y, CABINET_Z = (INNER_Y[0] + 0.02, -1.42), (0.0, 2.0)             # on the -Y wall, doors face +Y
+CABINET_XS = {"controller": (-9.7, -9.0), "converter": (-8.95, -8.25)}
 HYDRAULIC_X, HYDRAULIC_Y, HYDRAULIC_Z = (-5.4, -4.5), (0.85, 1.3), (0.3, 1.05)
 COOLING_X, COOLING_Y, COOLING_Z = (-6.3, -5.4), (-1.3, -0.85), (0.3, 1.25)
-CRANE_X, CRANE_Z, CRANE_TRAVEL = (-9.5, 1.2), 3.9, (-9.0, 0.6)
+CRANE_X, CRANE_Z, CRANE_TRAVEL = (-9.5, 1.2), 3.9, (-9.0, 0.6)             # trolley home is over the crane hatch
+HOOK_TO_PLATFORM = 2.0             # lifting platform floor below the hook (room for the G1 under the hook block)
+LIFT_PLATFORM = (0.9, 0.9)
+PLATFORM_PARKED_Z = HATCH_THICKNESS + 0.105                                     # parked: the platform frame rests on the closed hatch
+HOOK_BELOW_TROLLEY = CRANE_Z - HOOK_TO_PLATFORM - PLATFORM_PARKED_Z             # hook joint origin below the trolley (hook joint = 0: parked)
+HOOK_SPEED = 4.0                                                                # m/s in the simulation, like the tower lift
+HOOK_AT_FLOOR = PLATFORM_PARKED_Z                                               # hook joint value: deck flush with the floor (hatch open)
 EXTINGUISHER_XY = (-1.6, -2.0)
 ESTOP_XZ = (-0.1, 1.25)                                  # on the -Y wall next to the tower hatch
 
@@ -132,7 +140,7 @@ MAST_ARM = 0.55                 # crossbar half length (anemometer at +Y, wind v
 COVER_CRACK_XZ = (-5.8, 2.6)    # on the -Y side wall
 
 # ------------------------------------------------------------------ task T3: bring the tool (nacelle frame)
-TOOL_RACK_X, TOOL_RACK_Y, TOOL_RACK_TOP = (-8.95, -8.35), (INNER_Y[0], -1.72), 0.85   # rear, -Y wall
+TOOL_RACK_X, TOOL_RACK_Y, TOOL_RACK_TOP = (-8.2, -7.6), (INNER_Y[0], -1.72), 0.85    # -Y wall, next to the converter
 TOOL_TRAY_X, TOOL_TRAY_Y, TOOL_TRAY_TOP = (1.0, 1.4), (-1.25, -0.98), 0.85           # on the -Y girder
 TOOL_CASE = (0.09, 0.09, 0.2)             # torque tool case (socket set), small enough for the G1 hand
 TECHNICIAN_XY = (2.0, -1.7)               # on the -Y walkway by the front main bearing, facing the machine

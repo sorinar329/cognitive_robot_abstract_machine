@@ -33,7 +33,7 @@ rather than copy them).
 | RP 204 converter maintenance (ACP); converter cabinets (GE module 3D) | `converter.fault_light`, `controller.door_left_open` |
 | RP 301 blades, RP 304 rotor lightning protection (ACP); Sandia/EPRI blade inspection | `blade_*.leading_edge_erosion`, `blade_*.lightning_damage`, `blade_*.trailing_edge_crack` |
 | RP 401 foundation inspections and base bolt tensioning (ACP); foundation RP | `foundation.plinth_crack`, `foundation.grout_breakout`, `tower.anchor_nut_corrosion` |
-| RP 402 fall protection and rescue, RP 404 elevators (ACP) | tower interior zone (not modelled yet) |
+| RP 402 fall protection and rescue, RP 404 elevators (ACP) | tower interior: ladders with fall-arrest rail, service lift (`service_lift_joint`); cable loop fault `tower.cable_loop_chafed` |
 | RP 811 vibration analysis, RP 816 temperature measurement (ACP) | signals `gearbox_vibration_mm_s`, `generator_terminal_temperature_c`, `brake_disc_temperature_c` |
 | Vestas chapters: manual rotor lock, brake system, composite coupling, hydraulic system | `rotor_lock.left_engaged`, `brake.*`, `coupling.disc_pack_cracked`, `hydraulic.hose_leak` |
 | RP 302 rotor hubs, RP 814 pitch bearing grease (ACP); Vestas blade bearing, pitch system | hub zone (next): pitch bearing grease leak, pitch drive faults |

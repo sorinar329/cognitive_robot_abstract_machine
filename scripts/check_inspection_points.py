@@ -58,7 +58,7 @@ def main():
     bad = 0
     for part in parts.ALL:
         for p in part.INSPECTION_POINTS:
-            if p["outside"]:
+            if p["zone"] != "nacelle":
                 continue
             target = (to_nacelle @ tf(p["name"]))[:3, 3]
             rot = (to_nacelle @ tf(p["parent"]))[:3, :3]

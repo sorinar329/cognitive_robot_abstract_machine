@@ -2,19 +2,17 @@
 (anemometer, wind vane, aviation light). Turns on the yaw bearing (continuous Z)."""
 from turbine import dims as d
 from turbine.dims import site
-from turbine.urdf import fault, inspection_point, link, span_box
+from turbine.urdf import fault, floor_boxes, inspection_point, link, span_box
 
 F, W = d.FLOOR, d.WALL
 NX, NY, NZ, IX, IY = d.NACELLE_X, d.NACELLE_Y, d.NACELLE_Z, d.INNER_X, d.INNER_Y
 HX, HY = d.FLOOR_HATCH_X, d.FLOOR_HATCH_Y
+KX, KY = d.CRANE_HATCH_X, d.CRANE_HATCH_Y
 SZ, SH = d.SHAFT_HOLE_Z, d.SHAFT_HOLE_R
 
 COLLISIONS = [
-    # floor, split around the tower access opening
-    span_box((IX[0], HX[0]), IY, (-F, 0)),
-    span_box((HX[1], IX[1]), IY, (-F, 0)),
-    span_box(HX, (HY[1], IY[1]), (-F, 0)),
-    span_box(HX, (IY[0], HY[0]), (-F, 0)),
+    # floor, open at the tower access hatch and the crane hatch
+    *floor_boxes((-F, 0), IX, IY, holes=[(HX, HY), (KX, KY)]),
     # side walls, rear wall, roof (the roof hatch is not cut out yet)
     span_box(NX, (NY[0], IY[0]), NZ),
     span_box(NX, (IY[1], NY[1]), NZ),
@@ -33,6 +31,10 @@ LINKS = [
     link("nacelle_floor_hatch", "nacelle", mesh="nacelle/floor_hatch.obj",
          xyz=((HX[0] + HX[1]) / 2, HY[1], 0.0), joint="revolute", axis=(-1, 0, 0), limits=(0.0, 1.9),
          collisions=[span_box(((HX[0] - HX[1]) / 2, (HX[1] - HX[0]) / 2), (HY[0] - HY[1], 0.0), (0.0, d.HATCH_THICKNESS))]),
+    # rear hatch under the crane: opened (pi/2, standing at its +Y edge) to hoist the lifting platform
+    link("crane_hatch", "nacelle", mesh="nacelle/crane_hatch.obj",
+         xyz=((KX[0] + KX[1]) / 2, KY[1], 0.0), joint="revolute", axis=(-1, 0, 0), limits=(0.0, 1.9),
+         collisions=[span_box(((KX[0] - KX[1]) / 2, (KX[1] - KX[0]) / 2), (KY[0] - KY[1], 0.0), (0.0, d.HATCH_THICKNESS))]),
 ]
 MAST_TOP = NZ[1] + d.MAST_HEIGHT
 LINKS += [

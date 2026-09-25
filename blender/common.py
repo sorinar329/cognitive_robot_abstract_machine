@@ -55,6 +55,9 @@ COLORS = {
     "led_green": (0.1, 0.95, 0.2, 1.0),
     "led_red": (1.0, 0.1, 0.05, 1.0),
     "hydraulic_oil": (0.55, 0.4, 0.1, 1.0),
+    "lamp": (1.0, 0.97, 0.88, 1.0),
+    "grating": (0.52, 0.54, 0.55, 1.0),
+    "cable_black": (0.1, 0.1, 0.11, 1.0),
 }
 
 # PBR finish per material: (roughness, metallic, transmission); default (0.5, 0, 0)
@@ -95,7 +98,7 @@ FINISHES = {
 }
 
 # emissive materials: (strength); colour = base colour
-EMISSION = {"light_red": 6.0, "led_green": 4.0, "led_red": 4.0}
+EMISSION = {"light_red": 6.0, "led_green": 4.0, "led_red": 4.0, "lamp": 3.0}
 
 
 def reset_scene():

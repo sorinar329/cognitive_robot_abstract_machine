@@ -1,6 +1,6 @@
 """Outside, ground level up to the tower top: ground, foundation plinth with grout
 and earthing, 4 tower sections (base flange with anchor nuts, door, internal
-flanges), entrance door leaf, outside stairs, yaw bearing ring. Plus variants and
+flanges), entrance door leaf at ground level, yaw bearing ring. Plus variants and
 fault overlays for the foundation and the tower coating.
 
 Frames: ``foundation`` = world (ground level on the tower axis); ``tower_section_k``
@@ -69,20 +69,20 @@ def grout(broken):
 
 
 def earthing(loose):
+    """Earthing strap from the base flange across the plinth top to a terminal near its edge."""
     a = s.EARTHING_AZIMUTH
     flange_side = s.BASE_FLANGE_R_OUT + 0.012
-    pts = [polar(flange_side, a, BASE + 0.06), polar(flange_side + 0.02, a, top + 0.012),
-           polar(s.PLINTH_R - 0.06, a, top + 0.012), polar(s.PLINTH_R + 0.012, a, top - 0.06),
-           polar(s.PLINTH_R + 0.012, a, 0.12)]
-    objs = [c.box("terminal", (-0.05, 0.05), (-0.04, 0.04), (0.02, 0.16), mat="steel_grey")]
-    c.placed(objs[0], c.homogeneous_z(a, polar(s.PLINTH_R + 0.04, a, 0.0)))
-    if loose:   # torn off the flange: the strap ends on the plinth top, curled
-        pts = pts[2:][::-1] + [polar(s.PLINTH_R - 0.25, a + 0.03, top + 0.012),
-                               polar(s.PLINTH_R - 0.4, a - 0.02, top + 0.03)]
-        pts = pts[::-1]
+    term_r = s.PLINTH_R - 0.25
+    objs = [c.box("terminal", (-0.05, 0.05), (-0.04, 0.04), (0.0, 0.14), mat="steel_grey")]
+    c.placed(objs[0], c.homogeneous_z(a, polar(term_r, a, top)))
+    if loose:   # torn off the flange: the strap lies curled on the plinth top
+        pts = [polar(term_r - 0.06, a, top + 0.1), polar(term_r - 0.2, a, top + 0.012),
+               polar(term_r - 0.45, a + 0.03, top + 0.012), polar(term_r - 0.55, a - 0.02, top + 0.03)]
         objs.append(c.cylinder("empty_hole", 0.012, 0.004, (0, 0, 0), mat="crack"))
         c.placed(objs[-1], c.homogeneous_x_to(a, polar(s.BASE_FLANGE_R_OUT + 0.002, a, BASE + 0.06)))
     else:
+        pts = [polar(flange_side, a, BASE + 0.06), polar(flange_side + 0.02, a, top + 0.012),
+               polar(term_r - 0.06, a, top + 0.012), polar(term_r - 0.06, a, top + 0.1)]
         objs.append(c.cylinder("lug_bolt", 0.018, 0.02, (0, 0, 0), vertices=6, mat="bolt_black"))
         c.placed(objs[-1], c.homogeneous_x_to(a, polar(s.BASE_FLANGE_R_OUT + 0.02, a, BASE + 0.06)))
     for i, (p0, p1) in enumerate(zip(pts, pts[1:])):
@@ -143,7 +143,7 @@ for idx, (z0, z1) in enumerate(zip(zs_all, zs_all[1:]), start=1):
     objs = []
     h = z1 - z0
     if idx == 1:   # entrance door through the wall, with a reinforcing collar
-        rd = R(s.DOOR_SILL_Z)
+        rd = R(max(s.DOOR_SILL_Z, 0.0))
         hole = c.box("door_hole", (-s.DOOR_WIDTH / 2, s.DOOR_WIDTH / 2), (-rd - 0.5, -rd + 0.5),
                      (s.DOOR_SILL_Z, s.DOOR_SILL_Z + s.DOOR_HEIGHT))
         c.cut(wall, hole)
@@ -152,10 +152,17 @@ for idx, (z0, z1) in enumerate(zip(zs_all, zs_all[1:]), start=1):
         c.cut(collar, c.box("door_hole2", (-s.DOOR_WIDTH / 2, s.DOOR_WIDTH / 2), (-rd - 1, -rd + 1),
                             (s.DOOR_SILL_Z, s.DOOR_SILL_Z + s.DOOR_HEIGHT)))
         objs.append(collar)
-        # T-flange on the grout with the anchor bolt nuts outside the wall
-        objs.append(annulus("base_flange", 0.0, s.BASE_FLANGE_H, R(0) - s.tower_wall(0) - 0.25, s.BASE_FLANGE_R_OUT, "steel_grey"))
+        # T-flange on the grout with the anchor bolt nuts outside the wall; the door
+        # reaches down to the ground, so flange and nuts leave a gap there
+        flange = annulus("base_flange", 0.0, s.BASE_FLANGE_H, R(0) - s.tower_wall(0) - 0.25, s.BASE_FLANGE_R_OUT, "steel_grey")
+        c.cut(flange, c.box("door_gap", (-s.DOOR_WIDTH / 2, s.DOOR_WIDTH / 2), (-5, -1), (-1, 1)))
+        objs.append(flange)
+        objs.append(c.box("threshold", (-s.DOOR_WIDTH / 2, s.DOOR_WIDTH / 2), (-rd - 0.1, -rd + 0.3), (s.DOOR_SILL_Z, s.DOOR_SILL_Z + 0.01), mat="steel_grey"))
+        door_half = math.asin((s.DOOR_WIDTH / 2 + 0.1) / s.ANCHOR_NUT_R)
         for k in range(s.ANCHOR_NUTS):
             a = 2 * math.pi * k / s.ANCHOR_NUTS
+            if abs((a - s.DOOR_AZIMUTH + math.pi) % (2 * math.pi) - math.pi) < door_half:
+                continue
             x, y, _ = polar(s.ANCHOR_NUT_R, a, 0)
             objs.append(c.cylinder(f"nut{k}", 0.034, 0.045, (x, y, s.BASE_FLANGE_H + 0.0225), vertices=6, mat="bolt_black"))
             objs.append(c.cylinder(f"stud{k}", 0.018, 0.06, (x, y, s.BASE_FLANGE_H + 0.075), vertices=8, mat="pipe_steel"))
@@ -169,7 +176,7 @@ for idx, (z0, z1) in enumerate(zip(zs_all, zs_all[1:]), start=1):
     export(f"tower_section_{idx}", [wall] + objs)
 
 # door leaf, in its hinge frame (vertical axis at the +X edge of the opening)
-rd = R(s.DOOR_SILL_Z)
+rd = R(max(s.DOOR_SILL_Z, 0.0))
 leaf = annulus("leaf", s.DOOR_SILL_Z + 0.01, s.DOOR_SILL_Z + s.DOOR_HEIGHT - 0.01, rd - 0.03, rd + 0.035, "tower_paint")
 c.intersect(leaf, c.box("leaf_zone", (-s.DOOR_WIDTH / 2 + 0.01, s.DOOR_WIDTH / 2 - 0.01), (-rd - 1, -rd + 1), (-1, 10)))
 handle = c.box("handle", (-s.DOOR_WIDTH / 2 + 0.08, -s.DOOR_WIDTH / 2 + 0.2), (-rd - 0.09, -rd - 0.035),
@@ -178,30 +185,6 @@ door = c.join("tower_door", [leaf, handle])
 hinge_y = -math.sqrt(rd ** 2 - (s.DOOR_WIDTH / 2) ** 2)
 c.placed(door, c.translation((-s.DOOR_WIDTH / 2, -hinge_y, -s.DOOR_SILL_Z)))
 export("tower_door", [door])
-
-# outside stairs and landing (section 1 frame: ground is at -BASE)
-ground = -BASE
-y_land = -rd + 0.05
-y_edge = y_land - s.LANDING_DEPTH
-hw = s.STAIR_WIDTH / 2
-n_steps = round((s.DOOR_SILL_Z - ground) / s.STEP_RISE)
-rise = (s.DOOR_SILL_Z - ground) / n_steps
-parts = [c.box("landing", (-hw - 0.1, hw + 0.1), (y_edge, y_land), (s.DOOR_SILL_Z - 0.08, s.DOOR_SILL_Z), mat="steel_grey")]
-for x in (-hw - 0.05, hw + 0.05):
-    for y in (y_edge + 0.05, y_land - 0.1):
-        parts.append(c.rod("post", (x, y, ground), (x, y, s.DOOR_SILL_Z - 0.08), 0.04, mat="steel_grey"))
-for k in range(1, n_steps):
-    y1 = y_edge - (n_steps - 1 - k) * s.STEP_RUN
-    parts.append(c.box(f"step{k}", (-hw, hw), (y1 - s.STEP_RUN, y1), (ground + k * rise - 0.04, ground + k * rise), mat="steel_grey"))
-y_bottom = y_edge - (n_steps - 1) * s.STEP_RUN
-for x in (-hw - 0.02, hw + 0.02):
-    parts.append(c.rod("stringer", (x, y_bottom, ground + 0.05), (x, y_edge, s.DOOR_SILL_Z - 0.05), 0.03, mat="steel_grey"))
-    rail_h = 1.0
-    parts.append(c.rod("rail_stairs", (x, y_bottom, ground + rail_h), (x, y_edge, s.DOOR_SILL_Z + rail_h), 0.022, mat="pipe_steel"))
-    parts.append(c.rod("rail_landing", (x, y_edge, s.DOOR_SILL_Z + rail_h), (x, y_land - 0.05, s.DOOR_SILL_Z + rail_h), 0.022, mat="pipe_steel"))
-    for y, z0 in ((y_bottom, ground), (y_edge, s.DOOR_SILL_Z), (y_land - 0.05, s.DOOR_SILL_Z)):
-        parts.append(c.rod("rail_post", (x, y, z0), (x, y, z0 + rail_h), 0.02, mat="pipe_steel"))
-export("entrance_stairs", parts)
 
 # tower coating damage near the base (section 1 frame): rust patches and a run-off streak
 rust = [c.cylinder_blob(f"rust{i}", R, math.radians(a), z, sz, seed, "rust")

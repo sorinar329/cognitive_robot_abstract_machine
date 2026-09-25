@@ -9,6 +9,7 @@
 Always writes urdf/inspection_points.yaml as well.
 """
 import argparse
+import math
 import os
 import random
 import sys
@@ -39,9 +40,19 @@ def extras(names):
     return [spec for n in names for spec in available[n]]
 
 
-def build(fault_ids, links, points, faults, signals):
+def scenario_joint_states(spec):
+    """A scenario's ``joint_states``: joint -> number, or an expression over the dims
+    (``d`` = turbine.dims, ``site`` = turbine.dims.site), e.g. to lower the crane hook
+    to the ground: ``site.NACELLE_ORIGIN_Z + d.HOOK_AT_FLOOR``."""
+    from turbine import dims
+    from turbine.dims import site
+    return {j: float(eval(v, {"d": dims, "site": site, "math": math}) if isinstance(v, str) else v)
+            for j, v in (spec or {}).items()}
+
+
+def build(fault_ids, links, points, faults, signals, base_joint_states=None):
     variants = {l["name"]: l["variants"] for l in links if l["variants"]}
-    states, extra, active, joint_states = {}, [], [], {}
+    states, extra, active, joint_states = {}, [], [], dict(base_joint_states or {})
     signals = dict(signals)
     for fid in fault_ids:
         if fid not in faults:
@@ -94,13 +105,16 @@ def main():
         name = os.path.splitext(os.path.basename(args.scenario))[0]
         fault_ids = scenario.get("faults") or []
         links = links + extras(scenario.get("extras") or [])
+        base_joint_states = scenario_joint_states(scenario.get("joint_states"))
     elif args.random is not None:
         name = f"random_{args.seed}"
         fault_ids = sorted(random.Random(args.seed).sample(sorted(faults), min(args.random, len(faults))))
     else:
         name, fault_ids = None, []
+    if not args.scenario:
+        base_joint_states = {}
 
-    all_links, states, truth = build(fault_ids, links, points, faults, signals)
+    all_links, states, truth = build(fault_ids, links, points, faults, signals, base_joint_states)
     if name is None:
         out = os.path.join(ROOT, "urdf", "windturbine.urdf")
     else:

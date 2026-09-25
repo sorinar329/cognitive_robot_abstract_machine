@@ -1,0 +1,8 @@
+# Task T5: the G1 rides the tower's service lift from the ground to the yaw deck and
+# checks the tower on the way.
+view: tower_base
+description: Service lift at the ground, tower door open, cable loop chafed at the yaw deck
+joint_states:
+  tower_door_joint: 1.5
+faults:
+  - tower.cable_loop_chafed

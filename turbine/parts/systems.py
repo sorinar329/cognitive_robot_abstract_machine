@@ -8,26 +8,27 @@ from turbine import dims as d
 from turbine.urdf import fault, inspection_point, link, span_box
 
 M = "systems/"
-CX, CY, CZ = d.CABINET_X, d.CABINET_Y, d.CABINET_Z
-HINGE_Y = CY[1] - 0.01
+CY, CZ = d.CABINET_Y, d.CABINET_Z
+DOOR_W = {name: x1 - x0 - 0.02 for name, (x0, x1) in d.CABINET_XS.items()}
 
 
-def cabinet(name, side):
-    ys = tuple(sorted((side * CY[0], side * CY[1])))
+def cabinet(name):
+    """Cabinet on the -Y wall; its door (hinge at the -X edge) opens towards +Y."""
+    x0, x1 = d.CABINET_XS[name]
     return [
-        link(f"cabinet_{name}", "nacelle", mesh=M + f"cabinet_{name}.obj", collisions=[span_box(CX, ys, CZ)]),
+        link(f"cabinet_{name}", "nacelle", mesh=M + f"cabinet_{name}.obj", collisions=[span_box((x0, x1), CY, CZ)]),
         link(f"cabinet_{name}_door", f"cabinet_{name}", mesh=M + f"cabinet_{name}_door.obj",
-             xyz=(CX[1], side * HINGE_Y, 0.0), joint="revolute", axis=(0, 0, side), limits=(0.0, 1.9),
-             collisions=[span_box((0.0, 0.03), tuple(sorted((0.0, -side * (CY[1] - CY[0] - 0.02)))), (CZ[0] + 0.12, CZ[1] - 0.02))]),
+             xyz=(x0 + 0.01, CY[1], 0.0), joint="revolute", axis=(0, 0, 1), limits=(0.0, 1.9),
+             collisions=[span_box((0.0, DOOR_W[name]), (0.0, 0.03), (CZ[0] + 0.12, CZ[1] - 0.02))]),
     ]
 
 
 LINKS = [
     link("transformer", "nacelle", mesh=M + "transformer.obj", collisions=[span_box(d.TRAFO_X, d.TRAFO_Y, d.TRAFO_Z)]),
-    *cabinet("converter", 1),
+    *cabinet("converter"),
     link("converter_status_light", "cabinet_converter_door",
          variants={"ok": M + "status_light_ok_p.obj", "error": M + "status_light_error_p.obj"}),
-    *cabinet("controller", -1),
+    *cabinet("controller"),
     link("hydraulic_unit", "nacelle", mesh=M + "hydraulic_unit.obj",
          collisions=[span_box(d.HYDRAULIC_X, d.HYDRAULIC_Y, (0.0, d.HYDRAULIC_Z[1] + 0.2))]),
     link("cooling_unit", "nacelle", mesh=M + "cooling_unit.obj", collisions=[span_box(d.COOLING_X, d.COOLING_Y, (0.0, d.COOLING_Z[1]))]),
@@ -37,9 +38,12 @@ LINKS = [
     link("crane_trolley", "crane_rail", mesh=M + "crane_trolley.obj", xyz=(d.CRANE_TRAVEL[0], 0.0, d.CRANE_Z),
          joint="prismatic", axis=(1, 0, 0), limits=(0.0, d.CRANE_TRAVEL[1] - d.CRANE_TRAVEL[0]),
          collisions=[span_box((-0.25, 0.25), (-0.14, 0.14), (-0.33, -0.03))]),
-    link("crane_hook", "crane_trolley", mesh=M + "crane_hook.obj", xyz=(0.0, 0.0, -0.95),
-         joint="prismatic", axis=(0, 0, -1), limits=(0.0, 2.8),
+    # hook joint 0: the lifting platform parked on the closed crane hatch; it goes down to the ground
+    link("crane_hook", "crane_trolley", mesh=M + "crane_hook.obj", xyz=(0.0, 0.0, -d.HOOK_BELOW_TROLLEY),
+         joint="prismatic", axis=(0, 0, -1), limits=(0.0, 115.0), velocity=d.HOOK_SPEED,
          collisions=[span_box((-0.07, 0.07), (-0.04, 0.04), (-0.1, 0.14))]),
+    link("lifting_platform", "crane_hook", mesh=M + "lifting_platform.obj", xyz=(0.0, 0.0, -d.HOOK_TO_PLATFORM),
+         collisions=[span_box((-d.LIFT_PLATFORM[0] / 2, d.LIFT_PLATFORM[0] / 2), (-d.LIFT_PLATFORM[1] / 2, d.LIFT_PLATFORM[1] / 2), (-0.1, 0.0))]),
     link("fire_extinguisher", "nacelle",
          variants={"present": M + "extinguisher_present.obj", "missing": M + "extinguisher_missing.obj"}),
     link("safety_equipment", "nacelle", mesh=M + "safety.obj"),
@@ -58,9 +62,9 @@ EXTRAS = {
 
 WALL = d.INNER_Y[0]
 INSPECTION_POINTS = [
-    inspection_point("converter_inspect_status", "cabinet_converter", (CX[1] + 0.035, HINGE_Y - 0.25, 1.85), (1, 0.0, -0.3),
-                     "converter cabinet status light (green = ok)", distance=1.1),
-    inspection_point("controller_inspect_door", "cabinet_controller", (CX[1] + 0.03, -(CY[0] + CY[1]) / 2, 1.2), (1, 0.0, 0.2),
+    inspection_point("converter_inspect_status", "cabinet_converter", (d.CABINET_XS["converter"][0] + 0.26, CY[1] + 0.035, 1.85),
+                     (0.0, 1, -0.3), "converter cabinet status light (green = ok)", distance=1.1),
+    inspection_point("controller_inspect_door", "cabinet_controller", (sum(d.CABINET_XS["controller"]) / 2, CY[1] + 0.03, 1.2), (0.0, 1, 0.2),
                      "controller cabinet: door closed, emergency stop not pressed", distance=1.3),
     inspection_point("hydraulic_inspect", "hydraulic_unit", (d.HYDRAULIC_X[1] - 0.2, d.HYDRAULIC_Y[1], d.HYDRAULIC_Z[0] + 0.55), (0.8, 0.9, 1.0),
                      "hydraulic unit: hose fitting and tank, oil on the walkway", distance=0.78),
