@@ -23,6 +23,9 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, ROOT)
 from turbine.views import MAX_CAMERA_DISTANCE, VIEWS  # noqa: E402
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from add_gait import add_gait  # noqa: E402
+
 ROBOT_PREFIX = "offis_unitree_g1"
 MESH_PREFIX = "meshes/windturbine_model/models/"
 
@@ -31,6 +34,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("bundle")
     ap.add_argument("--view", choices=sorted(VIEWS), default="tower_base")
+    ap.add_argument("--no-gait", action="store_true", help="keep the recorded straight legs")
     args = ap.parse_args()
     scene_path = os.path.join(args.bundle, "scene.json")
     with open(scene_path) as f:
@@ -68,6 +72,8 @@ def main():
     with open(scene_path, "w") as f:
         json.dump(scene, f, indent=1)
     print(f"finished {args.bundle}: models {[m['name'] for m in models]}, view {args.view}")
+    if not args.no_gait:
+        add_gait(args.bundle)          # legs walk instead of sliding (visual only)
 
 
 if __name__ == "__main__":

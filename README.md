@@ -19,7 +19,9 @@ ROS, `~/workspace/segmind_ws` (G1 model) and this package sourced:
     $PY scripts/g1_climb.py --route lift                                               # T5: tower lift to the yaw deck
     $PY scripts/g1_tower_bolts.py                                                      # T6: flange bolt check -> reports/
 
-Record a run for CRAMERA and tidy the bundle (robot naming, GLB materials, camera):
+Record a run for CRAMERA and tidy the bundle (robot naming, GLB materials, camera, and a walking
+gait for the legs: in CRAM the G1's base slides, `scripts/add_gait.py` adds steps from the
+recorded base motion, visual only):
 
     $PY -m cramera.onboard.demo scripts/g1_inspection_round.py --name windturbine_g1_t1 -- --zone ground --scenario outside_ground
     python3 scripts/finish_recording.py ~/.cramera/scenes/windturbine_g1_t1 --view g1_ground

@@ -275,7 +275,7 @@ if stills:
     settings.file_format = "PNG"
     for fraction in stills:
         scene.frame_set(1 + round(fraction * (len(frames) - 1)))
-        scene.render.filepath = os.path.join(os.path.abspath(out), f"still_{fraction:.2f}.png")
+        scene.render.filepath = os.path.join(os.path.abspath(out), f"still_{fraction:.3f}.png")
         bpy.ops.render.render(write_still=True)
         print("wrote", scene.render.filepath)
 else:
