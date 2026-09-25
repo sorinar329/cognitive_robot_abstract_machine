@@ -48,7 +48,8 @@ h2{font:600 clamp(28px,5vw,38px)/1 var(--display);margin:0;text-wrap:balance;dis
 h2 small{font:500 12px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
 .intro{max-width:66ch;margin:0;color:var(--muted)}
 figure{margin:0;display:grid;gap:8px}
-figure img{display:block;width:100%;height:auto;border-radius:6px;background:var(--shot)}
+figure img,figure video{display:block;width:100%;height:auto;border-radius:6px;background:var(--shot)}
+figure video{aspect-ratio:16/9}
 figcaption{font-size:14px;color:var(--muted);max-width:70ch}
 figcaption strong{color:var(--ink);font-weight:600}
 .src{font:500 11px/1 var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--steel);margin-right:6px}
@@ -148,8 +149,8 @@ footer code{font-family:var(--mono);font-size:12px}
     <figure><img src="img/cramera_g1_t2.jpg" alt="G1 on the nacelle walkway" loading="lazy">
       <figcaption><span class="src">T2</span><strong>Nacelle walkway round:</strong> 6 of 6 points seen, 7 faults reported. 1:25 recording.</figcaption></figure>
   </div>
-  <figure><img src="img/cramera_g1_t3.jpg" alt="G1 bringing the torque tool case to the technician" loading="lazy">
-    <figcaption><span class="src">T3</span><strong>Find the loose bolt, bring the tool:</strong> the G1 spots the shrink-disc bolt whose torque marking no longer lines up, fetches the torque tool case from the rack at the rear, carries it about 10 m along the walkway and sets it on the tray next to the technician (1 mm from the tray centre). 1:10 recording. Tightening itself stays with the technician: those bolts need far more torque than a G1 arm can give.</figcaption></figure>
+  <figure><video class="clip" src="video/g1_t3.mp4" poster="img/cramera_g1_t3.jpg" controls playsinline muted preload="metadata" aria-label="G1 bringing the torque tool case to the technician"></video>
+    <figcaption><span class="src">T3</span><strong>Find the loose bolt, bring the tool:</strong> the G1 spots the shrink-disc bolt whose torque marking no longer lines up, fetches the torque tool case from the rack at the rear, carries it about 10 m along the walkway and sets it on the tray next to the technician (1 mm from the tray centre). Video replayed from the CRAMERA recording of the CRAM plan (coraplex actions, giskardpy motion), 1:10. Tightening itself stays with the technician: those bolts need far more torque than a G1 arm can give.</figcaption></figure>
   <ul class="facts">
     <li><b>Camera</b>Sees only things at or below its own height (1.27 m): the waist bends at most 0.52 rad.</li>
     <li><b>Tasks</b>T1 and T2 inspect; T3 assists a technician (pick up, carry, set down).</li>

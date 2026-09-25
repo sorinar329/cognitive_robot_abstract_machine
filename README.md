@@ -19,6 +19,15 @@ Record a run for CRAMERA and tidy the bundle (robot naming, GLB materials, camer
     $PY -m cramera.onboard.demo scripts/g1_inspection_round.py --name windturbine_g1_t1 -- --zone ground --scenario outside_ground
     python3 scripts/finish_recording.py ~/.cramera/scenes/windturbine_g1_t1 --view g1_ground
     # T2: --name windturbine_g1_t2 -- --zone nacelle --scenario nacelle_all_faults, then --view g1_nacelle
+    # T3: $PY -m cramera.onboard.demo scripts/g1_bring_the_tool.py --name windturbine_g1_t3, then --view g1_nacelle_wide
+
+Watch a task live in CRAMERA while CRAM executes it (the open viewer tab attaches):
+
+    ~/workspace/cramera-port/.venv/bin/cramera-live scripts/g1_bring_the_tool.py
+
+Render a recording to video (used by the picture tour):
+
+    blender -b --factory-startup -P scripts/render_recording.py -- ~/.cramera/scenes/windturbine_g1_t3 preview/video/g1_t3.mp4 --view g1_nacelle_video
 
 The G1's D435 looks ~48 deg down and the waist pitches at most 0.52 rad, so it only
 sees things at or below its camera height (1.27 m); `scripts/check_inspection_points.py`

@@ -128,8 +128,8 @@ def main():
     final = case.global_pose.to_np()[:3, 3]
     off = float(np.linalg.norm(final[:2] - np.array(CASE_TARGET[:2])))
     on_tray = off < PLACE_TOLERANCE and final[2] > FLOOR + d.TOOL_TRAY_TOP
-    print(f"case at {np.round(final - [0, 0, FLOOR], 3)} (nacelle frame), {off * 100:.1f} cm from the tray centre")
-    print(f"\n=== T3 report ===\nloose bolt found: {bool(seen and found)}\ntool delivered to the technician: {on_tray}")
+    print(f"case at {np.round(final - [0, 0, FLOOR], 3)} (nacelle frame), {off * 100:.1f} cm from the tray centre", flush=True)
+    print(f"\n=== T3 report ===\nloose bolt found: {bool(seen and found)}\ntool delivered to the technician: {on_tray}", flush=True)
     if not (seen and found and on_tray):     # no exit on success, so cramera-onboard can finish recording
         sys.exit(1)
 

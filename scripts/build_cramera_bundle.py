@@ -32,20 +32,7 @@ from turbine import urdf  # noqa: E402
 
 PREFIX = "windturbine"
 COVER = "nacelle/cover.obj"
-from turbine.dims import site  # noqa: E402
-
-_N = site.NACELLE_ORIGIN_Z
-VIEWS = {
-    # view: (camera, show the nacelle cover)
-    "turbine": ({"position": [150.0, -210.0, 90.0], "target": [0.0, 0.0, 85.0]}, True),
-    "tower_base": ({"position": [11.0, -17.0, 5.3], "target": [0.0, -2.0, 1.5]}, True),
-    "nacelle": ({"position": [-1.5, -14.0, _N + 8.5], "target": [-3.5, 0.0, _N + 0.8]}, False),
-    # robot recordings: the G1's start and its round around the tower base / along the nacelle walkway
-    "g1_ground": ({"position": [19.0, -25.0, 9.0], "target": [2.0, -7.0, 1.0]}, True),
-    "g1_nacelle": ({"position": [1.5, -9.5, _N + 5.5], "target": [-1.5, -1.2, _N + 0.9]}, False),
-    "g1_nacelle_wide": ({"position": [-2.5, -14.5, _N + 8.0], "target": [-3.3, -1.0, _N + 0.8]}, False),
-}
-MAX_CAMERA_DISTANCE = 320.0   # read by CRAMERA (rendering.maxCameraDistance) so the whole turbine fits
+from turbine.views import MAX_CAMERA_DISTANCE, VIEWS  # noqa: E402,F401
 
 
 def glb_asset(mesh):

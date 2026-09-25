@@ -3,11 +3,12 @@
 
   python3 scripts/build_gallery.py [--skip-renders] [--skip-screenshots]
 
-Writes preview/site/ (index.html + img/*.jpg + files.json):
+Writes preview/site/ (index.html + img/*.jpg + video/*.mp4 + files.json):
 - Blender renders of the healthy turbine and the fault scenarios, one image per
   inspection point that has a fault in them (scripts/render_preview.py);
 - CRAMERA screenshots of the turbine scenes and the G1 recordings (headless
   Chromium; needs the viewer on localhost:8711, see view.sh);
+- videos of the G1 recordings, replayed in Blender (scripts/render_recording.py);
 - the fault browser data and counts, stamped with the date and git commit.
 
 Publish the result to the page's existing URL (see README, "Picture tour").
@@ -35,6 +36,10 @@ CRAMERA_SCENES = {   # screenshot file -> CRAMERA scene
     "windturbine": "windturbine", "windturbine_outside_ground": "windturbine_outside_ground",
     "windturbine_nacelle_all": "windturbine_nacelle_all_faults", "g1_t1": "windturbine_g1_t1", "g1_t2": "windturbine_g1_t2", "g1_t3": "windturbine_g1_t3",
 }
+VIDEOS = {   # video file -> (CRAMERA recording, camera view in turbine/views.py)
+    "g1_t3": ("windturbine_g1_t3", "g1_nacelle_video"),
+}
+VIDEO_DIR = os.path.join(ROOT, "preview", "video")
 VIEWER = "http://localhost:8711/?scene="
 PANEL = (17, 192, 791, 875)          # the 3D panel in a 1600x1000 CRAMERA screenshot
 
@@ -57,6 +62,16 @@ def screenshot_all():
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
+def render_videos():
+    """Replay the robot recordings in Blender (scripts/render_recording.py) to MP4."""
+    os.makedirs(VIDEO_DIR, exist_ok=True)
+    for name, (scene, view) in VIDEOS.items():
+        bundle = os.path.expanduser(os.path.join("~/.cramera/scenes", scene))
+        subprocess.run(["blender", "-b", "--factory-startup", "-P", os.path.join(ROOT, "scripts", "render_recording.py"),
+                        "--", bundle, os.path.join(VIDEO_DIR, name + ".mp4"), "--step", "2", "--view", view],
+                       check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
 def to_jpeg(src, name, size, crop=None):
     im = Image.open(src).convert("RGBA")
     ground = Image.new("RGBA", im.size, (14, 20, 27, 255))
@@ -72,14 +87,20 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--skip-renders", action="store_true")
     ap.add_argument("--skip-screenshots", action="store_true")
+    ap.add_argument("--skip-videos", action="store_true")
     args = ap.parse_args()
     if not args.skip_renders:
         render_all()
     if not args.skip_screenshots:
         screenshot_all()
+    if not args.skip_videos:
+        render_videos()
 
     shutil.rmtree(OUT, ignore_errors=True)
     os.makedirs(os.path.join(OUT, "img"))
+    os.makedirs(os.path.join(OUT, "video"))
+    for name in VIDEOS:
+        shutil.copyfile(os.path.join(VIDEO_DIR, name + ".mp4"), os.path.join(OUT, "video", name + ".mp4"))
     for n in ("overview", "tower_base", "rotor", "nacelle"):
         to_jpeg(os.path.join(RENDERS, "H", n + ".png"), "render_" + n, (1400, 900))
     to_jpeg(os.path.join(RENDERS, "FN", "nacelle.png"), "render_nacelle_faults", (1400, 900))
@@ -116,7 +137,7 @@ def main():
     with open(os.path.join(OUT, "index.html"), "w") as f:
         f.write(html)
     with open(os.path.join(OUT, "files.json"), "w") as f:
-        json.dump({f"img/{n}": f"img/{n}" for n in sorted(os.listdir(os.path.join(OUT, "img")))}, f)
+        json.dump({f"{d}/{n}": f"{d}/{n}" for d in ("img", "video") for n in sorted(os.listdir(os.path.join(OUT, d)))}, f)
     print(f"built {OUT}: {len(points)} inspection points, {total} faults, commit {commit}")
 
 
