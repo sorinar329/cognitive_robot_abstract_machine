@@ -14,8 +14,8 @@ rather than copy them).
 | [ACP RP 108 *Wear Debris Collection and Analysis for Wind Turbine Gearboxes*](https://cleanpower.org/wp-content/uploads/2024/06/AWEA_OM_RP_108-Wear-Debris-Collection-and-Analysis-for-Wind-Turbine-Gearboxes.pdf) | Gearbox oil debris procedure | Gearbox filter/oil faults, particle count signal |
 | [ACP RP Chapter 7 *End of Warranty*](https://cleanpower.org/wp-content/uploads/2024/06/AWEA-OM-RP-Chapter-7_End-of-Warranty.pdf) and [Chapter 8 *Condition Based Maintenance*](https://cleanpower.org/wp-content/uploads/2024/06/AWEA-OM-RP-Chapter-8_Condition-Based-Maintenance.pdf) | Whole-turbine inspection lists; condition monitoring (vibration, grease/oil sampling, temperatures) | Inspection checklists; non-visual signals (vibration, temperature) |
 | [ACP *Recommended Practices for Onshore Wind Turbine Foundation Maintenance*](https://cleanpower.org/resources/recommended-practices-for-onshore-wind-turbine-foundation-maintenance/) | Foundation inspection, grout, anchor bolts | Foundation zone (plinth crack, grout breakout, anchor nuts) |
-| [GE Renewable Energy, *Wartungshandbuch 3MW-Plattform Onshore, Modul 3D – 3MW DFIG*, 2017 rev. 2](https://www.uvp-verbund.de/documents-ige-ng/igc_mv/EA910A3C-0A64-4308-B16B-4E63C4AE07E1/16_01_5b_Wartungspflichtenheft_3MW%20WEA.pdf) (German translation, 28 pages, from a German environmental-impact filing) | Manufacturer maintenance manual for the **electrical module** of a 3 MW DFIG turbine: converter cabinets, main cabinet (MCC), low-voltage distribution, safety chain, maintenance frequencies (6/12/48-month tasks) | Same size and generator type as our IEA 3.4 MW turbine: cabinet, converter and safety-chain inspections |
-| [Vestas *Mechanical Operating and Maintenance Manual V90-3.0 MW, VCRS 60 Hz (Mk 7)*, 2007](https://puc.sd.gov/commission/dockets/electric/2018/EL18-026/prefiledexhibits/fuerniss/9.pdf) (South Dakota PUC docket EL18-026) | Cover and chapter index of the manual (the chapters themselves are not in the filing), plus the wind farm's O&M plan | Chapter list of a real 3 MW geared turbine: rotor lock, blades, blade bearing, pitch, gearbox, brake, composite coupling, gear oil lubrication, generator and transformer, yaw gear, yaw bearing, hydraulics, wind sensors, air conditioning |
+| [GE Renewable Energy, *Wartungshandbuch 3MW-Plattform Onshore, Modul 3D – 3MW DFIG*, 2017 rev. 2](https://www.uvp-verbund.de/documents-ige-ng/igc_mv/EA910A3C-0A64-4308-B16B-4E63C4AE07E1/16_01_5b_Wartungspflichtenheft_3MW%20WEA.pdf) (German translation, 28 pages, from a German environmental-impact filing) | Manufacturer maintenance manual for the **electrical module** of a 3 MW DFIG turbine: converter cabinets, main cabinet (MCC), low-voltage distribution, safety chain, maintenance frequencies (6/12/48-month tasks) | Same size and generator type as our IEA 3.4 MW turbine. Contains a real maintenance schedule table ("Häufigkeit der Wartung": visual checks and system tests per cabinet and interval; e.g. coolant exchange every 5 years, pump motor bearings greased every 48 months, some 6-month tasks extendable to 12 months) |
+| [Vestas *Mechanical Operating and Maintenance Manual V90-3.0 MW, VCRS 60 Hz (Mk 7)*, 2007](https://puc.sd.gov/commission/dockets/electric/2018/EL18-026/prefiledexhibits/fuerniss/9.pdf) (South Dakota PUC docket EL18-026) | Cover and chapter index of the mechanical manual (the chapters themselves are not in the filing), plus the complete 32-page *Safety Regulations for Operators and Technicians V90-3MW/V100-2.75MW* (2006): turbine inspection procedure, emergency stop locations, rotor lock and internal crane operation, rescue equipment | Chapter list of a real 3 MW geared turbine: rotor lock, blades, blade bearing, pitch, gearbox, brake, composite coupling, gear oil lubrication, generator and transformer, yaw gear, yaw bearing, hydraulics, wind sensors, air conditioning |
 | [NREL *Wind Turbine Drivetrain Condition Monitoring – An Overview*](https://docs.nrel.gov/docs/fy12osti/50698.pdf) | Drivetrain failure modes and monitoring techniques | Gearbox and bearing faults and their signals |
 | [NREL *Gearbox Reliability Collaborative: Gearbox 1 Failure Analysis*](https://docs.nrel.gov/docs/fy12osti/53062.pdf) | Documented gearbox damage from a test turbine | Realistic gearbox damage appearance |
 | [Sandia / EPRI *Blade Visual Inspection and Maintenance Quantification* (2022)](https://www.sandia.gov/app/uploads/sites/273/2022/11/EPRI-Blade-Maintenance-Quantification-October19_2022-21.pdf) | How blade damage is found and classified in visual inspections | Blade faults (erosion, lightning, trailing edge) and their severity |
@@ -41,3 +41,17 @@ rather than copy them).
 
 The ACP chapters also give intervals (e.g. gear oil sampling every 6 months) that can
 become part of the scenarios later, for example "overdue" findings.
+
+## Is there a maintenance plan?
+
+Not for the whole turbine. Complete maintenance plans (task x interval for every
+component) are manufacturer documents and are not public; the IEA reference turbine is a
+design study and has none. What exists openly:
+
+- a real interval table for the **electrical module** of a 3 MW DFIG turbine (GE, above);
+- **procedures with intervals** per subsystem in the ACP recommended practices;
+- the **inspection and safety procedures** of the Vestas V90 (above);
+- the legal frame in Germany: a recurring inspection by an expert every 2 years (BWE
+  principles), maintenance typically once or twice a year.
+
+A maintenance plan for our model turbine can be compiled from these sources.
