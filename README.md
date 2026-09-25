@@ -28,6 +28,15 @@ Interior of a geared ~2 MW wind turbine nacelle as a URDF environment for CRAM
 (`semantic_digital_twin`), laid out like `iai_maps/iai_kit_mobile_lab`:
 `models/<part>/*.obj` meshes referenced via `package://windturbine_model/...`.
 
+## Picture tour (phone)
+
+https://claude.ai/artifact/GJymeF8rCoQM1yw57dzxfZ shows renders, CRAMERA screenshots and a
+healthy-vs-faulty browser. It is rebuilt from `gallery/template.html` after every change:
+
+    ~/cram/cram_venv/bin/python scripts/build_gallery.py   # renders, screenshots (viewer on :8711), page -> preview/site/
+
+and then republished to the same URL.
+
 ## Viewing in CRAMERA
 
 The nacelle is packaged like CRAMERA's `precision_lab` (branch `cramera-port` of

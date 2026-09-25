@@ -1,0 +1,219 @@
+<title>Wind Turbine Twin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --ground:#F1F3F4; --surface:#FFFFFF; --ink:#152029; --muted:#586772; --rule:#D3DADF;
+  --accent:#D9A406; --accent-ink:#8A6700; --steel:#3C5A73; --steel-soft:#E3EAF0;
+  --high:#B93A0E; --medium:#9C6A12; --low:#3F7249;
+  --shot:#0E141A;
+  --display:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;
+  --body:"Barlow",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --ground:#0E1419; --surface:#151D24; --ink:#E3E9ED; --muted:#94A2AD; --rule:#27323B;
+    --accent:#F0C23A; --accent-ink:#F0C23A; --steel:#86A8C5; --steel-soft:#1C2833;
+    --high:#F07A4A; --medium:#E0AE4C; --low:#7CC38A;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --ground:#0E1419; --surface:#151D24; --ink:#E3E9ED; --muted:#94A2AD; --rule:#27323B;
+  --accent:#F0C23A; --accent-ink:#F0C23A; --steel:#86A8C5; --steel-soft:#1C2833;
+  --high:#F07A4A; --medium:#E0AE4C; --low:#7CC38A;
+}
+*{box-sizing:border-box}
+body{background:var(--ground);color:var(--ink);font:16px/1.55 var(--body);padding:0 16px}
+.wrap{max-width:1080px;margin:0 auto;padding-block:28px 64px}
+a{color:var(--steel)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+header{display:grid;gap:14px;padding-bottom:22px;border-bottom:1px solid var(--rule)}
+.eyebrow{font:500 12px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--accent-ink)}
+h1{font:700 clamp(40px,8vw,72px)/.92 var(--display);letter-spacing:.005em;margin:0;text-wrap:balance}
+h1 span{color:var(--accent)}
+.lede{max-width:62ch;color:var(--muted);margin:0}
+.specs{display:flex;flex-wrap:wrap;gap:8px 22px;margin:4px 0 0;padding:0;list-style:none;font:500 13px/1.3 var(--mono);color:var(--ink);font-variant-numeric:tabular-nums}
+.specs li{display:flex;gap:6px;align-items:baseline}
+.specs b{font-weight:500;color:var(--muted);font-size:11px;letter-spacing:.06em;text-transform:uppercase}
+nav{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
+nav a{font:600 13px/1 var(--body);text-decoration:none;color:var(--ink);padding:8px 12px;border:1px solid var(--rule);border-radius:999px;background:var(--surface)}
+nav a:hover{border-color:var(--accent)}
+
+section{padding-top:44px;display:grid;gap:16px}
+h2{font:600 clamp(28px,5vw,38px)/1 var(--display);margin:0;text-wrap:balance;display:flex;gap:12px;align-items:baseline}
+h2 small{font:500 12px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.intro{max-width:66ch;margin:0;color:var(--muted)}
+figure{margin:0;display:grid;gap:8px}
+figure img{display:block;width:100%;height:auto;border-radius:6px;background:var(--shot)}
+figcaption{font-size:14px;color:var(--muted);max-width:70ch}
+figcaption strong{color:var(--ink);font-weight:600}
+.src{font:500 11px/1 var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--steel);margin-right:6px}
+.pair{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr))}
+
+.robot{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr))}
+.facts{margin:0;padding:0;list-style:none;display:grid;gap:6px;font-size:14px}
+.facts li{display:grid;grid-template-columns:110px 1fr;gap:10px}
+.facts b{font:500 11px/1.9 var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+
+/* fault browser */
+.browser{display:grid;gap:14px;background:var(--surface);border:1px solid var(--rule);border-radius:10px;padding:14px}
+.zones{display:flex;gap:6px;flex-wrap:wrap}
+.chip{font:600 13px/1 var(--body);padding:8px 12px;border-radius:999px;border:1px solid var(--rule);background:transparent;color:var(--ink);cursor:pointer}
+.chip[aria-pressed="true"]{background:var(--ink);color:var(--ground);border-color:var(--ink)}
+.layout{display:grid;gap:14px;grid-template-columns:minmax(0,1fr)}
+@media (min-width:880px){.layout{grid-template-columns:280px minmax(0,1fr)}}
+.list{display:flex;flex-direction:column;gap:2px;max-height:520px;overflow:auto;margin:0;padding:0;list-style:none}
+@media (max-width:879px){.list{flex-direction:row;overflow-x:auto;max-height:none;padding-bottom:4px}}
+.item{all:unset;box-sizing:border-box;display:grid;gap:2px;padding:9px 10px;border-radius:6px;cursor:pointer;min-width:0}
+@media (max-width:879px){.item{min-width:190px;border:1px solid var(--rule)}}
+.item:hover{background:var(--steel-soft)}
+.item[aria-current="true"]{background:var(--steel-soft);box-shadow:inset 3px 0 0 var(--accent)}
+.item .n{font:600 14px/1.25 var(--body)}
+.item .m{font:400 12px/1.2 var(--mono);color:var(--muted)}
+.view{display:grid;gap:12px;min-width:0}
+.toggle{display:inline-flex;border:1px solid var(--rule);border-radius:8px;overflow:hidden;width:max-content}
+.toggle button{all:unset;cursor:pointer;font:600 13px/1 var(--body);padding:9px 16px;color:var(--muted)}
+.toggle button[aria-pressed="true"]{background:var(--accent);color:#1B1400}
+.shots{display:grid;gap:10px;grid-template-columns:1fr}
+@media (min-width:1000px){.shots.side{grid-template-columns:1fr 1fr}}
+.shot{display:grid;gap:6px}
+.shot img{width:100%;height:auto;display:block;border-radius:6px;background:var(--shot);aspect-ratio:4/3;object-fit:cover}
+.tag{font:500 11px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.what{margin:0;font-size:14px;color:var(--muted)}
+.findings{margin:0;padding:0;list-style:none;display:grid;gap:8px}
+.findings li{display:grid;grid-template-columns:auto 1fr;gap:10px;align-items:start;font-size:15px}
+.sev{font:500 11px/1 var(--mono);letter-spacing:.06em;text-transform:uppercase;padding:5px 7px;border-radius:4px;border:1px solid currentColor;white-space:nowrap}
+.sev.high{color:var(--high)} .sev.medium{color:var(--medium)} .sev.low{color:var(--low)}
+.fid{display:block;font:400 12px/1.3 var(--mono);color:var(--muted)}
+.note{font-size:14px;color:var(--muted);max-width:70ch;margin:0;padding:12px 14px;border-left:3px solid var(--rule)}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--rule);font-size:13px;color:var(--muted)}
+footer code{font-family:var(--mono);font-size:12px}
+@media (prefers-reduced-motion:no-preference){.shot img{transition:opacity .15s}}
+</style>
+
+<div class="wrap">
+<header>
+  <div class="eyebrow">IEA-3.4-130-RWT · digital twin for robot inspection</div>
+  <h1>Wind Turbine <span>Twin</span></h1>
+  <p class="lede">A complete onshore turbine modelled in Blender, loaded as a CRAM world and shown in CRAMERA. __FAULTS__ faults can be switched on; a Unitree G1 walks inspection rounds at the tower base and in the nacelle.</p>
+  <ul class="specs">
+    <li><b>Hub height</b>110 m</li><li><b>Rotor</b>Ø 130 m</li><li><b>Tower</b>108 m, 4 sections</li>
+    <li><b>Rating</b>3.4 MW, geared DFIG</li><li><b>Nacelle</b>12.6 × 4.2 m</li><li><b>Faults</b>__FAULTS__</li>
+  </ul>
+  <nav aria-label="Sections">
+    <a href="#turbine">Turbine</a><a href="#tower">Tower base</a><a href="#nacelle">Nacelle</a><a href="#robot">G1 robot</a><a href="#faults">Faults</a>
+  </nav>
+</header>
+
+<section id="turbine">
+  <h2>The turbine <small>outside</small></h2>
+  <p class="intro">Tower tapering from 5.99 m to 3.0 m, three 63 m blades lofted from the IEA chord, twist and airfoil data (tilted 5°, coned 3°), nacelle with weather mast and aviation light.</p>
+  <figure><img src="img/cramera_windturbine.jpg" alt="The whole wind turbine in the CRAMERA viewer" loading="eager">
+    <figcaption><span class="src">CRAMERA</span>The whole turbine in the browser viewer. Every joint (yaw, rotor, blade pitch, doors, crane) has a slider.</figcaption></figure>
+  <div class="pair">
+    <figure><img src="img/render_overview.jpg" alt="Blender render of the whole turbine" loading="lazy"><figcaption><span class="src">Blender</span>Overview render.</figcaption></figure>
+    <figure><img src="img/render_rotor.jpg" alt="Hub, spinner and blades" loading="lazy"><figcaption><span class="src">Blender</span>Hub and blade roots; the blade shape follows the IEA airfoils.</figcaption></figure>
+  </div>
+</section>
+
+<section id="tower">
+  <h2>Tower base <small>foundation · entrance</small></h2>
+  <p class="intro">Concrete plinth with grout joint, base flange with 96 anchor nuts, earthing strap, entrance door and outside stairs. This is where the G1 does its first round.</p>
+  <div class="pair">
+    <figure><img src="img/cramera_windturbine_outside_ground.jpg" alt="Tower base with faults in CRAMERA" loading="lazy"><figcaption><span class="src">CRAMERA</span><strong>Scenario “outside_ground”:</strong> rust on the tower coating, plinth crack, broken grout, loose earthing strap, corroded anchor nuts.</figcaption></figure>
+    <figure><img src="img/render_tower_base.jpg" alt="Tower base render" loading="lazy"><figcaption><span class="src">Blender</span>Healthy tower base.</figcaption></figure>
+  </div>
+</section>
+
+<section id="nacelle">
+  <h2>Nacelle <small>IEA layout · cover removed</small></h2>
+  <p class="intro">Along the 5° tilted shaft: two main bearings, three-stage gearbox (1:97), fast shaft with brake and coupling, DFIG generator; behind it the transformer and the converter and controller cabinets. Walkways are 0.69 m wide.</p>
+  <figure><img src="img/render_nacelle.jpg" alt="Nacelle cutaway render" loading="lazy"><figcaption><span class="src">Blender</span>Cutaway of the healthy nacelle.</figcaption></figure>
+  <div class="pair">
+    <figure><img src="img/cramera_windturbine_nacelle_all.jpg" alt="Nacelle with all faults in CRAMERA" loading="lazy"><figcaption><span class="src">CRAMERA</span><strong>Scenario “nacelle_all_faults”:</strong> all 20 nacelle faults at once.</figcaption></figure>
+    <figure><img src="img/render_nacelle_faults.jpg" alt="Nacelle with faults render" loading="lazy"><figcaption><span class="src">Blender</span>The same scenario rendered.</figcaption></figure>
+  </div>
+</section>
+
+<section id="robot">
+  <h2>Unitree G1 <small>recorded in CRAMERA</small></h2>
+  <p class="intro">The G1 is planned and moved by CRAM (coraplex planner, giskardpy controller) and recorded with CRAMERA’s onboarder. At each inspection point it walks to a standpoint and aims its head camera, a D435 tilted 48° down.</p>
+  <div class="robot">
+    <figure><img src="img/cramera_g1_t1.jpg" alt="G1 at the start of the tower base round" loading="lazy">
+      <figcaption><span class="src">T1</span><strong>Tower base round:</strong> 6 of 6 points seen, 5 faults reported. 2:24 recording.</figcaption></figure>
+    <figure><img src="img/cramera_g1_t2.jpg" alt="G1 on the nacelle walkway" loading="lazy">
+      <figcaption><span class="src">T2</span><strong>Nacelle walkway round:</strong> 6 of 6 points seen, 7 faults reported. 1:25 recording.</figcaption></figure>
+  </div>
+  <ul class="facts">
+    <li><b>Camera</b>Sees only things at or below its own height (1.27 m): the waist bends at most 0.52 rad.</li>
+    <li><b>Findings</b>Taken from the scenario’s ground truth for now; recognising faults in camera images is the next step.</li>
+  </ul>
+</section>
+
+<section id="faults">
+  <h2>Faults <small>healthy vs faulty</small></h2>
+  <p class="intro">__POINT_COUNT__ inspection points, each rendered from where a camera would look. Pick a point, then flip between healthy and faulty.</p>
+  <div class="browser">
+    <div class="zones" role="group" aria-label="Zone">
+      <button class="chip" id="z-nacelle" data-zone="nacelle" aria-pressed="true">Nacelle</button>
+      <button class="chip" id="z-outside" data-zone="outside" aria-pressed="false">Outside</button>
+    </div>
+    <div class="layout">
+      <ul class="list" id="list" aria-label="Inspection points"></ul>
+      <div class="view">
+        <div class="toggle" role="group" aria-label="State">
+          <button id="s-bad" data-state="bad" aria-pressed="true">Faulty</button>
+          <button id="s-ok" data-state="ok" aria-pressed="false">Healthy</button>
+          <button id="s-both" data-state="both" aria-pressed="false">Both</button>
+        </div>
+        <div class="shots" id="shots"></div>
+        <p class="what" id="what"></p>
+        <ul class="findings" id="findings"></ul>
+      </div>
+    </div>
+  </div>
+  <p class="note">Blade faults are shown for blade 1; the scenarios can place them on any blade. Thermal and vibration faults (e.g. the hot terminal box) also carry sensor values that images don’t show.</p>
+</section>
+
+<footer>
+  Updated __UPDATED__ from commit <code>__COMMIT__</code>. Model: <code>~/workspace/windturbine_model</code> · live viewer on the workstation: <code>./view.sh --cramera windturbine_g1_t1</code> (localhost:8711, not reachable from the phone).
+</footer>
+</div>
+
+<script>
+const POINTS = __POINTS__;
+const pretty = s => s.replace(/_inspect_/, ": ").replace(/_/g, " ");
+let zone = "nacelle", state = "bad", current = null;
+try { const z = localStorage.getItem("wtt-zone"); if (z === "outside" || z === "nacelle") zone = z; } catch (e) {}
+const list = document.getElementById("list"), shots = document.getElementById("shots");
+function img(kind, p){ return `<div class="shot"><span class="tag">${kind === "ok" ? "Healthy" : "Faulty"}</span><img src="img/${kind}_${p.name}.jpg" alt="${kind === "ok" ? "Healthy" : "Faulty"}: ${p.what}"></div>`; }
+function show(p){
+  current = p;
+  list.querySelectorAll(".item").forEach(b => b.setAttribute("aria-current", b.dataset.name === p.name ? "true" : "false"));
+  shots.className = "shots" + (state === "both" ? " side" : "");
+  shots.innerHTML = state === "both" ? img("ok", p) + img("bad", p) : img(state, p);
+  document.getElementById("what").textContent = p.what;
+  document.getElementById("findings").innerHTML = p.faults.map(f =>
+    `<li><span class="sev ${f.severity}">${f.severity}</span><span>${f.text}<span class="fid">${f.id}</span></span></li>`).join("");
+}
+function render(){
+  document.querySelectorAll(".chip").forEach(c => c.setAttribute("aria-pressed", c.dataset.zone === zone ? "true" : "false"));
+  const pts = POINTS.filter(p => p.zone === zone);
+  list.innerHTML = pts.map(p => `<li><button class="item" data-name="${p.name}"><span class="n">${pretty(p.name)}</span><span class="m">${p.faults.length} fault${p.faults.length > 1 ? "s" : ""}</span></button></li>`).join("");
+  list.querySelectorAll(".item").forEach(b => b.addEventListener("click", () => show(POINTS.find(p => p.name === b.dataset.name))));
+  show(pts.find(p => current && p.name === current.name) || pts[0]);
+}
+document.querySelectorAll(".chip").forEach(c => c.addEventListener("click", () => {
+  zone = c.dataset.zone; try { localStorage.setItem("wtt-zone", zone); } catch (e) {} render();
+}));
+document.querySelectorAll(".toggle button").forEach(b => b.addEventListener("click", () => {
+  state = b.dataset.state;
+  document.querySelectorAll(".toggle button").forEach(x => x.setAttribute("aria-pressed", x === b ? "true" : "false"));
+  if (current) show(current);
+}));
+render();
+</script>
