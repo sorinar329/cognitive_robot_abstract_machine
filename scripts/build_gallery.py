@@ -32,18 +32,20 @@ OUT = os.path.join(ROOT, "preview", "site")
 RENDERS = os.path.join(ROOT, "preview", "renders")
 SHOTS = os.path.join(ROOT, "preview")
 SCENARIOS = {"H": "windturbine", "FN": "scenarios/nacelle_all_faults", "FO": "scenarios/outside_all_faults",
-             "FT": "scenarios/tower_climb", "HA": "scenarios/hoist_access"}
+             "FT": "scenarios/tower_climb", "FB": "scenarios/tower_bolt_check", "HA": "scenarios/hoist_access"}
 OVERVIEW_ONLY = {"HA"}                # renders without the inspection close-ups
-ZONE_TAG = {"nacelle": "FN", "outside": "FO", "tower": "FT"}
+FAULT_TAGS = ("FN", "FO", "FT", "FB")  # scenarios whose renders show the faults
+BOLT_REPORT = os.path.join(ROOT, "reports", "tower_bolt_check.json")
 CRAMERA_SCENES = {   # screenshot file -> CRAMERA scene
     "windturbine": "windturbine", "windturbine_outside_ground": "windturbine_outside_ground",
     "windturbine_nacelle_all": "windturbine_nacelle_all_faults", "g1_t1": "windturbine_g1_t1", "g1_t2": "windturbine_g1_t2", "g1_t3": "windturbine_g1_t3",
-    "g1_t4": "windturbine_g1_t4", "g1_t5": "windturbine_g1_t5",
+    "g1_t4": "windturbine_g1_t4", "g1_t5": "windturbine_g1_t5", "g1_t6": "windturbine_g1_t6",
 }
-VIDEOS = {   # video file -> (CRAMERA recording, camera view in turbine/views.py)
+VIDEOS = {   # video file -> (CRAMERA recording, camera view in turbine/views.py[, playback speed])
     "g1_t3": ("windturbine_g1_t3", "g1_nacelle_video"),
     "g1_t4": ("windturbine_g1_t4", "g1_hoist"),
     "g1_t5": ("windturbine_g1_t5", "g1_tower"),
+    "g1_t6": ("windturbine_g1_t6", "g1_tower", 2.0),
 }
 VIDEO_DIR = os.path.join(ROOT, "preview", "video")
 VIEWER = "http://localhost:8711/?scene="
@@ -71,10 +73,10 @@ def screenshot_all():
 def render_videos():
     """Replay the robot recordings in Blender (scripts/render_recording.py) to MP4."""
     os.makedirs(VIDEO_DIR, exist_ok=True)
-    for name, (scene, view) in VIDEOS.items():
+    for name, (scene, view, *speed) in VIDEOS.items():
         bundle = os.path.expanduser(os.path.join("~/.cramera/scenes", scene))
         subprocess.run(["blender", "-b", "--factory-startup", "-P", os.path.join(ROOT, "scripts", "render_recording.py"),
-                        "--", bundle, os.path.join(VIDEO_DIR, name + ".mp4"), "--step", "2", "--view", view],
+                        "--", bundle, os.path.join(VIDEO_DIR, name + ".mp4"), "--step", "2", "--view", view, "--speed", str(speed[0] if speed else 1.0)],
                        check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
@@ -84,6 +86,26 @@ def recording_length(scene):
         traj = json.load(f)
     seconds = round(len(traj["frames"]) / (traj.get("framesPerSecond") or 25))
     return f"{seconds // 60}:{seconds % 60:02d}"
+
+
+def bolt_report_html():
+    """The G1's flange bolt report (scripts/g1_tower_bolts.py) as a table and action lists."""
+    from html import escape
+    with open(BOLT_REPORT) as f:
+        flanges = json.load(f)["flanges"]
+    pct = lambda v, d=0: "n/a" if v is None else f"{v * 100:.{d}f} %"   # noqa: E731
+    rows = "".join(
+        f'<tr class="v-{r["verdict"].split()[0]}"><th scope="row">{r["flange"]} <small>{r["size"]}</small></th>'
+        f'<td>{r["seen"]}/{r["bolts"]}</td><td><b>{pct(r["tightness_ratio"], 1)}</b></td><td>{pct(r["worst_ratio"])}</td>'
+        f'<td>{escape(r["verdict"])}</td></tr>' for r in flanges)
+    cards = "".join(
+        f'<div class="todo"><h3>Flange {r["flange"]} <span>{escape(r["verdict"])}</span></h3>'
+        + (f'<p class="bolts">{", ".join(f"bolt {i}: {v * 100:.0f} %" for i, v in sorted(r["ratios"].items(), key=lambda kv: int(kv[0])))}</p>'
+           if r["ratios"] else "")
+        + "<ol>" + "".join(f"<li>{escape(a)}</li>" for a in r["actions"]) + "</ol></div>" for r in flanges)
+    return (f'<div class="tablewrap"><table class="report"><thead><tr><th scope="col">Flange</th><th scope="col">Read</th>'
+            f'<th scope="col">Tightness ratio</th><th scope="col">Worst bolt</th><th scope="col">Verdict</th></tr></thead>'
+            f'<tbody>{rows}</tbody></table></div><div class="todos">{cards}</div>')
 
 
 def to_jpeg(src, name, size, crop=None):
@@ -124,10 +146,12 @@ def main():
     for name in CRAMERA_SCENES:
         to_jpeg(os.path.join(SHOTS, name + ".png"), "cramera_" + name, (1400, 900), crop=PANEL)
 
-    active = set()
-    for tag in ZONE_TAG.values():
+    active, tag_of = set(), {}
+    for tag in FAULT_TAGS:
         with open(os.path.join(ROOT, "urdf", SCENARIOS[tag] + "_ground_truth.yaml")) as f:
-            active |= {x["id"] for x in yaml.safe_load(f)["faults"]}
+            for x in yaml.safe_load(f)["faults"]:
+                active.add(x["id"])
+                tag_of.setdefault(x["inspection_point"], tag)
     faults = {}
     total = 0
     for part in parts.ALL:
@@ -138,8 +162,8 @@ def main():
     points = []
     for part in parts.ALL:
         for p in part.INSPECTION_POINTS:
-            name, tag = p["name"], ZONE_TAG[p["zone"]]
-            if name not in faults or not os.path.exists(os.path.join(RENDERS, tag, name + ".png")):
+            name, tag = p["name"], tag_of.get(p["name"])
+            if name not in faults or tag is None or not os.path.exists(os.path.join(RENDERS, tag, name + ".png")):
                 continue
             to_jpeg(os.path.join(RENDERS, "H", name + ".png"), "ok_" + name, (800, 600))
             to_jpeg(os.path.join(RENDERS, tag, name + ".png"), "bad_" + name, (800, 600))
@@ -151,6 +175,7 @@ def main():
     html = (html.replace("__POINTS__", json.dumps(points)).replace("__FAULTS__", str(total))
             .replace("__POINT_COUNT__", str(len(points))).replace("__COMMIT__", commit or "uncommitted")
             .replace("__UPDATED__", datetime.date.today().isoformat()))
+    html = html.replace("__BOLT_REPORT__", bolt_report_html())
     for name, scene in CRAMERA_SCENES.items():
         if name.startswith("g1_"):
             html = html.replace(f"__LEN_{name}__", recording_length(scene))

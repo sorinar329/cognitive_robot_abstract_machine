@@ -164,5 +164,63 @@ car.append(c.box("mesh_back", (-CX / 2 - 0.005, -CX / 2), (-CY / 2, CY / 2), (0.
 car.append(c.box("control_panel", (-CX / 2 + 0.01, -CX / 2 + 0.06), (0.1, 0.3), (1.1, 1.35), mat="bolt_black"))
 export("lift_car", car)
 
+# %% flange bolts with torque markings (section-k frame; the joint is at the top of section k)
+from turbine import bolts as tb  # noqa: E402
+
+
+def hex_prism(name, apothem, z0, z1, mat):
+    """Hexagon prism with flat faces normal to +-X (so a marking on the +X face is centred)."""
+    r = apothem / math.cos(math.pi / 6)
+    ring = [(r * math.cos(math.radians(30 + 60 * i)), r * math.sin(math.radians(30 + 60 * i))) for i in range(6)]
+    verts = [(x, y, z0) for x, y in ring] + [(x, y, z1) for x, y in ring]
+    faces = [(i, (i + 1) % 6, 6 + (i + 1) % 6, 6 + i) for i in range(6)] + [tuple(range(5, -1, -1)), tuple(range(6, 12))]
+    return c.mesh_object(name, verts, faces, mat)
+
+
+def bolt_templates(size):
+    """(fixed part, nut part) of one bolt set at the origin: z = 0 at the underside of the
+    lower flange, bolt axis vertical, torque marking on the +X side."""
+    b = tb.spec(size)
+    wr, wh, nh, ap, sr = b["washer_d"] / 2, b["washer_h"], b["nut_h"], b["nut_af"] / 2, b["d"] / 2
+    top = 2 * s.FLANGE_H
+    stripe = 0.0035
+    fixed = [c.cylinder("washer", wr, wh, (0, 0, -wh / 2), vertices=12, mat="steel_grey"),
+             c.cylinder("stud", sr, 0.03, (0, 0, -wh - nh - 0.015), vertices=8, mat="pipe_steel"),
+             c.cylinder("washer_top", wr, wh, (0, 0, top + wh / 2), vertices=12, mat="steel_grey"),
+             hex_prism("head", ap, top + wh, top + wh + 0.62 * b["d"], "bolt_black"),
+             c.box("mark_flange", (wr, wr + 0.035), (-stripe, stripe), (-0.0012, 0.0), mat="hatch_yellow"),
+             c.box("mark_washer", (wr, wr + 0.0012), (-stripe, stripe), (-wh, 0.0), mat="hatch_yellow"),
+             c.box("mark_stud", (sr - 0.001, sr + 0.0012), (-stripe, stripe), (-wh - nh - 0.03, -wh - nh), mat="hatch_yellow")]
+    nut = [hex_prism("nut", ap, -wh - nh, -wh, "bolt_black"),
+           c.box("mark_nut", (ap, ap + 0.0012), (-stripe, stripe), (-wh - nh, -wh), mat="hatch_yellow")]
+    return c.join(f"fixed_{size}", fixed), c.join(f"nut_{size}", nut)
+
+
+def placed_copy(template, name, matrix):
+    obj = template.copy()
+    obj.data = template.data.copy()
+    obj.name = name
+    c.bpy.context.collection.objects.link(obj)
+    c.placed(obj, matrix)
+    return obj
+
+
+for k in range(1, len(s.TOWER_FLANGES) + 1):
+    fl = tb.flange(k)
+    fixed_t, nut_t = bolt_templates(fl["spec"]["size"])
+    under = fl["local_z"] - s.FLANGE_H          # underside of the lower flange, section-k frame
+    faults = s.FLANGE_MARKING_FAULTS.get(k, {})
+    for variant in ("ok", "loose") if faults else ("ok",):
+        objs = []
+        for i, a, x, y in fl["bolts"]:
+            inward = a + math.pi
+            offset = math.radians(faults.get(i, 0.0)) if variant == "loose" else 0.0
+            drop = s.FLANGE_NUT_RUN_OFF if variant == "loose" and tb.preload_ratio(faults.get(i, 0.0), fl["spec"]) < tb.LOST_BELOW else 0.0
+            objs.append(placed_copy(fixed_t, f"bolt{i}", c.homogeneous_z(inward, (x, y, under))))
+            objs.append(placed_copy(nut_t, f"nut{i}", c.homogeneous_z(inward + offset, (x, y, under - drop))))
+        export(f"flange_{k}_bolts_{variant}", objs)
+    c.bpy.data.objects.remove(fixed_t)
+    c.bpy.data.objects.remove(nut_t)
+
 c.save_blend("tower_interior")
 print("built tower_interior")

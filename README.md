@@ -5,7 +5,8 @@ inspection environment for CRAM, shown in CRAMERA. The plan and task ladder are 
 `docs/PLAN.md`; the reference data are in `references/iea34/`.
 
 Unitree G1 tasks (T0 door, T1 tower base round, T2 nacelle walkway round, T3 bring the
-tool, T4 crane hoist into the nacelle, T5 tower lift to the yaw deck).
+tool, T4 crane hoist into the nacelle, T5 tower lift to the yaw deck, T6 flange bolt
+check with tightness ratio and actions; the preload model is in `turbine/bolts.py`).
 Run them in the full CRAM stack of the `cramera-port` checkout (`uv sync` there), with
 ROS, `~/workspace/segmind_ws` (G1 model) and this package sourced:
 
@@ -16,6 +17,7 @@ ROS, `~/workspace/segmind_ws` (G1 model) and this package sourced:
     $PY scripts/g1_bring_the_tool.py                                                    # T3 (scenario bring_the_tool)
     $PY scripts/g1_climb.py --route hoist                                              # T4: crane hoist into the nacelle
     $PY scripts/g1_climb.py --route lift                                               # T5: tower lift to the yaw deck
+    $PY scripts/g1_tower_bolts.py                                                      # T6: flange bolt check -> reports/
 
 Record a run for CRAMERA and tidy the bundle (robot naming, GLB materials, camera):
 

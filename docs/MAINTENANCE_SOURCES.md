@@ -76,7 +76,11 @@ A maintenance plan for our model turbine can be compiled from these sources.
   140 Nm in a circular sequence.
 
 In the model: torque markings on the shrink disc bolts (`main_shaft.shrink_disc_bolt_loose`),
-a missing gearbox cover bolt, corroded anchor nuts. The large joints need hydraulic
+a missing gearbox cover bolt, corroded anchor nuts, and torque markings on all 364 tower
+flange bolts (`tower.flange_2_bolts_loose`, `tower.flange_3_bolts_loose`). Task T6 reads
+the flange markings, estimates each bolt's remaining preload from the marking offset
+(`turbine/bolts.py`) and applies the RP 401 thresholds above to decide between no
+action, re-tightening single bolts and re-tensioning the flange. The large joints need hydraulic
 tensioners or torque wrenches of several hundred to thousands of Nm, well beyond what a
 G1 arm can apply. So the robot's part is finding loose bolts by their markings and
 bringing the tools.

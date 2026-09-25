@@ -1,0 +1,10 @@
+# Task T6: the G1 rides the tower lift, stops at each flange platform, reads the torque
+# markings of the flange bolts, reports the tightness ratio per flange and what has to
+# be done, and rides back down.
+view: tower_base
+description: Flange 2 working loose (one nut run off), one nut turned on flange 3
+joint_states:
+  tower_door_joint: 1.5
+faults:
+  - tower.flange_2_bolts_loose
+  - tower.flange_3_bolts_loose

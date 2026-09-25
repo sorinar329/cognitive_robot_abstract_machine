@@ -93,6 +93,21 @@ figcaption strong{color:var(--ink);font-weight:600}
 .note{font-size:14px;color:var(--muted);max-width:70ch;margin:0;padding:12px 14px;border-left:3px solid var(--rule)}
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--rule);font-size:13px;color:var(--muted)}
 footer code{font-family:var(--mono);font-size:12px}
+.tablewrap{overflow-x:auto}
+table.report{border-collapse:collapse;width:100%;min-width:480px;font:500 14px/1.3 var(--body);font-variant-numeric:tabular-nums;background:var(--surface);border:1px solid var(--rule);border-radius:8px}
+table.report th,table.report td{padding:10px 12px;text-align:left;border-bottom:1px solid var(--rule)}
+table.report thead th{font:500 11px/1 var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+table.report tbody th small{font:500 11px/1 var(--mono);color:var(--muted)}
+table.report td b{font:600 18px/1 var(--display)}
+table.report tr.v-re-tension td:last-child{color:var(--high);font-weight:600}
+table.report tr.v-re-tighten td:last-child{color:var(--medium);font-weight:600}
+table.report tr.v-no td:last-child{color:var(--low);font-weight:600}
+.todos{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr))}
+.todo{background:var(--surface);border:1px solid var(--rule);border-radius:8px;padding:14px 16px}
+.todo h3{font:600 20px/1.1 var(--display);margin:0 0 6px;display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.todo h3 span{font:500 11px/1.6 var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--accent-ink)}
+.todo .bolts{font:500 13px/1.4 var(--mono);margin:0 0 6px;color:var(--high)}
+.todo ol{margin:0;padding-left:20px;display:grid;gap:6px;font-size:15px}
 @media (prefers-reduced-motion:no-preference){.shot img{transition:opacity .15s}}
 </style>
 
@@ -106,7 +121,7 @@ footer code{font-family:var(--mono);font-size:12px}
     <li><b>Rating</b>3.4 MW, geared DFIG</li><li><b>Nacelle</b>12.6 × 4.2 m</li><li><b>Faults</b>__FAULTS__</li>
   </ul>
   <nav aria-label="Sections">
-    <a href="#turbine">Turbine</a><a href="#tower">Tower base</a><a href="#inside">Inside the tower</a><a href="#nacelle">Nacelle</a><a href="#robot">G1 robot</a><a href="#climb">Getting up</a><a href="#faults">Faults</a>
+    <a href="#turbine">Turbine</a><a href="#tower">Tower base</a><a href="#inside">Inside the tower</a><a href="#nacelle">Nacelle</a><a href="#robot">G1 robot</a><a href="#climb">Getting up</a><a href="#bolts">Bolt check</a><a href="#faults">Faults</a>
   </nav>
 </header>
 
@@ -162,7 +177,7 @@ footer code{font-family:var(--mono);font-size:12px}
     <figcaption><span class="src">T3</span><strong>Find the loose bolt, bring the tool:</strong> the G1 spots the shrink-disc bolt whose torque marking no longer lines up, fetches the torque tool case from the rack at the rear, carries it about 10 m along the walkway and sets it on the tray next to the technician (1 mm from the tray centre). Video replayed from the CRAMERA recording of the CRAM plan (coraplex actions, giskardpy motion), __LEN_g1_t3__. Tightening itself stays with the technician: those bolts need far more torque than a G1 arm can give.</figcaption></figure>
   <ul class="facts">
     <li><b>Camera</b>Sees only things at or below its own height (1.27 m): the waist bends at most 0.52 rad.</li>
-    <li><b>Tasks</b>T1 and T2 inspect; T3 assists a technician (pick up, carry, set down); T4 and T5 get it up the turbine.</li>
+    <li><b>Tasks</b>T1 and T2 inspect; T3 assists a technician (pick up, carry, set down); T4 and T5 get it up the turbine; T6 checks the tower flange bolts.</li>
     <li><b>Findings</b>Taken from the scenario’s ground truth for now; recognising faults in camera images is the next step.</li>
   </ul>
 </section>
@@ -175,6 +190,20 @@ footer code{font-family:var(--mono);font-size:12px}
   <figure><video class="clip" src="video/g1_t5.mp4" poster="img/cramera_g1_t5.jpg" controls playsinline muted preload="metadata" aria-label="G1 riding the tower lift to the yaw deck"></video>
     <figcaption><span class="src">T5</span><strong>Up the tower:</strong> in through the door and into the lift car, up 105 m to the yaw deck, round the cable opening. It finds the cable loop rubbed through at the saddle, with copper showing. Tower wall cut away for the video. Recorded CRAM plan, __LEN_g1_t5__.</figcaption></figure>
   <figure><img src="img/render_hoist.jpg" alt="Lifting platform lowered to the ground on the crane rope" loading="lazy"><figcaption><span class="src">Blender</span>Scenario “hoist_access”: the platform waiting on the ground behind the tower.</figcaption></figure>
+</section>
+
+<section id="bolts">
+  <h2>Bolt check <small>T6 · flange bolts up the tower</small></h2>
+  <p class="intro">The G1 rides the lift and stops at the three rest platforms. On each one it walks a ring of standpoints and reads the torque markings on the nuts under the flange: 132 M42 bolts on flanges 1 and 2, 100 M36 on flange 3. The IEA reference gives no bolt data, so these are typical sizes. It then rides down, walks out and reports.</p>
+  <figure><video class="clip" src="video/g1_t6.mp4" poster="img/cramera_g1_t6.jpg" controls playsinline muted preload="metadata" aria-label="G1 checking the flange bolts on the tower platforms"></video>
+    <figcaption><span class="src">T6</span><strong>Flange bolt round:</strong> in, up, three platforms, down and out. Recorded CRAM plan, __LEN_g1_t6__, shown at 2× speed. Tower wall cut away for the video.</figcaption></figure>
+  __BOLT_REPORT__
+  <ul class="facts">
+    <li><b>Tightness</b>A nut that turns back loses preload. Turning it back by the angle that tightened it from snug to full preload (105° for M42, 117° for M36, from bolt and flange stiffness) releases all of it. So preload ≈ 1 − marking offset / that angle. The tightness ratio is the mean over the bolts read.</li>
+    <li><b>Limits</b>ACP RP 401 thresholds, borrowed from anchor bolts: any bolt below 85 % or a mean below 90 % → re-tension the whole flange. That is why flange 2 is re-tensioned although its mean is near 99 %.</li>
+    <li><b>Not seen</b>The G1’s camera sits 0.34 m above the nuts and must look past the flange edge. Bolts behind the lift shaft go on the technician’s list. On flange 2, one turned nut (bolt 60) is back there.</li>
+    <li><b>Limits of markings</b>They only show nuts that turned. Preload lost by settling doesn’t move them, so a 10 % tension sample stays in the plan. Readings come from the scenario ground truth for now; visibility is computed in the CRAM world.</li>
+  </ul>
 </section>
 
 <section id="faults">

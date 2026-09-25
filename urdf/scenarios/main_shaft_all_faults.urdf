@@ -3543,7 +3543,61 @@
     <child link="service_lift"/>
     <origin xyz="-0.85 0 -0.06" rpy="0 0 0"/>
     <axis xyz="0 0 1"/>
-    <limit lower="0.0" upper="105.66000000000001" effort="100" velocity="4.0"/>
+    <limit lower="-0.1" upper="105.66000000000001" effort="100" velocity="4.0"/>
+  </joint>
+  <link name="flange_1_bolts">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="1.0"/>
+      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="package://windturbine_model/models/tower_interior/flange_1_bolts_ok.obj"/>
+      </geometry>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </visual>
+  </link>
+  <joint name="flange_1_bolts_joint" type="fixed">
+    <parent link="tower_section_1"/>
+    <child link="flange_1_bolts"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+  <link name="flange_2_bolts">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="1.0"/>
+      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="package://windturbine_model/models/tower_interior/flange_2_bolts_ok.obj"/>
+      </geometry>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </visual>
+  </link>
+  <joint name="flange_2_bolts_joint" type="fixed">
+    <parent link="tower_section_2"/>
+    <child link="flange_2_bolts"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+  <link name="flange_3_bolts">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="1.0"/>
+      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="package://windturbine_model/models/tower_interior/flange_3_bolts_ok.obj"/>
+      </geometry>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </visual>
+  </link>
+  <joint name="flange_3_bolts_joint" type="fixed">
+    <parent link="tower_section_3"/>
+    <child link="flange_3_bolts"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
   </joint>
   <link name="nacelle">
     <inertial>
@@ -5032,6 +5086,42 @@
     <child link="tower_inspect_base_coating"/>
     <origin xyz="1.67385 -2.48159 0.6" rpy="0 0 0"/>
   </joint>
+  <link name="tower_inspect_flange_1">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="1.0"/>
+      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
+    </inertial>
+  </link>
+  <joint name="tower_inspect_flange_1_joint" type="fixed">
+    <parent link="tower_section_1"/>
+    <child link="tower_inspect_flange_1"/>
+    <origin xyz="2.77203 0 21.446" rpy="0 0 0"/>
+  </joint>
+  <link name="tower_inspect_flange_2">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="1.0"/>
+      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
+    </inertial>
+  </link>
+  <joint name="tower_inspect_flange_2_joint" type="fixed">
+    <parent link="tower_section_2"/>
+    <child link="tower_inspect_flange_2"/>
+    <origin xyz="1.39448 2.41531 32.246" rpy="0 0 0"/>
+  </joint>
+  <link name="tower_inspect_flange_3">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="1.0"/>
+      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
+    </inertial>
+  </link>
+  <joint name="tower_inspect_flange_3_joint" type="fixed">
+    <parent link="tower_section_3"/>
+    <child link="tower_inspect_flange_3"/>
+    <origin xyz="-3.70381e-16 -2.01626 32.2495" rpy="0 0 0"/>
+  </joint>
   <link name="tower_inspect_cable_loop">
     <inertial>
       <origin xyz="0 0 0" rpy="0 0 0"/>
@@ -5042,7 +5132,7 @@
   <joint name="tower_inspect_cable_loop_joint" type="fixed">
     <parent link="tower_section_4"/>
     <child link="tower_inspect_cable_loop"/>
-    <origin xyz="0.139 -0.001 19.27" rpy="0 0 0"/>
+    <origin xyz="0.099 0.159 19.27" rpy="0 0 0"/>
   </joint>
   <link name="nacelle_inspect_weather_mast">
     <inertial>

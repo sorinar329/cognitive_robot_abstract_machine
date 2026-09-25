@@ -1,6 +1,6 @@
 """Render a CRAMERA recording (a cramera-onboard bundle) to an MP4 video.
 
-  blender -b --factory-startup -P scripts/render_recording.py -- BUNDLE OUT.mp4 [--step N] [--view NAME] [--stills F,F,..]
+  blender -b --factory-startup -P scripts/render_recording.py -- BUNDLE OUT.mp4 [--step N] [--view NAME] [--speed S] [--stills F,F,..]
 
 Replays the bundle's trajectory: every model's joints (keyed ``prefix/joint``),
 the robot base pose and the tracked objects. The turbine is built from the
@@ -25,6 +25,8 @@ argv = sys.argv[sys.argv.index("--") + 1:]
 bundle, out = os.path.expanduser(argv[0]), argv[1]
 step = int(argv[argv.index("--step") + 1]) if "--step" in argv else 2
 view = argv[argv.index("--view") + 1] if "--view" in argv else None
+speed = float(argv[argv.index("--speed") + 1]) if "--speed" in argv else 1.0
+"""--speed 2: play back twice as fast as recorded."""
 stills = [float(v) for v in argv[argv.index("--stills") + 1].split(",")] if "--stills" in argv else None
 """--stills 0.1,0.5,0.9: instead of the video, PNGs at these fractions of the run (OUT is a directory)."""
 
@@ -177,7 +179,7 @@ if camera.get("cut_tower"):
     side = Vector(camera["cut_tower"] + [0.0]).normalized()
     for model in models:
         for link, vis_origin, obj in model.visuals:
-            if not link.startswith("tower_section"):
+            if not link.startswith(("tower_section", "flange_")):
                 continue
             m = model.transforms(traj["frames"][0], Matrix.Identity(4), [link])[link] @ vis_origin
             bm = bmesh.new()
@@ -258,7 +260,7 @@ scene.world = bpy.data.worlds.new("w")
 scene.world.color = (0.055, 0.075, 0.095)
 scene.render.resolution_x, scene.render.resolution_y = 1280, 720
 scene.frame_start, scene.frame_end = 1, len(frames)
-scene.render.fps = max(1, round(fps_in / step))
+scene.render.fps = max(1, round(fps_in / step * speed))
 settings = scene.render.image_settings
 if hasattr(settings, "media_type"):
     settings.media_type = "VIDEO"

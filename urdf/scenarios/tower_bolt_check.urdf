@@ -3571,7 +3571,7 @@
     </inertial>
     <visual>
       <geometry>
-        <mesh filename="package://windturbine_model/models/tower_interior/flange_2_bolts_ok.obj"/>
+        <mesh filename="package://windturbine_model/models/tower_interior/flange_2_bolts_loose.obj"/>
       </geometry>
       <origin xyz="0 0 0" rpy="0 0 0"/>
     </visual>
@@ -3589,7 +3589,7 @@
     </inertial>
     <visual>
       <geometry>
-        <mesh filename="package://windturbine_model/models/tower_interior/flange_3_bolts_ok.obj"/>
+        <mesh filename="package://windturbine_model/models/tower_interior/flange_3_bolts_loose.obj"/>
       </geometry>
       <origin xyz="0 0 0" rpy="0 0 0"/>
     </visual>
@@ -4480,7 +4480,7 @@
     </inertial>
     <visual>
       <geometry>
-        <mesh filename="package://windturbine_model/models/generator/brake_disc_overheated.obj"/>
+        <mesh filename="package://windturbine_model/models/generator/brake_disc_ok.obj"/>
       </geometry>
       <origin xyz="0 0 0" rpy="0 0 0"/>
     </visual>
@@ -4504,7 +4504,7 @@
     </inertial>
     <visual>
       <geometry>
-        <mesh filename="package://windturbine_model/models/generator/coupling_cracked.obj"/>
+        <mesh filename="package://windturbine_model/models/generator/coupling_ok.obj"/>
       </geometry>
       <origin xyz="0 0 0" rpy="0 0 0"/>
     </visual>
@@ -4528,7 +4528,7 @@
     </inertial>
     <visual>
       <geometry>
-        <mesh filename="package://windturbine_model/models/generator/brake_caliper_worn.obj"/>
+        <mesh filename="package://windturbine_model/models/generator/brake_caliper_ok.obj"/>
       </geometry>
       <origin xyz="0 0 0" rpy="0 0 0"/>
     </visual>
@@ -4976,42 +4976,6 @@
   <joint name="tool_tray_joint" type="fixed">
     <parent link="nacelle"/>
     <child link="tool_tray"/>
-    <origin xyz="0 0 0" rpy="0 0 0"/>
-  </joint>
-  <link name="generator_fault_carbon_dust">
-    <inertial>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-      <mass value="1.0"/>
-      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
-    </inertial>
-    <visual>
-      <geometry>
-        <mesh filename="package://windturbine_model/models/generator/fault_carbon_dust.obj"/>
-      </geometry>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-    </visual>
-  </link>
-  <joint name="generator_fault_carbon_dust_joint" type="fixed">
-    <parent link="generator"/>
-    <child link="generator_fault_carbon_dust"/>
-    <origin xyz="0 0 0" rpy="0 0 0"/>
-  </joint>
-  <link name="generator_fault_terminal_heat">
-    <inertial>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-      <mass value="1.0"/>
-      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
-    </inertial>
-    <visual>
-      <geometry>
-        <mesh filename="package://windturbine_model/models/generator/fault_terminal_heat.obj"/>
-      </geometry>
-      <origin xyz="0 0 0" rpy="0 0 0"/>
-    </visual>
-  </link>
-  <joint name="generator_fault_terminal_heat_joint" type="fixed">
-    <parent link="generator"/>
-    <child link="generator_fault_terminal_heat"/>
     <origin xyz="0 0 0" rpy="0 0 0"/>
   </joint>
   <link name="tower_inspect_door">

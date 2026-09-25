@@ -53,6 +53,20 @@ DOOR_AZIMUTH = -math.pi / 2
 DOOR_WIDTH, DOOR_HEIGHT = 0.9, 2.1
 DOOR_SILL_Z = -TOWER_BASE_Z                                  # at ground level: the G1 drives in (no stairs)
 
+# flange bolts of the internal L-flanges, bottom to top (estimate: the IEA reference gives none;
+# typical 3 MW towers use M42 low down and M36 higher up, HV sets property class 10.9)
+FLANGE_BOLTS = (("M42", 132), ("M42", 132), ("M36", 100))
+BOLT_SPECS = {   # thread, pitch, stress area, nut across flats and height, washer outer diameter and thickness
+    "M36": dict(d=0.036, pitch=0.004, stress_area=817e-6, nut_af=0.060, nut_h=0.029, washer_d=0.066, washer_h=0.006),
+    "M42": dict(d=0.042, pitch=0.0045, stress_area=1120e-6, nut_af=0.065, nut_h=0.034, washer_d=0.078, washer_h=0.007),
+}
+# scenario faults: torque markings turned by these angles (deg), per flange and bolt index
+FLANGE_MARKING_FAULTS = {
+    2: {20: 25.0, 21: 40.0, 22: 180.0, 60: 15.0},     # a sector working loose, one nut run off completely
+    3: {75: 14.0},                                   # one nut turned a little
+}
+FLANGE_NUT_RUN_OFF = 0.004     # gap under a nut that has lost all preload (visible)
+
 # earthing strap from the base flange to a terminal on the plinth (azimuth -120 deg)
 EARTHING_AZIMUTH = -2 * math.pi / 3
 

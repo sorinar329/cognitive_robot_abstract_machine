@@ -83,6 +83,48 @@ inspection_points:
   what: 'tower coating near the base: corrosion, paint damage'
   outside: true
   zone: outside
+- name: tower_inspect_flange_1
+  parent: tower_section_1
+  xyz:
+  - 2.77203
+  - 0.0
+  - 21.445999999999998
+  view_from:
+  - -1.0
+  - -0.0
+  - 0.2
+  distance: 0.55
+  what: 'flange 1 bolts (M42): torque markings on the nuts under the flange'
+  outside: false
+  zone: tower
+- name: tower_inspect_flange_2
+  parent: tower_section_2
+  xyz:
+  - 1.3944800000000002
+  - 2.415310210138648
+  - 32.246
+  view_from:
+  - -0.5000000000000001
+  - -0.8660254037844386
+  - 0.2
+  distance: 0.55
+  what: 'flange 2 bolts (M42): torque markings on the nuts under the flange'
+  outside: false
+  zone: tower
+- name: tower_inspect_flange_3
+  parent: tower_section_3
+  xyz:
+  - -3.7038095328732637e-16
+  - -2.0162600000000004
+  - 32.249500000000005
+  view_from:
+  - 1.8369701987210297e-16
+  - 1.0
+  - 0.2
+  distance: 0.55
+  what: 'flange 3 bolts (M36): torque markings on the nuts under the flange'
+  outside: false
+  zone: tower
 - name: tower_inspect_cable_loop
   parent: tower_section_4
   xyz:
