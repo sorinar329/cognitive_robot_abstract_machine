@@ -4,9 +4,10 @@
 newmtl steel_grey
 Ns 202.500000
 Ka 0.600000 0.600000 0.600000
-Kd 0.100482 0.106539 0.119280
 Ks 0.500000 0.500000 0.500000
 Ke 0.000000 0.000000 0.000000
 Ni 1.500000
 d 1.000000
 illum 3
+map_Kd /home/sorin/workspace/windturbine_model/textures/steel_grey_color.jpg
+map_Bump -bm 0.600000 /home/sorin/workspace/windturbine_model/textures/steel_grey_normal.jpg

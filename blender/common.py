@@ -125,7 +125,69 @@ def material(name):
         if name in EMISSION:
             shader.inputs["Emission Color"].default_value = colour
             shader.inputs["Emission Strength"].default_value = EMISSION[name]
+        add_texture(mat, shader, name)
     return mat
+
+
+TEXTURE_DIR = os.path.join(ROOT, "textures")
+TEXTURE_TILE = {   # metres per texture repeat (scripts/prepare_textures.py makes the images)
+    "grass": 3.0, "gravel": 1.5, "concrete": 2.0, "grout": 1.0, "grating": 0.6, "steel_grey": 1.0,
+    "pipe_steel": 0.5, "gear_paint": 1.5, "generator_paint": 1.5, "tower_paint": 2.5, "cabinet_grey": 1.5,
+    "hatch_yellow": 1.0, "grp_white": 2.0, "blade_white": 3.0,
+}
+NORMAL_STRENGTH = 0.6
+
+
+def add_texture(mat, shader, name):
+    """Colour and normal image for textured materials, repeated every TEXTURE_TILE metres of the
+    world-scale UVs that ``export_part`` projects (the GLB keeps the repeat as a texture transform)."""
+    colour_path = os.path.join(TEXTURE_DIR, f"{name}_color.jpg")
+    if name not in TEXTURE_TILE or not os.path.exists(colour_path):
+        return
+    nodes, links = mat.node_tree.nodes, mat.node_tree.links
+    uv = nodes.new("ShaderNodeTexCoord")
+    mapping = nodes.new("ShaderNodeMapping")
+    mapping.inputs["Scale"].default_value = (1.0 / TEXTURE_TILE[name],) * 3
+    links.new(uv.outputs["UV"], mapping.inputs["Vector"])
+    colour = nodes.new("ShaderNodeTexImage")
+    colour.image = bpy.data.images.load(colour_path, check_existing=True)
+    links.new(mapping.outputs["Vector"], colour.inputs["Vector"])
+    links.new(colour.outputs["Color"], shader.inputs["Base Color"])
+    normal_path = os.path.join(TEXTURE_DIR, f"{name}_normal.jpg")
+    if os.path.exists(normal_path):
+        normal = nodes.new("ShaderNodeTexImage")
+        normal.image = bpy.data.images.load(normal_path, check_existing=True)
+        normal.image.colorspace_settings.name = "Non-Color"
+        links.new(mapping.outputs["Vector"], normal.inputs["Vector"])
+        normal_map = nodes.new("ShaderNodeNormalMap")
+        normal_map.inputs["Strength"].default_value = NORMAL_STRENGTH
+        links.new(normal.outputs["Color"], normal_map.inputs["Color"])
+        links.new(normal_map.outputs["Normal"], shader.inputs["Normal"])
+
+
+def textured(obj):
+    return obj.type == "MESH" and any(s.material and s.material.name.split(".")[0] in TEXTURE_TILE
+                                      for s in obj.material_slots)
+
+
+def box_uv(obj):
+    """World-scale box projection (1 UV unit = 1 m) on each face's dominant axis, so a
+    texture has the same size on every part."""
+    import bmesh
+    bm = bmesh.new()
+    bm.from_mesh(obj.data)
+    layer = bm.loops.layers.uv.verify()
+    m = obj.matrix_world
+    rot = m.to_3x3()
+    for face in bm.faces:
+        n = rot @ face.normal
+        axis = max(range(3), key=lambda i: abs(n[i]))
+        u_axis, v_axis = [(1, 2), (0, 2), (0, 1)][axis]
+        for loop in face.loops:
+            p = m @ loop.vert.co
+            loop[layer].uv = (p[u_axis], p[v_axis])
+    bm.to_mesh(obj.data)
+    bm.free()
 
 
 def box(name, x, y, z, mat=None):
@@ -360,6 +422,8 @@ def export_part(part, objects, obj_name=None):
     os.makedirs(out_dir, exist_ok=True)
     bpy.ops.object.select_all(action="DESELECT")
     for o in objects:
+        if textured(o):
+            box_uv(o)
         o.select_set(True)
     bpy.ops.wm.obj_export(
         filepath=os.path.join(out_dir, (obj_name or part) + ".obj"),
@@ -381,6 +445,7 @@ def export_part(part, objects, obj_name=None):
         export_cameras=False,
         export_lights=False,
         export_materials="EXPORT",
+        export_image_format="JPEG",        # keep the textures small in the GLB
     )
 
 

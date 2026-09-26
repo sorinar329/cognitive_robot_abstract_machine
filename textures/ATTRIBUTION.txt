@@ -1,0 +1,9 @@
+Textures made from CC0 1.0 material sets by ambientCG (https://ambientcg.com):
+- Concrete034: https://ambientcg.com/view?id=Concrete034
+- Grass004: https://ambientcg.com/view?id=Grass004
+- Gravel023: https://ambientcg.com/view?id=Gravel023
+- Metal027: https://ambientcg.com/view?id=Metal027
+- MetalWalkway011: https://ambientcg.com/view?id=MetalWalkway011
+- PaintedMetal004: https://ambientcg.com/view?id=PaintedMetal004
+- Plastic010: https://ambientcg.com/view?id=Plastic010
+See scripts/prepare_textures.py for how they are processed.

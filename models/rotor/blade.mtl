@@ -4,19 +4,21 @@
 newmtl blade_white
 Ns 490.000000
 Ka 1.000000 1.000000 1.000000
-Kd 0.848088 0.848088 0.807346
 Ks 0.500000 0.500000 0.500000
 Ke 0.000000 0.000000 0.000000
 Ni 1.500000
 d 1.000000
 illum 2
+map_Kd -s 0.33333334 0.33333334 0.33333334 /home/sorin/workspace/windturbine_model/textures/blade_white_color.jpg
+map_Bump -s 0.33333334 0.33333334 0.33333334 -bm 0.600000 /home/sorin/workspace/windturbine_model/textures/blade_white_normal.jpg
 
 newmtl pipe_steel
 Ns 562.500000
 Ka 0.900000 0.900000 0.900000
-Kd 0.318547 0.318547 0.342392
 Ks 0.500000 0.500000 0.500000
 Ke 0.000000 0.000000 0.000000
 Ni 1.500000
 d 1.000000
 illum 3
+map_Kd -s 2 2 2 /home/sorin/workspace/windturbine_model/textures/pipe_steel_color.jpg
+map_Bump -s 2 2 2 -bm 0.600000 /home/sorin/workspace/windturbine_model/textures/pipe_steel_normal.jpg

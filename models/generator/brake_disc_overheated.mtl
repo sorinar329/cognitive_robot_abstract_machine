@@ -4,12 +4,13 @@
 newmtl gear_paint
 Ns 422.499969
 Ka 0.100000 0.100000 0.100000
-Kd 0.147319 0.214041 0.233022
 Ks 0.500000 0.500000 0.500000
 Ke 0.000000 0.000000 0.000000
 Ni 1.500000
 d 1.000000
 illum 3
+map_Kd -s 0.6666667 0.6666667 0.6666667 /home/sorin/workspace/windturbine_model/textures/gear_paint_color.jpg
+map_Bump -s 0.6666667 0.6666667 0.6666667 -bm 0.600000 /home/sorin/workspace/windturbine_model/textures/gear_paint_normal.jpg
 
 newmtl heat_blue
 Ns 422.499969
@@ -24,9 +25,10 @@ illum 3
 newmtl pipe_steel
 Ns 562.500000
 Ka 0.900000 0.900000 0.900000
-Kd 0.318547 0.318547 0.342392
 Ks 0.500000 0.500000 0.500000
 Ke 0.000000 0.000000 0.000000
 Ni 1.500000
 d 1.000000
 illum 3
+map_Kd -s 2 2 2 /home/sorin/workspace/windturbine_model/textures/pipe_steel_color.jpg
+map_Bump -s 2 2 2 -bm 0.600000 /home/sorin/workspace/windturbine_model/textures/pipe_steel_normal.jpg

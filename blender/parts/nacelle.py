@@ -27,7 +27,7 @@ roof_hatch = c.box("roof_hatch", d.ROOF_HATCH_X, d.ROOF_HATCH_Y, (Z[1] - 0.5, Z[
 c.cut(shell, inner, shaft_hole, roof_hatch)
 
 # --- floor grating with the tower access opening ----------------------------
-floor = c.box("nacelle_floor", d.INNER_X, d.INNER_Y, (-d.FLOOR, 0.0), mat="steel_grey")
+floor = c.box("nacelle_floor", d.INNER_X, d.INNER_Y, (-d.FLOOR, 0.0), mat="grating")
 opening = c.box("floor_opening", d.FLOOR_HATCH_X, d.FLOOR_HATCH_Y, (-1, 1))
 crane_opening = c.box("crane_opening", d.CRANE_HATCH_X, d.CRANE_HATCH_Y, (-1, 1))
 c.cut(floor, opening, crane_opening)
