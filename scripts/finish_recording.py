@@ -71,6 +71,7 @@ def main():
             parts, mass = dims.OBJECT_PARTS[obj["key"]]
             obj["parts"] = [dict(centre=list(c), size=list(s)) for c, s in parts]
             obj["mass"] = mass
+            obj["color"] = dims.OBJECT_COLORS.get(obj["key"], obj.get("color"))
 
     camera, _ = VIEWS[args.view]
     scene["camera"] = camera

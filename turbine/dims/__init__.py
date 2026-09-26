@@ -153,5 +153,6 @@ TOOL_CASE_PARTS = [                       # (centre, size) in the object frame, 
 TOOL_CASE_BOTTOM = TOOL_GRIP[2] / 2 + TOOL_CASE[2]   # grip centre above the case bottom
 TOOL_CASE_MASS = 3.0
 OBJECT_PARTS = {"torque_tool_case": (TOOL_CASE_PARTS, TOOL_CASE_MASS)}
+OBJECT_COLORS = {"torque_tool_case": "#d9261a"}
 """Compound objects the G1 handles: their parts for physics and rendering (scripts/finish_recording.py)."""
 TECHNICIAN_XY = (2.0, -1.7)               # on the -Y walkway by the front main bearing, facing the machine
