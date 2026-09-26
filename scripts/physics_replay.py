@@ -18,7 +18,8 @@ measures what physically happens:
   physics_replay.py ~/.cramera/scenes/windturbine_g1_t3 [--mass torque_tool_case=3.0]
 
 Writes <bundle>_physics (the same scene, trajectory from the simulation) and
-<bundle>_physics/physics_report.json. Run with the cramera-port Python (mujoco).
+<bundle>_physics/physics_report.json. The simulation uses CRAM's motion (straight legs);
+the physics bundle then gets the walking animation for viewing (scripts/add_gait.py). Run with the cramera-port Python (mujoco).
 """
 from __future__ import annotations
 
@@ -234,6 +235,7 @@ def main():
     ap.add_argument("--mass", action="append", default=[], help="object=kg")
     ap.add_argument("--out", help="output bundle (default: <bundle>_physics)")
     ap.add_argument("--with-gait", action="store_true", help="replay the visual walking gait too (legs swing into things)")
+    ap.add_argument("--no-gait", action="store_true", help="keep the physics bundle's legs as simulated (no walking animation)")
     args = ap.parse_args()
     bundle = os.path.expanduser(args.bundle).rstrip("/")
     out_dir = args.out or bundle + "_physics"
@@ -421,6 +423,10 @@ def main():
         json.dump(report, f, indent=1)
     with open(os.path.join(out_dir, "physics_scene.xml"), "w") as f:
         f.write(xml)
+    if not args.no_gait:          # walking legs for viewing, added after the physics (visual only)
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        from add_gait import add_gait
+        add_gait(out_dir)
     print(json.dumps(report, indent=1))
     print(f"wrote {out_dir} ({time.time() - t0:.0f} s)")
 
