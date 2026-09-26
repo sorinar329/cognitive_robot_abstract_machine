@@ -103,7 +103,7 @@ def physics_html():
             r = json.load(f)
         c = r["robot_turbine_contacts"]
         worst = max(c, key=lambda x: x["max_force_n"]) if c else None
-        contact = ("none" if not c else f'{len(c)} × , max {worst["max_force_n"]:.0f} N '
+        contact = ("none" if not c else f'{len(c)} pair{"s" if len(c) > 1 else ""}, max {worst["max_force_n"]:.0f} N '
                    f'<small>({escape(worst["robot_link"].replace("_link", ""))} – {escape(worst["turbine_link"])})</small>')
         objs = "; ".join(("held and placed" if o["placed"] else f'dropped at frame {o["dropped_at_frame"]}' if o["dropped_at_frame"]
                           else "not held") for o in r["objects"]) or "–"
