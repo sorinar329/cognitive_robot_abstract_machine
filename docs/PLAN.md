@@ -185,8 +185,12 @@ the turbine is solid; carried objects are free. State (26.09.2026):
 - fixed after the replay: rack corner clipped (T3, T4), bedplate rear frame across the hoist area (T4;
   the rear frame now ends at x = -7.9), lift car left through its railing (T5), walkway standpoints on
   the bedplate girder (T2);
-- open: the tool case slips out of CRAM's G1 grasp (tool frame at the object centre, thumb-only
-  closing); the parked G1 hands (about 0.66 m) barely fit the 0.69 m walkway;
+- fixed for the grasp (T3 now holds, carries and places the case in physics): in the CRAM stack
+  (local branches `g1-dex3-grasp` in cramera-port and iai_robots, not pushed) the Dex3 closed state
+  moves each joint in its closing direction, and the tool frame sits in the grasp channel instead of
+  5 mm off the palm; the onboarder records compound objects; the case has a T-grip; T3 carries it in
+  front of the body and withdraws the hand before parking;
+- open: the parked G1 hands (about 0.66 m) barely fit the 0.69 m walkway;
 - not included: real walking with a balance policy (e.g. Unitree's RL policy in MuJoCo).
 
 ## 8. Decisions

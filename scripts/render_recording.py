@@ -157,10 +157,22 @@ for m in models:
     print(f"\nmodel prefix={m.prefix!r} robot={m.robot} visuals={len(m.visuals)} root={m.root}", flush=True)
 objects = {}
 for spec in scene_spec.get("objects") or []:
-    if "box" in spec:
-        bpy.ops.mesh.primitive_cube_add(size=1.0)
-        o = bpy.context.active_object
-        o.data.transform(Matrix.Diagonal(list(spec["box"]) + [1.0]))
+    parts = [(p["centre"], p["size"]) for p in spec["parts"]] if spec.get("parts") else \
+        [((0, 0, 0), spec["box"])] if "box" in spec else []
+    if parts:
+        pieces = []
+        for centre, size in parts:
+            bpy.ops.mesh.primitive_cube_add(size=1.0)
+            piece = bpy.context.active_object
+            piece.data.transform(Matrix.Translation(Vector(centre)) @ Matrix.Diagonal(list(size) + [1.0]))
+            pieces.append(piece)
+        if len(pieces) > 1:
+            bpy.ops.object.select_all(action="DESELECT")
+            for piece in pieces:
+                piece.select_set(True)
+            bpy.context.view_layer.objects.active = pieces[0]
+            bpy.ops.object.join()
+        o = pieces[0]
         mat = bpy.data.materials.new(spec["key"])
         hexcol = spec.get("color", "#cc2222").lstrip("#")
         mat.diffuse_color = tuple(int(hexcol[i:i + 2], 16) / 255 for i in (0, 2, 4)) + (1.0,)

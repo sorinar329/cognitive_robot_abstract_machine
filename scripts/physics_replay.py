@@ -209,12 +209,15 @@ class SceneBuilder:
         self.world.append(f'<body name="base_target" mocap="true" pos="{fmt(tf[:3, 3])}" quat="{fmt(quat_wxyz(tf[:3, :3]))}"/>')
         self.equalities.append(f'<weld body1="base_target" body2="rb_{base}" solref="0.004 1" solimp="0.95 0.99 0.001"/>')
 
-    def add_object(self, key, size, pose, mass):
-        self.world.append(
-            f'<body name="obj_{key}" pos="{fmt(pose[:3])}" quat="{fmt([pose[6], pose[3], pose[4], pose[5]])}">'
-            f'<freejoint name="obj_{key}"/>'
-            f'<geom name="obj_{key}" type="box" size="{fmt(np.array(size) / 2)}" mass="{mass}" contype="1" conaffinity="1" '
-            f'friction="{FRICTION} 0.02 0.001" rgba="0.85 0.15 0.1 1"/></body>')
+    def add_object(self, key, parts, pose, mass):
+        """A free body from boxes [(centre, size)] in its own frame; the mass is spread by volume."""
+        volumes = [float(np.prod(s)) for _, s in parts]
+        geoms = "".join(
+            f'<geom name="obj_{key}_{i}" type="box" pos="{fmt(c)}" size="{fmt(np.array(s) / 2)}" '
+            f'mass="{mass * v / sum(volumes):.6g}" contype="1" conaffinity="1" friction="{FRICTION} 0.02 0.001" '
+            f'rgba="0.85 0.15 0.1 1"/>' for i, ((c, s), v) in enumerate(zip(parts, volumes)))
+        self.world.append(f'<body name="obj_{key}" pos="{fmt(pose[:3])}" quat="{fmt([pose[6], pose[3], pose[4], pose[5]])}">'
+                          f'<freejoint name="obj_{key}"/>{geoms}</body>')
 
     def xml(self):
         return (f'<mujoco model="windturbine_physics"><compiler angle="radian" autolimits="true"/>'
@@ -270,8 +273,10 @@ def main():
     n_env = b.add_environment(env, eprefix, frames[0], moving_links)
     b.add_robot(robot, base_body, bases[0])
     for spec in scene.get("objects") or []:
-        if "box" in spec:
-            b.add_object(spec["key"], spec["box"], spec["spawn"], masses.get(spec["key"], DEFAULT_MASS))
+        parts = [(p["centre"], p["size"]) for p in spec["parts"]] if spec.get("parts") else \
+            [((0, 0, 0), spec["box"])] if "box" in spec else None
+        if parts:
+            b.add_object(spec["key"], parts, spec["spawn"], masses.get(spec["key"], spec.get("mass", DEFAULT_MASS)))
     xml = b.xml()
     model = mujoco.MjModel.from_xml_string(xml)
     data = mujoco.MjData(model)
@@ -284,7 +289,7 @@ def main():
     qadr = {n: model.jnt_qposadr[i] for i, n in enumerate(jnames)}
     base_mocap = model.body("base_target").mocapid[0]
     env_mocap = {l: model.body(f"env_{l}").mocapid[0] for l in moving_links}
-    obj_keys = [s["key"] for s in scene.get("objects") or [] if "box" in s]
+    obj_keys = [s["key"] for s in scene.get("objects") or [] if "box" in s or s.get("parts")]
     geom_body = [model.body(model.geom_bodyid[g]).name for g in range(model.ngeom)]
     robot_geoms = np.array([n.startswith("rb_") for n in geom_body])
     env_geoms = np.array([n.startswith("env_") for n in geom_body])
@@ -305,6 +310,8 @@ def main():
     contacts = {}              # (robot body, env body) -> [max force, frames]
     foot_max = 0.0
     obj_hist = {k: [] for k in obj_keys}
+    palms = [n for n in ("left_hand_palm_link", "right_hand_palm_link") if f"rb_{n}" in [model.body(b).name for b in range(model.nbody)]]
+    palm_hist = {p: [] for p in palms}
     t0 = time.time()
     for i in range(len(frames)):
         j = min(i + 1, len(frames) - 1)
@@ -356,6 +363,8 @@ def main():
             objs[k] = [*map(float, np.round(o.xpos, 5)), float(x_), float(y_), float(z_), float(w_)]
             obj_hist[k].append(np.array(o.xpos))
         out_objects.append(objs)
+        for p in palms:
+            palm_hist[p].append(np.array(data.body(f"rb_{p}").xpos))
         if i % 200 == 0:
             print(f"  frame {i}/{len(frames)}  sim {data.time:6.1f} s  wall {time.time() - t0:5.1f} s", flush=True)
 
@@ -380,10 +389,15 @@ def main():
         dev = np.linalg.norm(hist[attach:detach] - ref, axis=1) if ref is not None else np.array([np.nan])
         place = np.array(seg.get("place") or objects[-1][key][:3])
         final = hist[-1]
-        lost_at = next((attach + n for n, d in enumerate(dev) if d > 0.10), None)
+        # held: the case stays at the grasping hand (the palm nearest to it at the grasp)
+        hand = min(palms, key=lambda p: np.linalg.norm(palm_hist[p][attach] - hist[attach])) if palms and attach is not None else None
+        to_hand = (np.linalg.norm(np.array(palm_hist[hand][attach + 20:detach]) - hist[attach + 20:detach], axis=1)
+                   if hand else np.array([np.inf]))
+        lost_at = next((attach + 20 + n for n, d in enumerate(to_hand) if d > 0.20), None)
         report["objects"].append(dict(
-            object=key, mass_kg=masses.get(key, DEFAULT_MASS), lifted_m=round(lifted, 3),
+            object=key, mass_kg=masses.get(key, next((s.get("mass", DEFAULT_MASS) for s in scene["objects"] if s["key"] == key))), lifted_m=round(lifted, 3),
             max_deviation_from_plan_m=round(float(np.nanmax(dev)), 3), dropped_at_frame=lost_at,
+            max_distance_to_hand_m=round(float(np.max(to_hand)), 3) if hand else None,
             final_position=[round(float(v), 3) for v in final],
             placement_error_m=round(float(np.linalg.norm(final[:2] - place[:2])), 3),
             height_above_target_m=round(float(final[2] - place[2]), 3),

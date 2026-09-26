@@ -65,6 +65,13 @@ def main():
         models.append(model)
     scene["models"] = models
 
+    from turbine import dims
+    for obj in scene.get("objects") or []:          # compound objects: their parts, for physics and videos
+        if obj["key"] in dims.OBJECT_PARTS:
+            parts, mass = dims.OBJECT_PARTS[obj["key"]]
+            obj["parts"] = [dict(centre=list(c), size=list(s)) for c, s in parts]
+            obj["mass"] = mass
+
     camera, _ = VIEWS[args.view]
     scene["camera"] = camera
     rendering = scene.setdefault("rendering", {})

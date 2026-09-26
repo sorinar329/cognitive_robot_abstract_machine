@@ -142,5 +142,16 @@ COVER_CRACK_XZ = (-5.8, 2.6)    # on the -Y side wall
 # ------------------------------------------------------------------ task T3: bring the tool (nacelle frame)
 TOOL_RACK_X, TOOL_RACK_Y, TOOL_RACK_TOP = (-8.2, -7.6), (INNER_Y[0], -1.72), 0.85    # -Y wall, next to the converter
 TOOL_TRAY_X, TOOL_TRAY_Y, TOOL_TRAY_TOP = (1.0, 1.4), (-1.25, -0.98), 0.85           # on the -Y girder
-TOOL_CASE = (0.09, 0.09, 0.2)             # torque tool case (socket set), small enough for the G1 hand
+TOOL_CASE = (0.09, 0.09, 0.2)             # torque tool case (socket set)
+TOOL_GRIP = (0.03, 0.03, 0.14)            # vertical T-grip on top of the case: room for the Dex3 fist (9 cm) and the approach
+TOOL_CAP = (0.055, 0.055, 0.012)          # cap on the grip: the case hangs from the fist instead of sliding through it
+TOOL_CASE_PARTS = [                       # (centre, size) in the object frame, origin at the grip centre
+    ((0.0, 0.0, 0.0), TOOL_GRIP),
+    ((0.0, 0.0, TOOL_GRIP[2] / 2 + TOOL_CAP[2] / 2), TOOL_CAP),
+    ((0.0, 0.0, -TOOL_GRIP[2] / 2 - TOOL_CASE[2] / 2), TOOL_CASE),
+]
+TOOL_CASE_BOTTOM = TOOL_GRIP[2] / 2 + TOOL_CASE[2]   # grip centre above the case bottom
+TOOL_CASE_MASS = 3.0
+OBJECT_PARTS = {"torque_tool_case": (TOOL_CASE_PARTS, TOOL_CASE_MASS)}
+"""Compound objects the G1 handles: their parts for physics and rendering (scripts/finish_recording.py)."""
 TECHNICIAN_XY = (2.0, -1.7)               # on the -Y walkway by the front main bearing, facing the machine

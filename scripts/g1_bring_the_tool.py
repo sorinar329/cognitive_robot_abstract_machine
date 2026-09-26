@@ -19,6 +19,7 @@ record it for CRAMERA with the onboarder:
 from __future__ import annotations
 
 import math
+from dataclasses import dataclass
 import os
 import sys
 
@@ -38,11 +39,17 @@ from coraplex.robot_plans.actions.core.navigation import LookAtAction  # noqa: E
 from coraplex.robot_plans.actions.core.pick_up import PickUpAction  # noqa: E402
 from coraplex.robot_plans.actions.core.placing import PlaceAction  # noqa: E402
 from coraplex.robot_plans.actions.core.robot_body import ParkArmsAction  # noqa: E402
+from coraplex.robot_plans.motions.base import BaseMotion  # noqa: E402
 from coraplex.view_manager import ViewManager  # noqa: E402
+from giskardpy.motion_statechart.tasks.cartesian_tasks import CartesianPose  # noqa: E402
+from scipy.spatial.transform import Rotation  # noqa: E402
+from semantic_digital_twin.world_description.world_entity import Body  # noqa: E402
 from semantic_digital_twin.api import BodySpecification, RobotSpecification, WorldSpecification  # noqa: E402
 from semantic_digital_twin.robots.unitree_g1 import UnitreeG1  # noqa: E402
 from semantic_digital_twin.spatial_types.spatial_types import Pose  # noqa: E402
-from semantic_digital_twin.world_description.geometry import Color, Scale  # noqa: E402
+from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix  # noqa: E402
+from semantic_digital_twin.world_description.geometry import Box, Color, Scale  # noqa: E402
+from semantic_digital_twin.world_description.shape_collection import ShapeCollection  # noqa: E402
 
 import g1_inspection_round as rnd  # noqa: E402
 from turbine import dims as d  # noqa: E402
@@ -57,15 +64,63 @@ STANDING_DISTANCE = 0.6
 LANE_Y = -rnd.WALKWAY_LANE
 RACK_CLEAR_X = d.TOOL_RACK_X[1] + 0.2
 """Walkway x at which the G1's torso is clear of the tool rack's shelf."""
+CARRY_IN_PELVIS = (0.32, 0.06, 0.28)
+"""Where the hand holds the grip while walking, in the pelvis frame: ahead of the thighs, near the midline."""
 PLACE_TOLERANCE = 0.06
 """How far the case may end up from the tray centre, in metres."""
 
-CASE_SIZE = d.TOOL_CASE
-CASE_START = Pose.from_xyz_rpy(sum(d.TOOL_RACK_X) / 2, d.TOOL_RACK_Y[1] - 0.1, FLOOR + d.TOOL_RACK_TOP + CASE_SIZE[2] / 2,
+CASE_START = Pose.from_xyz_rpy(sum(d.TOOL_RACK_X) / 2, d.TOOL_RACK_Y[1] - 0.1, FLOOR + d.TOOL_RACK_TOP + d.TOOL_CASE_BOTTOM + 0.002,
                                yaw=-math.pi / 2)
 """On the rack shelf, near its front lip; yaw = the direction the robot reaches in (towards -Y)."""
-CASE_TARGET = (sum(d.TOOL_TRAY_X) / 2, sum(d.TOOL_TRAY_Y) / 2, FLOOR + d.TOOL_TRAY_TOP + CASE_SIZE[2] / 2 + 0.005)
+CASE_TARGET = (sum(d.TOOL_TRAY_X) / 2, sum(d.TOOL_TRAY_Y) / 2, FLOOR + d.TOOL_TRAY_TOP + d.TOOL_CASE_BOTTOM + 0.005)
 """Centre of the tool tray next to the technician; the robot reaches towards +Y."""
+
+
+def tool_case(pose):
+    """The torque tool case with its T-grip; the body origin (what the hand grasps) is the grip centre."""
+    red = Color(0.85, 0.15, 0.1)
+    shapes = [Box(scale=Scale(*size), origin=HomogeneousTransformationMatrix.from_xyz_rpy(*centre), color=red)
+              for centre, size in d.TOOL_CASE_PARTS]
+    return BodySpecification("torque_tool_case", ShapeCollection(shapes), parent_T_self=pose.to_homogeneous_matrix())
+
+
+@dataclass
+class HoldInFront(BaseMotion):
+    """Bring the hand's tool frame to a pose in the pelvis frame (arm and waist only)."""
+
+    tip: Body
+    goal: Pose
+
+    def perform(self):
+        return
+
+    @property
+    def _motion_chart(self):
+        return CartesianPose(root_link=self.robot.root, tip_link=self.tip, goal_pose=self.goal)
+
+
+def hold_in_front(context, world, robot):
+    """Carry the case in front of the body, near the midline, grip upright: parked at the side, the
+    hanging case reached 0.34 m sideways, into the nacelle wall (found in the MuJoCo replay)."""
+    tool = ViewManager.get_end_effector_view(Arms.LEFT, robot).tool_frame
+    pelvis_T_tool = world.compute_forward_kinematics_np(robot.root, tool)
+    x, y, z, w = Rotation.from_matrix(pelvis_T_tool[:3, :3]).as_quat()
+    goal = Pose.from_xyz_quaternion(*CARRY_IN_PELVIS, x, y, z, w, reference_frame=robot.root)
+    with simulated_robot:
+        sequential([HoldInFront(tool, goal)], context=context).plan.perform()
+
+
+def withdraw_hand(context, world, robot, distance=0.12):
+    """Pull the open hand back out of the grip along its approach axis before parking: parking
+    straight away swept the open hand sideways through the grip and knocked the case off the
+    tray (found in the MuJoCo replay)."""
+    tool = ViewManager.get_end_effector_view(Arms.LEFT, robot).tool_frame
+    pelvis_T_tool = world.compute_forward_kinematics_np(robot.root, tool)
+    back = pelvis_T_tool @ np.array([[1, 0, 0, -distance], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]])
+    x, y, z, w = Rotation.from_matrix(back[:3, :3]).as_quat()
+    goal = Pose.from_xyz_quaternion(*back[:3, 3], x, y, z, w, reference_frame=robot.root)
+    with simulated_robot:
+        sequential([HoldInFront(tool, goal)], context=context).plan.perform()
 
 
 def standing_pose(x, y, yaw, world):
@@ -87,8 +142,7 @@ def main():
     world = WorldSpecification.from_urdf(
         urdf,
         robots=[RobotSpecification(semantic_annotation_type=UnitreeG1, world_T_odom=start.to_homogeneous_matrix())],
-        objects=[BodySpecification.box("torque_tool_case", Scale(*CASE_SIZE), color=Color(0.85, 0.15, 0.1),
-                                       parent_T_self=CASE_START.to_homogeneous_matrix())],
+        objects=[tool_case(CASE_START)],
     ).to_domain_object()
     robot = world.get_semantic_annotations_by_type(UnitreeG1)[0]
     rnd.use_optical_axis(robot)
@@ -120,7 +174,8 @@ def main():
     walk(context, world, (x, LANE_Y, math.pi), (RACK_CLEAR_X, LANE_Y, math.pi), (RACK_CLEAR_X, rack_stand.y, -math.pi / 2),
          (rack_stand.x, rack_stand.y, -math.pi / 2))
     with simulated_robot:
-        sequential([PickUpAction(case, Arms.LEFT, grasp), ParkArmsAction(Arms.BOTH)], context=context).plan.perform()
+        sequential([PickUpAction(case, Arms.LEFT, grasp), ParkArmsAction(Arms.RIGHT)], context=context).plan.perform()
+    hold_in_front(context, world, robot)
     print("picked up the torque tool case", flush=True)
 
     # 3. carry it to the technician's tray
@@ -130,11 +185,14 @@ def main():
          (tray_stand.x, tray_stand.y, math.pi / 2))
     place = Pose.from_xyz_rpy(*CASE_TARGET, yaw=math.pi / 2, reference_frame=world.root)
     with simulated_robot:
-        sequential([PlaceAction(case, place, Arms.LEFT), ParkArmsAction(Arms.BOTH)], context=context).plan.perform()
+        sequential([PlaceAction(case, place, Arms.LEFT)], context=context).plan.perform()
+    withdraw_hand(context, world, robot)
+    with simulated_robot:
+        sequential([ParkArmsAction(Arms.BOTH)], context=context).plan.perform()
 
     final = case.global_pose.to_np()[:3, 3]
     off = float(np.linalg.norm(final[:2] - np.array(CASE_TARGET[:2])))
-    on_tray = off < PLACE_TOLERANCE and final[2] > FLOOR + d.TOOL_TRAY_TOP
+    on_tray = off < PLACE_TOLERANCE and final[2] > FLOOR + d.TOOL_TRAY_TOP + d.TOOL_CASE_BOTTOM - 0.02
     print(f"case at {np.round(final - [0, 0, FLOOR], 3)} (nacelle frame), {off * 100:.1f} cm from the tray centre", flush=True)
     print(f"\n=== T3 report ===\nloose bolt found: {bool(seen and found)}\ntool delivered to the technician: {on_tray}", flush=True)
     if not (seen and found and on_tray):     # no exit on success, so cramera-onboard can finish recording
