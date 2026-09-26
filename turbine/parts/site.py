@@ -43,7 +43,7 @@ LINKS = [
     link("ground", "world", mesh=M + "ground.obj",
          collisions=[span_box((-s.GROUND_RADIUS, s.GROUND_RADIUS), (-s.GROUND_RADIUS, s.GROUND_RADIUS), (-0.05, 0.0))]),
     link("foundation", "world", mesh=M + "foundation.obj",
-         collisions=disk_boxes(s.PLINTH_R, (0.0, s.PLINTH_Z[1]))),
+         collisions=disk_boxes(s.PLINTH_R, s.PLINTH_Z)),
     link("foundation_grout", "foundation", variants={"ok": M + "grout_ok.obj", "broken": M + "grout_broken.obj"}),
     link("foundation_earthing", "foundation", variants={"ok": M + "earthing_ok.obj", "loose": M + "earthing_loose.obj"}),
     section(1), section(2), section(3), section(4),

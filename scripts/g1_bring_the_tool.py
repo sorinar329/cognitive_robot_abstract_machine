@@ -54,6 +54,9 @@ PELVIS = FLOOR + rnd.PELVIS_HEIGHT_ABOVE_FLOOR
 WALKWAY_Y = -1.7
 STANDING_DISTANCE = 0.6
 """How far the robot stands from an object it grasps or places (as in the G1 warehouse demo)."""
+LANE_Y = -rnd.WALKWAY_LANE
+RACK_CLEAR_X = d.TOOL_RACK_X[1] + 0.2
+"""Walkway x at which the G1's torso is clear of the tool rack's shelf."""
 PLACE_TOLERANCE = 0.06
 """How far the case may end up from the tray centre, in metres."""
 
@@ -113,14 +116,18 @@ def main():
     grasp = GraspDescription(ApproachDirection.FRONT, VerticalAlignment.NoAlignment,
                              ViewManager.get_end_effector_view(Arms.LEFT, robot))
     rack_stand = standing_pose(CASE_START.x, CASE_START.y, -math.pi / 2, world)
-    walk(context, world, (-7.6, WALKWAY_Y, math.pi), (rack_stand.x, rack_stand.y, -math.pi / 2))
+    # clear of the rack's corner before turning in (a diagonal over it clips the shelf; found in the MuJoCo replay)
+    walk(context, world, (x, LANE_Y, math.pi), (RACK_CLEAR_X, LANE_Y, math.pi), (RACK_CLEAR_X, rack_stand.y, -math.pi / 2),
+         (rack_stand.x, rack_stand.y, -math.pi / 2))
     with simulated_robot:
         sequential([PickUpAction(case, Arms.LEFT, grasp), ParkArmsAction(Arms.BOTH)], context=context).plan.perform()
     print("picked up the torque tool case", flush=True)
 
     # 3. carry it to the technician's tray
     tray_stand = standing_pose(CASE_TARGET[0], CASE_TARGET[1], math.pi / 2, world)
-    walk(context, world, (-7.6, WALKWAY_Y, 0.0), (tray_stand.x, tray_stand.y, math.pi / 2))
+    # facing along the walkway (the case in the parked left hand stays clear of the drivetrain), then turn to the tray
+    walk(context, world, (RACK_CLEAR_X, rack_stand.y, 0.0), (RACK_CLEAR_X, LANE_Y, 0.0), (tray_stand.x, LANE_Y, 0.0),
+         (tray_stand.x, tray_stand.y, math.pi / 2))
     place = Pose.from_xyz_rpy(*CASE_TARGET, yaw=math.pi / 2, reference_frame=world.root)
     with simulated_robot:
         sequential([PlaceAction(case, place, Arms.LEFT), ParkArmsAction(Arms.BOTH)], context=context).plan.perform()

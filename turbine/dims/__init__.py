@@ -56,7 +56,7 @@ BP_FRONT_X = (-3.4, 2.7)                 # cast front bedplate: main bearings an
 BP_GIRDER_Y = (0.9, 1.3)                 # side girders, mirrored in Y
 BP_TOP_Z = 0.45
 BP_CABLE_HOLE_R = 0.3                    # cable loop opening on the yaw axis
-BP_REAR_X = (-9.7, -3.4)                 # welded rear frame: generator, transformer
+BP_REAR_X = (-7.9, -3.4)                 # welded rear frame under the generator; behind it the floor is free (hoist, cabinets)
 BP_REAR_Y = (0.5, 0.8)
 BP_REAR_TOP_Z = 0.3
 

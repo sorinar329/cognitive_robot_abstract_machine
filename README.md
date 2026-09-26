@@ -30,6 +30,13 @@ recorded base motion, visual only):
     # T4: $PY -m cramera.onboard.demo scripts/g1_climb.py --name windturbine_g1_t4 -- --route hoist, then --view g1_hoist
     # T5: ... --name windturbine_g1_t5 -- --route lift, then --view g1_tower
 
+Replay a recording in MuJoCo physics (the G1 as force-limited servos with the URDF's masses and
+collision meshes, the pelvis held on the recorded path, the turbine solid, carried objects free). It
+writes `<bundle>_physics` for CRAMERA and `physics_report.json`: robot–turbine contacts with forces
+and positions, and whether carried objects stayed in hand and were placed:
+
+    $PY scripts/physics_replay.py ~/.cramera/scenes/windturbine_g1_t3 [--mass torque_tool_case=3.0]
+
 Watch a task live in CRAMERA while CRAM executes it (the open viewer tab attaches):
 
     ~/workspace/cramera-port/.venv/bin/cramera-live scripts/g1_bring_the_tool.py

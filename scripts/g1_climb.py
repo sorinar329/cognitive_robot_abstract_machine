@@ -160,8 +160,9 @@ def hoist():
     up = pelvis_z(robot) - rnd.PELVIS_HEIGHT_ABOVE_FLOOR - NACELLE
     # off the platform, first check: the controller cabinet by the hatch
     seen, found = inspect(context, world, robot, scenario, "controller_inspect_door", NACELLE)
-    # behind the slip ring, past the tool rack onto the -Y walkway
-    walk(context, world, NACELLE, (-7.95, -0.4, 0.0), (-7.95, -1.25, 0.0), (-7.3, -1.7, 0.0), (-3.0, -1.7, 0.0))
+    # behind the slip ring (between converter cabinet and generator), past the tool rack onto the -Y walkway
+    walk(context, world, NACELLE, (-8.4, -0.12, 0.0), (-8.4, -1.15, 0.0), (-7.35, -1.15, 0.0), (-7.35, -1.7, 0.0),
+         (-3.0, -1.7, 0.0))
     at = robot.root.global_pose.to_np()[:3, 3]
     on_walkway = abs(at[2] - NACELLE - rnd.PELVIS_HEIGHT_ABOVE_FLOOR) < 0.05 and at[1] < -d.WALKWAY_Y + 0.1
     print(f"\n=== T4 report ===\nhoisted to the nacelle floor: {abs(up) < 0.05} (floor offset {up:+.3f} m)"
@@ -179,7 +180,8 @@ def lift():
     print("in the lift car", flush=True)
     ride(context, world, robot, "service_lift", "service_lift_joint", site.LIFT_TRAVEL, site.LIFT_SPEED)
     up = pelvis_z(robot) - rnd.PELVIS_HEIGHT_ABOVE_FLOOR - YAW_DECK
-    walk(context, world, YAW_DECK, (0.2, -0.65, 0.0), (0.8, 0.1, math.pi / 2))     # round the cable opening
+    # straight out through the car door (+X), then round the cable opening
+    walk(context, world, YAW_DECK, (-0.15, LIFT_Y, 0.0), (-0.15, -0.65, 0.0), (0.2, -0.65, 0.0), (0.8, 0.1, math.pi / 2))
     seen, found = inspect(context, world, robot, scenario, "tower_inspect_cable_loop", YAW_DECK)
     print(f"\n=== T5 report ===\nlift at the yaw deck: {abs(up) < 0.05} (offset {up:+.3f} m)"
           f"\ncable loop checked: {bool(seen)} ({', '.join(f['id'] for f in found) or 'ok'})", flush=True)

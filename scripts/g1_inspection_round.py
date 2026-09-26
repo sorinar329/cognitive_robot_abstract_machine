@@ -51,12 +51,20 @@ except ImportError:
     MoveMotion = None
 
 from turbine import parts  # noqa: E402
+from turbine import dims as d  # noqa: E402
 from turbine.dims import site  # noqa: E402
 
 PELVIS_HEIGHT_ABOVE_FLOOR = 0.7923 + 0.005
 """The G1's pelvis height with all leg joints at zero (0.7923 m, from the G1 warehouse demo),
 plus 5 mm so its feet do not touch the floor's collision box (giskard treats contact
 as a collision violation)."""
+WALKWAY_STAND = (1.5, 1.75)
+"""|y| of the G1's pelvis on a nacelle walkway (walkway 1.35-2.08 m from the axis)."""
+WALKWAY_LANE = (d.WALKWAY_Y + d.INNER_Y[1]) / 2   # walkway centre, 1.715 m
+"""|y| of the lane the G1 walks along between standpoints, facing along the walkway: its parked
+hands (0.35 m ahead) then point along the walkway instead of into the drivetrain."""
+RACK_CLEARANCE = 0.3
+"""Standpoints keep this distance (x) from the tool rack at the -Y walkway's rear end."""
 CAMERA_HEIGHT_ABOVE_FLOOR = 1.27
 """D435 height with the G1 standing upright."""
 MIN_AIM_DEPRESSION = math.radians(19.0)
@@ -110,6 +118,21 @@ if MoveMotion is not None:
             return CartesianPose(root_link=self.world.root, tip_link=self.robot.root, goal_pose=self.target)
 
 
+def walkway_route(world, robot, stand, floor):
+    """Waypoints to a nacelle standpoint along the walkway lane: turn along the walkway, walk down
+    its middle, then turn to the standpoint (none if not both on the same walkway)."""
+    here = robot.root.global_pose.to_np()[:3, 3]
+    axis_y = world_pose(world, "nacelle")[1, 3]
+    dy0, dy1 = here[1] - axis_y, stand.y - axis_y
+    if abs(dy0) < 1.0 or abs(dy1) < 1.0 or dy0 * dy1 < 0 or abs(stand.x - here[0]) < 0.3:
+        return []
+    lane = axis_y + math.copysign(WALKWAY_LANE, dy1)
+    heading = 0.0 if stand.x > here[0] else math.pi
+    z = floor + PELVIS_HEIGHT_ABOVE_FLOOR
+    return [Pose.from_xyz_rpy(here[0], lane, z, yaw=heading, reference_frame=world.root),
+            Pose.from_xyz_rpy(stand.x, lane, z, yaw=heading, reference_frame=world.root)]
+
+
 def move_to(stand, zone):
     """The motion that brings the base to a standpoint in this zone."""
     if zone == "nacelle" and MoveMotion is not None:
@@ -133,6 +156,15 @@ def standpoint(world, point):
     direction = parent @ np.array(point["view_from"], dtype=float)
     direction /= np.linalg.norm(direction)
     camera = target + point["distance"] * direction
+    axis_y = world_pose(world, "nacelle")[1, 3]
+    if point.get("zone") == "nacelle" and abs(camera[1] - axis_y) > 1.0:
+        # on a walkway: stay inside it, clear of the bedplate girders, with room behind for the waist to lean
+        # back (the MuJoCo replay found the hips on the girder and the head at the wall otherwise)
+        y = min(max(abs(camera[1] - axis_y), WALKWAY_STAND[0]), WALKWAY_STAND[1])
+        camera[1] = axis_y + math.copysign(y, camera[1] - axis_y)
+        rack_x = world_pose(world, "nacelle")[0, 3] + np.array(d.TOOL_RACK_X)
+        if camera[1] < axis_y and rack_x[0] - RACK_CLEARANCE < camera[0] < rack_x[1] + RACK_CLEARANCE:
+            camera[0] = rack_x[1] + RACK_CLEARANCE
     yaw = math.atan2(target[1] - camera[1], target[0] - camera[0])
     return camera[0], camera[1], yaw, target
 
@@ -200,8 +232,9 @@ def main():
         stand = Pose.from_xyz_rpy(x, y, floor + PELVIS_HEIGHT_ABOVE_FLOOR, yaw=yaw, reference_frame=world.root)
         aim = aim_point(target, x, y, floor)
         look = Pose.from_xyz_rpy(*aim, reference_frame=world.root)
+        route = walkway_route(world, robot, stand, floor) if args.zone == "nacelle" else []
         with simulated_robot:
-            sequential([move_to(stand, args.zone)], context=context).plan.perform()
+            sequential([move_to(p, args.zone) for p in route + [stand]], context=context).plan.perform()
         converged = True
         try:
             with simulated_robot:

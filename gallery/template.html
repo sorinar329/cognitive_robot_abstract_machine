@@ -102,6 +102,10 @@ table.report td b{font:600 18px/1 var(--display)}
 table.report tr.v-re-tension td:last-child{color:var(--high);font-weight:600}
 table.report tr.v-re-tighten td:last-child{color:var(--medium);font-weight:600}
 table.report tr.v-no td:last-child{color:var(--low);font-weight:600}
+table.physics td small{font:400 12px/1.3 var(--mono);color:var(--muted)}
+table.physics tr.p-ok td:last-child{color:var(--low);font-weight:600}
+table.physics tr.p-contact td:last-child{color:var(--medium);font-weight:600}
+table.physics tr.p-fails td:last-child{color:var(--high);font-weight:600}
 .todos{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr))}
 .todo{background:var(--surface);border:1px solid var(--rule);border-radius:8px;padding:14px 16px}
 .todo h3{font:600 20px/1.1 var(--display);margin:0 0 6px;display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap}
@@ -121,7 +125,7 @@ table.report tr.v-no td:last-child{color:var(--low);font-weight:600}
     <li><b>Rating</b>3.4 MW, geared DFIG</li><li><b>Nacelle</b>12.6 × 4.2 m</li><li><b>Faults</b>__FAULTS__</li>
   </ul>
   <nav aria-label="Sections">
-    <a href="#turbine">Turbine</a><a href="#tower">Tower base</a><a href="#inside">Inside the tower</a><a href="#nacelle">Nacelle</a><a href="#robot">G1 robot</a><a href="#climb">Getting up</a><a href="#bolts">Bolt check</a><a href="#faults">Faults</a>
+    <a href="#turbine">Turbine</a><a href="#tower">Tower base</a><a href="#inside">Inside the tower</a><a href="#nacelle">Nacelle</a><a href="#robot">G1 robot</a><a href="#climb">Getting up</a><a href="#bolts">Bolt check</a><a href="#physics">Physics</a><a href="#faults">Faults</a>
   </nav>
 </header>
 
@@ -203,6 +207,19 @@ table.report tr.v-no td:last-child{color:var(--low);font-weight:600}
     <li><b>Limits</b>ACP RP 401 thresholds, borrowed from anchor bolts: any bolt below 85 % or a mean below 90 % → re-tension the whole flange. That is why flange 2 is re-tensioned although its mean is near 99 %.</li>
     <li><b>Not seen</b>The G1’s camera sits 0.34 m above the nuts and must look past the flange edge. Bolts behind the lift shaft go on the technician’s list. On flange 2, one turned nut (bolt 60) is back there.</li>
     <li><b>Limits of markings</b>They only show nuts that turned. Preload lost by settling doesn’t move them, so a 10 % tension sample stays in the plan. Readings come from the scenario ground truth for now; visibility is computed in the CRAM world.</li>
+  </ul>
+</section>
+
+<section id="physics">
+  <h2>Physics check <small>MuJoCo replay of the CRAM runs</small></h2>
+  <p class="intro">Each recorded CRAM run is played again in MuJoCo, the way CRAMERA’s lab does it. The G1 is a rigid-body model with the URDF’s masses and collision meshes. Every joint is a servo limited to its real torque: 25 Nm for the arms, 1.4 Nm for the fingers. The pelvis follows the recorded path (no balance controller, so it cannot fall). The turbine is solid, and the tool case is a free 3 kg box held only by friction. The replay uses CRAM’s own motion, without the walking animation.</p>
+  __PHYSICS__
+  <figure><video class="clip" src="video/g1_t3_physics.mp4" poster="img/cramera_g1_t3_physics.jpg" controls playsinline muted preload="metadata" aria-label="T3 replayed in MuJoCo: the tool case slips out of the hand"></video>
+    <figcaption><span class="src">T3 · MuJoCo</span><strong>The grasp does not hold:</strong> CRAM’s grasp puts the hand’s tool frame at the centre of the case, so the palm ends up inside it, and only the thumb closes. In CRAM the case is simply attached to the hand; in physics it slips out, even at 0.3 kg.</figcaption></figure>
+  <ul class="facts">
+    <li><b>Fixed</b>The replay found flaws the CRAM plans could not see, because straight base moves don’t avoid collisions. T3 and T4 clipped the tool-rack corner. T4 stepped over a 30 cm bedplate girder, so the rear frame now ends behind the slip ring. T5 left the lift car through its side railing. T2’s standpoints put the hips on the bedplate girder.</li>
+    <li><b>Open</b>The G1’s grasp for the tool case (a CRAM grasp setting for the Dex3 hand). The walkway is 0.69 m wide while the parked hands span about 0.66 m, so the hands brush the wall, and the head touches it when the waist leans back.</li>
+    <li><b>Model</b>Real walking (a balance policy) is not included: the pelvis is held on the recorded path. Masses of turbine parts don’t matter here; they are fixed.</li>
   </ul>
 </section>
 

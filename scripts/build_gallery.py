@@ -40,12 +40,18 @@ CRAMERA_SCENES = {   # screenshot file -> CRAMERA scene
     "windturbine": "windturbine", "windturbine_outside_ground": "windturbine_outside_ground",
     "windturbine_nacelle_all": "windturbine_nacelle_all_faults", "g1_t1": "windturbine_g1_t1", "g1_t2": "windturbine_g1_t2", "g1_t3": "windturbine_g1_t3",
     "g1_t4": "windturbine_g1_t4", "g1_t5": "windturbine_g1_t5", "g1_t6": "windturbine_g1_t6",
+    "g1_t3_physics": "windturbine_g1_t3_physics",
 }
 VIDEOS = {   # video file -> (CRAMERA recording, camera view in turbine/views.py[, playback speed])
     "g1_t3": ("windturbine_g1_t3", "g1_nacelle_video"),
     "g1_t4": ("windturbine_g1_t4", "g1_hoist"),
     "g1_t5": ("windturbine_g1_t5", "g1_tower"),
     "g1_t6": ("windturbine_g1_t6", "g1_tower", 2.0),
+    "g1_t3_physics": ("windturbine_g1_t3_physics", "g1_nacelle_video"),
+}
+PHYSICS = {   # task -> MuJoCo replay of its recording (scripts/physics_replay.py)
+    "T1": "windturbine_g1_t1_physics", "T2": "windturbine_g1_t2_physics", "T3": "windturbine_g1_t3_physics",
+    "T4": "windturbine_g1_t4_physics", "T5": "windturbine_g1_t5_physics", "T6": "windturbine_g1_t6_physics",
 }
 VIDEO_DIR = os.path.join(ROOT, "preview", "video")
 VIEWER = "http://localhost:8711/?scene="
@@ -86,6 +92,29 @@ def recording_length(scene):
         traj = json.load(f)
     seconds = round(len(traj["frames"]) / (traj.get("framesPerSecond") or 25))
     return f"{seconds // 60}:{seconds % 60:02d}"
+
+
+def physics_html():
+    """Per-task table of the MuJoCo replays: contacts with the turbine and carried objects."""
+    from html import escape
+    rows = []
+    for task, scene in PHYSICS.items():
+        with open(os.path.expanduser(os.path.join("~/.cramera/scenes", scene, "physics_report.json"))) as f:
+            r = json.load(f)
+        c = r["robot_turbine_contacts"]
+        worst = max(c, key=lambda x: x["max_force_n"]) if c else None
+        contact = ("none" if not c else f'{len(c)} × , max {worst["max_force_n"]:.0f} N '
+                   f'<small>({escape(worst["robot_link"].replace("_link", ""))} – {escape(worst["turbine_link"])})</small>')
+        objs = "; ".join(("held and placed" if o["placed"] else f'dropped at frame {o["dropped_at_frame"]}' if o["dropped_at_frame"]
+                          else "not held") for o in r["objects"]) or "–"
+        verdict = "ok" if not c or worst["max_force_n"] < 50 else "contact"
+        if r["objects"] and not all(o["placed"] for o in r["objects"]):
+            verdict = "fails"
+        rows.append(f'<tr class="p-{verdict}"><th scope="row">{task}</th><td>{r["sim_seconds"]:.0f} s</td><td>{contact}</td>'
+                    f'<td>{objs}</td><td>{verdict}</td></tr>')
+    return ('<div class="tablewrap"><table class="report physics"><thead><tr><th scope="col">Task</th><th scope="col">Simulated</th>'
+            '<th scope="col">Robot–turbine contacts over 5 N</th><th scope="col">Carried object</th><th scope="col">Result</th></tr></thead>'
+            f'<tbody>{"".join(rows)}</tbody></table></div>')
 
 
 def bolt_report_html():
@@ -175,7 +204,7 @@ def main():
     html = (html.replace("__POINTS__", json.dumps(points)).replace("__FAULTS__", str(total))
             .replace("__POINT_COUNT__", str(len(points))).replace("__COMMIT__", commit or "uncommitted")
             .replace("__UPDATED__", datetime.date.today().isoformat()))
-    html = html.replace("__BOLT_REPORT__", bolt_report_html())
+    html = html.replace("__BOLT_REPORT__", bolt_report_html()).replace("__PHYSICS__", physics_html())
     for name, scene in CRAMERA_SCENES.items():
         if name.startswith("g1_"):
             html = html.replace(f"__LEN_{name}__", recording_length(scene))

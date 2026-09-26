@@ -29,7 +29,7 @@ for side in (-1, 1):
 front = c.box("front_block", (-0.5, fx[1]), (-gy[1], gy[1]), (0.0, d.BP_TOP_Z), mat="gear_paint")
 c.cut(front, c.cylinder("cable_hole", d.BP_CABLE_HOLE_R, 2.0, (0, 0, 0)))
 parts.append(front)
-for x in (d.BP_REAR_X[0] + 0.1, -7.6, -5.0, fx[0] + 0.1):          # rear frame cross members
+for x in (d.BP_REAR_X[0] + 0.1, -5.0, fx[0] + 0.1):                # rear frame cross members
     parts.append(c.box(f"cross{x}", (x - 0.1, x + 0.1), (-d.BP_REAR_Y[1], d.BP_REAR_Y[1]), (0.0, d.BP_REAR_TOP_Z), mat="gear_paint"))
 parts.append(c.box("link_beam", (fx[0], fx[0] + 0.25), (-gy[1], gy[1]), (0.0, d.BP_TOP_Z), mat="gear_paint"))
 

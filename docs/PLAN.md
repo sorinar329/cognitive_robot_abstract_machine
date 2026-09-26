@@ -175,6 +175,20 @@ CRAM check, build and look at the CRAMERA bundle, and get your review.
 
 Rough size: about 60–80 parts, about 45 faults, about 70 inspection points.
 
+## 7b. Physics (MuJoCo replay)
+
+`scripts/physics_replay.py` replays each CRAM recording in MuJoCo, following the physics replay of
+CRAMERA's laboratory. The pelvis is welded to the recorded path; the joints are force-limited servos;
+the turbine is solid; carried objects are free. State (26.09.2026):
+
+- clean: T1, T4, T5, T6;
+- fixed after the replay: rack corner clipped (T3, T4), bedplate rear frame across the hoist area (T4;
+  the rear frame now ends at x = -7.9), lift car left through its railing (T5), walkway standpoints on
+  the bedplate girder (T2);
+- open: the tool case slips out of CRAM's G1 grasp (tool frame at the object centre, thumb-only
+  closing); the parked G1 hands (about 0.66 m) barely fit the 0.69 m walkway;
+- not included: real walking with a balance policy (e.g. Unitree's RL policy in MuJoCo).
+
 ## 8. Decisions
 
 - **Own repository:** this project stays in its own git repository, not a package
