@@ -1,6 +1,6 @@
 """Render a CRAMERA recording (a cramera-onboard bundle) to an MP4 video.
 
-  blender -b --factory-startup -P scripts/render_recording.py -- BUNDLE OUT.mp4 [--step N] [--view NAME] [--speed S] [--stills F,F,..]
+  blender -b --factory-startup -P scripts/render_recording.py -- BUNDLE OUT.mp4 [--step N] [--view NAME] [--speed S] [--look flat|eevee] [--stills F,F,..]
 
 Replays the bundle's trajectory: every model's joints (keyed ``prefix/joint``),
 the robot base pose and the tracked objects. The turbine is built from the
@@ -26,6 +26,8 @@ bundle, out = os.path.expanduser(argv[0]), argv[1]
 step = int(argv[argv.index("--step") + 1]) if "--step" in argv else 2
 view = argv[argv.index("--view") + 1] if "--view" in argv else None
 speed = float(argv[argv.index("--speed") + 1]) if "--speed" in argv else 1.0
+look = argv[argv.index("--look") + 1] if "--look" in argv else "flat"
+"""--look eevee: sky, sun, PBR materials, G1 colours (scripts/blender_look.py); flat: fast Workbench."""
 """--speed 2: play back twice as fast as recorded."""
 stills = [float(v) for v in argv[argv.index("--stills") + 1].split(",")] if "--stills" in argv else None
 """--stills 0.1,0.5,0.9: instead of the video, PNGs at these fractions of the run (OUT is a directory)."""
@@ -175,7 +177,12 @@ for spec in scene_spec.get("objects") or []:
         o = pieces[0]
         mat = bpy.data.materials.new(spec["key"])
         hexcol = spec.get("color", "#cc2222").lstrip("#")
-        mat.diffuse_color = tuple(int(hexcol[i:i + 2], 16) / 255 for i in (0, 2, 4)) + (1.0,)
+        srgb = [int(hexcol[i:i + 2], 16) / 255 for i in (0, 2, 4)]
+        mat.diffuse_color = tuple(srgb) + (1.0,)
+        mat.use_nodes = True                     # for EEVEE: a painted, slightly glossy case
+        shader = next(n for n in mat.node_tree.nodes if n.type == "BSDF_PRINCIPLED")
+        shader.inputs["Base Color"].default_value = tuple(v / 12.92 if v <= 0.04045 else ((v + 0.055) / 1.055) ** 2.4 for v in srgb) + (1.0,)
+        shader.inputs["Roughness"].default_value = 0.4
         o.data.materials.append(mat)
         objects[spec["key"]] = o
 
@@ -263,13 +270,21 @@ if "follow" not in camera:
     cam.rotation_euler = (Vector(camera["target"]) - cam.location).to_track_quat("-Z", "Y").to_euler()
 scene.camera = cam
 
-scene.render.engine = "BLENDER_WORKBENCH"
-scene.display.shading.color_type = "MATERIAL"
-scene.display.shading.light = "STUDIO"
-scene.display.shading.show_cavity = True
-scene.display.shading.show_shadows = False
-scene.world = bpy.data.worlds.new("w")
-scene.world.color = (0.055, 0.075, 0.095)
+if look == "eevee":
+    sys.path.insert(0, os.path.join(ROOT, "scripts"))
+    import blender_look  # noqa: E402
+    blender_look.setup(scene)
+    for model in models:
+        if model.robot:
+            blender_look.color_robot([(link, obj) for link, _, obj in model.visuals])
+else:
+    scene.render.engine = "BLENDER_WORKBENCH"
+    scene.display.shading.color_type = "MATERIAL"
+    scene.display.shading.light = "STUDIO"
+    scene.display.shading.show_cavity = True
+    scene.display.shading.show_shadows = False
+    scene.world = bpy.data.worlds.new("w")
+    scene.world.color = (0.055, 0.075, 0.095)
 scene.render.resolution_x, scene.render.resolution_y = 1280, 720
 scene.frame_start, scene.frame_end = 1, len(frames)
 scene.render.fps = max(1, round(fps_in / step * speed))
