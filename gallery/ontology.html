@@ -116,6 +116,11 @@ table.m td{padding:4px 10px;border-bottom:1px solid var(--rule)}
 table.m td:last-child{text-align:right}
 table.m tr:last-child td{border-bottom:none}
 .note{color:var(--muted);font-size:13px;max-width:72ch;margin:0}
+.src-tools{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;padding:8px 10px;border-bottom:1px solid var(--rule)}
+.btn{all:unset;cursor:pointer;font:500 12px/1 var(--sans);padding:7px 11px;border:1px solid var(--rule);border-radius:3px;background:var(--panel);color:var(--ink)}
+.btn:hover{border-color:var(--accent)}
+pre.code{margin:0;padding:12px 14px;font:400 12.5px/1.55 var(--mono);overflow:auto;max-height:78vh;white-space:pre;tab-size:4}
+pre.code .p{color:var(--oprop)} pre.code .s{color:var(--dprop)} pre.code .cm{color:var(--muted)} pre.code .n{color:var(--class)}
 @media (prefers-reduced-motion:no-preference){.tw{transition:transform .12s}}
 </style>
 
@@ -133,12 +138,14 @@ table.m tr:last-child td{border-bottom:none}
     <button role="tab" id="tab-o" data-tab="o"><span class="ic o"></span>Object properties</button>
     <button role="tab" id="tab-d" data-tab="d"><span class="ic d"></span>Data properties</button>
     <button role="tab" id="tab-i" data-tab="i"><span class="ic i"></span>Individuals</button>
+    <button role="tab" id="tab-src" data-tab="src">Source</button>
   </nav>
   <main id="view"></main>
 </div>
 
 <script>
 const D = __DATA__;
+const SRC = __SOURCE__;
 const KIND = {c: "classes", o: "objectProperties", d: "dataProperties", i: "individuals"};
 const NOUN = {c: "Class", o: "Object property", d: "Data property", i: "Individual"};
 const view = document.getElementById("view");
@@ -340,9 +347,34 @@ function workspace(k) {
     <section class="panel detail" aria-label="Description"><div class="phead"><span>Description</span><span>${NOUN[k]}</span></div><div class="pbody">${detail}</div></section>
   </div>`;
 }
+function highlightTurtle(text) {
+  return esc(text).replace(/("[^"\n]*"(?:@[a-z]+|\^\^[\w:]+)?)|(#.*$)|(\b(?:wt|owl|rdfs|rdf|xsd|dcterms|aicor):[A-Za-z_][\w.-]*)/gm,
+    (m, str, com, name) => str ? `<span class="s">${m}</span>` : com ? `<span class="cm">${m}</span>` :
+      (/^wt:[A-Z]/.test(m) ? `<span class="n">${m}</span>` : `<span class="p">${m}</span>`));
+}
+function sourceView() {
+  const fmt = state.srcFormat || "ttl", text = SRC[fmt];
+  const lines = text.split("\n").length;
+  return `<div class="panel"><div class="phead"><span><b>${fmt === "ttl" ? "windturbine.ttl" : "windturbine.owl"}</b> · ${lines} lines · ${Math.round(text.length / 1024)} KB</span><span>ontology/ in the model repository</span></div>
+    <div class="src-tools"><div class="seg" role="group" aria-label="Format">
+      <button id="f-ttl" aria-pressed="${fmt === "ttl"}">Turtle</button><button id="f-owl" aria-pressed="${fmt === "owl"}">RDF/XML (Protégé)</button></div>
+      <button class="btn" id="copy">Copy file</button></div>
+    <pre class="code" id="code" tabindex="0">${fmt === "ttl" ? highlightTurtle(text) : esc(text)}</pre></div>`;
+}
 function render() {
   document.querySelectorAll(".tabs button").forEach(b => b.setAttribute("aria-selected", b.dataset.tab === state.tab));
-  view.innerHTML = state.tab === "onto" ? ontologyView() : workspace(state.tab);
+  view.innerHTML = state.tab === "onto" ? ontologyView() : state.tab === "src" ? sourceView() : workspace(state.tab);
+  if (state.tab === "src") {
+    document.getElementById("f-ttl").onclick = () => { state.srcFormat = "ttl"; render(); };
+    document.getElementById("f-owl").onclick = () => { state.srcFormat = "owl"; render(); };
+    const btn = document.getElementById("copy");
+    btn.onclick = () => {
+      const text = SRC[state.srcFormat || "ttl"];
+      const done = () => { btn.textContent = "Copied"; setTimeout(() => (btn.textContent = "Copy file"), 1600); };
+      const fallback = () => { const r = document.createRange(); r.selectNodeContents(document.getElementById("code")); const s = getSelection(); s.removeAllRanges(); s.addRange(r); btn.textContent = "Selected — copy with Ctrl+C"; };
+      try { navigator.clipboard.writeText(text).then(done, fallback); } catch (e) { fallback(); }
+    };
+  }
   const q = document.getElementById("q-" + state.tab);
   if (q) q.addEventListener("input", e => { state.q[state.tab] = e.target.value; const pos = e.target.selectionStart; render(); const nq = document.getElementById("q-" + state.tab); nq.focus(); nq.setSelectionRange(pos, pos); });
   const a = document.getElementById("h-asserted"), i = document.getElementById("h-inferred");
@@ -382,7 +414,7 @@ view.addEventListener("keydown", e => {
   if (e.key === "Enter" || e.key === " ") { row.click(); e.preventDefault(); }
 });
 const h = location.hash.slice(1), m = /^([codi])-(.+)$/.exec(h);
-if (h === "onto") state.tab = "onto";
+if (h === "onto" || h === "src") state.tab = h;
 else if (m) { state.tab = m[1]; state.sel[m[1]] = decodeURIComponent(m[2]); }
 render();
 </script>

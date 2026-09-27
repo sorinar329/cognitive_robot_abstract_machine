@@ -195,6 +195,8 @@ data["ontology"] = {
 os.makedirs(OUT, exist_ok=True)
 html = open(os.path.join(ROOT, "gallery", "ontology.html")).read()
 html = html.replace("__DATA__", json.dumps(data, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/"))
+source = {"ttl": open(os.path.join(ONTO_DIR, "windturbine.ttl")).read(), "owl": open(os.path.join(ONTO_DIR, "windturbine.owl")).read()}
+html = html.replace("__SOURCE__", json.dumps(source, ensure_ascii=False).replace("</", "<\\/"))
 with open(os.path.join(OUT, "index.html"), "w") as f:
     f.write(html)
 print(f"wrote {OUT}/index.html ({len(html) // 1024} KB): {len(classes)} classes, {len(oprops)} object properties, "
