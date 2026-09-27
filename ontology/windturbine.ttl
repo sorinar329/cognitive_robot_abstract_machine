@@ -1,0 +1,3073 @@
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix wt: <http://www.semanticweb.org/windturbine-twin/ontology#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+<http://www.semanticweb.org/windturbine-twin/ontology> a owl:Ontology ;
+    dcterms:description "Knowledge representation of an onshore wind turbine (IEA-3.4-130-RWT) for robot inspection and maintenance: components and their structure, faults and how they are observed, maintenance actions, access, and the Unitree G1 tasks. The individuals are generated from the Wind Turbine Twin model."@en ;
+    dcterms:source "IEA Wind TCP Task 37, IEA-3.4-130-RWT (NREL/TP-5000-73492, 2019)" ;
+    dcterms:title "Wind Turbine Twin ontology"@en ;
+    owl:versionInfo "1.0" .
+
+wt:DrivetrainFault a owl:Class ;
+    rdfs:label "Drivetrain Fault"@en ;
+    rdfs:comment "A fault on any part of the drivetrain (partOf is transitive)."@en ;
+    rdfs:subClassOf owl:Thing ;
+    owl:equivalentClass [ a owl:Class ;
+            owl:intersectionOf ( wt:Fault [ a owl:Restriction ;
+                        owl:onProperty wt:affects ;
+                        owl:someValuesFrom [ a owl:Restriction ;
+                                owl:hasValue wt:drivetrain ;
+                                owl:onProperty wt:partOf ] ] ) ] .
+
+wt:DroneInspectableFault a owl:Class ;
+    rdfs:label "Drone Inspectable Fault"@en ;
+    rdfs:comment "A fault a drone camera can see (blades, outside of the nacelle)."@en ;
+    rdfs:subClassOf owl:Thing ;
+    owl:equivalentClass [ a owl:Class ;
+            owl:intersectionOf ( wt:Fault [ a owl:Restriction ;
+                        owl:hasValue wt:modality_drone_rgb ;
+                        owl:onProperty wt:observableBy ] ) ] .
+
+wt:G1InspectableFault a owl:Class ;
+    rdfs:label "G1 Inspectable Fault"@en ;
+    rdfs:comment "A fault at an inspection point that a G1 task visits."@en ;
+    rdfs:subClassOf owl:Thing ;
+    owl:equivalentClass [ a owl:Class ;
+            owl:intersectionOf ( wt:Fault [ a owl:Restriction ;
+                        owl:onProperty wt:observedAt ;
+                        owl:someValuesFrom [ a owl:Restriction ;
+                                owl:onProperty wt:visitedBy ;
+                                owl:someValuesFrom wt:RobotTask ] ] ) ] .
+
+wt:HighSeverityFault a owl:Class ;
+    rdfs:label "High Severity Fault"@en ;
+    rdfs:comment "A fault of high severity."@en ;
+    rdfs:subClassOf owl:Thing ;
+    owl:equivalentClass [ a owl:Class ;
+            owl:intersectionOf ( wt:Fault [ a owl:Restriction ;
+                        owl:hasValue wt:severity_high ;
+                        owl:onProperty wt:hasSeverity ] ) ] .
+
+wt:MonitoredFault a owl:Class ;
+    rdfs:label "Monitored Fault"@en ;
+    rdfs:comment "A fault that also shows in a condition monitoring signal."@en ;
+    rdfs:subClassOf owl:Thing ;
+    owl:equivalentClass [ a owl:Class ;
+            owl:intersectionOf ( wt:Fault [ a owl:Restriction ;
+                        owl:onProperty wt:indicatedBySignal ;
+                        owl:someValuesFrom wt:ConditionSignal ] ) ] .
+
+wt:NacelleFault a owl:Class ;
+    rdfs:label "Nacelle Fault"@en ;
+    rdfs:comment "A fault observed inside the nacelle."@en ;
+    rdfs:subClassOf owl:Thing ;
+    owl:equivalentClass [ a owl:Class ;
+            owl:intersectionOf ( wt:Fault [ a owl:Restriction ;
+                        owl:onProperty wt:observedAt ;
+                        owl:someValuesFrom [ a owl:Restriction ;
+                                owl:hasValue wt:zone_nacelle ;
+                                owl:onProperty wt:locatedInZone ] ] ) ] .
+
+wt:ThermallyDetectableFault a owl:Class ;
+    rdfs:label "Thermally Detectable Fault"@en ;
+    rdfs:comment "A fault a thermal camera can see."@en ;
+    rdfs:subClassOf owl:Thing ;
+    owl:equivalentClass [ a owl:Class ;
+            owl:intersectionOf ( wt:Fault [ a owl:Restriction ;
+                        owl:hasValue wt:modality_thermal ;
+                        owl:onProperty wt:observableBy ] ) ] .
+
+wt:assists a owl:ObjectProperty ;
+    rdfs:label "Assists"@en ;
+    rdfs:comment "Who the task helps."@en ;
+    rdfs:domain wt:RobotTask ;
+    rdfs:range wt:Person .
+
+wt:bedplate a wt:Bedplate,
+        owl:NamedIndividual ;
+    rdfs:label "Bedplate"@en ;
+    wt:mountedOn wt:nacelle ;
+    wt:partOf wt:nacelle_assembly ;
+    wt:urdfLink "bedplate"^^xsd:string .
+
+wt:boltCount a owl:DatatypeProperty,
+        owl:FunctionalProperty ;
+    rdfs:label "Bolt Count"@en ;
+    rdfs:comment "Number of bolts."@en ;
+    rdfs:domain wt:BoltSet ;
+    rdfs:range xsd:integer .
+
+wt:boltSize a owl:DatatypeProperty,
+        owl:FunctionalProperty ;
+    rdfs:label "Bolt Size"@en ;
+    rdfs:comment "Thread size, e.g. M42 (property class 10.9)."@en ;
+    rdfs:domain wt:BoltSet ;
+    rdfs:range xsd:string .
+
+wt:cameraHeight a owl:DatatypeProperty,
+        owl:FunctionalProperty ;
+    rdfs:label "Camera Height"@en ;
+    rdfs:comment "Camera height above the floor (m)."@en ;
+    rdfs:domain wt:Robot ;
+    rdfs:range xsd:decimal .
+
+wt:carries a owl:ObjectProperty ;
+    rdfs:label "Carries"@en ;
+    rdfs:comment "What the robot carries."@en ;
+    rdfs:domain wt:RobotTask ;
+    rdfs:range wt:Tool .
+
+wt:crameraScene a owl:DatatypeProperty,
+        owl:FunctionalProperty ;
+    rdfs:label "Cramera Scene"@en ;
+    rdfs:comment "Name of the CRAMERA recording."@en ;
+    rdfs:domain wt:RobotTask ;
+    rdfs:range xsd:string .
+
+wt:crane_hatch a wt:CraneHatch,
+        owl:NamedIndividual ;
+    rdfs:label "Crane hatch"@en ;
+    wt:mountedOn wt:nacelle ;
+    wt:partOf wt:nacelle_assembly ;
+    wt:urdfLink "crane_hatch"^^xsd:string .
+
+wt:fast_shaft_brake_disc a wt:BrakeDisc,
+        owl:NamedIndividual ;
+    rdfs:label "Fast shaft brake disc"@en ;
+    wt:mountedOn wt:fast_shaft ;
+    wt:partOf wt:fast_shaft ;
+    wt:urdfLink "fast_shaft_brake_disc"^^xsd:string .
+
+wt:fast_shaft_coupling a wt:FlexibleCoupling,
+        owl:NamedIndividual ;
+    rdfs:label "Fast shaft coupling"@en ;
+    wt:mountedOn wt:fast_shaft ;
+    wt:partOf wt:fast_shaft ;
+    wt:urdfLink "fast_shaft_coupling"^^xsd:string .
+
+wt:faultId a owl:DatatypeProperty,
+        owl:FunctionalProperty ;
+    rdfs:label "Fault Id"@en ;
+    rdfs:comment "Identifier of the fault in the model's scenarios."@en ;
+    rdfs:domain wt:Fault ;
+    rdfs:range xsd:string .
+
+wt:fault_blade_1_leading_edge_erosion a wt:Erosion,
+        owl:NamedIndividual ;
+    rdfs:label "blade 1 leading edge: leading edge erosion"@en ;
+    wt:affects wt:blade_1 ;
+    wt:faultId "blade_1.leading_edge_erosion"^^xsd:string ;
+    wt:hasSeverity wt:severity_medium ;
+    wt:indicatedBySignal wt:signal_power_curve_deficit_percent ;
+    wt:observableBy wt:modality_drone_rgb ;
+    wt:observedAt wt:blade_1_inspect_leading_edge ;
+    rdfs:comment "Leading-edge erosion on the outer blade: gelcoat worn through to the laminate"@en .
+
+wt:fault_blade_1_lightning_damage a wt:LightningDamage,
+        owl:NamedIndividual ;
+    rdfs:label "blade 1 tip: lightning damage"@en ;
+    wt:affects wt:blade_1 ;
+    wt:faultId "blade_1.lightning_damage"^^xsd:string ;
+    wt:hasSeverity wt:severity_high ;
+    wt:indicatedBySignal wt:signal_blade_1_lightning_counter ;
+    wt:observableBy wt:modality_drone_rgb ;
+    wt:observedAt wt:blade_1_inspect_tip_receptor ;
+    rdfs:comment "Lightning strike next to the tip receptor: burnt and delaminated shell"@en .
+
+wt:fault_blade_1_trailing_edge_crack a wt:Crack,
+        owl:NamedIndividual ;
+    rdfs:label "blade 1 trailing edge: trailing edge crack"@en ;
+    wt:affects wt:blade_1 ;
+    wt:faultId "blade_1.trailing_edge_crack"^^xsd:string ;
+    wt:hasSeverity wt:severity_high ;
+    wt:observableBy wt:modality_drone_rgb ;
+    wt:observedAt wt:blade_1_inspect_trailing_edge ;
+    rdfs:comment "Trailing-edge bond line split open near the maximum chord"@en .
+
+wt:fault_blade_2_leading_edge_erosion a wt:Erosion,
+        owl:NamedIndividual ;
+    rdfs:label "blade 2 leading edge: leading edge erosion"@en ;
+    wt:affects wt:blade_2 ;
+    wt:faultId "blade_2.leading_edge_erosion"^^xsd:string ;
+    wt:hasSeverity wt:severity_medium ;
+    wt:indicatedBySignal wt:signal_power_curve_deficit_percent ;
+    wt:observableBy wt:modality_drone_rgb ;
+    wt:observedAt wt:blade_2_inspect_leading_edge ;
+    rdfs:comment "Leading-edge erosion on the outer blade: gelcoat worn through to the laminate"@en .
+
+wt:fault_blade_2_lightning_damage a wt:LightningDamage,
+        owl:NamedIndividual ;
+    rdfs:label "blade 2 tip: lightning damage"@en ;
+    wt:affects wt:blade_2 ;
+    wt:faultId "blade_2.lightning_damage"^^xsd:string ;
+    wt:hasSeverity wt:severity_high ;
+    wt:indicatedBySignal wt:signal_blade_2_lightning_counter ;
+    wt:observableBy wt:modality_drone_rgb ;
+    wt:observedAt wt:blade_2_inspect_tip_receptor ;
+    rdfs:comment "Lightning strike next to the tip receptor: burnt and delaminated shell"@en .
+
+wt:fault_blade_2_trailing_edge_crack a wt:Crack,
+        owl:NamedIndividual ;
+    rdfs:label "blade 2 trailing edge: trailing edge crack"@en ;
+    wt:affects wt:blade_2 ;
+    wt:faultId "blade_2.trailing_edge_crack"^^xsd:string ;
+    wt:hasSeverity wt:severity_high ;
+    wt:observableBy wt:modality_drone_rgb ;
+    wt:observedAt wt:blade_2_inspect_trailing_edge ;
+    rdfs:comment "Trailing-edge bond line split open near the maximum chord"@en .
+
+wt:fault_blade_3_leading_edge_erosion a wt:Erosion,
+        owl:NamedIndividual ;
+    rdfs:label "blade 3 leading edge: leading edge erosion"@en ;
+    wt:affects wt:blade_3 ;
+    wt:faultId "blade_3.leading_edge_erosion"^^xsd:string ;
+    wt:hasSeverity wt:severity_medium ;
+    wt:indicatedBySignal wt:signal_power_curve_deficit_percent ;
+    wt:observableBy wt:modality_drone_rgb ;
+    wt:observedAt wt:blade_3_inspect_leading_edge ;
+    rdfs:comment "Leading-edge erosion on the outer blade: gelcoat worn through to the laminate"@en .
+
+wt:fault_blade_3_lightning_damage a wt:LightningDamage,
+        owl:NamedIndividual ;
+    rdfs:label "blade 3 tip: lightning damage"@en ;
+    wt:affects wt:blade_3 ;
+    wt:faultId "blade_3.lightning_damage"^^xsd:string ;
+    wt:hasSeverity wt:severity_high ;
+    wt:indicatedBySignal wt:signal_blade_3_lightning_counter ;
+    wt:observableBy wt:modality_drone_rgb ;
+    wt:observedAt wt:blade_3_inspect_tip_receptor ;
+    rdfs:comment "Lightning strike next to the tip receptor: burnt and delaminated shell"@en .
+
+wt:fault_blade_3_trailing_edge_crack a wt:Crack,
+        owl:NamedIndividual ;
+    rdfs:label "blade 3 trailing edge: trailing edge crack"@en ;
+    wt:affects wt:blade_3 ;
+    wt:faultId "blade_3.trailing_edge_crack"^^xsd:string ;
+    wt:hasSeverity wt:severity_high ;
+    wt:observableBy wt:modality_drone_rgb ;
+    wt:observedAt wt:blade_3_inspect_trailing_edge ;
+    rdfs:comment "Trailing-edge bond line split open near the maximum chord"@en .
+
+wt:fault_brake_disc_overheated a wt:Overheating,
+        owl:NamedIndividual ;
+    rdfs:label "brake disc: disc overheated"@en ;
+    wt:affects wt:brake_caliper ;
+    wt:faultId "brake.disc_overheated"^^xsd:string ;
+    wt:hasSeverity wt:severity_high ;
+    wt:indicatedBySignal wt:signal_brake_disc_temperature_c ;
+    wt:observableBy wt:modality_rgb,
+        wt:modality_thermal ;
+    wt:observedAt wt:brake_inspect_caliper ;
+    rdfs:comment "Brake disc overheated: blue temper colours on the friction faces"@en .
+
+wt:fault_brake_pads_worn a wt:Wear,
+        owl:NamedIndividual ;
+    rdfs:label "brake pads: pads worn"@en ;
+    wt:affects wt:brake_caliper ;
+    wt:faultId "brake.pads_worn"^^xsd:string ;
+    wt:hasSeverity wt:severity_medium ;
+    wt:indicatedBySignal wt:signal_brake_pad_wear_percent ;
+    wt:observableBy wt:modality_rgb ;
+    wt:observedAt wt:brake_inspect_caliper ;
+    rdfs:comment "Brake pads worn to the backing plate, wear pin out, brake dust below"@en .
+
+wt:fault_controller_door_left_open a wt:OpenEnclosure,
+        owl:NamedIndividual ;
+    rdfs:label "controller cabinet: door left open"@en ;
+    wt:affects wt:cabinet_controller_door ;
+    wt:faultId "controller.door_left_open"^^xsd:string ;
+    wt:hasSeverity wt:severity_low ;
+    wt:observableBy wt:modality_rgb ;
+    wt:observedAt wt:controller_inspect_door ;
+    rdfs:comment "Controller cabinet door left open after maintenance"@en .
+
+wt:fault_converter_fault_light a wt:FaultIndication,
+        owl:NamedIndividual ;
+    rdfs:label "converter cabinet: fault light"@en ;
+    wt:affects wt:converter_status_light ;
+    wt:faultId "converter.fault_light"^^xsd:string ;
+    wt:hasSeverity wt:severity_high ;
+    wt:indicatedBySignal wt:signal_converter_fault_code ;
+    wt:observableBy wt:modality_rgb ;
+    wt:observedAt wt:converter_inspect_status ;
+    rdfs:comment "Converter reports a fault: red status light on the cabinet door"@en .
+
+wt:fault_cooling_coolant_low a wt:FluidLevelLow,
+        owl:NamedIndividual ;
+    rdfs:label "cooling unit: coolant low"@en ;
+    wt:affects wt:cooling_level ;
+    wt:faultId "cooling.coolant_low"^^xsd:string ;
+    wt:hasSeverity wt:severity_medium ;
+    wt:indicatedBySignal wt:signal_generator_winding_temperature_c ;
+    wt:observableBy wt:modality_rgb ;
+    wt:observedAt wt:cooling_inspect_level ;
+    rdfs:comment "Coolant below the minimum mark in the expansion tank"@en .
+
+wt:fault_coupling_disc_pack_cracked a wt:Crack,
+        owl:NamedIndividual ;
+    rdfs:label "flexible coupling: disc pack cracked"@en ;
+    wt:affects wt:brake_caliper ;
+    wt:faultId "coupling.disc_pack_cracked"^^xsd:string ;
+    wt:hasSeverity wt:severity_high ;
+    wt:indicatedBySignal wt:signal_generator_vibration_mm_s ;
+    wt:observableBy wt:modality_rgb,
+        wt:modality_vibration ;
+    wt:observedAt wt:coupling_inspect ;
+    rdfs:comment "Crack through the gearbox-side coupling disc pack, a segment displaced"@en .
+
+wt:fault_foundation_earthing_disconnected a wt:Disconnection,
+        owl:NamedIndividual ;
+    rdfs:label "earthing strap: earthing disconnected"@en ;
+    wt:affects wt:foundation ;
+    wt:faultId "foundation.earthing_disconnected"^^xsd:string ;
+    wt:hasSeverity wt:severity_high ;
+    wt:indicatedBySignal wt:signal_earthing_resistance_ohm ;
+    wt:observableBy wt:modality_rgb ;
+    wt:observedAt wt:foundation_inspect_earthing ;
+    rdfs:comment "Earthing strap torn off the tower flange, lying on the plinth"@en .
+
+wt:fault_foundation_grout_breakout a wt:Breakout,
+        owl:NamedIndividual ;
+    rdfs:label "grout joint: grout breakout"@en ;
+    wt:affects wt:foundation ;
+    wt:faultId "foundation.grout_breakout"^^xsd:string ;
+    wt:hasSeverity wt:severity_high ;
+    wt:observableBy wt:modality_rgb ;
+    wt:observedAt wt:foundation_inspect_grout ;
+    rdfs:comment "Grout broken out under the base flange, debris on the plinth"@en .
+
+wt:fault_foundation_plinth_crack a wt:Crack,
+        owl:NamedIndividual ;
+    rdfs:label "foundation plinth: plinth crack"@en ;
+    wt:affects wt:foundation ;
+    wt:faultId "foundation.plinth_crack"^^xsd:string ;
+    wt:hasSeverity wt:severity_medium ;
+    wt:observableBy wt:modality_rgb ;
+    wt:observedAt wt:foundation_inspect_plinth ;
+    rdfs:comment "Crack running down the plinth and across its top towards the grout"@en .
+
+wt:fault_gearbox_cover_bolt_missing a wt:MissingFastener,
+        owl:NamedIndividual ;
+    rdfs:label "inspection cover: cover bolt missing"@en ;
+    wt:affects wt:gearbox_cover_bolts ;
+    wt:faultId "gearbox.cover_bolt_missing"^^xsd:string ;
+    wt:hasSeverity wt:severity_low ;
+    wt:observableBy wt:modality_rgb ;
+    wt:observedAt wt:gearbox_inspect_cover ;
+    rdfs:comment "One inspection cover bolt missing (loosened by vibration)"@en .
+
+wt:fault_gearbox_filter_clogged a wt:Clogging,
+        owl:NamedIndividual ;
+    rdfs:label "offline oil filter: filter clogged"@en ;
+    wt:affects wt:gearbox ;
+    wt:faultId "gearbox.filter_clogged"^^xsd:string ;
+    wt:hasSeverity wt:severity_medium ;
+    wt:indicatedBySignal wt:signal_gearbox_filter_dp_bar,
+        wt:signal_gearbox_oil_particle_count ;
+    wt:observableBy wt:modality_rgb ;
+    wt:observedAt wt:gearbox_inspect_filter ;
+    rdfs:comment "Oil filter clogged, differential pressure indicator popped out"@en .
+
+wt:fault_gearbox_oil_leak_input_seal a wt:OilLeak,
+        owl:NamedIndividual ;
+    rdfs:label "input shaft seal: oil leak input seal"@en ;
+    wt:affects wt:gearbox ;
+    wt:faultId "gearbox.oil_leak_input_seal"^^xsd:string ;
+    wt:hasSeverity wt:severity_high ;
+    wt:indicatedBySignal wt:signal_gearbox_oil_level ;
+    wt:observableBy wt:modality_rgb ;
+    wt:observedAt wt:gearbox_inspect_input_seal ;
+    rdfs:comment "Worn input shaft seal: oil runs down the front cover and pools on the floor"@en .
+
+wt:fault_gearbox_oil_level_low a wt:FluidLevelLow,
+        owl:NamedIndividual ;
+    rdfs:label "oil sump: oil level low"@en ;
+    wt:affects wt:gearbox_sight_glass ;
+    wt:faultId "gearbox.oil_level_low"^^xsd:string ;
+    wt:hasSeverity wt:severity_high ;
+    wt:indicatedBySignal wt:signal_gearbox_oil_level,
+        wt:signal_gearbox_oil_temperature_c ;
+    wt:observableBy wt:modality_rgb ;
+    wt:observedAt wt:gearbox_inspect_sight_glass ;
+    rdfs:comment "Oil level below minimum in the sight glass"@en .
+
+wt:fault_gearbox_torque_arm_bushing_cracked a wt:Crack,
+        owl:NamedIndividual ;
+    rdfs:label "torque arm bushing (-Y): torque arm bushing cracked"@en ;
+    wt:affects wt:gearbox ;
+    wt:faultId "gearbox.torque_arm_bushing_cracked"^^xsd:string ;
+    wt:hasSeverity wt:severity_medium ;
+    wt:indicatedBySignal wt:signal_gearbox_vibration_mm_s ;
+    wt:observableBy wt:modality_rgb,
+        wt:modality_vibration ;
+    wt:observedAt wt:gearbox_inspect_bushing_left ;
+    rdfs:comment "Elastomer bushing aged: torn and bulging out of the arm eye, gearbox vibrates more"@en .
+
+wt:fault_generator_slip_ring_carbon_dust a wt:Contamination,
+        owl:NamedIndividual ;
+    rdfs:label "slip ring / brushes: slip ring carbon dust"@en ;
+    wt:affects wt:generator ;
+    wt:faultId "generator.slip_ring_carbon_dust"^^xsd:string ;
+    wt:hasSeverity wt:severity_medium ;
+    wt:indicatedBySignal wt:signal_generator_brush_wear_percent ;
+    wt:observableBy wt:modality_rgb ;
+    wt:observedAt wt:generator_inspect_slip_ring ;
+    rdfs:comment "Worn slip-ring brushes: carbon dust below the housing and on the cover"@en .
+
+wt:fault_generator_terminal_box_overheating a wt:Overheating,
+        owl:NamedIndividual ;
+    rdfs:label "terminal box: terminal box overheating"@en ;
+    wt:affects wt:generator ;
+    wt:faultId "generator.terminal_box_overheating"^^xsd:string ;
+    wt:hasSeverity wt:severity_high ;
+    wt:indicatedBySignal wt:signal_generator_terminal_temperature_c ;
+    wt:observableBy wt:modality_rgb,
+        wt:modality_thermal ;
+    wt:observedAt wt:generator_inspect_terminal_box ;
+    rdfs:comment "Loose power connection overheating the terminal box, paint scorched"@en .
+
+wt:fault_hydraulic_hose_leak a wt:HydraulicLeak,
+        owl:NamedIndividual ;
+    rdfs:label "hydraulic unit: hose leak"@en ;
+    wt:affects wt:hydraulic_unit ;
+    wt:faultId "hydraulic.hose_leak"^^xsd:string ;
+    wt:hasSeverity wt:severity_medium ;
+    wt:indicatedBySignal wt:signal_hydraulic_pressure_bar ;
+    wt:observableBy wt:modality_rgb ;
+    wt:observedAt wt:hydraulic_inspect ;
+    rdfs:comment "Brake hose fitting leaking: oil down the tank and onto the walkway"@en .
+
+wt:fault_main_bearing_grease_collector_full a wt:ServiceDue,
+        owl:NamedIndividual ;
+    rdfs:label "grease collector: grease collector full"@en ;
+    wt:affects wt:main_bearing_grease_collector ;
+    wt:faultId "main_bearing.grease_collector_full"^^xsd:string ;
+    wt:hasSeverity wt:severity_low ;
+    wt:observableBy wt:modality_rgb ;
+    wt:observedAt wt:main_bearing_inspect_grease_collector ;
+    rdfs:comment "Used-grease collector full, must be emptied"@en .
+
+wt:fault_main_bearing_grease_leak_front_seal a wt:GreaseLeak,
+        owl:NamedIndividual ;
+    rdfs:label "main bearing upwind seal: grease leak front seal"@en ;
+    wt:affects wt:main_bearing ;
+    wt:faultId "main_bearing.grease_leak_front_seal"^^xsd:string ;
+    wt:hasSeverity wt:severity_medium ;
+    wt:indicatedBySignal wt:signal_main_bearing_temperature_c ;
+    wt:observableBy wt:modality_rgb ;
+    wt:observedAt wt:main_bearing_inspect_front_seal ;
+    rdfs:comment "Front main bearing downwind seal worn: grease pushed out and running onto the bearing foot"@en .
+
+wt:fault_main_shaft_fretting_corrosion a wt:Corrosion,
+        owl:NamedIndividual ;
+    rdfs:label "shaft / shrink disc interface: fretting corrosion"@en ;
+    wt:affects wt:main_shaft ;
+    wt:faultId "main_shaft.fretting_corrosion"^^xsd:string ;
+    wt:hasSeverity wt:severity_medium ;
+    wt:indicatedBySignal wt:signal_drivetrain_vibration_mm_s ;
+    wt:observableBy wt:modality_rgb ;
+    wt:observedAt wt:main_shaft_inspect_shrink_disc ;
+    rdfs:comment "Fretting corrosion: red-brown powder where the shaft enters the shrink disc"@en .
+
+wt:fault_main_shaft_shrink_disc_bolt_loose a wt:LooseFastener,
+        owl:NamedIndividual ;
+    rdfs:label "shrink disc: shrink disc bolt loose"@en ;
+    wt:affects wt:main_shaft_shrink_disc_bolts ;
+    wt:faultId "main_shaft.shrink_disc_bolt_loose"^^xsd:string ;
+    wt:hasSeverity wt:severity_high ;
+    wt:observableBy wt:modality_rgb ;
+    wt:observedAt wt:main_shaft_inspect_shrink_disc ;
+    rdfs:comment "One shrink disc bolt backed out, torque marker no longer aligned"@en .
+
+wt:fault_nacelle_anemometer_damaged a wt:MechanicalDamage,
+        owl:NamedIndividual ;
+    rdfs:label "anemometer: anemometer damaged"@en ;
+    wt:affects wt:anemometer ;
+    wt:faultId "nacelle.anemometer_damaged"^^xsd:string ;
+    wt:hasSeverity wt:severity_medium ;
+    wt:indicatedBySignal wt:signal_anemometer_plausible ;
+    wt:observableBy wt:modality_drone_rgb ;
+    wt:observedAt wt:nacelle_inspect_weather_mast ;
+    rdfs:comment "Cup anemometer damaged: one cup torn off, one arm bent"@en .
+
+wt:fault_nacelle_aviation_light_failed a wt:LightFailure,
+        owl:NamedIndividual ;
+    rdfs:label "aviation obstruction light: aviation light failed"@en ;
+    wt:affects wt:aviation_light ;
+    wt:faultId "nacelle.aviation_light_failed"^^xsd:string ;
+    wt:hasSeverity wt:severity_high ;
+    wt:indicatedBySignal wt:signal_aviation_light_on ;
+    wt:observableBy wt:modality_drone_rgb ;
+    wt:observedAt wt:nacelle_inspect_weather_mast ;
+    rdfs:comment "Aviation light dark with a broken dome"@en .
+
+wt:fault_nacelle_cover_crack a wt:Crack,
+        owl:NamedIndividual ;
+    rdfs:label "nacelle cover: cover crack"@en ;
+    wt:affects wt:nacelle ;
+    wt:faultId "nacelle.cover_crack"^^xsd:string ;
+    wt:hasSeverity wt:severity_low ;
+    wt:observableBy wt:modality_drone_rgb ;
+    wt:observedAt wt:nacelle_inspect_cover ;
+    rdfs:comment "Crack in the GRP cover on the -Y side, rain can get in"@en .
+
+wt:fault_rotor_lock_left_engaged a wt:LockEngaged,
+        owl:NamedIndividual ;
+    rdfs:label "rotor lock: left engaged"@en ;
+    wt:affects wt:rotor_lock ;
+    wt:faultId "rotor_lock.left_engaged"^^xsd:string ;
+    wt:hasSeverity wt:severity_high ;
+    wt:observableBy wt:modality_rgb ;
+    wt:observedAt wt:rotor_lock_inspect ;
+    rdfs:comment "Rotor lock pin left engaged after maintenance"@en .
+
+wt:fault_safety_extinguisher_missing a wt:MissingSafetyEquipment,
+        owl:NamedIndividual ;
+    rdfs:label "fire extinguisher: extinguisher missing"@en ;
+    wt:affects wt:nacelle ;
+    wt:faultId "safety.extinguisher_missing"^^xsd:string ;
+    wt:hasSeverity wt:severity_high ;
+    wt:observableBy wt:modality_rgb ;
+    wt:observedAt wt:safety_inspect_extinguisher ;
+    rdfs:comment "Fire extinguisher missing from its bracket"@en .
+
+wt:fault_tower_anchor_nut_corrosion a wt:Corrosion,
+        owl:NamedIndividual ;
+    rdfs:label "anchor bolts: anchor nut corrosion"@en ;
+    wt:affects wt:anchor_bolts ;
+    wt:faultId "tower.anchor_nut_corrosion"^^xsd:string ;
+    wt:hasSeverity wt:severity_medium ;
+    wt:observableBy wt:modality_rgb ;
+    wt:observedAt wt:tower_inspect_anchor_nuts ;
+    rdfs:comment "Corroded anchor nuts in one sector, rust running onto the plinth"@en .
+
+wt:fault_tower_base_coating_damage a wt:CoatingDamage,
+        owl:NamedIndividual ;
+    rdfs:label "tower coating: base coating damage"@en ;
+    wt:affects wt:tower_section_1 ;
+    wt:faultId "tower.base_coating_damage"^^xsd:string ;
+    wt:hasSeverity wt:severity_low ;
+    wt:observableBy wt:modality_rgb ;
+    wt:observedAt wt:tower_inspect_base_coating ;
+    rdfs:comment "Paint damage with rust patches and a rust streak near the tower base"@en .
+
+wt:fault_tower_cable_loop_chafed a wt:Chafing,
+        owl:NamedIndividual ;
+    rdfs:label "cable loop: cable loop chafed"@en ;
+    wt:affects wt:cable_loop ;
+    wt:faultId "tower.cable_loop_chafed"^^xsd:string ;
+    wt:hasSeverity wt:severity_high ;
+    wt:observableBy wt:modality_rgb ;
+    wt:observedAt wt:tower_inspect_cable_loop ;
+    rdfs:comment "Cable loop rubbed through at the saddle edge, copper showing, insulation flakes on the deck"@en .
+
+wt:fault_tower_flange_2_bolts_loose a wt:LooseFastener,
+        owl:NamedIndividual ;
+    rdfs:label "flange 2 bolts: flange 2 bolts loose"@en ;
+    wt:affects wt:flange_2_bolts ;
+    wt:faultId "tower.flange_2_bolts_loose"^^xsd:string ;
+    wt:hasSeverity wt:severity_high ;
+    wt:observableBy wt:modality_rgb ;
+    wt:observedAt wt:tower_inspect_flange_2 ;
+    rdfs:comment "Torque markings turned on flange 2: nut 20 by 25 deg, nut 21 by 40 deg, nut 22 by 180 deg, nut 60 by 15 deg (turning back 105 deg releases all preload)"@en .
+
+wt:fault_tower_flange_3_bolts_loose a wt:LooseFastener,
+        owl:NamedIndividual ;
+    rdfs:label "flange 3 bolts: flange 3 bolts loose"@en ;
+    wt:affects wt:flange_3_bolts ;
+    wt:faultId "tower.flange_3_bolts_loose"^^xsd:string ;
+    wt:hasSeverity wt:severity_medium ;
+    wt:observableBy wt:modality_rgb ;
+    wt:observedAt wt:tower_inspect_flange_3 ;
+    rdfs:comment "Torque markings turned on flange 3: nut 75 by 14 deg (turning back 117 deg releases all preload)"@en .
+
+wt:fire_extinguisher a wt:FireExtinguisher,
+        owl:NamedIndividual ;
+    rdfs:label "Fire extinguisher"@en ;
+    wt:mountedOn wt:nacelle ;
+    wt:partOf wt:nacelle_assembly ;
+    wt:urdfLink "fire_extinguisher"^^xsd:string .
+
+wt:flange_1_bolts a wt:FlangeBoltSet,
+        owl:NamedIndividual ;
+    rdfs:label "Flange 1 bolts"@en ;
+    wt:boltCount 132 ;
+    wt:boltSize "M42 10.9"^^xsd:string ;
+    wt:fastens wt:tower_section_1,
+        wt:tower_section_2 ;
+    wt:heightAboveGround 21.67 ;
+    wt:mountedOn wt:tower_section_1 ;
+    wt:partOf wt:tower ;
+    wt:preload 784.0 ;
+    wt:tighteningTorque 4281 ;
+    wt:turnToPreload 104.5 ;
+    wt:urdfLink "flange_1_bolts"^^xsd:string .
+
+wt:foundation_earthing a wt:EarthingStrap,
+        owl:NamedIndividual ;
+    rdfs:label "Foundation earthing"@en ;
+    wt:mountedOn wt:foundation ;
+    wt:partOf wt:foundation_system ;
+    wt:urdfLink "foundation_earthing"^^xsd:string .
+
+wt:foundation_grout a wt:GroutJoint,
+        owl:NamedIndividual ;
+    rdfs:label "Foundation grout"@en ;
+    wt:mountedOn wt:foundation ;
+    wt:partOf wt:foundation_system ;
+    wt:urdfLink "foundation_grout"^^xsd:string .
+
+wt:gearbox_bushing_left a wt:TorqueArmBushing,
+        owl:NamedIndividual ;
+    rdfs:label "Gearbox bushing left"@en ;
+    wt:mountedOn wt:gearbox ;
+    wt:partOf wt:gearbox ;
+    wt:urdfLink "gearbox_bushing_left"^^xsd:string .
+
+wt:gearbox_filter_indicator a wt:OilFilterIndicator,
+        owl:NamedIndividual ;
+    rdfs:label "Gearbox filter indicator"@en ;
+    wt:mountedOn wt:gearbox ;
+    wt:partOf wt:gearbox ;
+    wt:urdfLink "gearbox_filter_indicator"^^xsd:string .
+
+wt:gearbox_inspect_bushing_right a wt:InspectionPoint,
+        owl:NamedIndividual ;
+    rdfs:label "Gearbox: bushing right"@en ;
+    wt:inspects wt:gearbox ;
+    wt:locatedInZone wt:zone_nacelle ;
+    wt:viewDistance 0.7 ;
+    rdfs:comment "torque arm elastomer bushing (+Y side)"@en .
+
+wt:ground a wt:Ground,
+        owl:NamedIndividual ;
+    rdfs:label "Ground"@en ;
+    wt:urdfLink "ground"^^xsd:string .
+
+wt:ground_controller a wt:GroundController,
+        owl:NamedIndividual ;
+    rdfs:label "Ground controller"@en ;
+    wt:mountedOn wt:tower_section_1 ;
+    wt:partOf wt:tower ;
+    wt:urdfLink "ground_controller"^^xsd:string .
+
+wt:heightAboveGround a owl:DatatypeProperty,
+        owl:FunctionalProperty ;
+    rdfs:label "Height Above Ground"@en ;
+    rdfs:comment "Height above ground (m)."@en ;
+    rdfs:domain wt:PhysicalObject ;
+    rdfs:range xsd:decimal .
+
+wt:hubHeight a owl:DatatypeProperty,
+        owl:FunctionalProperty ;
+    rdfs:label "Hub Height"@en ;
+    rdfs:comment "Hub height above ground (m)."@en ;
+    rdfs:domain wt:WindTurbine ;
+    rdfs:range xsd:decimal .
+
+wt:ladder_1 a wt:Ladder,
+        owl:NamedIndividual ;
+    rdfs:label "Ladder 1"@en ;
+    wt:mountedOn wt:tower_section_1 ;
+    wt:partOf wt:tower ;
+    wt:urdfLink "ladder_1"^^xsd:string .
+
+wt:ladder_2 a wt:Ladder,
+        owl:NamedIndividual ;
+    rdfs:label "Ladder 2"@en ;
+    wt:mountedOn wt:tower_section_2 ;
+    wt:partOf wt:tower ;
+    wt:urdfLink "ladder_2"^^xsd:string .
+
+wt:ladder_3 a wt:Ladder,
+        owl:NamedIndividual ;
+    rdfs:label "Ladder 3"@en ;
+    wt:mountedOn wt:tower_section_3 ;
+    wt:partOf wt:tower ;
+    wt:urdfLink "ladder_3"^^xsd:string .
+
+wt:ladder_4 a wt:Ladder,
+        owl:NamedIndividual ;
+    rdfs:label "Ladder 4"@en ;
+    wt:mountedOn wt:tower_section_4 ;
+    wt:partOf wt:tower ;
+    wt:urdfLink "ladder_4"^^xsd:string .
+
+wt:lift_rails a wt:LiftGuide,
+        owl:NamedIndividual ;
+    rdfs:label "Lift rails"@en ;
+    wt:mountedOn wt:tower_section_1 ;
+    wt:partOf wt:service_lift ;
+    wt:urdfLink "lift_rails"^^xsd:string .
+
+wt:mass a owl:DatatypeProperty,
+        owl:FunctionalProperty ;
+    rdfs:label "Mass"@en ;
+    rdfs:comment "Mass (kg)."@en ;
+    rdfs:domain wt:PhysicalObject ;
+    rdfs:range xsd:decimal .
+
+wt:mountedOn a owl:ObjectProperty ;
+    rdfs:label "Mounted On"@en ;
+    rdfs:comment "Kinematic parent in the model (URDF): what a part is attached to."@en ;
+    rdfs:domain wt:PhysicalObject ;
+    rdfs:range wt:PhysicalObject .
+
+wt:nacelle_floor_hatch a wt:FloorHatch,
+        owl:NamedIndividual ;
+    rdfs:label "Nacelle floor hatch"@en ;
+    wt:mountedOn wt:nacelle ;
+    wt:partOf wt:nacelle_assembly ;
+    wt:urdfLink "nacelle_floor_hatch"^^xsd:string .
+
+wt:nominalValue a owl:DatatypeProperty,
+        owl:FunctionalProperty ;
+    rdfs:label "Nominal Value"@en ;
+    rdfs:comment "Value of the healthy turbine."@en ;
+    rdfs:domain wt:ConditionSignal ;
+    rdfs:range xsd:decimal .
+
+wt:platform_1 a wt:RestPlatform,
+        owl:NamedIndividual ;
+    rdfs:label "Platform 1"@en ;
+    wt:heightAboveGround 20.57 ;
+    wt:locatedInZone wt:zone_tower ;
+    wt:mountedOn wt:tower_section_1 ;
+    wt:partOf wt:tower ;
+    wt:urdfLink "platform_1"^^xsd:string .
+
+wt:platform_2 a wt:RestPlatform,
+        owl:NamedIndividual ;
+    rdfs:label "Platform 2"@en ;
+    wt:heightAboveGround 52.98 ;
+    wt:locatedInZone wt:zone_tower ;
+    wt:mountedOn wt:tower_section_2 ;
+    wt:partOf wt:tower ;
+    wt:urdfLink "platform_2"^^xsd:string .
+
+wt:platform_3 a wt:RestPlatform,
+        owl:NamedIndividual ;
+    rdfs:label "Platform 3"@en ;
+    wt:heightAboveGround 85.39 ;
+    wt:locatedInZone wt:zone_tower ;
+    wt:mountedOn wt:tower_section_3 ;
+    wt:partOf wt:tower ;
+    wt:urdfLink "platform_3"^^xsd:string .
+
+wt:platform_4 a wt:YawDeck,
+        owl:NamedIndividual ;
+    rdfs:label "Platform 4"@en ;
+    wt:heightAboveGround 105.46 ;
+    wt:locatedInZone wt:zone_tower ;
+    wt:mountedOn wt:tower_section_4 ;
+    wt:partOf wt:tower ;
+    wt:urdfLink "platform_4"^^xsd:string .
+
+wt:preload a owl:DatatypeProperty,
+        owl:FunctionalProperty ;
+    rdfs:label "Preload"@en ;
+    rdfs:comment "Specified preload per bolt (kN), F_p,C = 0.7 f_ub A_s."@en ;
+    rdfs:domain wt:BoltSet ;
+    rdfs:range xsd:decimal .
+
+wt:ratedPower a owl:DatatypeProperty,
+        owl:FunctionalProperty ;
+    rdfs:label "Rated Power"@en ;
+    rdfs:comment "Rated power (MW)."@en ;
+    rdfs:domain wt:WindTurbine ;
+    rdfs:range xsd:decimal .
+
+wt:rides a owl:ObjectProperty ;
+    rdfs:label "Rides"@en ;
+    rdfs:comment "Equipment the robot rides in a task."@en ;
+    rdfs:domain wt:RobotTask ;
+    rdfs:range wt:HandlingEquipment .
+
+wt:rotorDiameter a owl:DatatypeProperty,
+        owl:FunctionalProperty ;
+    rdfs:label "Rotor Diameter"@en ;
+    rdfs:comment "Rotor diameter (m)."@en ;
+    rdfs:domain wt:WindTurbine ;
+    rdfs:range xsd:decimal .
+
+wt:rotor_lock_pin a wt:RotorLockPin,
+        owl:NamedIndividual ;
+    rdfs:label "Rotor lock pin"@en ;
+    wt:mountedOn wt:rotor_lock ;
+    wt:partOf wt:rotor_lock ;
+    wt:urdfLink "rotor_lock_pin"^^xsd:string .
+
+wt:safety_equipment a wt:SafetyKit,
+        owl:NamedIndividual ;
+    rdfs:label "Safety equipment"@en ;
+    wt:mountedOn wt:nacelle ;
+    wt:partOf wt:nacelle_assembly ;
+    wt:urdfLink "safety_equipment"^^xsd:string .
+
+wt:scriptPath a owl:DatatypeProperty,
+        owl:FunctionalProperty ;
+    rdfs:label "Script Path"@en ;
+    rdfs:comment "The CRAM plan script in the model repository."@en ;
+    rdfs:domain wt:RobotTask ;
+    rdfs:range xsd:string .
+
+wt:severityRank a owl:DatatypeProperty,
+        owl:FunctionalProperty ;
+    rdfs:label "Severity Rank"@en ;
+    rdfs:comment "1 low, 2 medium, 3 high."@en ;
+    rdfs:domain wt:Severity ;
+    rdfs:range xsd:integer .
+
+wt:speed a owl:DatatypeProperty,
+        owl:FunctionalProperty ;
+    rdfs:label "Speed"@en ;
+    rdfs:comment "Speed in the simulation (m/s)."@en ;
+    rdfs:domain wt:HandlingEquipment ;
+    rdfs:range xsd:decimal .
+
+wt:takesPlaceIn a owl:ObjectProperty ;
+    rdfs:label "Takes Place In"@en ;
+    rdfs:comment "Zones a task works in."@en ;
+    rdfs:domain wt:RobotTask ;
+    rdfs:range wt:Zone .
+
+wt:task_t0 a wt:InspectionRound,
+        owl:NamedIndividual ;
+    rdfs:label "T0: look at the tower door"@en ;
+    wt:crameraScene "windturbine_g1_t1"^^xsd:string ;
+    wt:performedBy wt:g1 ;
+    wt:scriptPath "scripts/g1_inspection_round.py"^^xsd:string ;
+    wt:takesPlaceIn wt:zone_outside ;
+    wt:usesAction wt:action_LookAtAction,
+        wt:action_NavigateAction ;
+    wt:visits wt:tower_inspect_door .
+
+wt:task_t1 a wt:InspectionRound,
+        owl:NamedIndividual ;
+    rdfs:label "T1: tower base round"@en ;
+    wt:crameraScene "windturbine_g1_t1"^^xsd:string ;
+    wt:performedBy wt:g1 ;
+    wt:scriptPath "scripts/g1_inspection_round.py"^^xsd:string ;
+    wt:takesPlaceIn wt:zone_outside ;
+    wt:usesAction wt:action_LookAtAction,
+        wt:action_NavigateAction,
+        wt:action_ParkArmsAction ;
+    wt:visits wt:foundation_inspect_earthing,
+        wt:foundation_inspect_grout,
+        wt:foundation_inspect_plinth,
+        wt:tower_inspect_anchor_nuts,
+        wt:tower_inspect_base_coating,
+        wt:tower_inspect_door .
+
+wt:task_t2 a wt:InspectionRound,
+        owl:NamedIndividual ;
+    rdfs:label "T2: nacelle walkway round"@en ;
+    wt:crameraScene "windturbine_g1_t2"^^xsd:string ;
+    wt:performedBy wt:g1 ;
+    wt:scriptPath "scripts/g1_inspection_round.py"^^xsd:string ;
+    wt:takesPlaceIn wt:zone_nacelle ;
+    wt:usesAction wt:action_LookAtAction,
+        wt:action_ParkArmsAction,
+        wt:action_StraightMove ;
+    wt:visits wt:gearbox_inspect_bushing_left,
+        wt:gearbox_inspect_input_seal,
+        wt:gearbox_inspect_sight_glass,
+        wt:generator_inspect_slip_ring,
+        wt:main_bearing_inspect_grease_collector,
+        wt:main_shaft_inspect_shrink_disc .
+
+wt:task_t3 a wt:AssistanceTask,
+        owl:NamedIndividual ;
+    rdfs:label "T3: find the loose bolt, bring the torque tool"@en ;
+    wt:assists wt:technician ;
+    wt:carries wt:torque_tool_case ;
+    wt:crameraScene "windturbine_g1_t3"^^xsd:string ;
+    wt:performedBy wt:g1 ;
+    wt:scriptPath "scripts/g1_bring_the_tool.py"^^xsd:string ;
+    wt:takesPlaceIn wt:zone_nacelle ;
+    wt:usesAction wt:action_LookAtAction,
+        wt:action_ParkArmsAction,
+        wt:action_PickUpAction,
+        wt:action_PlaceAction,
+        wt:action_StraightMove ;
+    wt:visits wt:main_shaft_inspect_shrink_disc .
+
+wt:task_t4 a wt:AccessTask,
+        owl:NamedIndividual ;
+    rdfs:label "T4: crane hoist into the nacelle"@en ;
+    wt:crameraScene "windturbine_g1_t4"^^xsd:string ;
+    wt:performedBy wt:g1 ;
+    wt:rides wt:lifting_platform ;
+    wt:scriptPath "scripts/g1_climb.py"^^xsd:string ;
+    wt:takesPlaceIn wt:zone_nacelle,
+        wt:zone_outside ;
+    wt:usesAction wt:action_LookAtAction,
+        wt:action_RideCarrier,
+        wt:action_StraightMove ;
+    wt:visits wt:controller_inspect_door .
+
+wt:task_t5 a wt:AccessTask,
+        owl:NamedIndividual ;
+    rdfs:label "T5: tower lift to the yaw deck"@en ;
+    wt:crameraScene "windturbine_g1_t5"^^xsd:string ;
+    wt:performedBy wt:g1 ;
+    wt:rides wt:service_lift ;
+    wt:scriptPath "scripts/g1_climb.py"^^xsd:string ;
+    wt:takesPlaceIn wt:zone_outside,
+        wt:zone_tower ;
+    wt:usesAction wt:action_LookAtAction,
+        wt:action_RideCarrier,
+        wt:action_StraightMove ;
+    wt:visits wt:tower_inspect_cable_loop .
+
+wt:task_t6 a wt:BoltCheck,
+        owl:NamedIndividual ;
+    rdfs:label "T6: flange bolt check"@en ;
+    wt:crameraScene "windturbine_g1_t6"^^xsd:string ;
+    wt:performedBy wt:g1 ;
+    wt:rides wt:service_lift ;
+    wt:scriptPath "scripts/g1_tower_bolts.py"^^xsd:string ;
+    wt:takesPlaceIn wt:zone_outside,
+        wt:zone_tower ;
+    wt:usesAction wt:action_LookAtAction,
+        wt:action_RideCarrier,
+        wt:action_StraightMove ;
+    wt:visits wt:tower_inspect_flange_1,
+        wt:tower_inspect_flange_2,
+        wt:tower_inspect_flange_3 .
+
+wt:tighteningTorque a owl:DatatypeProperty,
+        owl:FunctionalProperty ;
+    rdfs:label "Tightening Torque"@en ;
+    rdfs:comment "Tightening torque (Nm), torque coefficient 0.13."@en ;
+    rdfs:domain wt:BoltSet ;
+    rdfs:range xsd:decimal .
+
+wt:tool_rack a wt:ToolRack,
+        owl:NamedIndividual ;
+    rdfs:label "Tool rack"@en ;
+    wt:mountedOn wt:nacelle ;
+    wt:partOf wt:nacelle_assembly ;
+    wt:urdfLink "tool_rack"^^xsd:string .
+
+wt:tool_tray a wt:ToolTray,
+        owl:NamedIndividual ;
+    rdfs:label "Tool tray"@en ;
+    wt:mountedOn wt:nacelle ;
+    wt:partOf wt:nacelle_assembly ;
+    wt:urdfLink "tool_tray"^^xsd:string .
+
+wt:towerHeight a owl:DatatypeProperty,
+        owl:FunctionalProperty ;
+    rdfs:label "Tower Height"@en ;
+    rdfs:comment "Tower height (m)."@en ;
+    rdfs:domain wt:WindTurbine ;
+    rdfs:range xsd:decimal .
+
+wt:tower_door a wt:TowerDoor,
+        owl:NamedIndividual ;
+    rdfs:label "Tower door"@en ;
+    wt:mountedOn wt:tower_section_1 ;
+    wt:partOf wt:tower_section_1 ;
+    wt:providesAccessTo wt:zone_tower ;
+    wt:urdfLink "tower_door"^^xsd:string .
+
+wt:transformer a wt:Transformer,
+        owl:NamedIndividual ;
+    rdfs:label "Transformer"@en ;
+    wt:mountedOn wt:nacelle ;
+    wt:partOf wt:nacelle_assembly ;
+    wt:urdfLink "transformer"^^xsd:string .
+
+wt:travel a owl:DatatypeProperty,
+        owl:FunctionalProperty ;
+    rdfs:label "Travel"@en ;
+    rdfs:comment "Travel of a lift or hoist (m)."@en ;
+    rdfs:domain wt:HandlingEquipment ;
+    rdfs:range xsd:decimal .
+
+wt:turnToPreload a owl:DatatypeProperty,
+        owl:FunctionalProperty ;
+    rdfs:label "Turn To Preload"@en ;
+    rdfs:comment "Nut turn from snug to full preload (deg); turning back by it releases all preload."@en ;
+    rdfs:domain wt:BoltSet ;
+    rdfs:range xsd:decimal .
+
+wt:unit a owl:DatatypeProperty,
+        owl:FunctionalProperty ;
+    rdfs:label "Unit"@en ;
+    rdfs:comment "Unit of the signal."@en ;
+    rdfs:domain wt:ConditionSignal ;
+    rdfs:range xsd:string .
+
+wt:urdfLink a owl:DatatypeProperty,
+        owl:FunctionalProperty ;
+    rdfs:label "Urdf Link"@en ;
+    rdfs:comment "Name of the link in the model's URDF."@en ;
+    rdfs:domain wt:PhysicalObject ;
+    rdfs:range xsd:string .
+
+wt:usesAction a owl:ObjectProperty ;
+    rdfs:label "Uses Action"@en ;
+    rdfs:comment "CRAM actions in the task's plan."@en ;
+    rdfs:domain wt:RobotTask ;
+    rdfs:range wt:CRAMAction .
+
+wt:vestas_v90_safety a wt:MaintenanceDocument,
+        owl:NamedIndividual ;
+    rdfs:label "Vestas V90-3 MW safety regulations for operators and technicians."@en ;
+    rdfs:comment "Vestas V90-3 MW safety regulations for operators and technicians."@en .
+
+wt:viewDistance a owl:DatatypeProperty,
+        owl:FunctionalProperty ;
+    rdfs:label "View Distance"@en ;
+    rdfs:comment "Camera distance to look from (m)."@en ;
+    rdfs:domain wt:InspectionPoint ;
+    rdfs:range xsd:decimal .
+
+wt:visits a owl:ObjectProperty ;
+    rdfs:label "Visits"@en ;
+    rdfs:comment "Inspection points a task looks at."@en ;
+    rdfs:domain wt:RobotTask ;
+    rdfs:range wt:InspectionPoint ;
+    owl:inverseOf wt:visitedBy .
+
+wt:AnchorBoltSet a owl:Class ;
+    rdfs:label "Anchor Bolt Set"@en ;
+    rdfs:comment "Anchor bolts and nuts of the tower base flange."@en ;
+    rdfs:subClassOf wt:BoltSet .
+
+wt:Anemometer a owl:Class ;
+    rdfs:label "Anemometer"@en ;
+    rdfs:comment "Cup anemometer."@en ;
+    rdfs:subClassOf wt:AuxiliarySystem .
+
+wt:AssistanceTask a owl:Class ;
+    rdfs:label "Assistance Task"@en ;
+    rdfs:comment "Help a technician, e.g. by bringing tools."@en ;
+    rdfs:subClassOf wt:RobotTask .
+
+wt:AviationLight a owl:Class ;
+    rdfs:label "Aviation Light"@en ;
+    rdfs:comment "Aviation obstruction light."@en ;
+    rdfs:subClassOf wt:AuxiliarySystem .
+
+wt:Bedplate a owl:Class ;
+    rdfs:label "Bedplate"@en ;
+    rdfs:comment "Nacelle main frame carrying the drivetrain."@en ;
+    rdfs:subClassOf wt:StructuralComponent .
+
+wt:BoltCheck a owl:Class ;
+    rdfs:label "Bolt Check"@en ;
+    rdfs:comment "Read torque markings of a bolted joint and assess its preload."@en ;
+    rdfs:subClassOf wt:InspectionRound .
+
+wt:BrakeCaliper a owl:Class ;
+    rdfs:label "Brake Caliper"@en ;
+    rdfs:comment "Hydraulic brake caliper."@en ;
+    rdfs:subClassOf wt:DrivetrainComponent .
+
+wt:BrakeDisc a owl:Class ;
+    rdfs:label "Brake Disc"@en ;
+    rdfs:comment "Disc of the mechanical rotor brake."@en ;
+    rdfs:subClassOf wt:DrivetrainComponent .
+
+wt:Breakout a owl:Class ;
+    rdfs:label "Breakout"@en ;
+    rdfs:comment "Material broken out, e.g. grout."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty wt:remediedBy ;
+            owl:someValuesFrom wt:StructuralRepair ],
+        wt:MaterialDegradation .
+
+wt:CableLoop a owl:Class ;
+    rdfs:label "Cable Loop"@en ;
+    rdfs:comment "Power cable loop under the yaw bearing, allowing the nacelle to yaw."@en ;
+    rdfs:subClassOf wt:ElectricalComponent .
+
+wt:Chafing a owl:Class ;
+    rdfs:label "Chafing"@en ;
+    rdfs:comment "Rubbing damage, e.g. cable insulation."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty wt:remediedBy ;
+            owl:someValuesFrom wt:ReplacePart ],
+        wt:MaterialDegradation .
+
+wt:Clean a owl:Class ;
+    rdfs:label "Clean"@en ;
+    rdfs:comment "Clean a surface or component."@en ;
+    rdfs:subClassOf wt:MaintenanceAction .
+
+wt:Clogging a owl:Class ;
+    rdfs:label "Clogging"@en ;
+    rdfs:comment "A filter is clogged."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty wt:remediedBy ;
+            owl:someValuesFrom wt:ReplaceFilter ],
+        wt:FunctionalFault .
+
+wt:CoatingDamage a owl:Class ;
+    rdfs:label "Coating Damage"@en ;
+    rdfs:comment "Damaged paint or coating."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty wt:remediedBy ;
+            owl:someValuesFrom wt:Recoat ],
+        wt:MaterialDegradation .
+
+wt:Contamination a owl:Class ;
+    rdfs:label "Contamination"@en ;
+    rdfs:comment "Dirt or dust where it harms, e.g. carbon dust at slip rings."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty wt:remediedBy ;
+            owl:someValuesFrom wt:Clean ],
+        wt:FunctionalFault .
+
+wt:ControllerCabinet a owl:Class ;
+    rdfs:label "Controller Cabinet"@en ;
+    rdfs:comment "Turbine controller cabinet."@en ;
+    rdfs:subClassOf wt:ElectricalComponent .
+
+wt:ConverterCabinet a owl:Class ;
+    rdfs:label "Converter Cabinet"@en ;
+    rdfs:comment "Power converter cabinet."@en ;
+    rdfs:subClassOf wt:ElectricalComponent .
+
+wt:CoolantLevelGauge a owl:Class ;
+    rdfs:label "Coolant Level Gauge"@en ;
+    rdfs:comment "Level tube of the coolant expansion tank."@en ;
+    rdfs:subClassOf wt:AuxiliarySystem .
+
+wt:CoolingUnit a owl:Class ;
+    rdfs:label "Cooling Unit"@en ;
+    rdfs:comment "Liquid cooling of generator and converter."@en ;
+    rdfs:subClassOf wt:AuxiliarySystem .
+
+wt:CoverBoltSet a owl:Class ;
+    rdfs:label "Cover Bolt Set"@en ;
+    rdfs:comment "Bolts of the gearbox inspection cover."@en ;
+    rdfs:subClassOf wt:BoltSet .
+
+wt:CraneHatch a owl:Class ;
+    rdfs:label "Crane Hatch"@en ;
+    rdfs:comment "Rear floor hatch for the crane hoist."@en ;
+    rdfs:subClassOf wt:Hatch .
+
+wt:CraneHook a owl:Class ;
+    rdfs:label "Crane Hook"@en ;
+    rdfs:comment "Hook block of the service crane, reaching the ground."@en ;
+    rdfs:subClassOf wt:HandlingEquipment .
+
+wt:CraneRail a owl:Class ;
+    rdfs:label "Crane Rail"@en ;
+    rdfs:comment "Rail of the service crane."@en ;
+    rdfs:subClassOf wt:HandlingEquipment .
+
+wt:CraneTrolley a owl:Class ;
+    rdfs:label "Crane Trolley"@en ;
+    rdfs:comment "Trolley of the service crane."@en ;
+    rdfs:subClassOf wt:HandlingEquipment .
+
+wt:Disconnection a owl:Class ;
+    rdfs:label "Disconnection"@en ;
+    rdfs:comment "A connection is broken."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty wt:remediedBy ;
+            owl:someValuesFrom wt:Reconnect ],
+        wt:FunctionalFault .
+
+wt:EarthingStrap a owl:Class ;
+    rdfs:label "Earthing Strap"@en ;
+    rdfs:comment "Earthing connection from tower flange to foundation."@en ;
+    rdfs:subClassOf wt:ElectricalComponent .
+
+wt:EmptyCollector a owl:Class ;
+    rdfs:label "Empty Collector"@en ;
+    rdfs:comment "Empty a grease collector."@en ;
+    rdfs:subClassOf wt:MaintenanceAction .
+
+wt:Fastener a owl:Class ;
+    rdfs:label "Fastener"@en ;
+    rdfs:comment "Bolted connections."@en ;
+    rdfs:subClassOf wt:TurbineComponent .
+
+wt:FaultIndication a owl:Class ;
+    rdfs:label "Fault Indication"@en ;
+    rdfs:comment "A device reports a fault (red light, fault code)."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:hasValue wt:ge_3mw_module_3d ;
+            owl:onProperty wt:describedIn ],
+        [ a owl:Restriction ;
+            owl:onProperty wt:remediedBy ;
+            owl:someValuesFrom wt:Diagnose ],
+        wt:FunctionalFault .
+
+wt:FireExtinguisher a owl:Class ;
+    rdfs:label "Fire Extinguisher"@en ;
+    rdfs:comment "Portable fire extinguisher."@en ;
+    rdfs:subClassOf wt:SafetyEquipment .
+
+wt:FlexibleCoupling a owl:Class ;
+    rdfs:label "Flexible Coupling"@en ;
+    rdfs:comment "Disc-pack coupling between gearbox and generator."@en ;
+    rdfs:subClassOf wt:DrivetrainComponent .
+
+wt:FloorHatch a owl:Class ;
+    rdfs:label "Floor Hatch"@en ;
+    rdfs:comment "Hatch between tower and nacelle."@en ;
+    rdfs:subClassOf wt:Hatch .
+
+wt:FoundationPlinth a owl:Class ;
+    rdfs:label "Foundation Plinth"@en ;
+    rdfs:comment "Concrete pedestal of the foundation."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty wt:partOf ;
+            owl:someValuesFrom wt:Foundation ],
+        wt:StructuralComponent .
+
+wt:Generator a owl:Class ;
+    rdfs:label "Generator"@en ;
+    rdfs:comment "Doubly-fed induction generator."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty wt:partOf ;
+            owl:someValuesFrom wt:Drivetrain ],
+        wt:DrivetrainComponent .
+
+wt:GreaseCollector a owl:Class ;
+    rdfs:label "Grease Collector"@en ;
+    rdfs:comment "Container collecting spent bearing grease."@en ;
+    rdfs:subClassOf wt:DrivetrainComponent .
+
+wt:GreaseLeak a owl:Class ;
+    rdfs:label "Grease Leak"@en ;
+    rdfs:comment "Bearing grease leaking."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty wt:remediedBy ;
+            owl:someValuesFrom wt:Reseal ],
+        wt:Leak .
+
+wt:Ground a owl:Class ;
+    rdfs:label "Ground"@en ;
+    rdfs:comment "Terrain around the tower: grass, crane pad, road."@en ;
+    rdfs:subClassOf wt:Site .
+
+wt:GroundController a owl:Class ;
+    rdfs:label "Ground Controller"@en ;
+    rdfs:comment "Control cabinet on the tower ground floor."@en ;
+    rdfs:subClassOf wt:ElectricalComponent .
+
+wt:GroutJoint a owl:Class ;
+    rdfs:label "Grout Joint"@en ;
+    rdfs:comment "Grout layer under the tower base flange."@en ;
+    rdfs:subClassOf wt:StructuralComponent .
+
+wt:HighSpeedShaft a owl:Class ;
+    rdfs:label "High Speed Shaft"@en ;
+    rdfs:comment "Shaft from gearbox to generator."@en ;
+    rdfs:subClassOf wt:DrivetrainComponent .
+
+wt:Hub a owl:Class ;
+    rdfs:label "Hub"@en ;
+    rdfs:comment "Cast hub carrying the blades."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty wt:partOf ;
+            owl:someValuesFrom wt:Rotor ],
+        wt:StructuralComponent .
+
+wt:HumanoidRobot a owl:Class ;
+    rdfs:label "Humanoid Robot"@en ;
+    rdfs:comment "A robot with a human-like body."@en ;
+    rdfs:subClassOf wt:Robot .
+
+wt:HydraulicLeak a owl:Class ;
+    rdfs:label "Hydraulic Leak"@en ;
+    rdfs:comment "Hydraulic oil leaking."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty wt:remediedBy ;
+            owl:someValuesFrom wt:ReplacePart ],
+        wt:Leak .
+
+wt:HydraulicUnit a owl:Class ;
+    rdfs:label "Hydraulic Unit"@en ;
+    rdfs:comment "Hydraulic power unit (brake, yaw brakes)."@en ;
+    rdfs:subClassOf wt:AuxiliarySystem .
+
+wt:LiftGuide a owl:Class ;
+    rdfs:label "Lift Guide"@en ;
+    rdfs:comment "Guide and hoist wires of the service lift."@en ;
+    rdfs:subClassOf wt:HandlingEquipment .
+
+wt:LiftingPlatform a owl:Class ;
+    rdfs:label "Lifting Platform"@en ;
+    rdfs:comment "Platform hung from the crane hook; hoists a robot or loads through the rear floor hatch."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:hasValue wt:zone_nacelle ;
+            owl:onProperty wt:providesAccessTo ],
+        wt:HandlingEquipment .
+
+wt:LightFailure a owl:Class ;
+    rdfs:label "Light Failure"@en ;
+    rdfs:comment "A light does not work."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty wt:remediedBy ;
+            owl:someValuesFrom wt:ReplacePart ],
+        wt:FunctionalFault .
+
+wt:LockEngaged a owl:Class ;
+    rdfs:label "Lock Engaged"@en ;
+    rdfs:comment "A lock is engaged that must be released."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty wt:remediedBy ;
+            owl:someValuesFrom wt:RestoreConfiguration ],
+        wt:UnsafeCondition .
+
+wt:MainBearing a owl:Class ;
+    rdfs:label "Main Bearing"@en ;
+    rdfs:comment "Main shaft bearing with seals."@en ;
+    rdfs:subClassOf wt:DrivetrainComponent .
+
+wt:MainShaft a owl:Class ;
+    rdfs:label "Main Shaft"@en ;
+    rdfs:comment "Low-speed shaft from hub to gearbox."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty wt:partOf ;
+            owl:someValuesFrom wt:Drivetrain ],
+        wt:DrivetrainComponent .
+
+wt:MechanicalDamage a owl:Class ;
+    rdfs:label "Mechanical Damage"@en ;
+    rdfs:comment "A device is mechanically damaged."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty wt:remediedBy ;
+            owl:someValuesFrom wt:ReplacePart ],
+        wt:FunctionalFault .
+
+wt:MissingFastener a owl:Class ;
+    rdfs:label "Missing Fastener"@en ;
+    rdfs:comment "A bolt is missing."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty wt:remediedBy ;
+            owl:someValuesFrom wt:ReplaceFastener ],
+        wt:FastenerFault .
+
+wt:MissingSafetyEquipment a owl:Class ;
+    rdfs:label "Missing Safety Equipment"@en ;
+    rdfs:comment "Required safety equipment is not there."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty wt:remediedBy ;
+            owl:someValuesFrom wt:RestoreConfiguration ],
+        wt:UnsafeCondition .
+
+wt:NacelleHousing a owl:Class ;
+    rdfs:label "Nacelle Housing"@en ;
+    rdfs:comment "Glass-fibre cover of the nacelle."@en ;
+    rdfs:subClassOf wt:StructuralComponent .
+
+wt:OilFilterIndicator a owl:Class ;
+    rdfs:label "Oil Filter Indicator"@en ;
+    rdfs:comment "Clogging indicator of the offline oil filter."@en ;
+    rdfs:subClassOf wt:DrivetrainComponent .
+
+wt:OilLeak a owl:Class ;
+    rdfs:label "Oil Leak"@en ;
+    rdfs:comment "Gear oil leaking."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty wt:remediedBy ;
+            owl:someValuesFrom wt:Reseal ],
+        wt:Leak .
+
+wt:OpenEnclosure a owl:Class ;
+    rdfs:label "Open Enclosure"@en ;
+    rdfs:comment "A cabinet or cover is left open."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty wt:remediedBy ;
+            owl:someValuesFrom wt:RestoreConfiguration ],
+        wt:UnsafeCondition .
+
+wt:Reconnect a owl:Class ;
+    rdfs:label "Reconnect"@en ;
+    rdfs:comment "Restore an electrical connection."@en ;
+    rdfs:subClassOf wt:MaintenanceAction .
+
+wt:Refill a owl:Class ;
+    rdfs:label "Refill"@en ;
+    rdfs:comment "Top up oil or coolant."@en ;
+    rdfs:subClassOf wt:MaintenanceAction .
+
+wt:ReplaceFastener a owl:Class ;
+    rdfs:label "Replace Fastener"@en ;
+    rdfs:comment "Replace bolt, nut and washers."@en ;
+    rdfs:subClassOf wt:MaintenanceAction .
+
+wt:ReplaceFilter a owl:Class ;
+    rdfs:label "Replace Filter"@en ;
+    rdfs:comment "Replace a filter element."@en ;
+    rdfs:subClassOf wt:MaintenanceAction .
+
+wt:Retension a owl:Class ;
+    rdfs:label "Retension"@en ;
+    rdfs:comment "Re-tension all bolts of a joint (hydraulic tensioner or torque wrench), cross pattern, two passes."@en ;
+    rdfs:subClassOf wt:MaintenanceAction .
+
+wt:Retighten a owl:Class ;
+    rdfs:label "Retighten"@en ;
+    rdfs:comment "Bring single bolts back to the specified torque."@en ;
+    rdfs:subClassOf wt:MaintenanceAction .
+
+wt:RotorLock a owl:Class ;
+    rdfs:label "Rotor Lock"@en ;
+    rdfs:comment "Mechanical lock of the rotor for work."@en ;
+    rdfs:subClassOf wt:DrivetrainComponent .
+
+wt:RotorLockPin a owl:Class ;
+    rdfs:label "Rotor Lock Pin"@en ;
+    rdfs:comment "Pin of the rotor lock."@en ;
+    rdfs:subClassOf wt:DrivetrainComponent .
+
+wt:SafetyKit a owl:Class ;
+    rdfs:label "Safety Kit"@en ;
+    rdfs:comment "First-aid kit and emergency equipment."@en ;
+    rdfs:subClassOf wt:SafetyEquipment .
+
+wt:Sensor a owl:Class ;
+    rdfs:label "Sensor"@en ;
+    rdfs:comment "A device that measures something."@en ;
+    rdfs:subClassOf wt:RobotPart .
+
+wt:ServiceCrane a owl:Class ;
+    rdfs:label "Service Crane"@en ;
+    rdfs:comment "On-board crane under the nacelle roof."@en ;
+    rdfs:subClassOf wt:HandlingEquipment .
+
+wt:ServiceDue a owl:Class ;
+    rdfs:label "Service Due"@en ;
+    rdfs:comment "A consumable is full or used up."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty wt:remediedBy ;
+            owl:someValuesFrom wt:EmptyCollector ],
+        wt:FunctionalFault .
+
+wt:ServiceLift a owl:Class ;
+    rdfs:label "Service Lift"@en ;
+    rdfs:comment "Service lift in the tower, ground floor to yaw deck."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:hasValue wt:zone_tower ;
+            owl:onProperty wt:providesAccessTo ],
+        wt:HandlingEquipment .
+
+wt:ShrinkDiscBoltSet a owl:Class ;
+    rdfs:label "Shrink Disc Bolt Set"@en ;
+    rdfs:comment "Bolts of the shrink disc between main shaft and gearbox."@en ;
+    rdfs:subClassOf wt:BoltSet .
+
+wt:SightGlass a owl:Class ;
+    rdfs:label "Sight Glass"@en ;
+    rdfs:comment "Oil level sight glass."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty wt:partOf ;
+            owl:someValuesFrom wt:Gearbox ],
+        wt:DrivetrainComponent .
+
+wt:StatusLight a owl:Class ;
+    rdfs:label "Status Light"@en ;
+    rdfs:comment "Indicator light on a cabinet door."@en ;
+    rdfs:subClassOf wt:ElectricalComponent .
+
+wt:Technician a owl:Class ;
+    rdfs:label "Technician"@en ;
+    rdfs:comment "Service technician."@en ;
+    rdfs:subClassOf wt:Person .
+
+wt:ToolRack a owl:Class ;
+    rdfs:label "Tool Rack"@en ;
+    rdfs:comment "Rack for tools."@en ;
+    rdfs:subClassOf wt:Storage .
+
+wt:ToolTray a owl:Class ;
+    rdfs:label "Tool Tray"@en ;
+    rdfs:comment "Tray to put tools on at the work place."@en ;
+    rdfs:subClassOf wt:Storage .
+
+wt:TorqueArmBushing a owl:Class ;
+    rdfs:label "Torque Arm Bushing"@en ;
+    rdfs:comment "Elastomer bushing supporting the gearbox torque arm."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty wt:partOf ;
+            owl:someValuesFrom wt:Gearbox ],
+        wt:DrivetrainComponent .
+
+wt:TorqueToolCase a owl:Class ;
+    rdfs:label "Torque Tool Case"@en ;
+    rdfs:comment "Case with the torque tool for bolted joints; carried by its T-grip."@en ;
+    rdfs:subClassOf wt:Tool .
+
+wt:TowerDoor a owl:Class ;
+    rdfs:label "Tower Door"@en ;
+    rdfs:comment "Entrance door at ground level."@en ;
+    rdfs:subClassOf wt:Door .
+
+wt:Transformer a owl:Class ;
+    rdfs:label "Transformer"@en ;
+    rdfs:comment "Cast-resin transformer."@en ;
+    rdfs:subClassOf wt:ElectricalComponent .
+
+wt:UnitreeG1 a owl:Class ;
+    rdfs:label "Unitree G1"@en ;
+    rdfs:comment "Unitree G1 humanoid (29 DoF, Dex3 hands, RealSense D435 head camera)."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onClass wt:RobotHand ;
+            owl:onProperty wt:hasRobotPart ;
+            owl:qualifiedCardinality "2"^^xsd:nonNegativeInteger ],
+        [ a owl:Restriction ;
+            owl:onProperty wt:hasRobotPart ;
+            owl:someValuesFrom wt:DepthCamera ],
+        wt:HumanoidRobot .
+
+wt:Wear a owl:Class ;
+    rdfs:label "Wear"@en ;
+    rdfs:comment "Wear of a consumable part, e.g. brake pads."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty wt:remediedBy ;
+            owl:someValuesFrom wt:ReplacePart ],
+        wt:MaterialDegradation .
+
+wt:WeatherMast a owl:Class ;
+    rdfs:label "Weather Mast"@en ;
+    rdfs:comment "Mast on the nacelle roof."@en ;
+    rdfs:subClassOf wt:AuxiliarySystem .
+
+wt:YawBearing a owl:Class ;
+    rdfs:label "Yaw Bearing"@en ;
+    rdfs:comment "Slewing ring between tower and nacelle."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty wt:partOf ;
+            owl:someValuesFrom wt:YawSystem ],
+        wt:StructuralComponent .
+
+wt:YawDeck a owl:Class ;
+    rdfs:label "Yaw Deck"@en ;
+    rdfs:comment "Top platform under the yaw bearing."@en ;
+    rdfs:subClassOf wt:Platform .
+
+wt:acp_om_recommended_practices a wt:MaintenanceDocument,
+        owl:NamedIndividual ;
+    rdfs:label "AWEA/ACP Operations and Maintenance Recommended Practices"@en ;
+    rdfs:comment "AWEA/ACP Operations and Maintenance Recommended Practices, 2nd ed. 2017."@en .
+
+wt:acp_rp_401 a wt:MaintenanceDocument,
+        owl:NamedIndividual ;
+    rdfs:label "ACP RP 401"@en ;
+    rdfs:comment "ACP RP 401: foundation inspections and base bolt tensioning."@en .
+
+wt:action_PickUpAction a wt:CRAMAction,
+        owl:NamedIndividual ;
+    rdfs:label "PickUpAction"@en ;
+    rdfs:comment "Grasp and lift an object."@en .
+
+wt:action_PlaceAction a wt:CRAMAction,
+        owl:NamedIndividual ;
+    rdfs:label "PlaceAction"@en ;
+    rdfs:comment "Put an object down."@en .
+
+wt:anchor_bolts a wt:AnchorBoltSet,
+        owl:NamedIndividual ;
+    rdfs:label "Anchor bolts"@en ;
+    wt:boltCount 96 ;
+    wt:fastens wt:foundation,
+        wt:tower_section_1 ;
+    wt:partOf wt:foundation_system ;
+    rdfs:comment "96 anchor bolts on the base flange."@en .
+
+wt:anemometer a wt:Anemometer,
+        owl:NamedIndividual ;
+    rdfs:label "Anemometer"@en ;
+    wt:mountedOn wt:weather_mast ;
+    wt:partOf wt:weather_mast ;
+    wt:urdfLink "anemometer"^^xsd:string .
+
+wt:aviation_light a wt:AviationLight,
+        owl:NamedIndividual ;
+    rdfs:label "Aviation light"@en ;
+    wt:mountedOn wt:weather_mast ;
+    wt:partOf wt:weather_mast ;
+    wt:urdfLink "aviation_light"^^xsd:string .
+
+wt:blade_1_inspect_leading_edge a wt:InspectionPoint,
+        owl:NamedIndividual ;
+    rdfs:label "Blade 1: leading edge"@en ;
+    wt:inspects wt:blade_1 ;
+    wt:locatedInZone wt:zone_outside ;
+    wt:viewDistance 5.0 ;
+    rdfs:comment "blade 1 leading edge, outer third: erosion"@en .
+
+wt:blade_1_inspect_tip_receptor a wt:InspectionPoint,
+        owl:NamedIndividual ;
+    rdfs:label "Blade 1: tip receptor"@en ;
+    wt:inspects wt:blade_1 ;
+    wt:locatedInZone wt:zone_outside ;
+    wt:viewDistance 4.0 ;
+    rdfs:comment "blade 1 tip and lightning receptor, suction side"@en .
+
+wt:blade_1_inspect_trailing_edge a wt:InspectionPoint,
+        owl:NamedIndividual ;
+    rdfs:label "Blade 1: trailing edge"@en ;
+    wt:inspects wt:blade_1 ;
+    wt:locatedInZone wt:zone_outside ;
+    wt:viewDistance 5.0 ;
+    rdfs:comment "blade 1 trailing edge near the maximum chord: cracks, split bond line"@en .
+
+wt:blade_2_inspect_leading_edge a wt:InspectionPoint,
+        owl:NamedIndividual ;
+    rdfs:label "Blade 2: leading edge"@en ;
+    wt:inspects wt:blade_2 ;
+    wt:locatedInZone wt:zone_outside ;
+    wt:viewDistance 5.0 ;
+    rdfs:comment "blade 2 leading edge, outer third: erosion"@en .
+
+wt:blade_2_inspect_tip_receptor a wt:InspectionPoint,
+        owl:NamedIndividual ;
+    rdfs:label "Blade 2: tip receptor"@en ;
+    wt:inspects wt:blade_2 ;
+    wt:locatedInZone wt:zone_outside ;
+    wt:viewDistance 4.0 ;
+    rdfs:comment "blade 2 tip and lightning receptor, suction side"@en .
+
+wt:blade_2_inspect_trailing_edge a wt:InspectionPoint,
+        owl:NamedIndividual ;
+    rdfs:label "Blade 2: trailing edge"@en ;
+    wt:inspects wt:blade_2 ;
+    wt:locatedInZone wt:zone_outside ;
+    wt:viewDistance 5.0 ;
+    rdfs:comment "blade 2 trailing edge near the maximum chord: cracks, split bond line"@en .
+
+wt:blade_3_inspect_leading_edge a wt:InspectionPoint,
+        owl:NamedIndividual ;
+    rdfs:label "Blade 3: leading edge"@en ;
+    wt:inspects wt:blade_3 ;
+    wt:locatedInZone wt:zone_outside ;
+    wt:viewDistance 5.0 ;
+    rdfs:comment "blade 3 leading edge, outer third: erosion"@en .
+
+wt:blade_3_inspect_tip_receptor a wt:InspectionPoint,
+        owl:NamedIndividual ;
+    rdfs:label "Blade 3: tip receptor"@en ;
+    wt:inspects wt:blade_3 ;
+    wt:locatedInZone wt:zone_outside ;
+    wt:viewDistance 4.0 ;
+    rdfs:comment "blade 3 tip and lightning receptor, suction side"@en .
+
+wt:blade_3_inspect_trailing_edge a wt:InspectionPoint,
+        owl:NamedIndividual ;
+    rdfs:label "Blade 3: trailing edge"@en ;
+    wt:inspects wt:blade_3 ;
+    wt:locatedInZone wt:zone_outside ;
+    wt:viewDistance 5.0 ;
+    rdfs:comment "blade 3 trailing edge near the maximum chord: cracks, split bond line"@en .
+
+wt:cabinet_controller_door a wt:CabinetDoor,
+        owl:NamedIndividual ;
+    rdfs:label "Cabinet controller door"@en ;
+    wt:mountedOn wt:cabinet_controller ;
+    wt:partOf wt:cabinet_controller ;
+    wt:urdfLink "cabinet_controller_door"^^xsd:string .
+
+wt:cable_loop a wt:CableLoop,
+        owl:NamedIndividual ;
+    rdfs:label "Cable loop"@en ;
+    wt:mountedOn wt:tower_section_4 ;
+    wt:partOf wt:tower ;
+    wt:urdfLink "cable_loop"^^xsd:string .
+
+wt:converter_inspect_status a wt:InspectionPoint,
+        owl:NamedIndividual ;
+    rdfs:label "Converter: status"@en ;
+    wt:inspects wt:cabinet_converter ;
+    wt:locatedInZone wt:zone_nacelle ;
+    wt:viewDistance 1.1 ;
+    rdfs:comment "converter cabinet status light (green = ok)"@en .
+
+wt:converter_status_light a wt:StatusLight,
+        owl:NamedIndividual ;
+    rdfs:label "Converter status light"@en ;
+    wt:mountedOn wt:cabinet_converter_door ;
+    wt:partOf wt:cabinet_converter_door ;
+    wt:urdfLink "converter_status_light"^^xsd:string .
+
+wt:cooling_inspect_level a wt:InspectionPoint,
+        owl:NamedIndividual ;
+    rdfs:label "Cooling: level"@en ;
+    wt:inspects wt:cooling_unit ;
+    wt:locatedInZone wt:zone_nacelle ;
+    wt:viewDistance 0.57 ;
+    rdfs:comment "coolant expansion tank level tube (above the red mark)"@en .
+
+wt:cooling_level a wt:CoolantLevelGauge,
+        owl:NamedIndividual ;
+    rdfs:label "Cooling level"@en ;
+    wt:mountedOn wt:cooling_unit ;
+    wt:partOf wt:cooling_unit ;
+    wt:urdfLink "cooling_level"^^xsd:string .
+
+wt:coupling_inspect a wt:InspectionPoint,
+        owl:NamedIndividual ;
+    rdfs:label "Coupling inspect"@en ;
+    wt:inspects wt:brake_caliper ;
+    wt:locatedInZone wt:zone_nacelle ;
+    wt:viewDistance 1.3 ;
+    rdfs:comment "flexible coupling disc packs: cracks, loose bolts"@en .
+
+wt:crane_hook a wt:CraneHook,
+        owl:NamedIndividual ;
+    rdfs:label "Crane hook"@en ;
+    wt:mountedOn wt:crane_trolley ;
+    wt:partOf wt:service_crane ;
+    wt:speed 4.0 ;
+    wt:travel 115.0 ;
+    wt:urdfLink "crane_hook"^^xsd:string .
+
+wt:crane_rail a wt:CraneRail,
+        owl:NamedIndividual ;
+    rdfs:label "Crane rail"@en ;
+    wt:mountedOn wt:nacelle ;
+    wt:partOf wt:service_crane ;
+    wt:urdfLink "crane_rail"^^xsd:string .
+
+wt:crane_trolley a wt:CraneTrolley,
+        owl:NamedIndividual ;
+    rdfs:label "Crane trolley"@en ;
+    wt:mountedOn wt:crane_rail ;
+    wt:partOf wt:service_crane ;
+    wt:urdfLink "crane_trolley"^^xsd:string .
+
+wt:fastens a owl:ObjectProperty ;
+    rdfs:label "Fastens"@en ;
+    rdfs:comment "The components a bolt set joins."@en ;
+    rdfs:domain wt:BoltSet ;
+    rdfs:range wt:TurbineComponent .
+
+wt:flange_2_bolts a wt:FlangeBoltSet,
+        owl:NamedIndividual ;
+    rdfs:label "Flange 2 bolts"@en ;
+    wt:boltCount 132 ;
+    wt:boltSize "M42 10.9"^^xsd:string ;
+    wt:fastens wt:tower_section_2,
+        wt:tower_section_3 ;
+    wt:heightAboveGround 54.08 ;
+    wt:mountedOn wt:tower_section_2 ;
+    wt:partOf wt:tower ;
+    wt:preload 784.0 ;
+    wt:tighteningTorque 4281 ;
+    wt:turnToPreload 104.5 ;
+    wt:urdfLink "flange_2_bolts"^^xsd:string .
+
+wt:flange_3_bolts a wt:FlangeBoltSet,
+        owl:NamedIndividual ;
+    rdfs:label "Flange 3 bolts"@en ;
+    wt:boltCount 100 ;
+    wt:boltSize "M36 10.9"^^xsd:string ;
+    wt:fastens wt:tower_section_3,
+        wt:tower_section_4 ;
+    wt:heightAboveGround 86.49 ;
+    wt:mountedOn wt:tower_section_3 ;
+    wt:partOf wt:tower ;
+    wt:preload 571.9 ;
+    wt:tighteningTorque 2676 ;
+    wt:turnToPreload 116.8 ;
+    wt:urdfLink "flange_3_bolts"^^xsd:string .
+
+wt:g1_d435 a wt:DepthCamera,
+        owl:NamedIndividual ;
+    rdfs:label "G1 RealSense D435"@en ;
+    rdfs:comment "Head camera, optical axis 48° down."@en .
+
+wt:g1_left_hand a wt:RobotHand,
+        owl:NamedIndividual ;
+    rdfs:label "G1 left Dex3 hand"@en ;
+    rdfs:comment "Three-finger Dex3 hand; fingers 1.4 Nm, thumb rotation 2.45 Nm."@en ;
+    owl:differentFrom wt:g1_right_hand .
+
+wt:ge_3mw_module_3d a wt:MaintenanceDocument,
+        owl:NamedIndividual ;
+    rdfs:label "GE 3 MW maintenance manual"@en ;
+    rdfs:comment "GE 3 MW maintenance manual, module 3D (electrical)."@en .
+
+wt:gearbox_cover_bolts a wt:CoverBoltSet,
+        owl:NamedIndividual ;
+    rdfs:label "Gearbox cover bolts"@en ;
+    wt:mountedOn wt:gearbox ;
+    wt:partOf wt:gearbox ;
+    wt:urdfLink "gearbox_cover_bolts"^^xsd:string .
+
+wt:gearbox_inspect_cover a wt:InspectionPoint,
+        owl:NamedIndividual ;
+    rdfs:label "Gearbox: cover"@en ;
+    wt:inspects wt:gearbox ;
+    wt:locatedInZone wt:zone_nacelle ;
+    wt:viewDistance 0.95 ;
+    rdfs:comment "side inspection cover bolts"@en .
+
+wt:gearbox_inspect_filter a wt:InspectionPoint,
+        owl:NamedIndividual ;
+    rdfs:label "Gearbox: filter"@en ;
+    wt:inspects wt:gearbox ;
+    wt:locatedInZone wt:zone_nacelle ;
+    wt:viewDistance 0.81 ;
+    rdfs:comment "oil filter clogging indicator (green = ok, red pin out = clogged)"@en .
+
+wt:gearbox_sight_glass a wt:SightGlass,
+        owl:NamedIndividual ;
+    rdfs:label "Gearbox sight glass"@en ;
+    wt:mountedOn wt:gearbox ;
+    wt:partOf wt:gearbox ;
+    wt:urdfLink "gearbox_sight_glass"^^xsd:string .
+
+wt:generator_inspect_terminal_box a wt:InspectionPoint,
+        owl:NamedIndividual ;
+    rdfs:label "Generator: terminal box"@en ;
+    wt:inspects wt:generator ;
+    wt:locatedInZone wt:zone_nacelle ;
+    wt:viewDistance 1.54 ;
+    rdfs:comment "generator terminal box: overheating (thermal camera), scorched paint"@en .
+
+wt:hasFault a owl:ObjectProperty ;
+    rdfs:label "Has Fault"@en .
+
+wt:hasInspectionPoint a owl:ObjectProperty ;
+    rdfs:label "Has Inspection Point"@en .
+
+wt:hasPart a owl:ObjectProperty,
+        owl:TransitiveProperty ;
+    rdfs:label "Has Part"@en .
+
+wt:hydraulic_inspect a wt:InspectionPoint,
+        owl:NamedIndividual ;
+    rdfs:label "Hydraulic inspect"@en ;
+    wt:inspects wt:hydraulic_unit ;
+    wt:locatedInZone wt:zone_nacelle ;
+    wt:viewDistance 0.78 ;
+    rdfs:comment "hydraulic unit: hose fitting and tank, oil on the walkway"@en .
+
+wt:indicatedBySignal a owl:ObjectProperty ;
+    rdfs:label "Indicated By Signal"@en ;
+    rdfs:comment "A condition monitoring signal that shows the fault."@en ;
+    rdfs:domain wt:Fault ;
+    rdfs:range wt:ConditionSignal .
+
+wt:inspects a owl:FunctionalProperty,
+        owl:ObjectProperty ;
+    rdfs:label "Inspects"@en ;
+    rdfs:comment "The component an inspection point looks at."@en ;
+    rdfs:domain wt:InspectionPoint ;
+    rdfs:range wt:TurbineComponent ;
+    owl:inverseOf wt:hasInspectionPoint .
+
+wt:lifting_platform a wt:LiftingPlatform,
+        owl:NamedIndividual ;
+    rdfs:label "Lifting platform"@en ;
+    wt:mountedOn wt:crane_hook ;
+    wt:partOf wt:service_crane ;
+    wt:providesAccessTo wt:zone_nacelle ;
+    wt:urdfLink "lifting_platform"^^xsd:string .
+
+wt:main_bearing_grease_collector a wt:GreaseCollector,
+        owl:NamedIndividual ;
+    rdfs:label "Main bearing grease collector"@en ;
+    wt:mountedOn wt:main_bearing ;
+    wt:partOf wt:main_bearing ;
+    wt:urdfLink "main_bearing_grease_collector"^^xsd:string .
+
+wt:main_bearing_inspect_front_seal a wt:InspectionPoint,
+        owl:NamedIndividual ;
+    rdfs:label "Main bearing: front seal"@en ;
+    wt:inspects wt:main_bearing ;
+    wt:locatedInZone wt:zone_nacelle ;
+    wt:viewDistance 1.45 ;
+    rdfs:comment "front main bearing, downwind seal: grease leaking out"@en .
+
+wt:main_shaft_shrink_disc_bolts a wt:ShrinkDiscBoltSet,
+        owl:NamedIndividual ;
+    rdfs:label "Main shaft shrink disc bolts"@en ;
+    wt:mountedOn wt:main_shaft ;
+    wt:partOf wt:main_shaft ;
+    wt:urdfLink "main_shaft_shrink_disc_bolts"^^xsd:string .
+
+wt:nacelle_inspect_cover a wt:InspectionPoint,
+        owl:NamedIndividual ;
+    rdfs:label "Nacelle: cover"@en ;
+    wt:inspects wt:nacelle ;
+    wt:locatedInZone wt:zone_outside ;
+    wt:viewDistance 4.0 ;
+    rdfs:comment "nacelle cover, -Y side: cracks in the GRP shell"@en .
+
+wt:performedBy a owl:ObjectProperty ;
+    rdfs:label "Performed By"@en ;
+    rdfs:comment "Who executes a task."@en ;
+    rdfs:domain wt:RobotTask ;
+    rdfs:range wt:Agent ;
+    owl:inverseOf wt:performs .
+
+wt:performs a owl:ObjectProperty ;
+    rdfs:label "Performs"@en .
+
+wt:rotor_lock_inspect a wt:InspectionPoint,
+        owl:NamedIndividual ;
+    rdfs:label "Rotor lock inspect"@en ;
+    wt:inspects wt:rotor_lock ;
+    wt:locatedInZone wt:zone_nacelle ;
+    wt:viewDistance 0.92 ;
+    rdfs:comment "rotor lock pin position (must be retracted in operation)"@en .
+
+wt:safety_inspect_extinguisher a wt:InspectionPoint,
+        owl:NamedIndividual ;
+    rdfs:label "Safety: extinguisher"@en ;
+    wt:inspects wt:nacelle ;
+    wt:locatedInZone wt:zone_nacelle ;
+    wt:viewDistance 1.2 ;
+    rdfs:comment "fire extinguisher in its bracket by the tower hatch"@en .
+
+wt:signal_anemometer_plausible a wt:ConditionSignal,
+        owl:NamedIndividual ;
+    rdfs:label "Anemometer plausible"@en ;
+    wt:nominalValue 1.0 ;
+    wt:unit "boolean"^^xsd:string ;
+    rdfs:comment "Condition monitoring signal."@en .
+
+wt:signal_aviation_light_on a wt:ConditionSignal,
+        owl:NamedIndividual ;
+    rdfs:label "Aviation light on"@en ;
+    wt:nominalValue 1.0 ;
+    wt:unit "boolean"^^xsd:string ;
+    rdfs:comment "Condition monitoring signal."@en .
+
+wt:signal_blade_1_lightning_counter a wt:ConditionSignal,
+        owl:NamedIndividual ;
+    rdfs:label "Blade 1 lightning counter"@en ;
+    wt:nominalValue 0.0 ;
+    wt:unit "count"^^xsd:string ;
+    rdfs:comment "Condition monitoring signal."@en .
+
+wt:signal_blade_2_lightning_counter a wt:ConditionSignal,
+        owl:NamedIndividual ;
+    rdfs:label "Blade 2 lightning counter"@en ;
+    wt:nominalValue 0.0 ;
+    wt:unit "count"^^xsd:string ;
+    rdfs:comment "Condition monitoring signal."@en .
+
+wt:signal_blade_3_lightning_counter a wt:ConditionSignal,
+        owl:NamedIndividual ;
+    rdfs:label "Blade 3 lightning counter"@en ;
+    wt:nominalValue 0.0 ;
+    wt:unit "count"^^xsd:string ;
+    rdfs:comment "Condition monitoring signal."@en .
+
+wt:signal_brake_disc_temperature_c a wt:ConditionSignal,
+        owl:NamedIndividual ;
+    rdfs:label "Brake disc temperature c"@en ;
+    wt:nominalValue 55.0 ;
+    wt:unit "°C"^^xsd:string ;
+    rdfs:comment "Condition monitoring signal."@en .
+
+wt:signal_brake_pad_wear_percent a wt:ConditionSignal,
+        owl:NamedIndividual ;
+    rdfs:label "Brake pad wear percent"@en ;
+    wt:nominalValue 20.0 ;
+    wt:unit "%"^^xsd:string ;
+    rdfs:comment "Condition monitoring signal."@en .
+
+wt:signal_converter_fault_code a wt:ConditionSignal,
+        owl:NamedIndividual ;
+    rdfs:label "Converter fault code"@en ;
+    wt:nominalValue 0.0 ;
+    wt:unit "code"^^xsd:string ;
+    rdfs:comment "Condition monitoring signal."@en .
+
+wt:signal_drivetrain_vibration_mm_s a wt:ConditionSignal,
+        owl:NamedIndividual ;
+    rdfs:label "Drivetrain vibration mm s"@en ;
+    wt:nominalValue 1.6 ;
+    wt:unit "mm/s"^^xsd:string ;
+    rdfs:comment "Condition monitoring signal."@en .
+
+wt:signal_earthing_resistance_ohm a wt:ConditionSignal,
+        owl:NamedIndividual ;
+    rdfs:label "Earthing resistance ohm"@en ;
+    wt:nominalValue 2.1 ;
+    wt:unit "Ω"^^xsd:string ;
+    rdfs:comment "Condition monitoring signal."@en .
+
+wt:signal_gearbox_filter_dp_bar a wt:ConditionSignal,
+        owl:NamedIndividual ;
+    rdfs:label "Gearbox filter dp bar"@en ;
+    wt:nominalValue 0.8 ;
+    wt:unit "bar"^^xsd:string ;
+    rdfs:comment "Condition monitoring signal."@en .
+
+wt:signal_gearbox_oil_particle_count a wt:ConditionSignal,
+        owl:NamedIndividual ;
+    rdfs:label "Gearbox oil particle count"@en ;
+    wt:nominalValue 300.0 ;
+    wt:unit "count"^^xsd:string ;
+    rdfs:comment "Condition monitoring signal."@en .
+
+wt:signal_gearbox_oil_temperature_c a wt:ConditionSignal,
+        owl:NamedIndividual ;
+    rdfs:label "Gearbox oil temperature c"@en ;
+    wt:nominalValue 62.0 ;
+    wt:unit "°C"^^xsd:string ;
+    rdfs:comment "Condition monitoring signal."@en .
+
+wt:signal_gearbox_vibration_mm_s a wt:ConditionSignal,
+        owl:NamedIndividual ;
+    rdfs:label "Gearbox vibration mm s"@en ;
+    wt:nominalValue 2.1 ;
+    wt:unit "mm/s"^^xsd:string ;
+    rdfs:comment "Condition monitoring signal."@en .
+
+wt:signal_generator_brush_wear_percent a wt:ConditionSignal,
+        owl:NamedIndividual ;
+    rdfs:label "Generator brush wear percent"@en ;
+    wt:nominalValue 30.0 ;
+    wt:unit "%"^^xsd:string ;
+    rdfs:comment "Condition monitoring signal."@en .
+
+wt:signal_generator_terminal_temperature_c a wt:ConditionSignal,
+        owl:NamedIndividual ;
+    rdfs:label "Generator terminal temperature c"@en ;
+    wt:nominalValue 46.0 ;
+    wt:unit "°C"^^xsd:string ;
+    rdfs:comment "Condition monitoring signal."@en .
+
+wt:signal_generator_vibration_mm_s a wt:ConditionSignal,
+        owl:NamedIndividual ;
+    rdfs:label "Generator vibration mm s"@en ;
+    wt:nominalValue 1.9 ;
+    wt:unit "mm/s"^^xsd:string ;
+    rdfs:comment "Condition monitoring signal."@en .
+
+wt:signal_generator_winding_temperature_c a wt:ConditionSignal,
+        owl:NamedIndividual ;
+    rdfs:label "Generator winding temperature c"@en ;
+    wt:nominalValue 95.0 ;
+    wt:unit "°C"^^xsd:string ;
+    rdfs:comment "Condition monitoring signal."@en .
+
+wt:signal_hydraulic_pressure_bar a wt:ConditionSignal,
+        owl:NamedIndividual ;
+    rdfs:label "Hydraulic pressure bar"@en ;
+    wt:nominalValue 160.0 ;
+    wt:unit "bar"^^xsd:string ;
+    rdfs:comment "Condition monitoring signal."@en .
+
+wt:signal_main_bearing_temperature_c a wt:ConditionSignal,
+        owl:NamedIndividual ;
+    rdfs:label "Main bearing temperature c"@en ;
+    wt:nominalValue 41.0 ;
+    wt:unit "°C"^^xsd:string ;
+    rdfs:comment "Condition monitoring signal."@en .
+
+wt:technician a wt:Technician,
+        owl:NamedIndividual ;
+    rdfs:label "Technician"@en .
+
+wt:torque_tool_case a wt:TorqueToolCase,
+        owl:NamedIndividual ;
+    rdfs:label "Torque tool case"@en ;
+    wt:mass 3.0 ;
+    rdfs:comment "Case with T-grip; 3 kg."@en .
+
+wt:tower_inspect_flange_1 a wt:InspectionPoint,
+        owl:NamedIndividual ;
+    rdfs:label "Tower: flange 1"@en ;
+    wt:inspects wt:tower_section_1 ;
+    wt:locatedInZone wt:zone_tower ;
+    wt:viewDistance 0.55 ;
+    rdfs:comment "flange 1 bolts (M42): torque markings on the nuts under the flange"@en .
+
+wt:yaw_bearing a wt:YawBearing,
+        owl:NamedIndividual ;
+    rdfs:label "Yaw bearing"@en ;
+    wt:mountedOn wt:tower_section_4 ;
+    wt:partOf wt:yaw_system ;
+    wt:urdfLink "yaw_bearing"^^xsd:string .
+
+wt:yaw_system a wt:YawSystem,
+        owl:NamedIndividual ;
+    rdfs:label "Yaw System"@en ;
+    wt:partOf wt:iea_3_4_130_rwt .
+
+wt:AccessTask a owl:Class ;
+    rdfs:label "Access Task"@en ;
+    rdfs:comment "Get the robot to a zone it cannot walk to (lift, hoist)."@en ;
+    rdfs:subClassOf wt:RobotTask .
+
+wt:CabinetDoor a owl:Class ;
+    rdfs:label "Cabinet Door"@en ;
+    rdfs:comment "Door of a switch cabinet."@en ;
+    rdfs:subClassOf wt:Door .
+
+wt:Corrosion a owl:Class ;
+    rdfs:label "Corrosion"@en ;
+    rdfs:comment "Rust or fretting corrosion."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty wt:remediedBy ;
+            owl:someValuesFrom wt:Recoat ],
+        wt:MaterialDegradation .
+
+wt:DepthCamera a owl:Class ;
+    rdfs:label "Depth Camera"@en ;
+    rdfs:comment "RGB-D camera."@en ;
+    rdfs:subClassOf wt:Sensor .
+
+wt:Diagnose a owl:Class ;
+    rdfs:label "Diagnose"@en ;
+    rdfs:comment "Read the fault code and diagnose the device."@en ;
+    rdfs:subClassOf wt:MaintenanceAction .
+
+wt:Door a owl:Class ;
+    rdfs:label "Door"@en ;
+    rdfs:comment "A door."@en ;
+    rdfs:subClassOf wt:AccessStructure .
+
+wt:ExternalDamage a owl:Class ;
+    rdfs:label "External Damage"@en ;
+    rdfs:comment "Damage from outside."@en ;
+    rdfs:subClassOf wt:Fault .
+
+wt:FluidLevelLow a owl:Class ;
+    rdfs:label "Fluid Level Low"@en ;
+    rdfs:comment "Oil or coolant below the minimum mark."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty wt:remediedBy ;
+            owl:someValuesFrom wt:Refill ],
+        wt:FunctionalFault .
+
+wt:Foundation a owl:Class ;
+    rdfs:label "Foundation"@en ;
+    rdfs:comment "Concrete foundation with plinth, grout joint and anchor bolts."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty wt:partOf ;
+            owl:someValuesFrom wt:WindTurbine ],
+        wt:Assembly .
+
+wt:Hatch a owl:Class ;
+    rdfs:label "Hatch"@en ;
+    rdfs:comment "A floor hatch."@en ;
+    rdfs:subClassOf wt:AccessStructure .
+
+wt:Nacelle a owl:Class ;
+    rdfs:label "Nacelle"@en ;
+    rdfs:comment "Machine housing on the tower top, turning about the yaw axis."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty wt:partOf ;
+            owl:someValuesFrom wt:WindTurbine ],
+        wt:Assembly .
+
+wt:Overheating a owl:Class ;
+    rdfs:label "Overheating"@en ;
+    rdfs:comment "Temperature above its limit."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty wt:remediedBy ;
+            owl:someValuesFrom wt:Diagnose ],
+        wt:ThermalFault .
+
+wt:Platform a owl:Class ;
+    rdfs:label "Platform"@en ;
+    rdfs:comment "Floor inside the tower."@en ;
+    rdfs:subClassOf wt:AccessStructure .
+
+wt:Recoat a owl:Class ;
+    rdfs:label "Recoat"@en ;
+    rdfs:comment "Remove corrosion and repaint."@en ;
+    rdfs:subClassOf wt:MaintenanceAction .
+
+wt:Reseal a owl:Class ;
+    rdfs:label "Reseal"@en ;
+    rdfs:comment "Replace a seal."@en ;
+    rdfs:subClassOf wt:MaintenanceAction .
+
+wt:SafetyEquipment a owl:Class ;
+    rdfs:label "Safety Equipment"@en ;
+    rdfs:comment "Equipment for the safety of people."@en ;
+    rdfs:subClassOf wt:TurbineComponent .
+
+wt:Site a owl:Class ;
+    rdfs:label "Site"@en ;
+    rdfs:comment "The turbine's surroundings."@en ;
+    rdfs:subClassOf wt:PhysicalObject .
+
+wt:Storage a owl:Class ;
+    rdfs:label "Storage"@en ;
+    rdfs:comment "Where tools are kept."@en ;
+    rdfs:subClassOf wt:TurbineComponent .
+
+wt:ThermalFault a owl:Class ;
+    rdfs:label "Thermal Fault"@en ;
+    rdfs:comment "Too hot."@en ;
+    rdfs:subClassOf wt:Fault .
+
+wt:Tower a owl:Class ;
+    rdfs:label "Tower"@en ;
+    rdfs:comment "Tubular steel tower, bolted from sections, with its interior."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty wt:partOf ;
+            owl:someValuesFrom wt:WindTurbine ],
+        wt:Assembly .
+
+wt:YawSystem a owl:Class ;
+    rdfs:label "Yaw System"@en ;
+    rdfs:comment "Yaw bearing and drives turning the nacelle into the wind."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty wt:partOf ;
+            owl:someValuesFrom wt:WindTurbine ],
+        wt:Assembly .
+
+wt:action_NavigateAction a wt:CRAMAction,
+        owl:NamedIndividual ;
+    rdfs:label "NavigateAction"@en ;
+    rdfs:comment "Drive the base to a pose (route planning)."@en .
+
+wt:affects a owl:ObjectProperty ;
+    rdfs:label "Affects"@en ;
+    rdfs:comment "The component a fault is on."@en ;
+    rdfs:domain wt:Fault ;
+    rdfs:range wt:TurbineComponent ;
+    owl:inverseOf wt:hasFault .
+
+wt:brake_inspect_caliper a wt:InspectionPoint,
+        owl:NamedIndividual ;
+    rdfs:label "Brake: caliper"@en ;
+    wt:inspects wt:brake_caliper ;
+    wt:locatedInZone wt:zone_nacelle ;
+    wt:viewDistance 1.47 ;
+    rdfs:comment "brake pads (thickness, wear pin) and the disc's friction face"@en .
+
+wt:cabinet_converter_door a wt:CabinetDoor,
+        owl:NamedIndividual ;
+    rdfs:label "Cabinet converter door"@en ;
+    wt:mountedOn wt:cabinet_converter ;
+    wt:partOf wt:cabinet_converter ;
+    wt:urdfLink "cabinet_converter_door"^^xsd:string .
+
+wt:controller_inspect_door a wt:InspectionPoint,
+        owl:NamedIndividual ;
+    rdfs:label "Controller: door"@en ;
+    wt:inspects wt:cabinet_controller ;
+    wt:locatedInZone wt:zone_nacelle ;
+    wt:viewDistance 1.3 ;
+    rdfs:comment "controller cabinet: door closed, emergency stop not pressed"@en .
+
+wt:foundation_inspect_earthing a wt:InspectionPoint,
+        owl:NamedIndividual ;
+    rdfs:label "Foundation: earthing"@en ;
+    wt:inspects wt:foundation ;
+    wt:locatedInZone wt:zone_outside ;
+    wt:viewDistance 1.8 ;
+    rdfs:comment "earthing strap from the tower flange to the plinth terminal"@en .
+
+wt:foundation_inspect_grout a wt:InspectionPoint,
+        owl:NamedIndividual ;
+    rdfs:label "Foundation: grout"@en ;
+    wt:inspects wt:foundation ;
+    wt:locatedInZone wt:zone_outside ;
+    wt:viewDistance 1.8 ;
+    rdfs:comment "grout joint under the tower base flange"@en .
+
+wt:foundation_inspect_plinth a wt:InspectionPoint,
+        owl:NamedIndividual ;
+    rdfs:label "Foundation: plinth"@en ;
+    wt:inspects wt:foundation ;
+    wt:locatedInZone wt:zone_outside ;
+    wt:viewDistance 2.0 ;
+    rdfs:comment "foundation plinth concrete: cracks, spalling"@en .
+
+wt:g1_right_hand a wt:RobotHand,
+        owl:NamedIndividual ;
+    rdfs:label "G1 right Dex3 hand"@en ;
+    rdfs:comment "Three-finger Dex3 hand; fingers 1.4 Nm, thumb rotation 2.45 Nm."@en .
+
+wt:gearbox_inspect_bushing_left a wt:InspectionPoint,
+        owl:NamedIndividual ;
+    rdfs:label "Gearbox: bushing left"@en ;
+    wt:inspects wt:gearbox ;
+    wt:locatedInZone wt:zone_nacelle ;
+    wt:viewDistance 0.7 ;
+    rdfs:comment "torque arm elastomer bushing (-Y side)"@en .
+
+wt:gearbox_inspect_input_seal a wt:InspectionPoint,
+        owl:NamedIndividual ;
+    rdfs:label "Gearbox: input seal"@en ;
+    wt:inspects wt:gearbox ;
+    wt:locatedInZone wt:zone_nacelle ;
+    wt:viewDistance 1.35 ;
+    rdfs:comment "input shaft seal and front cover, below it the floor"@en .
+
+wt:gearbox_inspect_sight_glass a wt:InspectionPoint,
+        owl:NamedIndividual ;
+    rdfs:label "Gearbox: sight glass"@en ;
+    wt:inspects wt:gearbox ;
+    wt:locatedInZone wt:zone_nacelle ;
+    wt:viewDistance 1.17 ;
+    rdfs:comment "oil level in the sight glass"@en .
+
+wt:generator_inspect_slip_ring a wt:InspectionPoint,
+        owl:NamedIndividual ;
+    rdfs:label "Generator: slip ring"@en ;
+    wt:inspects wt:generator ;
+    wt:locatedInZone wt:zone_nacelle ;
+    wt:viewDistance 1.3 ;
+    rdfs:comment "slip-ring housing and brush cover: carbon dust"@en .
+
+wt:hasRobotPart a owl:ObjectProperty ;
+    rdfs:label "Has Robot Part"@en ;
+    rdfs:comment "A hand, camera or other part of a robot (not transitive, so it can be counted)."@en ;
+    rdfs:domain wt:Robot ;
+    rdfs:range wt:RobotPart .
+
+wt:hasSeverity a owl:FunctionalProperty,
+        owl:ObjectProperty ;
+    rdfs:label "Has Severity"@en ;
+    rdfs:comment "Severity of a fault."@en ;
+    rdfs:domain wt:Fault ;
+    rdfs:range wt:Severity .
+
+wt:hydraulic_unit a wt:HydraulicUnit,
+        owl:NamedIndividual ;
+    rdfs:label "Hydraulic unit"@en ;
+    wt:mountedOn wt:nacelle ;
+    wt:partOf wt:nacelle_assembly ;
+    wt:urdfLink "hydraulic_unit"^^xsd:string .
+
+wt:locatedInZone a owl:FunctionalProperty,
+        owl:ObjectProperty ;
+    rdfs:label "Located In Zone"@en ;
+    rdfs:comment "The zone something is in or reached from."@en ;
+    rdfs:range wt:Zone .
+
+wt:main_bearing_inspect_grease_collector a wt:InspectionPoint,
+        owl:NamedIndividual ;
+    rdfs:label "Main bearing: grease collector"@en ;
+    wt:inspects wt:main_bearing ;
+    wt:locatedInZone wt:zone_nacelle ;
+    wt:viewDistance 1.1 ;
+    rdfs:comment "used-grease collector fill level"@en .
+
+wt:modality_vibration a wt:SensingModality,
+        owl:NamedIndividual ;
+    rdfs:label "Vibration measurement (CMS)"@en .
+
+wt:nacelle_inspect_weather_mast a wt:InspectionPoint,
+        owl:NamedIndividual ;
+    rdfs:label "Nacelle: weather mast"@en ;
+    wt:inspects wt:nacelle ;
+    wt:locatedInZone wt:zone_outside ;
+    wt:viewDistance 1.6 ;
+    rdfs:comment "anemometer, wind vane and aviation light on the roof"@en .
+
+wt:observedAt a owl:ObjectProperty ;
+    rdfs:label "Observed At"@en ;
+    rdfs:comment "Where the fault is seen."@en ;
+    rdfs:domain wt:Fault ;
+    rdfs:range wt:InspectionPoint .
+
+wt:providesAccessTo a owl:ObjectProperty ;
+    rdfs:label "Provides Access To"@en ;
+    rdfs:comment "Equipment through which a zone is reached."@en ;
+    rdfs:domain wt:PhysicalObject ;
+    rdfs:range wt:Zone .
+
+wt:signal_gearbox_oil_level a wt:ConditionSignal,
+        owl:NamedIndividual ;
+    rdfs:label "Gearbox oil level"@en ;
+    wt:nominalValue 1.0 ;
+    wt:unit "fraction of nominal"^^xsd:string ;
+    rdfs:comment "Condition monitoring signal."@en .
+
+wt:tower_inspect_anchor_nuts a wt:InspectionPoint,
+        owl:NamedIndividual ;
+    rdfs:label "Tower: anchor nuts"@en ;
+    wt:inspects wt:tower_section_1 ;
+    wt:locatedInZone wt:zone_outside ;
+    wt:viewDistance 1.8 ;
+    rdfs:comment "anchor bolt nuts on the base flange"@en .
+
+wt:tower_inspect_base_coating a wt:InspectionPoint,
+        owl:NamedIndividual ;
+    rdfs:label "Tower: base coating"@en ;
+    wt:inspects wt:tower_section_1 ;
+    wt:locatedInZone wt:zone_outside ;
+    wt:viewDistance 3.0 ;
+    rdfs:comment "tower coating near the base: corrosion, paint damage"@en .
+
+wt:tower_inspect_cable_loop a wt:InspectionPoint,
+        owl:NamedIndividual ;
+    rdfs:label "Tower: cable loop"@en ;
+    wt:inspects wt:tower_section_4 ;
+    wt:locatedInZone wt:zone_tower ;
+    wt:viewDistance 1.45 ;
+    rdfs:comment "power cable loop at the saddle on the yaw deck: chafed insulation"@en .
+
+wt:tower_inspect_door a wt:InspectionPoint,
+        owl:NamedIndividual ;
+    rdfs:label "Tower: door"@en ;
+    wt:inspects wt:tower_section_1 ;
+    wt:locatedInZone wt:zone_outside ;
+    wt:viewDistance 6.0 ;
+    rdfs:comment "tower entrance door (closed, undamaged)"@en .
+
+wt:tower_inspect_flange_2 a wt:InspectionPoint,
+        owl:NamedIndividual ;
+    rdfs:label "Tower: flange 2"@en ;
+    wt:inspects wt:tower_section_2 ;
+    wt:locatedInZone wt:zone_tower ;
+    wt:viewDistance 0.55 ;
+    rdfs:comment "flange 2 bolts (M42): torque markings on the nuts under the flange"@en .
+
+wt:tower_inspect_flange_3 a wt:InspectionPoint,
+        owl:NamedIndividual ;
+    rdfs:label "Tower: flange 3"@en ;
+    wt:inspects wt:tower_section_3 ;
+    wt:locatedInZone wt:zone_tower ;
+    wt:viewDistance 0.55 ;
+    rdfs:comment "flange 3 bolts (M36): torque markings on the nuts under the flange"@en .
+
+wt:visitedBy a owl:ObjectProperty ;
+    rdfs:label "Visited By"@en .
+
+wt:Agent a owl:Class ;
+    rdfs:label "Agent"@en ;
+    rdfs:comment "Something that acts: a robot or a person."@en ;
+    rdfs:subClassOf wt:PhysicalObject .
+
+wt:Blade a owl:Class ;
+    rdfs:label "Blade"@en ;
+    rdfs:comment "Rotor blade, lofted from the IEA airfoils."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty wt:partOf ;
+            owl:someValuesFrom wt:Rotor ],
+        wt:StructuralComponent .
+
+wt:Erosion a owl:Class ;
+    rdfs:label "Erosion"@en ;
+    rdfs:comment "Material worn away by impact (rain, dust), e.g. blade leading edges."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty wt:remediedBy ;
+            owl:someValuesFrom wt:StructuralRepair ],
+        wt:MaterialDegradation .
+
+wt:FastenerFault a owl:Class ;
+    rdfs:label "Fastener Fault"@en ;
+    rdfs:comment "A bolted joint lost preload or a fastener is missing."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:hasValue wt:acp_rp_401 ;
+            owl:onProperty wt:describedIn ],
+        wt:Fault .
+
+wt:FlangeBoltSet a owl:Class ;
+    rdfs:label "Flange Bolt Set"@en ;
+    dcterms:source "ACP RP 401 (by analogy for the thresholds)" ;
+    rdfs:comment "Bolts of an internal tower flange joint, with torque markings."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:minQualifiedCardinality "2"^^xsd:nonNegativeInteger ;
+            owl:onClass wt:TowerSection ;
+            owl:onProperty wt:fastens ],
+        wt:BoltSet .
+
+wt:Gearbox a owl:Class ;
+    rdfs:label "Gearbox"@en ;
+    rdfs:comment "Three-stage gearbox, ratio 1:97."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty wt:partOf ;
+            owl:someValuesFrom wt:Drivetrain ],
+        wt:DrivetrainComponent .
+
+wt:LightningDamage a owl:Class ;
+    rdfs:label "Lightning Damage"@en ;
+    rdfs:comment "Damage from a lightning strike."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty wt:remediedBy ;
+            owl:someValuesFrom wt:StructuralRepair ],
+        wt:ExternalDamage .
+
+wt:LooseFastener a owl:Class ;
+    rdfs:label "Loose Fastener"@en ;
+    rdfs:comment "Nut or bolt turned back (torque marking offset): lost preload."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty wt:remediedBy ;
+            owl:someValuesFrom [ a owl:Class ;
+                    owl:unionOf ( wt:Retighten wt:Retension ) ] ],
+        wt:FastenerFault .
+
+wt:Person a owl:Class ;
+    rdfs:label "Person"@en ;
+    rdfs:comment "A human."@en ;
+    rdfs:subClassOf wt:Agent .
+
+wt:RestPlatform a owl:Class ;
+    rdfs:label "Rest Platform"@en ;
+    rdfs:comment "Platform about 1.1 m below a flange joint, for bolt checks."@en ;
+    rdfs:subClassOf wt:Platform .
+
+wt:RestoreConfiguration a owl:Class ;
+    rdfs:label "Restore Configuration"@en ;
+    rdfs:comment "Close, release or put back what was left in the wrong state."@en ;
+    rdfs:subClassOf wt:MaintenanceAction .
+
+wt:RobotHand a owl:Class ;
+    rdfs:label "Robot Hand"@en ;
+    rdfs:comment "An end effector with fingers."@en ;
+    rdfs:subClassOf wt:RobotPart .
+
+wt:RobotPart a owl:Class ;
+    rdfs:label "Robot Part"@en ;
+    rdfs:comment "A part of a robot."@en ;
+    rdfs:subClassOf wt:Artifact .
+
+wt:Rotor a owl:Class ;
+    rdfs:label "Rotor"@en ;
+    rdfs:comment "Hub with three blades."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty wt:partOf ;
+            owl:someValuesFrom wt:WindTurbine ],
+        wt:Assembly .
+
+wt:Tool a owl:Class ;
+    rdfs:label "Tool"@en ;
+    rdfs:comment "A hand tool or tool set."@en ;
+    rdfs:subClassOf wt:Artifact .
+
+wt:action_ParkArmsAction a wt:CRAMAction,
+        owl:NamedIndividual ;
+    rdfs:label "ParkArmsAction"@en ;
+    rdfs:comment "Move the arms to the park pose."@en .
+
+wt:action_RideCarrier a wt:CRAMAction,
+        owl:NamedIndividual ;
+    rdfs:label "RideCarrier"@en ;
+    rdfs:comment "Stand on a lift car or platform while its joint moves."@en .
+
+wt:cabinet_controller a wt:ControllerCabinet,
+        owl:NamedIndividual ;
+    rdfs:label "Cabinet controller"@en ;
+    wt:mountedOn wt:nacelle ;
+    wt:partOf wt:nacelle_assembly ;
+    wt:urdfLink "cabinet_controller"^^xsd:string .
+
+wt:cabinet_converter a wt:ConverterCabinet,
+        owl:NamedIndividual ;
+    rdfs:label "Cabinet converter"@en ;
+    wt:mountedOn wt:nacelle ;
+    wt:partOf wt:nacelle_assembly ;
+    wt:urdfLink "cabinet_converter"^^xsd:string .
+
+wt:cooling_unit a wt:CoolingUnit,
+        owl:NamedIndividual ;
+    rdfs:label "Cooling unit"@en ;
+    wt:mountedOn wt:nacelle ;
+    wt:partOf wt:nacelle_assembly ;
+    wt:urdfLink "cooling_unit"^^xsd:string .
+
+wt:describedIn a owl:ObjectProperty ;
+    rdfs:label "Described In"@en ;
+    rdfs:comment "Where a procedure or threshold is described."@en ;
+    rdfs:range wt:MaintenanceDocument .
+
+wt:hub a wt:Hub,
+        owl:NamedIndividual ;
+    rdfs:label "Hub"@en ;
+    wt:mountedOn wt:main_shaft ;
+    wt:partOf wt:rotor ;
+    wt:urdfLink "hub"^^xsd:string .
+
+wt:modality_thermal a wt:SensingModality,
+        owl:NamedIndividual ;
+    rdfs:label "Thermal camera"@en .
+
+wt:observableBy a owl:ObjectProperty ;
+    rdfs:label "Observable By"@en ;
+    rdfs:comment "How the fault can be observed."@en ;
+    rdfs:domain wt:Fault ;
+    rdfs:range wt:SensingModality .
+
+wt:service_lift a wt:ServiceLift,
+        owl:NamedIndividual ;
+    rdfs:label "Service lift"@en ;
+    wt:mountedOn wt:tower_section_1 ;
+    wt:partOf wt:tower ;
+    wt:providesAccessTo wt:zone_tower ;
+    wt:speed 4.0 ;
+    wt:travel 105.46 ;
+    wt:urdfLink "service_lift"^^xsd:string .
+
+wt:signal_power_curve_deficit_percent a wt:ConditionSignal,
+        owl:NamedIndividual ;
+    rdfs:label "Power curve deficit percent"@en ;
+    wt:nominalValue 0.0 ;
+    wt:unit "%"^^xsd:string ;
+    rdfs:comment "Condition monitoring signal."@en .
+
+wt:AccessStructure a owl:Class ;
+    rdfs:label "Access Structure"@en ;
+    rdfs:comment "Structure for moving around the turbine."@en ;
+    rdfs:subClassOf wt:TurbineComponent .
+
+wt:Drivetrain a owl:Class ;
+    rdfs:label "Drivetrain"@en ;
+    rdfs:comment "Main shaft, main bearing, gearbox, high-speed shaft, brake, coupling and generator."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty wt:partOf ;
+            owl:someValuesFrom wt:Nacelle ],
+        [ a owl:Restriction ;
+            owl:onProperty wt:partOf ;
+            owl:someValuesFrom wt:WindTurbine ],
+        wt:Assembly .
+
+wt:InspectionRound a owl:Class ;
+    rdfs:label "Inspection Round"@en ;
+    rdfs:comment "Visit inspection points and report their state."@en ;
+    rdfs:subClassOf wt:RobotTask .
+
+wt:Ladder a owl:Class ;
+    rdfs:label "Ladder"@en ;
+    rdfs:comment "Ladder with fall-arrest rail."@en ;
+    rdfs:subClassOf wt:AccessStructure .
+
+wt:Leak a owl:Class ;
+    rdfs:label "Leak"@en ;
+    rdfs:comment "A fluid escapes where it should not."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:hasValue wt:acp_om_recommended_practices ;
+            owl:onProperty wt:describedIn ],
+        wt:Fault .
+
+wt:StructuralRepair a owl:Class ;
+    rdfs:label "Structural Repair"@en ;
+    rdfs:comment "Repair concrete, metal or composite structure."@en ;
+    rdfs:subClassOf wt:MaintenanceAction .
+
+wt:UnsafeCondition a owl:Class ;
+    rdfs:label "Unsafe Condition"@en ;
+    rdfs:comment "A configuration that is unsafe or not allowed in operation."@en ;
+    rdfs:subClassOf wt:Fault .
+
+wt:fast_shaft a wt:HighSpeedShaft,
+        owl:NamedIndividual ;
+    rdfs:label "Fast shaft"@en ;
+    wt:mountedOn wt:drivetrain ;
+    wt:partOf wt:drivetrain ;
+    wt:urdfLink "fast_shaft"^^xsd:string .
+
+wt:foundation_system a wt:Foundation,
+        owl:NamedIndividual ;
+    rdfs:label "Foundation"@en ;
+    wt:partOf wt:iea_3_4_130_rwt .
+
+wt:generator a wt:Generator,
+        owl:NamedIndividual ;
+    rdfs:label "Generator"@en ;
+    wt:mountedOn wt:drivetrain ;
+    wt:partOf wt:drivetrain ;
+    wt:urdfLink "generator"^^xsd:string .
+
+wt:main_shaft_inspect_shrink_disc a wt:InspectionPoint,
+        owl:NamedIndividual ;
+    rdfs:label "Main shaft: shrink disc"@en ;
+    wt:inspects wt:main_shaft ;
+    wt:locatedInZone wt:zone_nacelle ;
+    wt:viewDistance 1.6 ;
+    rdfs:comment "shrink disc bolts (torque markers) and fretting"@en .
+
+wt:rotor a wt:Rotor,
+        owl:NamedIndividual ;
+    rdfs:label "Rotor"@en ;
+    wt:partOf wt:iea_3_4_130_rwt .
+
+wt:rotor_lock a wt:RotorLock,
+        owl:NamedIndividual ;
+    rdfs:label "Rotor lock"@en ;
+    wt:mountedOn wt:main_bearing ;
+    wt:partOf wt:drivetrain ;
+    wt:urdfLink "rotor_lock"^^xsd:string .
+
+wt:service_crane a wt:ServiceCrane,
+        owl:NamedIndividual ;
+    rdfs:label "Service crane"@en ;
+    wt:partOf wt:nacelle_assembly .
+
+wt:weather_mast a wt:WeatherMast,
+        owl:NamedIndividual ;
+    rdfs:label "Weather mast"@en ;
+    wt:mountedOn wt:nacelle ;
+    wt:partOf wt:nacelle_assembly ;
+    wt:urdfLink "weather_mast"^^xsd:string .
+
+wt:MaintenanceDocument a owl:Class ;
+    rdfs:label "Maintenance Document"@en ;
+    rdfs:comment "A manual or recommended practice describing inspections or repairs."@en ;
+    rdfs:subClassOf owl:Thing .
+
+wt:ReplacePart a owl:Class ;
+    rdfs:label "Replace Part"@en ;
+    rdfs:comment "Replace a worn or broken part."@en ;
+    rdfs:subClassOf wt:MaintenanceAction .
+
+wt:Robot a owl:Class ;
+    rdfs:label "Robot"@en ;
+    rdfs:comment "A robot."@en ;
+    rdfs:subClassOf wt:Agent,
+        wt:Artifact .
+
+wt:TowerSection a owl:Class ;
+    rdfs:label "Tower Section"@en ;
+    rdfs:comment "One bolted steel tower section."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty wt:partOf ;
+            owl:someValuesFrom wt:Tower ],
+        wt:StructuralComponent .
+
+wt:action_StraightMove a wt:CRAMAction,
+        owl:NamedIndividual ;
+    rdfs:label "StraightMove"@en ;
+    rdfs:comment "Straight base move without route planning."@en .
+
+wt:brake_caliper a wt:BrakeCaliper,
+        owl:NamedIndividual ;
+    rdfs:label "Brake caliper"@en ;
+    wt:mountedOn wt:drivetrain ;
+    wt:partOf wt:drivetrain ;
+    wt:urdfLink "brake_caliper"^^xsd:string .
+
+wt:main_shaft a wt:MainShaft,
+        owl:NamedIndividual ;
+    rdfs:label "Main shaft"@en ;
+    wt:mountedOn wt:drivetrain ;
+    wt:partOf wt:drivetrain ;
+    wt:urdfLink "main_shaft"^^xsd:string .
+
+wt:Artifact a owl:Class ;
+    rdfs:label "Artifact"@en ;
+    rdfs:comment "A physical object made for a purpose."@en ;
+    rdfs:subClassOf wt:PhysicalObject .
+
+wt:AuxiliarySystem a owl:Class ;
+    rdfs:label "Auxiliary System"@en ;
+    rdfs:comment "Supporting systems."@en ;
+    rdfs:subClassOf wt:TurbineComponent .
+
+wt:SensingModality a owl:Class ;
+    rdfs:label "Sensing Modality"@en ;
+    rdfs:comment "How a condition can be observed."@en ;
+    rdfs:subClassOf owl:Thing .
+
+wt:Severity a owl:Class ;
+    rdfs:label "Severity"@en ;
+    rdfs:comment "How urgent a fault is."@en ;
+    rdfs:subClassOf owl:Thing ;
+    owl:equivalentClass [ a owl:Class ;
+            owl:oneOf ( wt:severity_low wt:severity_medium wt:severity_high ) ] .
+
+wt:blade_1 a wt:Blade,
+        owl:NamedIndividual ;
+    rdfs:label "Blade 1"@en ;
+    wt:mountedOn wt:hub ;
+    wt:partOf wt:rotor ;
+    wt:urdfLink "blade_1"^^xsd:string .
+
+wt:blade_2 a wt:Blade,
+        owl:NamedIndividual ;
+    rdfs:label "Blade 2"@en ;
+    wt:mountedOn wt:hub ;
+    wt:partOf wt:rotor ;
+    wt:urdfLink "blade_2"^^xsd:string .
+
+wt:blade_3 a wt:Blade,
+        owl:NamedIndividual ;
+    rdfs:label "Blade 3"@en ;
+    wt:mountedOn wt:hub ;
+    wt:partOf wt:rotor ;
+    wt:urdfLink "blade_3"^^xsd:string .
+
+wt:iea_3_4_130_rwt a wt:WindTurbine,
+        owl:NamedIndividual ;
+    rdfs:label "IEA-3.4-130-RWT"@en ;
+    wt:hubHeight 110.0 ;
+    wt:ratedPower 3.37 ;
+    wt:rotorDiameter 130.0 ;
+    wt:towerHeight 108.0 ;
+    rdfs:comment "The modelled land-based reference turbine."@en .
+
+wt:main_bearing a wt:MainBearing,
+        owl:NamedIndividual ;
+    rdfs:label "Main bearing"@en ;
+    wt:mountedOn wt:drivetrain ;
+    wt:partOf wt:drivetrain ;
+    wt:urdfLink "main_bearing"^^xsd:string .
+
+wt:tower_section_4 a wt:TowerSection,
+        owl:NamedIndividual ;
+    rdfs:label "Tower section 4"@en ;
+    wt:mountedOn wt:tower_section_3 ;
+    wt:partOf wt:tower ;
+    wt:urdfLink "tower_section_4"^^xsd:string .
+
+wt:Assembly a owl:Class ;
+    rdfs:label "Assembly"@en ;
+    rdfs:comment "A major structural or functional group of a wind turbine."@en ;
+    rdfs:subClassOf wt:Artifact .
+
+wt:Crack a owl:Class ;
+    rdfs:label "Crack"@en ;
+    rdfs:comment "A crack in concrete, metal, composite or elastomer."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty wt:remediedBy ;
+            owl:someValuesFrom wt:StructuralRepair ],
+        wt:MaterialDegradation .
+
+wt:ElectricalComponent a owl:Class ;
+    rdfs:label "Electrical Component"@en ;
+    rdfs:comment "Power conversion, control and grounding."@en ;
+    rdfs:subClassOf wt:TurbineComponent .
+
+wt:Zone a owl:Class ;
+    rdfs:label "Zone"@en ;
+    rdfs:comment "A region of the turbine where a robot works: outside, inside the tower, inside the nacelle."@en ;
+    rdfs:subClassOf owl:Thing ;
+    owl:equivalentClass [ a owl:Class ;
+            owl:oneOf ( wt:zone_outside wt:zone_tower wt:zone_nacelle ) ] .
+
+wt:action_LookAtAction a wt:CRAMAction,
+        owl:NamedIndividual ;
+    rdfs:label "LookAtAction"@en ;
+    rdfs:comment "Point the camera at a target."@en .
+
+wt:g1 a wt:UnitreeG1,
+        owl:NamedIndividual ;
+    rdfs:label "Unitree G1"@en ;
+    wt:cameraHeight 1.27 ;
+    wt:hasRobotPart wt:g1_d435,
+        wt:g1_left_hand,
+        wt:g1_right_hand ;
+    wt:mass 34.8 ;
+    rdfs:comment "The humanoid of the CRAM stack (OFFIS description)."@en .
+
+wt:severity_low a wt:Severity,
+        owl:NamedIndividual ;
+    rdfs:label "low"@en ;
+    wt:severityRank 1 .
+
+wt:tower_section_2 a wt:TowerSection,
+        owl:NamedIndividual ;
+    rdfs:label "Tower section 2"@en ;
+    wt:mountedOn wt:tower_section_1 ;
+    wt:partOf wt:tower ;
+    wt:urdfLink "tower_section_2"^^xsd:string .
+
+wt:tower_section_3 a wt:TowerSection,
+        owl:NamedIndividual ;
+    rdfs:label "Tower section 3"@en ;
+    wt:mountedOn wt:tower_section_2 ;
+    wt:partOf wt:tower ;
+    wt:urdfLink "tower_section_3"^^xsd:string .
+
+wt:CRAMAction a owl:Class ;
+    rdfs:label "CRAMAction"@en ;
+    rdfs:comment "An action designator of the CRAM stack (coraplex) used in the plans."@en ;
+    rdfs:subClassOf owl:Thing .
+
+wt:MaterialDegradation a owl:Class ;
+    rdfs:label "Material Degradation"@en ;
+    rdfs:comment "The material itself is damaged or worn."@en ;
+    rdfs:subClassOf wt:Fault .
+
+wt:StructuralComponent a owl:Class ;
+    rdfs:label "Structural Component"@en ;
+    rdfs:comment "Load-carrying structure."@en ;
+    rdfs:subClassOf wt:TurbineComponent .
+
+wt:FunctionalFault a owl:Class ;
+    rdfs:label "Functional Fault"@en ;
+    rdfs:comment "Something does not work as it should."@en ;
+    rdfs:subClassOf wt:Fault .
+
+wt:PhysicalObject a owl:Class ;
+    rdfs:label "Physical Object"@en ;
+    rdfs:comment "Anything with a location in space: the turbine and its parts, robots, tools, people."@en ;
+    rdfs:subClassOf owl:Thing .
+
+wt:BoltSet a owl:Class ;
+    rdfs:label "Bolt Set"@en ;
+    rdfs:comment "The bolts of one bolted joint."@en ;
+    rdfs:subClassOf wt:Fastener .
+
+wt:HandlingEquipment a owl:Class ;
+    rdfs:label "Handling Equipment"@en ;
+    rdfs:comment "Equipment that lifts or carries loads and people."@en ;
+    rdfs:subClassOf wt:TurbineComponent .
+
+wt:foundation a wt:FoundationPlinth,
+        owl:NamedIndividual ;
+    rdfs:label "Foundation"@en ;
+    wt:partOf wt:foundation_system ;
+    wt:urdfLink "foundation"^^xsd:string .
+
+wt:WindTurbine a owl:Class ;
+    rdfs:label "Wind Turbine"@en ;
+    rdfs:comment "A horizontal-axis wind turbine as a whole."@en ;
+    rdfs:subClassOf wt:Artifact .
+
+wt:RobotTask a owl:Class ;
+    rdfs:label "Robot Task"@en ;
+    rdfs:comment "A task the robot executes as a CRAM plan."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty wt:performedBy ;
+            owl:someValuesFrom wt:Robot ],
+        owl:Thing .
+
+wt:modality_drone_rgb a wt:SensingModality,
+        owl:NamedIndividual ;
+    rdfs:label "RGB camera on a drone"@en .
+
+wt:DrivetrainComponent a owl:Class ;
+    rdfs:label "Drivetrain Component"@en ;
+    rdfs:comment "Part of the power train from hub to generator."@en ;
+    rdfs:subClassOf wt:TurbineComponent .
+
+wt:drivetrain a wt:Drivetrain,
+        owl:NamedIndividual ;
+    rdfs:label "Drivetrain"@en ;
+    wt:partOf wt:iea_3_4_130_rwt,
+        wt:nacelle_assembly ;
+    wt:urdfLink "drivetrain"^^xsd:string .
+
+wt:MaintenanceAction a owl:Class ;
+    rdfs:label "Maintenance Action"@en ;
+    dcterms:source "ACP O&M Recommended Practices" ;
+    rdfs:comment "What a technician does to remedy a fault."@en ;
+    rdfs:subClassOf owl:Thing .
+
+wt:TurbineComponent a owl:Class ;
+    rdfs:label "Turbine Component"@en ;
+    rdfs:comment "A part of a wind turbine that can be inspected, maintained or replaced."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onProperty wt:partOf ;
+            owl:someValuesFrom wt:Assembly ],
+        wt:Artifact .
+
+wt:zone_tower a wt:Zone,
+        owl:NamedIndividual ;
+    rdfs:label "Tower"@en ;
+    rdfs:comment "Inside the tower: ground floor, rest platforms, yaw deck."@en .
+
+wt:nacelle_assembly a wt:Nacelle,
+        owl:NamedIndividual ;
+    rdfs:label "Nacelle"@en ;
+    wt:partOf wt:iea_3_4_130_rwt .
+
+wt:tower_section_1 a wt:TowerSection,
+        owl:NamedIndividual ;
+    rdfs:label "Tower section 1"@en ;
+    wt:mountedOn wt:foundation ;
+    wt:partOf wt:tower ;
+    wt:urdfLink "tower_section_1"^^xsd:string .
+
+wt:gearbox a wt:Gearbox,
+        owl:NamedIndividual ;
+    rdfs:label "Gearbox"@en ;
+    wt:mountedOn wt:drivetrain ;
+    wt:partOf wt:drivetrain ;
+    wt:urdfLink "gearbox"^^xsd:string .
+
+wt:severity_medium a wt:Severity,
+        owl:NamedIndividual ;
+    rdfs:label "medium"@en ;
+    wt:severityRank 2 .
+
+wt:tower a wt:Tower,
+        owl:NamedIndividual ;
+    rdfs:label "Tower"@en ;
+    wt:partOf wt:iea_3_4_130_rwt .
+
+wt:nacelle a wt:NacelleHousing,
+        owl:NamedIndividual ;
+    rdfs:label "Nacelle"@en ;
+    wt:mountedOn wt:yaw_bearing ;
+    wt:partOf wt:nacelle_assembly ;
+    wt:urdfLink "nacelle"^^xsd:string .
+
+wt:partOf a owl:ObjectProperty,
+        owl:TransitiveProperty ;
+    rdfs:label "Part Of"@en ;
+    rdfs:comment "Structural part-whole relation (transitive)."@en ;
+    owl:inverseOf wt:hasPart .
+
+wt:Fault a owl:Class ;
+    rdfs:label "Fault"@en ;
+    rdfs:comment "An abnormal condition of a turbine component that an inspection should find."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onClass wt:Severity ;
+            owl:onProperty wt:hasSeverity ;
+            owl:qualifiedCardinality "1"^^xsd:nonNegativeInteger ],
+        [ a owl:Restriction ;
+            owl:onProperty wt:affects ;
+            owl:someValuesFrom wt:TurbineComponent ],
+        [ a owl:Restriction ;
+            owl:onProperty wt:observableBy ;
+            owl:someValuesFrom wt:SensingModality ],
+        owl:Thing .
+
+wt:severity_high a wt:Severity,
+        owl:NamedIndividual ;
+    rdfs:label "high"@en ;
+    wt:severityRank 3 .
+
+wt:zone_outside a wt:Zone,
+        owl:NamedIndividual ;
+    rdfs:label "Outside"@en ;
+    rdfs:comment "Around the tower base and outside the nacelle (ground robot or drone)."@en .
+
+wt:remediedBy a owl:ObjectProperty ;
+    rdfs:label "Remedied By"@en ;
+    rdfs:comment "What remedies the fault."@en ;
+    rdfs:domain wt:Fault ;
+    rdfs:range wt:MaintenanceAction .
+
+wt:ConditionSignal a owl:Class ;
+    rdfs:label "Condition Signal"@en ;
+    rdfs:comment "A measured value from the turbine's condition monitoring (SCADA / CMS)."@en ;
+    rdfs:subClassOf owl:Thing .
+
+wt:zone_nacelle a wt:Zone,
+        owl:NamedIndividual ;
+    rdfs:label "Nacelle"@en ;
+    rdfs:comment "Inside the nacelle: walkways along the drivetrain."@en .
+
+wt:modality_rgb a wt:SensingModality,
+        owl:NamedIndividual ;
+    rdfs:label "RGB camera on the robot"@en .
+
+wt:InspectionPoint a owl:Class ;
+    rdfs:label "Inspection Point"@en ;
+    rdfs:comment "A place on a component to look at, with the direction and distance a camera should look from."@en ;
+    rdfs:subClassOf [ a owl:Restriction ;
+            owl:onClass wt:TurbineComponent ;
+            owl:onProperty wt:inspects ;
+            owl:qualifiedCardinality "1"^^xsd:nonNegativeInteger ],
+        [ a owl:Restriction ;
+            owl:onClass wt:Zone ;
+            owl:onProperty wt:locatedInZone ;
+            owl:qualifiedCardinality "1"^^xsd:nonNegativeInteger ],
+        owl:Thing .
+
+[] a owl:AllDisjointClasses ;
+    owl:members ( wt:MaterialDegradation wt:Leak wt:FastenerFault wt:ThermalFault wt:FunctionalFault wt:ExternalDamage wt:UnsafeCondition ) .
+
+[] a owl:AllDifferent ;
+    owl:distinctMembers ( wt:severity_low wt:severity_medium wt:severity_high ) .
+
+[] a owl:AllDisjointClasses ;
+    owl:members ( wt:TurbineComponent wt:Robot wt:Person wt:Tool wt:Site ) .
+
+[] a owl:AllDifferent ;
+    owl:distinctMembers ( wt:zone_outside wt:zone_tower wt:zone_nacelle ) .
+

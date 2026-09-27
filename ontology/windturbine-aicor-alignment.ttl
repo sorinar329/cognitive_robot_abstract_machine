@@ -1,0 +1,22 @@
+@prefix aicor: <http://aicor.knowledge/l2-ontology.owl#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix wt: <http://www.semanticweb.org/windturbine-twin/ontology#> .
+
+wt:ConditionSignal rdfs:subClassOf aicor:SensorOutput .
+
+wt:MaintenanceAction rdfs:subClassOf aicor:PhysicalRepair .
+
+wt:PhysicalObject rdfs:subClassOf aicor:PhysicalEntity .
+
+wt:Robot rdfs:subClassOf aicor:Robot .
+
+wt:RobotTask rdfs:subClassOf aicor:Task .
+
+wt:Sensor rdfs:subClassOf aicor:Sensor .
+
+<http://www.semanticweb.org/windturbine-twin/ontology/aicor-alignment> a owl:Ontology ;
+    rdfs:comment "Maps the Wind Turbine Twin ontology onto the AICOR L2 ontology (DUL-based)."@en ;
+    owl:imports <http://aicor.knowledge/l2-ontology.owl>,
+        <http://www.semanticweb.org/windturbine-twin/ontology> .
+

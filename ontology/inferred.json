@@ -1,0 +1,352 @@
+{
+ "reasoner": "HermiT (owlready2 0.51)",
+ "consistent": true,
+ "unsatisfiable": [],
+ "defined_class_members": {
+  "MonitoredFault": [
+   "fault_blade_1_leading_edge_erosion",
+   "fault_blade_1_lightning_damage",
+   "fault_blade_2_leading_edge_erosion",
+   "fault_blade_2_lightning_damage",
+   "fault_blade_3_leading_edge_erosion",
+   "fault_blade_3_lightning_damage",
+   "fault_brake_disc_overheated",
+   "fault_brake_pads_worn",
+   "fault_converter_fault_light",
+   "fault_cooling_coolant_low",
+   "fault_coupling_disc_pack_cracked",
+   "fault_foundation_earthing_disconnected",
+   "fault_gearbox_filter_clogged",
+   "fault_gearbox_oil_leak_input_seal",
+   "fault_gearbox_oil_level_low",
+   "fault_gearbox_torque_arm_bushing_cracked",
+   "fault_generator_slip_ring_carbon_dust",
+   "fault_generator_terminal_box_overheating",
+   "fault_hydraulic_hose_leak",
+   "fault_main_bearing_grease_leak_front_seal",
+   "fault_main_shaft_fretting_corrosion",
+   "fault_nacelle_anemometer_damaged",
+   "fault_nacelle_aviation_light_failed"
+  ],
+  "Severity": [
+   "severity_high",
+   "severity_low",
+   "severity_medium"
+  ],
+  "ThermallyDetectableFault": [
+   "fault_brake_disc_overheated",
+   "fault_generator_terminal_box_overheating"
+  ],
+  "Zone": [
+   "zone_nacelle",
+   "zone_outside",
+   "zone_tower"
+  ],
+  "HighSeverityFault": [
+   "fault_blade_1_lightning_damage",
+   "fault_blade_1_trailing_edge_crack",
+   "fault_blade_2_lightning_damage",
+   "fault_blade_2_trailing_edge_crack",
+   "fault_blade_3_lightning_damage",
+   "fault_blade_3_trailing_edge_crack",
+   "fault_brake_disc_overheated",
+   "fault_converter_fault_light",
+   "fault_coupling_disc_pack_cracked",
+   "fault_foundation_earthing_disconnected",
+   "fault_foundation_grout_breakout",
+   "fault_gearbox_oil_leak_input_seal",
+   "fault_gearbox_oil_level_low",
+   "fault_generator_terminal_box_overheating",
+   "fault_main_shaft_shrink_disc_bolt_loose",
+   "fault_nacelle_aviation_light_failed",
+   "fault_rotor_lock_left_engaged",
+   "fault_safety_extinguisher_missing",
+   "fault_tower_cable_loop_chafed",
+   "fault_tower_flange_2_bolts_loose"
+  ],
+  "NacelleFault": [
+   "fault_brake_disc_overheated",
+   "fault_brake_pads_worn",
+   "fault_controller_door_left_open",
+   "fault_converter_fault_light",
+   "fault_cooling_coolant_low",
+   "fault_coupling_disc_pack_cracked",
+   "fault_gearbox_cover_bolt_missing",
+   "fault_gearbox_filter_clogged",
+   "fault_gearbox_oil_leak_input_seal",
+   "fault_gearbox_oil_level_low",
+   "fault_gearbox_torque_arm_bushing_cracked",
+   "fault_generator_slip_ring_carbon_dust",
+   "fault_generator_terminal_box_overheating",
+   "fault_hydraulic_hose_leak",
+   "fault_main_bearing_grease_collector_full",
+   "fault_main_bearing_grease_leak_front_seal",
+   "fault_main_shaft_fretting_corrosion",
+   "fault_main_shaft_shrink_disc_bolt_loose",
+   "fault_rotor_lock_left_engaged",
+   "fault_safety_extinguisher_missing"
+  ],
+  "G1InspectableFault": [
+   "fault_controller_door_left_open",
+   "fault_foundation_earthing_disconnected",
+   "fault_foundation_grout_breakout",
+   "fault_foundation_plinth_crack",
+   "fault_gearbox_oil_leak_input_seal",
+   "fault_gearbox_oil_level_low",
+   "fault_gearbox_torque_arm_bushing_cracked",
+   "fault_generator_slip_ring_carbon_dust",
+   "fault_main_bearing_grease_collector_full",
+   "fault_main_shaft_fretting_corrosion",
+   "fault_main_shaft_shrink_disc_bolt_loose",
+   "fault_tower_anchor_nut_corrosion",
+   "fault_tower_base_coating_damage",
+   "fault_tower_cable_loop_chafed",
+   "fault_tower_flange_2_bolts_loose",
+   "fault_tower_flange_3_bolts_loose"
+  ],
+  "DrivetrainFault": [
+   "fault_brake_disc_overheated",
+   "fault_brake_pads_worn",
+   "fault_coupling_disc_pack_cracked",
+   "fault_gearbox_cover_bolt_missing",
+   "fault_gearbox_filter_clogged",
+   "fault_gearbox_oil_leak_input_seal",
+   "fault_gearbox_oil_level_low",
+   "fault_gearbox_torque_arm_bushing_cracked",
+   "fault_generator_slip_ring_carbon_dust",
+   "fault_generator_terminal_box_overheating",
+   "fault_main_bearing_grease_collector_full",
+   "fault_main_bearing_grease_leak_front_seal",
+   "fault_main_shaft_fretting_corrosion",
+   "fault_main_shaft_shrink_disc_bolt_loose",
+   "fault_rotor_lock_left_engaged"
+  ],
+  "DroneInspectableFault": [
+   "fault_blade_1_leading_edge_erosion",
+   "fault_blade_1_lightning_damage",
+   "fault_blade_1_trailing_edge_crack",
+   "fault_blade_2_leading_edge_erosion",
+   "fault_blade_2_lightning_damage",
+   "fault_blade_2_trailing_edge_crack",
+   "fault_blade_3_leading_edge_erosion",
+   "fault_blade_3_lightning_damage",
+   "fault_blade_3_trailing_edge_crack",
+   "fault_nacelle_anemometer_damaged",
+   "fault_nacelle_aviation_light_failed",
+   "fault_nacelle_cover_crack"
+  ]
+ },
+ "inferred_types": {
+  "fault_tower_cable_loop_chafed": [
+   "G1InspectableFault",
+   "HighSeverityFault"
+  ],
+  "fault_gearbox_cover_bolt_missing": [
+   "DrivetrainFault",
+   "NacelleFault"
+  ],
+  "fault_safety_extinguisher_missing": [
+   "HighSeverityFault",
+   "NacelleFault"
+  ],
+  "fault_cooling_coolant_low": [
+   "MonitoredFault",
+   "NacelleFault"
+  ],
+  "fault_tower_anchor_nut_corrosion": [
+   "G1InspectableFault"
+  ],
+  "fault_blade_2_lightning_damage": [
+   "DroneInspectableFault",
+   "HighSeverityFault",
+   "MonitoredFault"
+  ],
+  "fault_gearbox_torque_arm_bushing_cracked": [
+   "DrivetrainFault",
+   "G1InspectableFault",
+   "MonitoredFault",
+   "NacelleFault"
+  ],
+  "fault_main_bearing_grease_collector_full": [
+   "DrivetrainFault",
+   "G1InspectableFault",
+   "NacelleFault"
+  ],
+  "fault_foundation_grout_breakout": [
+   "G1InspectableFault",
+   "HighSeverityFault"
+  ],
+  "fault_brake_disc_overheated": [
+   "DrivetrainFault",
+   "HighSeverityFault",
+   "MonitoredFault",
+   "NacelleFault",
+   "ThermallyDetectableFault"
+  ],
+  "fault_gearbox_oil_leak_input_seal": [
+   "DrivetrainFault",
+   "G1InspectableFault",
+   "HighSeverityFault",
+   "MonitoredFault",
+   "NacelleFault"
+  ],
+  "fault_blade_1_lightning_damage": [
+   "DroneInspectableFault",
+   "HighSeverityFault",
+   "MonitoredFault"
+  ],
+  "fault_blade_2_trailing_edge_crack": [
+   "DroneInspectableFault",
+   "HighSeverityFault"
+  ],
+  "fault_coupling_disc_pack_cracked": [
+   "DrivetrainFault",
+   "HighSeverityFault",
+   "MonitoredFault",
+   "NacelleFault"
+  ],
+  "fault_nacelle_aviation_light_failed": [
+   "DroneInspectableFault",
+   "HighSeverityFault",
+   "MonitoredFault"
+  ],
+  "fault_blade_3_lightning_damage": [
+   "DroneInspectableFault",
+   "HighSeverityFault",
+   "MonitoredFault"
+  ],
+  "fault_gearbox_filter_clogged": [
+   "DrivetrainFault",
+   "MonitoredFault",
+   "NacelleFault"
+  ],
+  "fault_foundation_plinth_crack": [
+   "G1InspectableFault"
+  ],
+  "fault_generator_slip_ring_carbon_dust": [
+   "DrivetrainFault",
+   "G1InspectableFault",
+   "MonitoredFault",
+   "NacelleFault"
+  ],
+  "fault_gearbox_oil_level_low": [
+   "DrivetrainFault",
+   "G1InspectableFault",
+   "HighSeverityFault",
+   "MonitoredFault",
+   "NacelleFault"
+  ],
+  "fault_rotor_lock_left_engaged": [
+   "DrivetrainFault",
+   "HighSeverityFault",
+   "NacelleFault"
+  ],
+  "fault_converter_fault_light": [
+   "HighSeverityFault",
+   "MonitoredFault",
+   "NacelleFault"
+  ],
+  "fault_tower_base_coating_damage": [
+   "G1InspectableFault"
+  ],
+  "fault_blade_1_trailing_edge_crack": [
+   "DroneInspectableFault",
+   "HighSeverityFault"
+  ],
+  "fault_brake_pads_worn": [
+   "DrivetrainFault",
+   "MonitoredFault",
+   "NacelleFault"
+  ],
+  "fault_nacelle_cover_crack": [
+   "DroneInspectableFault"
+  ],
+  "fault_main_shaft_fretting_corrosion": [
+   "DrivetrainFault",
+   "G1InspectableFault",
+   "MonitoredFault",
+   "NacelleFault"
+  ],
+  "fault_tower_flange_2_bolts_loose": [
+   "G1InspectableFault",
+   "HighSeverityFault"
+  ],
+  "fault_hydraulic_hose_leak": [
+   "MonitoredFault",
+   "NacelleFault"
+  ],
+  "fault_main_shaft_shrink_disc_bolt_loose": [
+   "DrivetrainFault",
+   "G1InspectableFault",
+   "HighSeverityFault",
+   "NacelleFault"
+  ],
+  "fault_controller_door_left_open": [
+   "G1InspectableFault",
+   "NacelleFault"
+  ],
+  "fault_blade_2_leading_edge_erosion": [
+   "DroneInspectableFault",
+   "MonitoredFault"
+  ],
+  "fault_tower_flange_3_bolts_loose": [
+   "G1InspectableFault"
+  ],
+  "fault_generator_terminal_box_overheating": [
+   "DrivetrainFault",
+   "HighSeverityFault",
+   "MonitoredFault",
+   "NacelleFault",
+   "ThermallyDetectableFault"
+  ],
+  "fault_nacelle_anemometer_damaged": [
+   "DroneInspectableFault",
+   "MonitoredFault"
+  ],
+  "fault_blade_1_leading_edge_erosion": [
+   "DroneInspectableFault",
+   "MonitoredFault"
+  ],
+  "fault_blade_3_trailing_edge_crack": [
+   "DroneInspectableFault",
+   "HighSeverityFault"
+  ],
+  "fault_blade_3_leading_edge_erosion": [
+   "DroneInspectableFault",
+   "MonitoredFault"
+  ],
+  "fault_main_bearing_grease_leak_front_seal": [
+   "DrivetrainFault",
+   "MonitoredFault",
+   "NacelleFault"
+  ],
+  "fault_foundation_earthing_disconnected": [
+   "G1InspectableFault",
+   "HighSeverityFault",
+   "MonitoredFault"
+  ]
+ },
+ "inferred_superclasses": {
+  "MonitoredFault": [
+   "Fault"
+  ],
+  "ThermallyDetectableFault": [
+   "Fault"
+  ],
+  "HighSeverityFault": [
+   "Fault"
+  ],
+  "NacelleFault": [
+   "Fault"
+  ],
+  "G1InspectableFault": [
+   "Fault"
+  ],
+  "DrivetrainFault": [
+   "Fault"
+  ],
+  "DroneInspectableFault": [
+   "Fault"
+  ]
+ }
+}

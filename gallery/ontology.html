@@ -1,0 +1,388 @@
+<meta charset="utf-8">
+<title>Turbine Twin Ontology</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+:root{
+  --bg:#EEF1F4; --panel:#FFFFFF; --head:#F5F7F9; --ink:#18212B; --muted:#5D6978; --rule:#D6DCE3;
+  --accent:#2E5E8E; --sel:#DCE8F5; --class:#C0820A; --oprop:#2D6CB0; --dprop:#3A8A48; --ind:#7B4BB2;
+  --kw:#A23B8C; --inferred:#FFF3BF; --inferred-ink:#6B5400; --ok:#2E7D4F; --bad:#B3261E;
+  --sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --bg:#10151B; --panel:#161C24; --head:#1B222B; --ink:#E2E8EF; --muted:#93A0AF; --rule:#29323D;
+    --accent:#86B6E6; --sel:#213549; --class:#E8B04C; --oprop:#72A8E8; --dprop:#74C482; --ind:#B690E6;
+    --kw:#E590D2; --inferred:#3A3213; --inferred-ink:#F2DB8C; --ok:#6FCF97; --bad:#F2887F;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#10151B; --panel:#161C24; --head:#1B222B; --ink:#E2E8EF; --muted:#93A0AF; --rule:#29323D;
+  --accent:#86B6E6; --sel:#213549; --class:#E8B04C; --oprop:#72A8E8; --dprop:#74C482; --ind:#B690E6;
+  --kw:#E590D2; --inferred:#3A3213; --inferred-ink:#F2DB8C; --ok:#6FCF97; --bad:#F2887F;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 var(--sans);padding:0 16px}
+.app{max-width:1280px;margin:0 auto;padding-block:18px 40px;display:grid;gap:12px}
+a{color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+
+/* header */
+.top{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:10px 20px}
+.top h1{margin:0;font:600 22px/1.2 var(--sans);letter-spacing:-.005em}
+.top h1 small{display:block;font:500 11px/1.4 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.iri{font:400 12px/1.4 var(--mono);color:var(--muted);word-break:break-all}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{display:inline-flex;align-items:center;gap:6px;font:500 12px/1 var(--mono);padding:6px 9px;border:1px solid var(--rule);border-radius:4px;background:var(--panel)}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--ok)}
+.dot.bad{background:var(--bad)}
+
+/* tabs */
+.tabs{display:flex;gap:2px;overflow-x:auto;overflow-y:hidden;border-bottom:1px solid var(--rule);scrollbar-width:none}
+.tabs button{all:unset;cursor:pointer;white-space:nowrap;font:500 13px/1 var(--sans);padding:10px 14px;color:var(--muted);border:1px solid transparent;border-bottom:none;border-radius:4px 4px 0 0;display:inline-flex;gap:8px;align-items:center}
+.tabs button[aria-selected="true"]{background:var(--panel);color:var(--ink);border-color:var(--rule);box-shadow:0 1px 0 var(--panel)}
+.tabs button:focus-visible{outline:2px solid var(--accent)}
+
+/* workspace */
+.work{display:grid;gap:12px;grid-template-columns:minmax(0,1fr)}
+@media (min-width:900px){.work{grid-template-columns:330px minmax(0,1fr)}}
+.panel{background:var(--panel);border:1px solid var(--rule);border-radius:4px;min-width:0;display:flex;flex-direction:column}
+.phead{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px;background:var(--head);border-bottom:1px solid var(--rule);font:500 12px/1.3 var(--sans);color:var(--muted)}
+.phead b{color:var(--ink);font-weight:600}
+.pbody{padding:10px 12px}
+.side .pbody{padding:6px 4px 10px}
+.side{max-height:78vh}
+@media (max-width:899px){.side{max-height:46vh}}
+.scroll{overflow:auto;flex:1}
+.tools{display:flex;gap:6px;padding:8px 10px;border-bottom:1px solid var(--rule);flex-wrap:wrap}
+.tools input{flex:1;min-width:120px;font:400 13px/1 var(--sans);padding:7px 9px;border:1px solid var(--rule);border-radius:3px;background:var(--bg);color:var(--ink)}
+.seg{display:inline-flex;border:1px solid var(--rule);border-radius:3px;overflow:hidden}
+.seg button{all:unset;cursor:pointer;font:500 12px/1 var(--sans);padding:7px 9px;color:var(--muted)}
+.seg button[aria-pressed="true"]{background:var(--sel);color:var(--ink)}
+
+/* tree */
+.tree,.tree ul{list-style:none;margin:0;padding:0}
+.tree ul{padding-left:14px}
+.row{display:flex;align-items:center;gap:5px;padding:2px 4px;border-radius:3px;cursor:pointer;white-space:nowrap}
+.row:hover{background:var(--head)}
+.row[aria-selected="true"]{background:var(--sel)}
+.tw{all:unset;width:14px;height:14px;display:inline-grid;place-items:center;color:var(--muted);font-size:10px;cursor:pointer;flex:none}
+.tw[aria-expanded="true"]{transform:rotate(90deg)}
+.tw.leaf{visibility:hidden}
+.nm{font:400 13px/1.45 var(--mono)}
+.cnt{font:400 11px/1 var(--mono);color:var(--muted)}
+.row.inf .nm{background:var(--inferred);color:var(--inferred-ink);padding:0 3px;border-radius:2px}
+.hit .nm{text-decoration:underline;text-decoration-color:var(--accent);text-underline-offset:3px}
+
+/* entity icons (Protégé colour code) */
+.ic{flex:none;display:inline-block;width:10px;height:10px}
+.ic.c{border-radius:50%;background:var(--class)}
+.ic.o{width:12px;height:8px;border-radius:2px;background:var(--oprop)}
+.ic.d{width:12px;height:8px;border-radius:2px;background:var(--dprop)}
+.ic.i{width:8px;height:8px;transform:rotate(45deg);background:var(--ind);margin:0 1px}
+
+/* detail */
+.etitle{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.etitle h2{margin:0;font:600 18px/1.3 var(--sans)}
+.etitle h2 span{color:var(--muted);font-weight:500}
+.detail .pbody{display:grid;gap:14px}
+.block{border:1px solid var(--rule);border-radius:3px}
+.block h3{margin:0;padding:6px 10px;background:var(--head);border-bottom:1px solid var(--rule);font:600 12px/1.3 var(--sans);letter-spacing:.02em;display:flex;justify-content:space-between;gap:8px}
+.block h3 small{font:400 11px/1.3 var(--mono);color:var(--muted)}
+.block ul{list-style:none;margin:0;padding:4px 0}
+.block li{padding:4px 10px;font:400 13px/1.55 var(--mono);overflow-wrap:anywhere}
+.block li.inf{background:var(--inferred);color:var(--inferred-ink)}
+.block li .tag{font:500 10px/1 var(--sans);letter-spacing:.06em;text-transform:uppercase;border:1px solid currentColor;border-radius:2px;padding:2px 4px;margin-left:6px;opacity:.8}
+.block li .from{color:var(--muted);font-size:12px}
+.block li.ann{font-family:var(--sans);display:grid;grid-template-columns:130px minmax(0,1fr);gap:10px}
+@media (max-width:560px){.block li.ann{grid-template-columns:1fr;gap:2px}}
+.ann .k{font:500 12px/1.6 var(--mono);color:var(--muted)}
+.ann .lang{font:400 11px/1 var(--mono);color:var(--muted);margin-left:6px}
+.empty{color:var(--muted);font-family:var(--sans);font-style:italic}
+.e{text-decoration:none;border-bottom:1px dotted currentColor;cursor:pointer}
+.e.c{color:var(--class)} .e.o{color:var(--oprop)} .e.d{color:var(--dprop)} .e.i{color:var(--ind)}
+.kw{color:var(--kw);font-weight:500}
+.lit{color:var(--ink)}
+.dt{color:var(--muted)}
+.chars{display:flex;flex-wrap:wrap;gap:4px 16px;padding:8px 10px}
+.chars label{display:inline-flex;gap:6px;align-items:center;font:400 13px/1.4 var(--sans);color:var(--muted)}
+.chars label.on{color:var(--ink);font-weight:500}
+.cols{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr));align-items:start}
+table.m{border-collapse:collapse;width:100%;font:400 13px/1.4 var(--mono);font-variant-numeric:tabular-nums}
+table.m td{padding:4px 10px;border-bottom:1px solid var(--rule)}
+table.m td:last-child{text-align:right}
+table.m tr:last-child td{border-bottom:none}
+.note{color:var(--muted);font-size:13px;max-width:72ch;margin:0}
+@media (prefers-reduced-motion:no-preference){.tw{transition:transform .12s}}
+</style>
+
+<div class="app">
+  <header class="top">
+    <div>
+      <h1><small>Ontology · Protégé view</small>Wind Turbine Twin</h1>
+      <div class="iri" id="onto-iri"></div>
+    </div>
+    <div class="chips" id="chips"></div>
+  </header>
+  <nav class="tabs" role="tablist" aria-label="Views">
+    <button role="tab" id="tab-onto" data-tab="onto">Active ontology</button>
+    <button role="tab" id="tab-c" data-tab="c"><span class="ic c"></span>Classes</button>
+    <button role="tab" id="tab-o" data-tab="o"><span class="ic o"></span>Object properties</button>
+    <button role="tab" id="tab-d" data-tab="d"><span class="ic d"></span>Data properties</button>
+    <button role="tab" id="tab-i" data-tab="i"><span class="ic i"></span>Individuals</button>
+  </nav>
+  <main id="view"></main>
+</div>
+
+<script>
+const D = __DATA__;
+const KIND = {c: "classes", o: "objectProperties", d: "dataProperties", i: "individuals"};
+const NOUN = {c: "Class", o: "Object property", d: "Data property", i: "Individual"};
+const view = document.getElementById("view");
+const esc = s => String(s).replace(/[&<>"]/g, ch => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[ch]));
+const state = {tab: "c", sel: {c: "DrivetrainFault", o: "partOf", d: "preload", i: "fault_gearbox_oil_leak_input_seal"}, inferred: false, q: {}};
+try { const s = JSON.parse(localStorage.getItem("wtt-onto") || "{}"); Object.assign(state, s, {sel: Object.assign(state.sel, s.sel || {})}); } catch (e) {}
+const save = () => { try { localStorage.setItem("wtt-onto", JSON.stringify({tab: state.tab, sel: state.sel, inferred: state.inferred})); } catch (e) {} };
+
+function kindOf(name) {
+  if (name === "owl:Thing") return "c";
+  for (const k of ["c", "o", "d", "i"]) if (D[KIND[k]][name]) return k;
+  return null;
+}
+function link(name) {
+  const k = kindOf(name);
+  return k ? `<a class="e ${k}" href="#${k}-${esc(name)}" data-go="${k}" data-name="${esc(name)}">${esc(name)}</a>` : `<span>${esc(name)}</span>`;
+}
+function mx(tokens) {
+  return tokens.map(([k, t]) => k === "k" ? `<span class="kw">${esc(t)}</span>` : (k === "t" ? `<span class="lit">${esc(t)}</span>` : link(t))).join("");
+}
+function block(title, rows, note) {
+  const body = rows.length ? rows.join("") : `<li class="empty">none</li>`;
+  return `<section class="block"><h3>${title}${note ? `<small>${note}</small>` : ""}</h3><ul>${body}</ul></section>`;
+}
+function annBlock(ann) {
+  return block("Annotations", ann.map(([k, v, lang]) => `<li class="ann"><span class="k">${esc(k)}</span><span>${esc(v)}${lang ? `<span class="lang">@${esc(lang)}</span>` : ""}</span></li>`));
+}
+const inf = html => `<li class="inf">${html}<span class="tag">inferred</span></li>`;
+
+/* ---------- header ---------- */
+document.getElementById("onto-iri").textContent = D.ontology.iri;
+const R = D.ontology.reasoner;
+document.getElementById("chips").innerHTML =
+  `<span class="chip"><span class="dot${R.consistent ? "" : " bad"}"></span>${esc(R.reasoner.split(" ")[0])} · ${R.consistent ? "consistent" : "inconsistent"}</span>` +
+  `<span class="chip">DL ${esc(D.ontology.expressivity)}</span>` +
+  `<span class="chip">${D.ontology.metrics.Axioms} axioms</span>`;
+
+/* ---------- class tree ---------- */
+function classChildren(inferred) {
+  const kids = {"owl:Thing": []};
+  for (const [n, c] of Object.entries(D.classes)) {
+    let parents = c.parents.filter(p => p === "owl:Thing" || D.classes[p]);
+    if (inferred && c.inferredParents.length) parents = parents.filter(p => p !== "owl:Thing").concat(c.inferredParents);
+    if (!parents.length) parents = ["owl:Thing"];
+    for (const p of new Set(parents)) (kids[p] = kids[p] || []).push(n);
+  }
+  for (const k in kids) kids[k].sort((a, b) => a.localeCompare(b));
+  return kids;
+}
+function ancestorsOf(name, kids) {
+  const parentOf = {};
+  for (const [p, cs] of Object.entries(kids)) for (const c of cs) (parentOf[c] = parentOf[c] || []).push(p);
+  const out = new Set(), stack = [name];
+  while (stack.length) for (const p of parentOf[stack.pop()] || []) if (!out.has(p)) { out.add(p); stack.push(p); }
+  return out;
+}
+const open = {c: new Set(["owl:Thing"]), o: new Set(), d: new Set(), i: new Set()};
+function treeHTML(root, kids, k, matches, openSet, labelOf, extraClass) {
+  const render = (n, depth) => {
+    const cs = (kids[n] || []).filter(c => !matches || matches.has(c));
+    const isOpen = openSet.has(n) || (matches && cs.length);
+    const selected = state.sel[k] === n;
+    const cls = (extraClass && extraClass(n)) || "";
+    let html = `<li><div class="row ${cls}${matches && matches.hit.has(n) ? " hit" : ""}" role="treeitem" aria-selected="${selected}" data-sel="${esc(n)}" tabindex="${selected ? 0 : -1}">` +
+      `<button class="tw${cs.length ? "" : " leaf"}" aria-label="expand" aria-expanded="${!!isOpen}" data-tw="${esc(n)}">▶</button>` +
+      `<span class="ic ${n === "owl:Thing" ? "c" : k}"></span><span class="nm">${esc(n)}</span>${labelOf ? labelOf(n) : ""}</div>`;
+    if (cs.length && isOpen) html += `<ul role="group">${cs.map(c => render(c, depth + 1)).join("")}</ul>`;
+    return html + "</li>";
+  };
+  return `<ul class="tree" role="tree">${render(root, 0)}</ul>`;
+}
+function matchSet(query, kids, root, items) {
+  if (!query) return null;
+  const q = query.toLowerCase(), hit = new Set();
+  for (const [n, e] of Object.entries(items)) {
+    const lab = (e.ann.find(a => a[0] === "rdfs:label") || [])[1] || "";
+    if (n.toLowerCase().includes(q) || lab.toLowerCase().includes(q)) hit.add(n);
+  }
+  const keep = new Set(hit);
+  const parentOf = {};
+  for (const [p, cs] of Object.entries(kids)) for (const c of cs) (parentOf[c] = parentOf[c] || []).push(p);
+  for (const n of hit) { const st = [n]; while (st.length) for (const p of parentOf[st.pop()] || []) if (!keep.has(p)) { keep.add(p); st.push(p); } }
+  keep.add(root); keep.hit = hit;
+  return keep;
+}
+
+/* ---------- detail renderers ---------- */
+function classDetail(n) {
+  if (n === "owl:Thing") return `<div class="etitle"><span class="ic c"></span><h2><span>Class:</span> owl:Thing</h2></div><p class="note">The root of every class hierarchy.</p>`;
+  const c = D.classes[n], kids = classChildren(false);
+  const sub = c.parents.map(p => `<li>${link(p)}</li>`).concat(c.superExpr.map(e => `<li>${mx(e)}</li>`))
+    .concat(c.inferredParents.map(p => inf(link(p))));
+  const anc = [];
+  for (const a of ancestorsOf(n, kids)) if (D.classes[a]) for (const e of D.classes[a].superExpr) anc.push(`<li>${mx(e)} <span class="from">— from ${link(a)}</span></li>`);
+  const inst = c.instances.map(i => `<li>${link(i)}</li>`).concat(c.inferredInstances.map(i => inf(link(i))));
+  const align = c.aicor.map(a => `<li>SubClass Of <span class="lit">${esc(a)}</span></li>`);
+  return `<div class="etitle"><span class="ic c"></span><h2><span>Class:</span> ${esc(n)}</h2></div><div class="iri">${esc(c.iri)}</div>` +
+    annBlock(c.ann) +
+    `<div class="cols"><div style="display:grid;gap:14px">` +
+    block("Equivalent To", c.equivalent.map(e => `<li>${mx(e)}</li>`)) +
+    block("SubClass Of", sub) +
+    block("SubClass Of (Anonymous Ancestor)", anc) + `</div><div style="display:grid;gap:14px">` +
+    block("Instances", inst, `${c.instances.length + c.inferredInstances.length}`) +
+    block("Disjoint With", c.disjoint.map(x => `<li>${link(x)}</li>`)) +
+    (align.length ? block("Alignment (AICOR)", align) : "") + `</div></div>`;
+}
+function propDetail(n, k) {
+  const p = D[KIND[k]][n];
+  const chars = `<section class="block"><h3>Characteristics</h3><div class="chars">${p.chars.map(([name, on]) =>
+    `<label class="${on ? "on" : ""}"><input type="checkbox" disabled ${on ? "checked" : ""}>${esc(name)}</label>`).join("")}</div></section>`;
+  return `<div class="etitle"><span class="ic ${k}"></span><h2><span>${NOUN[k]}:</span> ${esc(n)}</h2></div><div class="iri">${esc(p.iri)}</div>` +
+    annBlock(p.ann) + `<div class="cols">` + chars +
+    `<div style="display:grid;gap:14px">` +
+    block("Domains (intersection)", p.domain.map(e => `<li>${mx(e)}</li>`)) +
+    block("Ranges", p.range.map(e => `<li>${mx(e)}</li>`)) +
+    (k === "o" ? block("Inverse Of", p.inverse.map(x => `<li>${link(x)}</li>`)) : "") +
+    block("SubProperty Of", p.parents.map(x => `<li>${link(x)}</li>`)) + `</div></div>` +
+    `<p class="note">Used in ${p.usage} assertion${p.usage === 1 ? "" : "s"}.</p>`;
+}
+function indDetail(n) {
+  const x = D.individuals[n];
+  const types = x.types.map(t => `<li>${link(t)}</li>`).concat(x.inferredTypes.map(t => inf(link(t))));
+  const obj = x.objects.map(([p, o]) => `<li>${link(p)}  ${link(o)}</li>`);
+  const dat = x.data.map(([p, v, dt]) => `<li>${link(p)}  <span class="lit">"${esc(v)}"</span>${dt ? `<span class="dt">^^${esc(dt)}</span>` : ""}</li>`);
+  const used = x.usedBy.map(([s, p]) => `<li>${link(s)}  ${link(p)}  <span class="from">${esc(n)}</span></li>`);
+  return `<div class="etitle"><span class="ic i"></span><h2><span>Individual:</span> ${esc(n)}</h2></div><div class="iri">${esc(x.iri)}</div>` +
+    annBlock(x.ann) + `<div class="cols"><div style="display:grid;gap:14px">` +
+    block("Types", types) + block("Referenced by", used, `${x.usedBy.length}`) + `</div><div style="display:grid;gap:14px">` +
+    block("Object property assertions", obj) + block("Data property assertions", dat) + `</div></div>`;
+}
+
+/* ---------- views ---------- */
+function ontologyView() {
+  const o = D.ontology;
+  const metrics = Object.entries(o.metrics).map(([k, v]) => `<tr><td>${esc(k)}</td><td>${v}</td></tr>`).join("");
+  const axioms = Object.entries(o.axioms).map(([k, v]) => `<tr><td>${esc(k)}</td><td>${v}</td></tr>`).join("");
+  const defined = Object.entries(D.classes).filter(([, c]) => c.equivalent.length && c.inferredInstances.length)
+    .map(([n, c]) => `<tr><td>${link(n)}</td><td>${c.inferredInstances.length}</td></tr>`).join("");
+  return `<div class="panel"><div class="phead"><span><b>Active ontology</b></span><span class="iri">version ${esc(o.version)}</span></div><div class="pbody" style="display:grid;gap:14px">
+    <div class="iri">${esc(o.iri)}</div>
+    ${annBlock(o.ann)}
+    <div class="cols">
+      <section class="block"><h3>Ontology metrics</h3><table class="m">${metrics}<tr><td>DL expressivity</td><td>${esc(o.expressivity)}</td></tr></table></section>
+      <section class="block"><h3>Axiom types</h3><table class="m">${axioms}</table></section>
+      <section class="block"><h3>Reasoner <small>${esc(o.reasoner.reasoner)}</small></h3><table class="m">
+        <tr><td>Consistent</td><td>${o.reasoner.consistent ? "yes" : "no"}</td></tr>
+        <tr><td>Unsatisfiable classes</td><td>${(o.reasoner.unsatisfiable || []).length}</td></tr>${defined}</table>
+        <p class="note" style="padding:8px 10px">Members of defined classes found by the reasoner, e.g. DrivetrainFault through the transitive partOf.</p></section>
+      <section class="block"><h3>Alignment to AICOR <small>windturbine-aicor-alignment.ttl</small></h3><ul>${o.alignment.map(([a, b]) => `<li>${link(a)} <span class="kw">SubClassOf</span> <span class="lit">${esc(b)}</span></li>`).join("")}</ul></section>
+      <section class="block"><h3>Prefixes</h3><table class="m">${o.prefixes.map(([p, iri]) => `<tr><td>${esc(p)}</td><td style="text-align:left;word-break:break-all">${esc(iri)}</td></tr>`).join("")}</table></section>
+      <section class="block"><h3>Files <small>in the model repository</small></h3><ul>
+        <li>ontology/windturbine.owl <span class="from">RDF/XML, open in Protégé</span></li>
+        <li>ontology/windturbine.ttl <span class="from">Turtle</span></li>
+        <li>ontology/windturbine-aicor-alignment.ttl</li>
+        <li>scripts/build_ontology.py <span class="from">generated from the model</span></li>
+        <li>scripts/reason_ontology.py <span class="from">HermiT</span></li></ul></section>
+    </div></div></div>`;
+}
+function workspace(k) {
+  let kids, root, items, labelOf = null, extra = null, title, tools = "";
+  const q = state.q[k] || "";
+  if (k === "c") {
+    kids = classChildren(state.inferred); root = "owl:Thing"; items = D.classes;
+    const infParents = new Set(Object.entries(D.classes).filter(([, c]) => c.inferredParents.length).map(([n]) => n));
+    extra = n => state.inferred && infParents.has(n) ? "inf" : "";
+    labelOf = n => { const c = D.classes[n]; const m = c ? c.instances.length + c.inferredInstances.length : 0; return m ? `<span class="cnt">${m}</span>` : ""; };
+    title = `Class hierarchy: <b>owl:Thing</b>`;
+    tools = `<div class="seg" role="group" aria-label="Hierarchy"><button id="h-asserted" aria-pressed="${!state.inferred}">Asserted</button><button id="h-inferred" aria-pressed="${state.inferred}">Inferred</button></div>`;
+  } else if (k === "o" || k === "d") {
+    items = D[KIND[k]]; root = k === "o" ? "owl:topObjectProperty" : "owl:topDataProperty";
+    kids = {[root]: []};
+    for (const [n, p] of Object.entries(items)) { const ps = p.parents.length ? p.parents : [root]; for (const x of ps) (kids[x] = kids[x] || []).push(n); }
+    for (const x in kids) kids[x].sort();
+    open[k].add(root);
+    title = `${k === "o" ? "Object" : "Data"} property hierarchy: <b>${root}</b>`;
+  } else {
+    items = D.individuals; root = "Individuals by type";
+    kids = {[root]: []};
+    const byType = {};
+    for (const [n, x] of Object.entries(items)) { const t = x.types[0] || "owl:Thing"; (byType[t] = byType[t] || []).push(n); }
+    for (const [t, ns] of Object.entries(byType)) { kids[root].push("⟨" + t + "⟩"); kids["⟨" + t + "⟩"] = ns.sort(); }
+    kids[root].sort();
+    open.i.add(root);
+    const sel = state.sel.i && D.individuals[state.sel.i];
+    if (sel) open.i.add("⟨" + sel.types[0] + "⟩");
+    title = `Individuals: <b>${Object.keys(items).length}</b>`;
+  }
+  const matches = matchSet(q, kids, root, items);
+  if (!matches && k === "c") for (const a of ancestorsOf(state.sel.c, kids)) open.c.add(a);
+  let tree = treeHTML(root, kids, k, matches, open[k], labelOf, extra);
+  if (k === "i") tree = tree.replace(/<span class="ic i"><\/span><span class="nm">⟨([^<]*)⟩<\/span>/g, `<span class="ic c"></span><span class="nm">$1</span>`)
+                            .replace(`<span class="ic i"></span><span class="nm">${root}</span>`, `<span class="ic c"></span><span class="nm">${root}</span>`);
+  const sel = state.sel[k];
+  const detail = k === "c" ? classDetail(sel) : k === "i" ? indDetail(sel) : propDetail(sel, k);
+  return `<div class="work">
+    <section class="panel side" aria-label="Hierarchy"><div class="phead"><span>${title}</span></div>
+      <div class="tools"><input id="q-${k}" type="search" placeholder="Search…" value="${esc(q)}" aria-label="Search">${tools}</div>
+      <div class="scroll pbody" id="tree">${tree}</div></section>
+    <section class="panel detail" aria-label="Description"><div class="phead"><span>Description</span><span>${NOUN[k]}</span></div><div class="pbody">${detail}</div></section>
+  </div>`;
+}
+function render() {
+  document.querySelectorAll(".tabs button").forEach(b => b.setAttribute("aria-selected", b.dataset.tab === state.tab));
+  view.innerHTML = state.tab === "onto" ? ontologyView() : workspace(state.tab);
+  const q = document.getElementById("q-" + state.tab);
+  if (q) q.addEventListener("input", e => { state.q[state.tab] = e.target.value; const pos = e.target.selectionStart; render(); const nq = document.getElementById("q-" + state.tab); nq.focus(); nq.setSelectionRange(pos, pos); });
+  const a = document.getElementById("h-asserted"), i = document.getElementById("h-inferred");
+  if (a) { a.onclick = () => { state.inferred = false; save(); render(); }; i.onclick = () => { state.inferred = true; save(); render(); }; }
+  const selRow = view.querySelector('.row[aria-selected="true"]');
+  if (selRow) selRow.scrollIntoView({block: "nearest"});
+  save();
+}
+function go(k, name) {
+  if (!k || (k !== "c" && !D[KIND[k]][name]) || (k === "c" && name !== "owl:Thing" && !D.classes[name])) return;
+  state.tab = k; state.sel[k] = name; state.q[k] = "";
+  try { history.replaceState(null, "", "#" + k + "-" + name); } catch (e) {}
+  render();
+}
+document.querySelector(".tabs").addEventListener("click", e => {
+  const b = e.target.closest("button[data-tab]"); if (!b) return;
+  state.tab = b.dataset.tab; render();
+});
+view.addEventListener("click", e => {
+  const tw = e.target.closest("[data-tw]");
+  if (tw) { const s = open[state.tab], n = tw.dataset.tw; s.has(n) ? s.delete(n) : s.add(n); render(); return; }
+  const a = e.target.closest("[data-go]");
+  if (a) { e.preventDefault(); go(a.dataset.go, a.dataset.name); return; }
+  const row = e.target.closest("[data-sel]");
+  if (row) {
+    const n = row.dataset.sel;
+    if (state.tab === "i" && (n.startsWith("⟨") || n === "Individuals by type")) { const s = open.i; s.has(n) ? s.delete(n) : s.add(n); render(); return; }
+    if (n.startsWith("owl:top")) return;
+    state.sel[state.tab] = n; open[state.tab].add(n); render();
+  }
+});
+view.addEventListener("keydown", e => {
+  const row = e.target.closest && e.target.closest(".row"); if (!row) return;
+  const rows = [...view.querySelectorAll(".row")], idx = rows.indexOf(row);
+  if (e.key === "ArrowDown" && rows[idx + 1]) { rows[idx + 1].focus(); e.preventDefault(); }
+  if (e.key === "ArrowUp" && rows[idx - 1]) { rows[idx - 1].focus(); e.preventDefault(); }
+  if (e.key === "Enter" || e.key === " ") { row.click(); e.preventDefault(); }
+});
+const h = location.hash.slice(1), m = /^([codi])-(.+)$/.exec(h);
+if (h === "onto") state.tab = "onto";
+else if (m) { state.tab = m[1]; state.sel[m[1]] = decodeURIComponent(m[2]); }
+render();
+</script>
