@@ -125,6 +125,15 @@ class BoardHole:
     The hole's bounding box, as minimum x, maximum x, minimum y, maximum y.
     """
 
+    @property
+    def bounding_box_center(self) -> Tuple[float, float]:
+        """
+        The middle of the hole's bounding box, which a piece centred on its own bounding
+        box is released over.
+        """
+        minimum_x, maximum_x, minimum_y, maximum_y = self.bounds
+        return (minimum_x + maximum_x) / 2, (minimum_y + maximum_y) / 2
+
 
 @dataclass(frozen=True)
 class BoardGeometry:

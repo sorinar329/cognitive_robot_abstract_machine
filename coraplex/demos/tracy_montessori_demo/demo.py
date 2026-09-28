@@ -206,6 +206,30 @@ PIECE_HEIGHT = 0.03
 How tall every piece of the set stands.
 """
 
+FINGER_PAD_CLOSING_TRAVEL = 0.0135
+"""
+How far Tracy's finger pads move out along the gripper's reach as it closes.
+
+Measured on the robot's own description: open, the pads end at the tool frame; closed,
+13.5 mm past it. The Robotiq linkage swings the pads down onto whatever the hand is
+lowered over.
+"""
+
+CLOSED_PAD_CLEARANCE = 0.005
+"""
+How far the closed finger pads stay above what a grasped piece stands on.
+"""
+
+GRASP_HEIGHT = FINGER_PAD_CLOSING_TRAVEL + CLOSED_PAD_CLEARANCE
+"""
+How far above its bottom face a piece is grasped.
+
+A grasp brings the tool frame to the grasp point, and the pads end there while the hand
+is open, so the closed pads stay :data:`CLOSED_PAD_CLEARANCE` above the table and cover
+the rest of the piece. Grasped at its middle instead, a piece is held by its top few
+millimetres only and swings between the pads.
+"""
+
 CUBE_EDGE_LENGTH = 0.03
 """
 Edge length of the cube, which goes through the square hole.
@@ -233,13 +257,6 @@ triangular hole.
 """
 
 
-TRIANGLE_RELEASE_YAW = -math.pi / 2
-"""
-Turn that brings the triangular prism's apex, along its own +y, round to the board's +x,
-where the triangular hole points.
-"""
-
-
 @dataclass(frozen=True)
 class PieceSpecification:
     """
@@ -262,20 +279,16 @@ class PieceSpecification:
     The hole the piece is sorted into.
     """
 
-    release_yaw: float = 0.0
-    """
-    How far the piece is turned about the vertical, in radians, when it is let go of
-    over its hole, so that it lines up with the hole.
-    """
-
 
 def _triangular_prism(side: float, height: float, color: Color) -> Mesh:
     """
-    An upright prism of equilateral cross-section, centred on its centroid, its apex
-    pointing along its own +y.
+    An upright prism of equilateral cross-section, centred on the middle of its bounding
+    box, its apex pointing along its own +x, the way the triangular hole points.
 
-    The fingers close along the piece's own y, so they hold it by one flat face and the
+    The fingers close along the piece's own x, so they hold it by one flat face and the
     opposite edge; closing on two of its slanted faces would squeeze it out of the hand.
+    Centred on its centroid instead, the flat face would stand closer to the middle than
+    the apex, and the fingers, which move together, would meet only the face.
 
     :param side: Side of the cross-section.
     :param height: How tall the prism stands.
@@ -285,12 +298,12 @@ def _triangular_prism(side: float, height: float, color: Color) -> Mesh:
     circumradius = side / math.sqrt(3)
     inradius = side / (2 * math.sqrt(3))
     outline = np.array(
-        [[0.0, circumradius], [-side / 2, -inradius], [side / 2, -inradius]]
+        [[circumradius, 0.0], [-inradius, side / 2], [-inradius, -side / 2]]
     )
     solid = trimesh.creation.extrude_triangulation(
         vertices=outline, faces=np.array([[0, 1, 2]]), height=height
     )
-    solid.apply_translation([0.0, 0.0, -height / 2])
+    solid.apply_translation([-(circumradius - inradius) / 2, 0.0, -height / 2])
     mesh = Mesh.from_trimesh(mesh=solid)
     mesh.color = color
     return mesh
@@ -324,7 +337,6 @@ PIECE_SPECIFICATIONS = (
         name="triangular_prism",
         shape=_triangular_prism(TRIANGULAR_PRISM_SIDE, PIECE_HEIGHT, YELLOW),
         hole=HoleShape.TRIANGLE,
-        release_yaw=TRIANGLE_RELEASE_YAW,
     ),
 )
 """
@@ -385,12 +397,13 @@ def build_scene(world: World) -> List[MontessoriPiece]:
         )
 
         for index, specification in enumerate(PIECE_SPECIFICATIONS):
-            hole_x, hole_y = geometry.hole_of_shape(specification.hole).center
+            hole_x, hole_y = geometry.hole_of_shape(
+                specification.hole
+            ).bounding_box_center
             release_pose = Pose.from_xyz_rpy(
                 BOARD_X + hole_x,
                 BOARD_Y + hole_y,
-                lid_top_z + RELEASE_HEIGHT + PIECE_HEIGHT / 2,
-                yaw=specification.release_yaw,
+                lid_top_z + RELEASE_HEIGHT + GRASP_HEIGHT,
                 reference_frame=world.root,
             )
             pieces.append(
@@ -420,10 +433,12 @@ def _stand_piece_on_the_table(
     :param release_pose: Where it is let go of over its hole.
     :return: The piece.
     """
-    body = Body(
-        name=PrefixedName(specification.name),
-        collision=ShapeCollection([copy.deepcopy(specification.shape)]),
-        visual=ShapeCollection([copy.deepcopy(specification.shape)]),
+    body = Body(name=PrefixedName(specification.name))
+    body.collision = ShapeCollection(
+        [_shape_around_the_grasp_point(specification, body)], reference_frame=body
+    )
+    body.visual = ShapeCollection(
+        [_shape_around_the_grasp_point(specification, body)], reference_frame=body
     )
     world.add_kinematic_structure_entity(body)
     world.add_connection(
@@ -435,7 +450,7 @@ def _stand_piece_on_the_table(
             parent_T_connection_expression=HomogeneousTransformationMatrix.from_xyz_rpy(
                 PIECE_ROW_X,
                 row_y,
-                TABLE_TOP_Z + PIECE_HEIGHT / 2 + RESTING_CLEARANCE,
+                TABLE_TOP_Z + RESTING_CLEARANCE + GRASP_HEIGHT,
             ),
         )
     )
@@ -445,6 +460,24 @@ def _stand_piece_on_the_table(
     annotation = HasRootBody(root=body)
     world.add_semantic_annotations([annotation])
     return MontessoriPiece(body=body, annotation=annotation, release_pose=release_pose)
+
+
+def _shape_around_the_grasp_point(
+    specification: PieceSpecification, body: Body
+) -> Shape:
+    """
+    The piece's geometry placed so that ``body``'s origin, which a grasp aims at, lies
+    :data:`GRASP_HEIGHT` above the piece's bottom face.
+
+    :param specification: What the piece is.
+    :param body: The body the geometry belongs to.
+    :return: A copy of the piece's geometry, raised above the body's origin.
+    """
+    shape = copy.deepcopy(specification.shape)
+    shape.origin = HomogeneousTransformationMatrix.from_xyz_rpy(
+        z=PIECE_HEIGHT / 2 - GRASP_HEIGHT, reference_frame=body
+    )
+    return shape
 
 
 # %% the plan, the same wherever it runs
@@ -465,6 +498,7 @@ def build_plan(context: Context, pieces: List[MontessoriPiece]) -> Plan:
         ApproachDirection.FRONT,
         VerticalAlignment.TOP,
         context.robot.left_arm.end_effector,
+        rotate_gripper=True,
     )
 
     actions = [ParkArmsAction(Arms.BOTH)]

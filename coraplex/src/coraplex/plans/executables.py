@@ -362,7 +362,11 @@ class GiskardExecutable(Executable):
         """
         Execute the native chart while projecting its recorded motion states.
         """
-        pacer = GiskardExecutable.simulation_pacer
+        pacer = (
+            NoPacing()
+            if GiskardExecutable.simulation_pacer is None
+            else GiskardExecutable.simulation_pacer
+        )
         executor = Ros2Executor(
             context=MotionStatechartContext(
                 world=self.context.world,
@@ -371,7 +375,7 @@ class GiskardExecutable(Executable):
                 ),
             ),
             ros_node=self.context.ros_node,
-            pacer=NoPacing() if pacer is None else pacer,
+            pacer=pacer,
         )
         with ExitStack() as cleanup:
             history = MotionPlanHistory(self.motion_state_chart, self.motion_mappings)
@@ -387,7 +391,7 @@ class GiskardExecutable(Executable):
                     len(self.motion_mappings) * self.context.ticks_per_motion
                 ):
                     executor.tick()
-                    executor.pacer.sleep()
+                    pacer.sleep()
                     if executor.motion_statechart.is_end_motion():
                         history.end_active_motions()
                         return
