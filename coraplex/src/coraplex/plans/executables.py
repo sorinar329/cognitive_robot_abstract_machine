@@ -13,6 +13,7 @@ from coraplex.exceptions import (
     ConditionNotSatisfied,
     UnknownExecutionType,
 )
+from giskardpy.executor import NoPacing, Pacer
 from giskardpy.motion_statechart.context import MotionStatechartContext
 from giskardpy.motion_statechart.data_types import LifeCycleValues
 from giskardpy.motion_statechart.goals.collision_avoidance import (
@@ -240,6 +241,15 @@ class GiskardExecutable(Executable):
     to the motion state chart.
     """
 
+    simulation_pacer: ClassVar[Optional[Pacer]] = None
+    """
+    What holds the control loop of a simulated execution between two ticks.
+
+    Without one the loop runs as fast as the hardware allows, which is what a
+    kinematically moved world wants. A physically simulated world sets a pacer that
+    steps its physics instead, so the controller and the physics advance in lockstep.
+    """
+
     @property
     def giskard_executables(self) -> List[GiskardExecutable]:
         """
@@ -352,6 +362,11 @@ class GiskardExecutable(Executable):
         """
         Execute the native chart while projecting its recorded motion states.
         """
+        pacer = (
+            NoPacing()
+            if GiskardExecutable.simulation_pacer is None
+            else GiskardExecutable.simulation_pacer
+        )
         executor = Ros2Executor(
             context=MotionStatechartContext(
                 world=self.context.world,
@@ -360,6 +375,7 @@ class GiskardExecutable(Executable):
                 ),
             ),
             ros_node=self.context.ros_node,
+            pacer=pacer,
         )
         with ExitStack() as cleanup:
             history = MotionPlanHistory(self.motion_state_chart, self.motion_mappings)
@@ -375,6 +391,7 @@ class GiskardExecutable(Executable):
                     len(self.motion_mappings) * self.context.ticks_per_motion
                 ):
                     executor.tick()
+                    pacer.sleep()
                     if executor.motion_statechart.is_end_motion():
                         history.end_active_motions()
                         return
@@ -450,6 +467,8 @@ class MoveBranchExecutable(Executable):
         """
         Move the branch and report the attached node's execution outcome.
         """
+        if not self.context.update_world_model_attachment:
+            return
         with self.execution_scope():
             self.context.world.move_branch(self.body, self.new_parent)
 
