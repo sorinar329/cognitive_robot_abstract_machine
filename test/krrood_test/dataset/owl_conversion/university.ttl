@@ -1,0 +1,27 @@
+@prefix : <http://example.org/university#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+<http://example.org/university> a owl:Ontology ; rdfs:label "University" .
+
+:Organization a owl:Class ; rdfs:comment "A group of people with a shared purpose." .
+:University a owl:Class ; rdfs:subClassOf :Organization .
+:Department a owl:Class ; rdfs:subClassOf :Organization .
+:Person a owl:Class ; rdfs:comment "A human being." .
+:Course a owl:Class .
+:Student a owl:Class ;
+    rdfs:subClassOf [ a owl:Restriction ; owl:onProperty :roleFor ; owl:someValuesFrom :Person ] .
+
+
+
+:memberOf a owl:ObjectProperty ; rdfs:domain :Person ; rdfs:range :Organization ;
+    owl:inverseOf :member .
+:member a owl:ObjectProperty ; rdfs:domain :Organization ; rdfs:range :Person .
+:worksFor a owl:ObjectProperty ; rdfs:subPropertyOf :memberOf ; rdfs:domain :Person ; rdfs:range :Organization .
+:subOrganizationOf a owl:ObjectProperty , owl:TransitiveProperty ;
+    rdfs:domain :Organization ; rdfs:range :Organization .
+:takesCourse a owl:ObjectProperty ; rdfs:domain :Student ; rdfs:range :Course .
+
+:name a owl:DatatypeProperty ; rdfs:domain :Person ; rdfs:range xsd:string .

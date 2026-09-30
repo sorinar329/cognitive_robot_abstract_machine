@@ -111,3 +111,13 @@ class Cabinet(ConvertedRoot):
     """
     A reference to a class rather than to an instance of it.
     """
+
+    shelf_count: int = 0
+    """
+    A single-valued builtin field whose name consists of several words.
+    """
+
+    labels: List[str] = field(default_factory=list)
+    """
+    A many-valued builtin field.
+    """
