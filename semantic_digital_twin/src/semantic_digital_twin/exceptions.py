@@ -1952,3 +1952,102 @@ class SimulationAlreadyRunningError(UsageError):
 
     def suggest_correction(self) -> str:
         return "Stop the simulation before starting it again."
+
+
+# %% OpenFAST
+
+
+@dataclass
+class OpenFASTError(DataclassException):
+    """
+    Raised when the OpenFAST library reports a fatal error.
+    """
+
+    routine: str
+    """
+    Name of the library routine that failed.
+    """
+
+    message: str
+    """
+    The error message OpenFAST returned.
+    """
+
+    def error_message(self) -> str:
+        return f"OpenFAST routine {self.routine} failed: {self.message}"
+
+    def suggest_correction(self) -> str:
+        return (
+            "Check the input files named in the message; OpenFAST prints further "
+            "details to the console."
+        )
+
+
+@dataclass
+class MissingOpenFASTOutputChannelError(DataclassException):
+    """
+    Raised when an OpenFAST simulation does not output a channel that is needed to
+    describe the turbine state.
+    """
+
+    channel: str
+    """
+    The missing output channel.
+    """
+
+    available_channels: List[str]
+    """
+    The channels the simulation does output.
+    """
+
+    def error_message(self) -> str:
+        return (
+            f"The OpenFAST simulation does not output the channel {self.channel}. "
+            f"Available channels: {', '.join(self.available_channels)}"
+        )
+
+    def suggest_correction(self) -> str:
+        return (
+            "Enable the channel in the OutList of the input file that provides it, or "
+            "write the input files with OpenFASTInputDeck, which enables it."
+        )
+
+
+@dataclass
+class OpenFASTSimulationFinishedError(UsageError):
+    """
+    Raised when an OpenFAST simulation is advanced past the end time set in its input
+    file.
+    """
+
+    end_time: float
+    """
+    The end time of the simulation in seconds.
+    """
+
+    def error_message(self) -> str:
+        return f"The OpenFAST simulation has reached its end time of {self.end_time} s."
+
+    def suggest_correction(self) -> str:
+        return "Write the input files with a longer duration."
+
+
+@dataclass
+class OpenFASTInstallationNotConfiguredError(UsageError):
+    """
+    Raised when the environment does not say where OpenFAST is installed.
+    """
+
+    environment_variable: str
+    """
+    The environment variable that is not set.
+    """
+
+    def error_message(self) -> str:
+        return f"The environment variable {self.environment_variable} is not set."
+
+    def suggest_correction(self) -> str:
+        return (
+            "Set it to the corresponding file of your OpenFAST build, or pass the path "
+            "explicitly."
+        )
