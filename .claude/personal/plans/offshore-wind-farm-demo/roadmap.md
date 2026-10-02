@@ -56,3 +56,30 @@ The class diagram is the "Class diagram" tab of the wind farm brainstorm board
   `openfast_integration`.
 - 2 October 2026: OpenFAST stalled; controller design, OWL draft, then the switch to
   semDT, EQL and SegMind; class diagram agreed; plan created.
+
+## wind-turbine-annotation (2 October 2026)
+
+Branched from upstream main (321f499ce1), not from openfast_integration: only
+`semantic_annotations/wind_turbine.py` and its test were taken over, unchanged. The fork's
+main was fast-forwarded to upstream main so pull requests in the fork show only the
+item's own commits. 8 tests and the semDT ORM and annotation suites pass.
+
+## offshore-wind-farm-world (2 October 2026)
+
+Stacked on wind-turbine-annotation. Decisions taken while implementing:
+
+- `WindTurbine.create_with_new_bodies_in_world` now takes a `TurbineModel` (geometry
+  plus rating) instead of a bare geometry; `create_offshore_with_new_bodies_in_world`
+  builds the turbine on a new `OffshoreFoundation`. The deferred OpenFAST adapter will
+  need a model when it is rebased.
+- `OperationalState` has no fault member; a fault is `TurbineStatus.faulted`, so a
+  turbine can be faulted in any phase.
+- A new turbine is parked, so its blades start feathered (pi/2).
+- The anemometer is a body without drawn geometry on the nacelle roof, on the yaw axis.
+- The transition piece is the monopile segment above the sea, from mean sea level to
+  the 10 m platform, matching the OC3 SubDyn members; it is drawn yellow.
+- The sea reaches one rotor diameter beyond every structure.
+- The substation topside size (30 x 20 x 12 m), the 7-rotor-diameter spacing (as at
+  Horns Rev 1) and the substation's distance live only in the scene script.
+- `cramera-live` passes its own arguments on to the demo, so the scene script takes no
+  command-line options.

@@ -54,21 +54,23 @@ items:
     title: WindTurbine semantic annotation on main
     branch: wind-turbine-annotation
     track: semdt-world
-    status: not_started
+    status: in_progress
     notes: >-
       Moves only the WindTurbine annotation (tower, nacelle, hub, blades and their yaw,
       rotor and pitch connections) and its tests out of openfast_integration onto main.
+    blockers: ["Draft pull request to be opened by hand (no GitHub tooling on the machine)"]
 
   - id: offshore-wind-farm-world
     title: Offshore wind farm in the semDT, shown in CRAMERA
     branch: offshore-wind-farm-world
     track: semdt-world
-    status: not_started
+    status: in_progress
     depends_on: [wind-turbine-annotation]
     notes: >-
       WindFarm, OffshoreSubstation, Sea, Anemometer, OffshoreFoundation, TurbineModel,
       TurbineStatus, TurbineSetpoints, OperationalState; NREL 5 MW on the OC3 monopile;
       three turbines in a scene script viewable in CRAMERA.
+    blockers: ["Draft pull request to be opened by hand (no GitHub tooling on the machine)"]
 
   - id: wind-farm-simulation
     title: Scenario and plant dynamics in the wind_farm_control package
