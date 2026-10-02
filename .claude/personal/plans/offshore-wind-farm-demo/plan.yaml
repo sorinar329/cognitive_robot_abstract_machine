@@ -1,0 +1,141 @@
+schema_version: 1
+id: offshore-wind-farm-demo
+title: Offshore wind farm demo
+description: >-
+  An offshore wind farm of three turbines, modelled in the semantic digital twin and
+  controlled from CRAM: SegMind detects wind and grid events, a WindFarmController
+  builds Giskard statecharts that decide and act, and CRAMERA shows the scene, the
+  detection statechart and the control statechart.
+default_repository: sorinar329/cognitive_robot_abstract_machine
+
+waves:
+  - id: world-and-simulation
+    name: "Wave 1: World and simulation"
+    description: The offshore farm in the semDT, and a simulation that moves it.
+  - id: events-and-control
+    name: "Wave 2: Events and control"
+    description: SegMind events, CRAMERA statechart tabs and the controller that acts on the events.
+  - id: demo
+    name: "Wave 3: Demo"
+    description: The scripted scenario and its CRAMERA recording.
+
+tracks:
+  - id: semdt-world
+    name: World model in the semDT
+    wave: world-and-simulation
+    description: Semantic annotations of the turbines and the offshore farm.
+  - id: simulation
+    name: Simulation
+    wave: world-and-simulation
+    description: Scenario and plant dynamics in the standalone wind_farm_control package.
+  - id: openfast
+    name: OpenFAST
+    wave: world-and-simulation
+    description: OpenFAST as an alternative plant, stalled on 2 October 2026.
+  - id: segmind
+    name: SegMind events
+    wave: events-and-control
+    description: Detectors that read the semDT and emit wind, power and grid events.
+  - id: cramera
+    name: CRAMERA
+    wave: events-and-control
+    description: One statechart tab per named chart in the viewer.
+  - id: control
+    name: Wind farm control
+    wave: events-and-control
+    description: WindFarmController, statechart nodes, EQL guards and decisions.
+  - id: demo-scenario
+    name: Demo scenario
+    wave: demo
+    description: The end-to-end scenario and its recording.
+
+items:
+  - id: wind-turbine-annotation
+    title: WindTurbine semantic annotation on main
+    branch: wind-turbine-annotation
+    track: semdt-world
+    status: not_started
+    notes: >-
+      Moves only the WindTurbine annotation (tower, nacelle, hub, blades and their yaw,
+      rotor and pitch connections) and its tests out of openfast_integration onto main.
+
+  - id: offshore-wind-farm-world
+    title: Offshore wind farm in the semDT, shown in CRAMERA
+    branch: offshore-wind-farm-world
+    track: semdt-world
+    status: not_started
+    depends_on: [wind-turbine-annotation]
+    notes: >-
+      WindFarm, OffshoreSubstation, Sea, Anemometer, OffshoreFoundation, TurbineModel,
+      TurbineStatus, TurbineSetpoints, OperationalState; NREL 5 MW on the OC3 monopile;
+      three turbines in a scene script viewable in CRAMERA.
+
+  - id: wind-farm-simulation
+    title: Scenario and plant dynamics in the wind_farm_control package
+    branch: wind-farm-simulation
+    track: simulation
+    status: not_started
+    depends_on: [offshore-wind-farm-world]
+    notes: >-
+      Creates the standalone wind_farm_control workspace package with Scenario,
+      PowerCurveDynamics and WindFarmSimulation; writes wind, demand, status, power and
+      joint positions into the semDT.
+
+  - id: openfast-adapter
+    title: OpenFAST adapter as an alternative plant
+    branch: openfast_integration
+    track: openfast
+    status: deferred
+    depends_on: [wind-turbine-annotation]
+    notes: >-
+      Pushed to the fork without a pull request; stalled on 2 October 2026. Rebase on
+      wind-turbine-annotation when resumed; OpenFASTDynamics would wrap it.
+
+  - id: segmind-event-callbacks
+    title: EventLogger keeps every callback registered for an event type
+    branch: segmind-event-callbacks
+    track: segmind
+    status: not_started
+    notes: >-
+      Bug: add_callback replaces the callbacks already registered for a type and copies
+      them only to direct subclasses. Carries the bug label.
+
+  - id: segmind-wind-farm-detectors
+    title: SegMind wind, power and grid demand detectors
+    branch: segmind-wind-farm-detectors
+    track: segmind
+    status: not_started
+    depends_on: [offshore-wind-farm-world, segmind-event-callbacks]
+    notes: >-
+      SustainedThresholdDetector with hold times and hysteresis; cut-in, cut-out, power
+      production and power demand detectors; wind farm event classes; simulated
+      timestamps.
+
+  - id: cramera-statechart-tabs
+    title: CRAMERA shows one statechart tab per named chart
+    branch: cramera-statechart-tabs
+    track: cramera
+    status: not_started
+    notes: >-
+      Bridge keeps named ChartObservers; the graph panel adds a tab per chart and
+      recordings store every chart.
+
+  - id: wind-farm-controller
+    title: WindFarmController with statecharts, EQL guards and decisions
+    branch: wind-farm-controller
+    track: control
+    status: not_started
+    depends_on: [wind-farm-simulation, segmind-wind-farm-detectors]
+    notes: >-
+      EventInbox, TurbineControlChart, EventFluent, QueryHolds, MakeDecision,
+      TurbineCommand nodes, AwaitEffect; Decision as a semantic annotation in the semDT.
+
+  - id: offshore-demo-scenario
+    title: Offshore demo scenario and CRAMERA recording
+    branch: offshore-demo-scenario
+    track: demo-scenario
+    status: not_started
+    depends_on: [wind-farm-controller, cramera-statechart-tabs]
+    notes: >-
+      Calm, gust, steady rise, grid request, start-up with one turbine in maintenance,
+      power check, storm shutdown; recorded in CRAMERA with Detection and Control tabs.
