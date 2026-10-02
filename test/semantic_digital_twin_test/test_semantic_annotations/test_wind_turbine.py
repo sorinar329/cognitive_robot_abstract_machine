@@ -2,6 +2,11 @@ import numpy as np
 import pytest
 
 from semantic_digital_twin.semantic_annotations.wind_turbine import (
+    FEATHERED_PITCH,
+    OperationalState,
+    TurbineModel,
+    TurbineRating,
+    TurbineSetpoints,
     WindTurbine,
     WindTurbineGeometry,
 )
@@ -26,11 +31,23 @@ def wind_turbine_geometry() -> WindTurbineGeometry:
 
 
 @pytest.fixture
-def wind_turbine(wind_turbine_geometry: WindTurbineGeometry) -> WindTurbine:
-    world = World.create_with_root_body()
-    return WindTurbine.create_with_new_bodies_in_world(
-        "turbine", world, wind_turbine_geometry
+def turbine_model(wind_turbine_geometry: WindTurbineGeometry) -> TurbineModel:
+    return TurbineModel(
+        name="test turbine",
+        geometry=wind_turbine_geometry,
+        rating=TurbineRating(
+            rated_power=2.0e6,
+            cut_in_wind_speed=3.5,
+            rated_wind_speed=12.0,
+            cut_out_wind_speed=24.0,
+        ),
     )
+
+
+@pytest.fixture
+def wind_turbine(turbine_model: TurbineModel) -> WindTurbine:
+    world = World.create_with_root_body()
+    return WindTurbine.create_with_new_bodies_in_world("turbine", world, turbine_model)
 
 
 def unit_axis(connection: RevoluteConnection) -> np.ndarray:
@@ -109,6 +126,54 @@ def test_parts_are_registered_as_semantic_annotations(wind_turbine):
     assert wind_turbine.nacelle in world.semantic_annotations
     assert wind_turbine.hub in world.semantic_annotations
     assert all(blade in world.semantic_annotations for blade in wind_turbine.blades)
+
+
+def test_turbine_knows_its_model(wind_turbine, turbine_model):
+    assert wind_turbine.model is turbine_model
+
+
+# %% anemometer
+
+
+def test_anemometer_sits_on_the_nacelle_roof_on_the_yaw_axis(
+    wind_turbine, wind_turbine_geometry
+):
+    wind_turbine._world.update_forward_kinematics()
+    anemometer_position = wind_turbine.anemometer.root.global_transform.to_np()[:3, 3]
+    assert wind_turbine.anemometer.root.parent_connection.parent == (
+        wind_turbine.nacelle.root
+    )
+    assert np.allclose(
+        anemometer_position,
+        [
+            0.0,
+            0.0,
+            wind_turbine_geometry.tower_height
+            + 2 * wind_turbine_geometry.tower_top_to_shaft,
+        ],
+    )
+
+
+def test_anemometer_is_registered_as_a_semantic_annotation(wind_turbine):
+    assert wind_turbine.anemometer in wind_turbine._world.semantic_annotations
+
+
+# %% a new turbine is parked
+
+
+def test_new_turbine_reports_that_it_is_parked(wind_turbine):
+    assert wind_turbine.status.operational_state == OperationalState.PARKED
+    assert wind_turbine.status.brake_engaged
+    assert not wind_turbine.status.generator_connected
+
+
+def test_new_turbine_is_commanded_to_stay_parked(wind_turbine):
+    assert wind_turbine.setpoints == TurbineSetpoints()
+
+
+def test_new_turbine_has_its_blades_feathered(wind_turbine):
+    for connection in wind_turbine.pitch_connections:
+        assert connection.position == pytest.approx(FEATHERED_PITCH)
 
 
 # %% geometry
