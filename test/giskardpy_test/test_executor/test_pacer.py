@@ -17,8 +17,10 @@ from giskardpy.motion_statechart.graph_node import EndMotion
 from giskardpy.motion_statechart.monitors.payload_monitors import CountSeconds
 from giskardpy.motion_statechart.motion_statechart import MotionStatechart
 from giskardpy.qp.qp_controller_config import QPControllerConfig
+from semantic_digital_twin.adapters.controlled_simulation import ControlledSimulation
 from semantic_digital_twin.adapters.multi_sim import MujocoSim
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
+from semantic_digital_twin.exceptions import SimulationStoppedError
 from semantic_digital_twin.spatial_types.spatial_types import (
     HomogeneousTransformationMatrix,
 )
@@ -101,13 +103,10 @@ def test_with_executor():
     assert kin_sim.control_cycles == 42
 
 
-@pytest.mark.skipif(
-    not runs_in_continuous_integration(), reason="MuJoCo tests only run in CI"
-)
-def test_stepped_simulation_pacer_advances_the_physics_one_cycle_per_sleep():
+@pytest.fixture
+def falling_box_world() -> World:
     """
-    A box dropped from a metre falls under the simulation's gravity exactly as far as
-    the paced cycles add up to, so the physics and the loop stay in lockstep.
+    A world holding one box on a free connection, a metre above the root.
     """
     world = World()
     with world.modify_world():
@@ -128,9 +127,22 @@ def test_stepped_simulation_pacer_advances_the_physics_one_cycle_per_sleep():
                 ),
             )
         )
+    return world
+
+
+@pytest.mark.skipif(
+    not runs_in_continuous_integration(), reason="MuJoCo tests only run in CI"
+)
+def test_stepped_simulation_pacer_advances_the_physics_one_cycle_per_sleep(
+    falling_box_world,
+):
+    """
+    A box dropped from a metre falls under the simulation's gravity exactly as far as
+    the paced cycles add up to, so the physics and the loop stay in lockstep.
+    """
     cycles, frequency = 25, 50
 
-    simulation = MujocoSim(world=world, headless=True)
+    simulation = MujocoSim(world=falling_box_world, headless=True)
     simulation.start_stepped_simulation()
     try:
         pacer = SteppedSimulationPacer(simulation)
@@ -143,3 +155,21 @@ def test_stepped_simulation_pacer_advances_the_physics_one_cycle_per_sleep():
 
     fallen = 0.5 * 9.81 * (cycles / frequency) ** 2
     assert height == pytest.approx(1.0 - fallen, abs=0.01)
+
+
+@pytest.mark.skipif(
+    not runs_in_continuous_integration(), reason="MuJoCo tests only run in CI"
+)
+def test_stopping_a_controlled_simulation_ends_the_loop_it_paces(falling_box_world):
+    simulation = MujocoSim(world=falling_box_world, headless=True)
+    simulation.start_stepped_simulation()
+    try:
+        controlled = ControlledSimulation(simulation)
+        pacer = SteppedSimulationPacer(controlled)
+        pacer.target_frequency = 50
+        pacer.sleep()
+        controlled.stop()
+        with pytest.raises(SimulationStoppedError):
+            pacer.sleep()
+    finally:
+        simulation.stop_simulation()

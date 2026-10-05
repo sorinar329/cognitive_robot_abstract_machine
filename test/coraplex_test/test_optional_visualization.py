@@ -28,6 +28,7 @@ from coraplex.visualization import (
     RerunVisualization,
     PluginVisualization,
 )
+from semantic_digital_twin.adapters.controlled_simulation import ControlledSimulation
 from semantic_digital_twin.robots.minimal_robot import MinimalRobot
 from semantic_digital_twin.adapters.rerun import RerunMode
 import coraplex.testing as testing_module
@@ -58,6 +59,11 @@ class ObservedScene(PlanVisualization):
     The plans attached to this scene.
     """
 
+    simulations: list[ControlledSimulation] = field(default_factory=list)
+    """
+    The simulations attached to this scene.
+    """
+
     def start(self):
         """
         Begin serving this scene.
@@ -79,6 +85,14 @@ class ObservedScene(PlanVisualization):
         """
         self.plans.append(plan)
         return PlanCallback(plan=plan)
+
+    def attach_simulation(self, simulation: ControlledSimulation) -> None:
+        """
+        Record the attached simulation.
+
+        :param simulation: The simulation the host attached.
+        """
+        self.simulations.append(simulation)
 
 
 @pytest.fixture
@@ -138,6 +152,34 @@ def test_provider_can_observe_plan_node_returned_by_demo(installed_scene) -> Non
     root = sequential([])
     selected.attach_plan(root)
     assert selected.provider.plans == [root.plan]
+    selected.stop()
+
+
+def test_provider_receives_the_attached_simulation(installed_scene) -> None:
+    """
+    A simulation the demo offers for control reaches the installed provider.
+    """
+    simulation = Mock(spec=ControlledSimulation)
+    selected = PluginVisualization(World()).start()
+
+    selected.attach_simulation(simulation)
+
+    assert selected.provider.simulations == [simulation]
+    selected.stop()
+
+
+def test_a_backend_without_a_provider_ignores_an_attached_simulation() -> None:
+    """
+    Offering a simulation for control changes nothing for a renderer that cannot
+    control one.
+    """
+    world = World()
+    callbacks = list(world.state.state_change_callbacks)
+    selected = HeadlessVisualization(world).start()
+
+    selected.attach_simulation(Mock(spec=ControlledSimulation))
+
+    assert world.state.state_change_callbacks == callbacks
     selected.stop()
 
 

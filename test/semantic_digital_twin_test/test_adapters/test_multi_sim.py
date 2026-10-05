@@ -1672,38 +1672,6 @@ def test_prebuilt_world_multiple_free_bodies_start_at_authored_poses():
 # %% stepped simulation
 
 
-@pytest.fixture
-def falling_box_world() -> World:
-    world = World()
-    with world.modify_world():
-        root = Body(name=PrefixedName("root"))
-        world.add_body(root)
-        box = Body(name=PrefixedName("box"))
-        geometry = ShapeCollection(
-            [
-                Box(
-                    origin=HomogeneousTransformationMatrix.from_xyz_rpy(
-                        reference_frame=box
-                    ),
-                    scale=Scale(0.1, 0.1, 0.1),
-                )
-            ],
-            reference_frame=box,
-        )
-        box.collision, box.visual = geometry, geometry
-        world.add_connection(
-            Connection6DoF.create_with_dofs(
-                world=world,
-                parent=root,
-                child=box,
-                parent_T_connection_expression=HomogeneousTransformationMatrix.from_xyz_rpy(
-                    z=1.0, reference_frame=root
-                ),
-            )
-        )
-    return world
-
-
 def test_stepping_before_start_raises(falling_box_world):
     multi_sim = MujocoSim(world=falling_box_world, headless=headless)
 

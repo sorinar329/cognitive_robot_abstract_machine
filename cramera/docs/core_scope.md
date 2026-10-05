@@ -13,7 +13,7 @@ their plan or visualization session.
 | Feature | Deferred implementation |
 | --- | --- |
 | Plan authoring and generated demos | `plan_builder.*`, Builder helpers, catalog/scaffold/save endpoints and generated Python programs |
-| Manipulation from the browser | Object dragging, joint sliders, editable placement targets and constraint injection |
+| Manipulation from the browser | Object dragging, joint sliders, editable placement targets and constraint injection; the opt-in simulation control (pause, resume, stop, and body pose, mass and friction of a `ControlledSimulation` a demo attaches) is the only exception |
 | Hand teleoperation | Sandbox page, teleop controller, MediaPipe runtime and hand model |
 | Probabilistic model workbench | Models page, workbench API, Plotly and model-editing helpers |
 | Guided offline presentation | Tour page, storyboard orchestration and presentation-specific startup tools |

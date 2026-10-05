@@ -1,0 +1,1 @@
+{"worker": "gw1", "left_behind": [{"test": "test/semantic_digital_twin_test/test_adapters/test_multi_sim.py::test_body_frame_excludes_joint_state_at_build_time", "worlds": 1}, {"test": "test/semantic_digital_twin_test/test_adapters/test_multi_sim.py::test_stepping_before_start_raises", "worlds": 1}]}

@@ -17,6 +17,7 @@ from types import NoneType
 from typing_extensions import (
     Dict,
     List,
+    Protocol,
     Any,
     ClassVar,
     Iterator,
@@ -44,8 +45,10 @@ from semantic_digital_twin.callbacks.callback import (
 )
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.exceptions import (
+    MasslessBodyError,
     QuaternionConversionError,
     MujocoEntityNotFoundError,
+    NonPositiveMassError,
     SimulationAlreadyRunningError,
     SimulationNotStartedError,
 )
@@ -75,7 +78,10 @@ from semantic_digital_twin.world_description.geometry import (
     Mesh,
     Color,
 )
-from semantic_digital_twin.world_description.contact import ContactParameters
+from semantic_digital_twin.world_description.contact import (
+    ContactFriction,
+    ContactParameters,
+)
 from semantic_digital_twin.world_description.world_entity import (
     Region,
     Body,
@@ -98,6 +104,11 @@ from semantic_digital_twin.world_description.world_modification import (
 )
 
 logger = logging.getLogger(__name__)
+
+MUJOCO_MISSING_ID = -1
+"""
+The id :func:`mujoco.mj_name2id` answers with for a name the model does not hold.
+"""
 
 
 def cas_pose_to_list(pose: HomogeneousTransformationMatrix) -> List[float]:
@@ -3595,6 +3606,19 @@ class MujocoSynchronizer(MultiSimSynchronizer):
         super().stop()
 
 
+class SteppedSimulation(Protocol):
+    """
+    A simulation its caller advances one step at a time.
+    """
+
+    def step_simulation(self, duration: timedelta) -> None:
+        """
+        Advance the physics.
+
+        :param duration: How much simulated time to advance.
+        """
+
+
 class MultiSim(ABC):
     """
     Class to handle the simulation of a world using the simulator.
@@ -3744,3 +3768,129 @@ class MujocoSim(MultiSim):
         for _ in range(round(duration.total_seconds() / self.simulator.step_size)):
             self.simulator.step()
         self.simulator.render()
+
+    # %% body physics
+
+    def simulates(self, body: Body) -> bool:
+        """
+        :param body: A body of the simulated world.
+        :return: Whether MuJoCo simulates ``body``.
+        """
+        return self._mujoco_body_id(body) != MUJOCO_MISSING_ID
+
+    def body_mass(self, body: Body) -> float:
+        """
+        :param body: A body MuJoCo simulates.
+        :return: The mass MuJoCo simulates ``body`` with, in kilograms.
+        """
+        return float(self.simulator._mj_model.body_mass[self._simulated_body_id(body)])
+
+    def body_inertia(self, body: Body) -> numpy.ndarray:
+        """
+        :param body: A body MuJoCo simulates.
+        :return: The principal moments of inertia MuJoCo simulates ``body`` with.
+        """
+        return self.simulator._mj_model.body_inertia[
+            self._simulated_body_id(body)
+        ].copy()
+
+    def set_body_mass(self, body: Body, mass: float) -> None:
+        """
+        Give ``body`` a new mass, scaling its inertia along so that its mass stays
+        distributed as before.
+
+        :param body: A body MuJoCo simulates with a mass.
+        :param mass: The new mass, in kilograms.
+        :raises NonPositiveMassError: If ``mass`` is not greater than zero.
+        :raises MasslessBodyError: If MuJoCo gives ``body`` no mass to scale.
+        """
+        if mass <= 0:
+            raise NonPositiveMassError(body.name, mass)
+        model = self.simulator._mj_model
+        body_id = self._simulated_body_id(body)
+        if model.body_mass[body_id] == 0:
+            raise MasslessBodyError(body.name)
+        with self.simulator._model_lock:
+            model.body_inertia[body_id] *= mass / model.body_mass[body_id]
+            model.body_mass[body_id] = mass
+
+    def set_fixed_body_pose(
+        self, body: Body, parent_T_body: HomogeneousTransformationMatrix
+    ) -> None:
+        """
+        Put a body MuJoCo holds without a joint somewhere else relative to its parent.
+
+        :param body: A body MuJoCo simulates without a joint.
+        :param parent_T_body: The body's new pose relative to its parent.
+        """
+        transform = parent_T_body.to_np()
+        model = self.simulator._mj_model
+        body_id = self._simulated_body_id(body)
+        with self.simulator._model_lock:
+            model.body_pos[body_id] = transform[:3, 3]
+            model.body_quat[body_id] = Rotation.from_matrix(transform[:3, :3]).as_quat(
+                scalar_first=True
+            )
+
+    def body_friction(self, body: Body) -> Optional[ContactFriction]:
+        """
+        :param body: A body MuJoCo simulates.
+        :return: The friction of the first of ``body``'s colliding geoms, or None if it
+            has none.
+        """
+        geom_ids = self._colliding_geom_ids(body)
+        if not geom_ids:
+            return None
+        sliding, torsional, rolling = self.simulator._mj_model.geom_friction[
+            geom_ids[0]
+        ]
+        return ContactFriction(float(sliding), float(torsional), float(rolling))
+
+    def set_body_friction(self, body: Body, friction: ContactFriction) -> None:
+        """
+        Give every colliding geom of ``body`` the same friction.
+
+        .. note:: MuJoCo resolves a contact with the larger of the two touching geoms'
+            coefficients, so lowering one body's friction below that of what it touches
+            changes nothing.
+
+        :param body: A body MuJoCo simulates.
+        :param friction: The new friction.
+        """
+        model = self.simulator._mj_model
+        with self.simulator._model_lock:
+            for geom_id in self._colliding_geom_ids(body):
+                model.geom_friction[geom_id] = friction.to_list()
+
+    def _mujoco_body_id(self, body: Body) -> int:
+        """
+        :return: The id MuJoCo knows ``body`` by, or :data:`MUJOCO_MISSING_ID`.
+        """
+        return mujoco.mj_name2id(
+            self.simulator._mj_model, mujoco.mjtObj.mjOBJ_BODY, body.name.name
+        )
+
+    def _simulated_body_id(self, body: Body) -> int:
+        """
+        :return: The id MuJoCo knows ``body`` by.
+        :raises MujocoEntityNotFoundError: If MuJoCo does not simulate ``body``.
+        """
+        body_id = self._mujoco_body_id(body)
+        if body_id == MUJOCO_MISSING_ID:
+            raise MujocoEntityNotFoundError(
+                entity_name=body.name.name, entity_type=mujoco.mjtObj.mjOBJ_BODY
+            )
+        return body_id
+
+    def _colliding_geom_ids(self, body: Body) -> List[int]:
+        """
+        :return: The ids of the geoms of ``body`` that take part in contacts.
+        """
+        model = self.simulator._mj_model
+        body_id = self._simulated_body_id(body)
+        first = model.body_geomadr[body_id]
+        return [
+            geom_id
+            for geom_id in range(first, first + model.body_geomnum[body_id])
+            if model.geom_contype[geom_id] or model.geom_conaffinity[geom_id]
+        ]

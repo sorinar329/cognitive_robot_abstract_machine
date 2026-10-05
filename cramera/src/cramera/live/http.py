@@ -24,6 +24,8 @@ HTTP endpoints of the live bridge (default port 8765).
                       :mod:`cramera.live.transforms`)
     GET /recording  {state: idle|recording|finalized, frameCount, durationSeconds,
                       sceneName}  see :mod:`cramera.live.recording`
+    GET /simulation  and POST /simulation/{pause,resume,stop,edit}  the opt-in
+                      simulation control, see :mod:`cramera.live.simulation_control`
     POST /recording/stop     finalize the current recording into a scene bundle under
                               :func:`cramera.paths.local_scenes_directory`
     POST /recording/discard  drop the current recording and its bundle, if any
@@ -51,7 +53,10 @@ from pathlib import Path
 
 from dataclasses import asdict, dataclass
 
-from typing_extensions import Any, ClassVar, Dict, Optional, Tuple, Type
+from typing_extensions import Any, Callable, ClassVar, Dict, Optional, Tuple, Type
+
+from semantic_digital_twin.adapters.controlled_simulation import ControlledSimulation
+from semantic_digital_twin.exceptions import SimulationEditError, SimulationStoppedError
 
 from cramera.knowledge.query_vocabulary import UnknownVocabularyName
 from cramera.knowledge.queryable_knowledge import QueryScope, UnknownQueryScope
@@ -61,6 +66,14 @@ from cramera.live.frame_range import InvalidFrameRange
 from cramera.live.live_bundle import build_live_scene
 from cramera.live.recording import Recording, RecordingState
 from cramera.live.recording_bundle import finalize_recording
+from cramera.live.simulation_control import (
+    InvalidSimulationEditRequest,
+    NoSimulationAttached,
+    SceneGraphField,
+    SimulationEditRequest,
+    SimulationRoute,
+    UnknownSimulatedBody,
+)
 from cramera.live.recording_save_request import (
     InvalidRecordingSaveRequest,
     RecordingSaveRequest,
@@ -89,6 +102,15 @@ class BridgeRequestHandler(BaseHTTPRequestHandler):
     bridge: Bridge
     """
     The visualization session whose snapshots are served.
+    """
+
+    SIMULATION_CONTROLS: ClassVar[Dict[str, Callable[[ControlledSimulation], None]]] = {
+        SimulationRoute.PAUSE: ControlledSimulation.pause,
+        SimulationRoute.RESUME: ControlledSimulation.resume,
+        SimulationRoute.STOP: ControlledSimulation.stop,
+    }
+    """
+    The run controls, by the route that applies them.
     """
 
     def __init__(self, *args: Any, bridge: Bridge, **kwargs: Any) -> None:
@@ -175,6 +197,8 @@ class BridgeRequestHandler(BaseHTTPRequestHandler):
             return self._send_json(self.bridge.status())
         if self.path.startswith("/recording"):
             return self._send_json(self._recording_status())
+        if self.path.startswith(SimulationRoute.SCENE_GRAPH):
+            return self._send_json(self.bridge.scene_graph())
         self.send_response(404)
         self.end_headers()
 
@@ -315,7 +339,44 @@ class BridgeRequestHandler(BaseHTTPRequestHandler):
             return self._discard_recording()
         if self.path == "/recording/save":
             return self._save_recording()
+        if self.path in self.SIMULATION_CONTROLS:
+            return self.control_simulation(self.SIMULATION_CONTROLS[self.path])
+        if self.path == SimulationRoute.EDIT:
+            return self.edit_simulation()
         self._send_json({"ok": False, "error": "unknown endpoint"}, 404)
+
+    def control_simulation(
+        self, control: Callable[[ControlledSimulation], None]
+    ) -> None:
+        """
+        Pause, resume or stop the attached simulation, and report its run state.
+
+        :param control: The control to apply to the simulation.
+        """
+        try:
+            simulation = self.bridge.controlled_simulation()
+            control(simulation)
+        except NoSimulationAttached as error:
+            return self._send_json({"ok": False, "error": str(error)}, 404)
+        except SimulationStoppedError as error:
+            return self._send_json({"ok": False, "error": str(error)}, 409)
+        self._send_json({"ok": True, SceneGraphField.STATE: simulation.state})
+
+    def edit_simulation(self) -> None:
+        """
+        Have one requested change made to the attached simulation.
+        """
+        try:
+            simulation = self.bridge.controlled_simulation()
+            request = SimulationEditRequest.from_json(self._posted_payload())
+            simulation.submit(request.edit_for(simulation))
+        except (NoSimulationAttached, UnknownSimulatedBody) as error:
+            return self._send_json({"ok": False, "error": str(error)}, 404)
+        except SimulationStoppedError as error:
+            return self._send_json({"ok": False, "error": str(error)}, 409)
+        except (InvalidSimulationEditRequest, SimulationEditError) as error:
+            return self._send_json({"ok": False, "error": str(error)}, 400)
+        self._send_json({"ok": True})
 
     def _posted_payload(self) -> Optional[Dict[str, Any]]:
         """

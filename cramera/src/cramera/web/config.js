@@ -22,6 +22,6 @@ window.CRAMERA_CONFIG = {
     ? { left: ['robot-scene'] }
     : {
         left: ['robot-scene'],
-        right: ['eql', 'graph'],
+        right: ['eql', 'graph', 'scene-graph'],
       },
 };

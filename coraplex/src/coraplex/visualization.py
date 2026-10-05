@@ -29,6 +29,9 @@ if TYPE_CHECKING:
 
     from coraplex.plans.plan import Plan
     from coraplex.plans.plan_callbacks import PlanCallback
+    from semantic_digital_twin.adapters.controlled_simulation import (
+        ControlledSimulation,
+    )
     from semantic_digital_twin.world import World
 
 try:
@@ -72,6 +75,14 @@ class PlanVisualization(ABC):
 
         :param plan: The plan to observe.
         :return: A callback registered by the visualization owner.
+        """
+
+    def attach_simulation(self, simulation: ControlledSimulation) -> None:
+        """
+        Offer the viewer control over the simulation of :attr:`world`; a provider that
+        cannot control one ignores it.
+
+        :param simulation: The simulation the viewer may pause, resume, stop and change.
         """
 
 
@@ -239,6 +250,15 @@ class WorldVisualization(ABC):
 
     def attach_plan(self, plan: Plan | PlanNode) -> None:
         pass
+
+    def attach_simulation(self, simulation: ControlledSimulation) -> None:
+        """
+        Offer the renderer control over the simulation of :attr:`world`; a renderer
+        that cannot control one ignores it.
+
+        :param simulation: The simulation the renderer may pause, resume, stop and
+            change.
+        """
 
     def finish_execution(self) -> None:
         self.stop()
@@ -427,6 +447,17 @@ class PluginVisualization(WorldVisualization):
         callback = self.provider.plan_callback(observed_plan)
         observed_plan.node_callbacks.append(callback)
         self._callbacks.append(callback)
+
+    def attach_simulation(self, simulation: ControlledSimulation) -> None:
+        """
+        Offer the running optional provider control over the simulation.
+
+        :param simulation: The simulation the provider may pause, resume, stop and
+            change.
+        """
+        if self.provider is None:
+            return
+        self.provider.attach_simulation(simulation)
 
     def _remove_callbacks(self) -> None:
         for callback in self._callbacks:

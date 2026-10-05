@@ -7,6 +7,10 @@ point, and the physics advances one cycle before the next tick reads the world b
 is what :class:`~giskardpy.executor.SteppedSimulationPacer` does, and
 :data:`~coraplex.plans.executables.GiskardExecutable.simulation_pacer` is where a plan
 picks it up.
+
+The simulation is offered to the visualization for control, so a viewer that can
+control one (cramera) pauses, resumes and stops the run and moves bodies or changes
+their mass and friction while it runs.
 """
 
 from __future__ import annotations
@@ -20,7 +24,9 @@ from coraplex.datastructures.dataclasses import Context
 from coraplex.datastructures.enums import ExecutionType
 from coraplex.execution_environment import ExecutionEnvironment
 from coraplex.plans.executables import GiskardExecutable
+from coraplex.visualization import WorldVisualization
 from giskardpy.executor import SteppedSimulationPacer
+from semantic_digital_twin.adapters.controlled_simulation import ControlledSimulation
 from semantic_digital_twin.adapters.multi_sim import (
     ContactDimensionality,
     MujocoGeom,
@@ -115,6 +121,8 @@ def run(
         update_world_model_attachment=False,
     )
     plan = build_plan(context, pieces)
+    visualization = WorldVisualization.from_environment(world).start()
+    visualization.attach_plan(plan)
 
     simulation = MujocoSim(
         world=world,
@@ -125,10 +133,12 @@ def run(
         noslip_iterations=NO_SLIP_ITERATIONS,
     )
     simulation.start_stepped_simulation()
+    controlled = ControlledSimulation(simulation)
+    visualization.attach_simulation(controlled)
     previous_pacer = GiskardExecutable.simulation_pacer
-    GiskardExecutable.simulation_pacer = SteppedSimulationPacer(simulation)
+    GiskardExecutable.simulation_pacer = SteppedSimulationPacer(controlled)
     try:
-        simulation.step_simulation(SETTLING_DURATION)
+        controlled.step_simulation(SETTLING_DURATION)
         with ExecutionEnvironment(execution_type=ExecutionType.SIMULATED):
             plan.perform()
     finally:

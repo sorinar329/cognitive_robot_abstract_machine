@@ -33,6 +33,7 @@ from cramera.logging_setup import get_logger
 from cramera.body_geometry import NumericPose, POSE_PRECISION, rounded_pose
 from semantic_digital_twin.world_description.connections import (
     ActiveConnection1DOF,
+    FixedConnection,
 )
 from cramera.knowledge.enums import PlanNodeGroup
 from cramera.live.chart_observer import ChartObserver
@@ -52,6 +53,7 @@ from cramera.knowledge.workspace_classes import WorkspaceClassIndex
 from cramera.live.query import LiveQuerySource, NoQuerySourceRegistered
 from cramera.live.markers import MarkerEntry, MarkerStore
 from cramera.live.shape_catalog import ShapeEntry, served_mesh_file, shape_entry
+from cramera.live.simulation_control import NoSimulationAttached, SceneGraph
 from cramera.live.transforms import TransformGraph, TransformSnapshot
 from cramera.world_objects import WorldObjects
 from cramera.palette import ObjectPalette
@@ -61,6 +63,9 @@ if TYPE_CHECKING:
     from coraplex.plans.plan import Plan
     from coraplex.plans.plan_node import MotionNode, PlanNode
     from giskardpy.motion_statechart.motion_statechart import MotionStatechart
+    from semantic_digital_twin.adapters.controlled_simulation import (
+        ControlledSimulation,
+    )
     from semantic_digital_twin.world import World
     from semantic_digital_twin.world_description.world_entity import Body, Connection
 
@@ -682,6 +687,12 @@ class Bridge:
     :mod:`cramera.live.visualization`); None before anything has ever attached.
     """
 
+    simulation: Optional[ControlledSimulation] = None
+    """
+    The simulation the demo offered the viewer control over, if it offered one (see
+    :mod:`cramera.live.simulation_control`).
+    """
+
     # %% what the visualization drives
     def attach(self, world: World) -> None:
         """
@@ -971,11 +982,12 @@ class Bridge:
                     continue
                 connection = body.parent_connection
                 entries.append(
-                    "%s<-%s:%s"
+                    "%s<-%s:%s%s"
                     % (
                         name,
                         str(connection.parent.name) if connection else "",
                         type(connection).__name__ if connection else "root",
+                        self._fixed_origin(connection),
                     )
                 )
         except Exception as error:
@@ -985,6 +997,18 @@ class Bridge:
             return
         digest = hashlib.sha1("|".join(sorted(entries)).encode()).hexdigest()[:16]
         self._bundle_signature = "world-%s-robot-%s" % (digest, robot_name)
+
+    @staticmethod
+    def _fixed_origin(connection: Optional[Connection]) -> List[float]:
+        """
+        The pose a fixed connection holds its child at, so moving a fixed body changes
+        the bundle signature; empty for any other connection, whose pose is state.
+
+        :param connection: The connection holding a bundled body, if any.
+        """
+        if not isinstance(connection, FixedConnection):
+            return []
+        return NumericPose.of_matrix(connection.origin.to_np()).rounded(POSE_PRECISION)
 
     def status(self) -> Dict[str, Any]:
         """
@@ -1311,6 +1335,46 @@ class Bridge:
             color=entries[0].color,
             shapes=entries,
         )
+
+    # %% simulation control
+    def scene_graph(self) -> Dict[str, Any]:
+        """
+        The attached simulation's bodies, composed from the latest snapshots (safe to
+        call from HTTP threads).
+        """
+        simulation = self.simulation
+        if simulation is None:
+            return SceneGraph.unavailable_payload()
+        return SceneGraph.compose(
+            simulation, self.transform_state, self.published_poses_by_body_name()
+        ).to_payload()
+
+    def controlled_simulation(self) -> ControlledSimulation:
+        """
+        The simulation the demo offered control over.
+
+        :raises NoSimulationAttached: If the demo offered none.
+        """
+        simulation = self.simulation
+        if simulation is None:
+            raise NoSimulationAttached()
+        return simulation
+
+    def published_poses_by_body_name(self) -> Dict[str, List[float]]:
+        """
+        The poses of the latest snapshot, by the name of the body each belongs to.
+        """
+        with self._lock:
+            state = self.state
+            bodies = dict(self._bodies)
+        poses = {
+            str(body.name): state.objects[key]
+            for key, body in bodies.items()
+            if key in state.objects
+        }
+        if state.base is not None and ROBOT_BASE_KEY in bodies:
+            poses[str(bodies[ROBOT_BASE_KEY].name)] = state.base
+        return poses
 
     # %% world snapshot
     def snapshot(self) -> None:

@@ -1952,3 +1952,140 @@ class SimulationAlreadyRunningError(UsageError):
 
     def suggest_correction(self) -> str:
         return "Stop the simulation before starting it again."
+
+
+# %% controlled simulation
+
+
+@dataclass
+class SimulationStoppedError(DataclassException):
+    """
+    Raised in a controlled simulation's stepping thread once the simulation was stopped,
+    so the control loop driving it ends, and when a stopped simulation is asked to
+    continue or change.
+    """
+
+    world_name: str
+    """
+    Name of the root of the world whose simulation was stopped.
+    """
+
+    def error_message(self) -> str:
+        return f"The simulation of the world rooted at {self.world_name} was stopped."
+
+    def suggest_correction(self) -> str:
+        return "Start a new simulation to carry on."
+
+
+@dataclass
+class SimulationEditError(UsageError):
+    """
+    Raised when a change to a running simulation cannot be made.
+    """
+
+    body_name: PrefixedName
+    """
+    Name of the body the change was meant for.
+    """
+
+
+@dataclass
+class BodyNotSimulatedError(SimulationEditError):
+    """
+    Raised when a change is meant for a body the simulation does not simulate.
+    """
+
+    def error_message(self) -> str:
+        return f"The simulation does not simulate the body {self.body_name}."
+
+    def suggest_correction(self) -> str:
+        return "Change a body of the world the simulation was built from."
+
+
+@dataclass
+class UnmovableBodyError(SimulationEditError):
+    """
+    Raised when a body is to be moved that neither hangs off a connection with six
+    degrees of freedom nor is held by fixed connections up to the root of its world.
+    """
+
+    def error_message(self) -> str:
+        return (
+            f"The body {self.body_name} is the root of its world or carried by a "
+            "joint, so it cannot be moved on its own."
+        )
+
+    def suggest_correction(self) -> str:
+        return (
+            "Move a body that is connected to its parent with six degrees of freedom, "
+            "or one held by fixed connections up to the root of the world."
+        )
+
+
+@dataclass
+class MasslessBodyError(SimulationEditError):
+    """
+    Raised when a body is to be given a mass that its simulation gives none, such as
+    the world itself.
+    """
+
+    def error_message(self) -> str:
+        return f"The body {self.body_name} has no mass in the simulation to change."
+
+    def suggest_correction(self) -> str:
+        return "Change the mass of a body the simulation moves."
+
+
+@dataclass
+class BodyWithoutContactError(SimulationEditError):
+    """
+    Raised when a body is to be given a friction but has no shape that touches others.
+    """
+
+    def error_message(self) -> str:
+        return (
+            f"The body {self.body_name} has no shape that collides, so it has no "
+            "friction to change."
+        )
+
+    def suggest_correction(self) -> str:
+        return "Change the friction of a body with a collision shape."
+
+
+@dataclass
+class NonPositiveMassError(SimulationEditError):
+    """
+    Raised when a body is to be given a mass of zero or less.
+    """
+
+    mass: float
+    """
+    The mass that was asked for, in kilograms.
+    """
+
+    def error_message(self) -> str:
+        return f"The body {self.body_name} cannot weigh {self.mass} kg."
+
+    def suggest_correction(self) -> str:
+        return "Give the body a mass greater than zero."
+
+
+@dataclass
+class NegativeFrictionError(SimulationEditError):
+    """
+    Raised when a body is to be given a friction coefficient below zero.
+    """
+
+    coefficients: List[float]
+    """
+    The sliding, torsional and rolling coefficients that were asked for.
+    """
+
+    def error_message(self) -> str:
+        return (
+            f"The body {self.body_name} cannot have the friction coefficients "
+            f"{self.coefficients}."
+        )
+
+    def suggest_correction(self) -> str:
+        return "Give every friction coefficient a value of zero or more."

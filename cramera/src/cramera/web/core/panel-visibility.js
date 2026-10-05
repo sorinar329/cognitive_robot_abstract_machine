@@ -22,6 +22,7 @@
     'robot-scene': 'Semantic Digital Twin Scene',
     'eql': 'EQL · entity query language',
     'graph': 'Knowledge & reasoning graphs',
+    'scene-graph': 'Scene graph · simulation control',
   };
   /* What the View menu calls each panel; an unlisted id shows as its raw id. */
 

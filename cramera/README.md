@@ -28,8 +28,33 @@ cramera-live path/to/demo.py
 
 The wrapper selects CRAMERA through CRAM's visualization backend. The live bridge
 serves the world's geometry and state on port 8765. Open the viewer and choose Live
-to follow the robot, objects, plan progress and motion statecharts. The viewer
-observes execution; it offers no robot or plan editing controls.
+to follow the robot, objects, plan progress and motion statecharts. Unless a demo
+opts in to simulation control (below), the viewer observes execution; it never offers
+robot or plan editing controls.
+
+### Control a stepped simulation
+
+A demo that steps a MuJoCo simulation from its control loop can opt in to being
+controlled from the viewer. It wraps the simulation in a `ControlledSimulation`,
+paces its plan with it and attaches it to its visualization:
+
+```python
+controlled = ControlledSimulation(simulation)
+visualization.attach_simulation(controlled)
+GiskardExecutable.simulation_pacer = SteppedSimulationPacer(controlled)
+```
+
+The *Scene graph · simulation* panel then lists every simulated body with its pose,
+mass and friction, and offers pause, play and stop. A pause holds the robot and the
+physics together at the next control step. Loose bodies (on a free connection) and
+fixed bodies (held by fixed connections up to the world's root) can be moved; mass
+and friction can be changed for any body MuJoCo gives them. Changes are made between
+two physics steps, right away while paused. Stop ends the plan with a
+`SimulationStoppedError`. A demo that attaches no simulation shows the panel as a
+one-line note, and every control request is refused.
+
+MuJoCo resolves a contact with the larger friction of the two touching surfaces, so
+lowering one body's friction below that of what it touches has no effect.
 
 Use one live session per `CRAMERA_DATA` directory. Separate simultaneous sessions
 need separate data directories and ports.

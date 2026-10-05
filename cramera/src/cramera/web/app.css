@@ -41,6 +41,9 @@ body{
 .slot{display:flex;flex-direction:column;gap:16px;min-height:0;min-width:0}
 .slot>.panel{flex:1;min-height:0}
 .slot>.panel-eql{flex:0 1 auto;min-height:150px}
+/* the scene graph stays a one-line note until a demo offers its simulation for control */
+.slot>.panel-scene-graph{flex:0 0 auto}
+.slot>.panel-scene-graph.sg-available{flex:1 1 0;min-height:260px}
 /* the tab group holding the graph takes the share the graph used to take on its own */
 .slot>.panel-tabs{flex:1 1 0}
 .panel-error{margin:auto;color:var(--danger);font-size:13px;padding:20px;text-align:center}
@@ -709,3 +712,39 @@ body.graph-full-open{overflow:hidden}
   border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%;
   animation: cr-spin 0.7s linear infinite; opacity: 0.85;
 }
+
+/* %% scene graph · simulation control */
+.panel-scene-graph .panel-head{padding:10px 14px}
+.sg-controls{display:flex;align-items:center;gap:6px}
+.sg-controls button,.sg-section-head button,.sg-reload{
+  background:var(--bg2);border:1px solid var(--line2);color:var(--ink);
+  border-radius:var(--radius);padding:3px 9px;font-size:12px;cursor:pointer;
+}
+.sg-controls button:disabled{opacity:.35;cursor:default}
+.sg-state{font-family:var(--mono);font-size:11px;color:var(--muted);margin-right:6px}
+.sg-state[data-state="running"]{color:var(--accent)}
+.sg-state[data-state="paused"]{color:var(--warn)}
+.sg-state[data-state="stopped"]{color:var(--danger)}
+.sg-note{padding:8px 14px;font-size:12px;color:var(--faint)}
+.sg-body{display:grid;grid-template-columns:minmax(150px,2fr) 3fr;flex:1;min-height:0}
+.sg-tree-wrap{display:flex;flex-direction:column;border-right:1px solid var(--line);min-height:0}
+.sg-filter{margin:8px;background:var(--bg2);border:1px solid var(--line2);color:var(--ink);
+  border-radius:var(--radius);padding:4px 8px;font-size:12px}
+.sg-tree{overflow:auto;flex:1;font-family:var(--mono);font-size:12px;padding-bottom:8px}
+.sg-row{padding:2px 6px;cursor:pointer;white-space:nowrap;color:var(--muted)}
+.sg-row:hover{background:var(--bg2)}
+.sg-row.selected{background:rgba(57,213,200,.12);color:var(--ink)}
+.sg-row.sg-loose{color:var(--obj)}
+.sg-row.sg-fixed{color:var(--reg)}
+.sg-detail{overflow:auto;padding:10px 12px;font-size:12px;min-height:0}
+.sg-info{display:flex;justify-content:space-between;gap:8px;align-items:center;
+  font-family:var(--mono);color:var(--muted);margin-bottom:8px;word-break:break-all}
+.sg-section{border:1px solid var(--line);border-radius:var(--radius);padding:8px;margin-bottom:8px}
+.sg-section-head{display:flex;justify-content:space-between;align-items:center;font-weight:600;margin-bottom:6px}
+.sg-field{display:grid;grid-template-columns:70px 1fr 90px;gap:6px;align-items:center;margin:3px 0}
+.sg-field input{background:var(--bg2);border:1px solid var(--line2);color:var(--ink);
+  border-radius:var(--radius);padding:3px 6px;font-family:var(--mono);font-size:12px;min-width:0}
+.sg-current{font-family:var(--mono);color:var(--faint);font-size:11px}
+.sg-empty{color:var(--faint)}
+.sg-message{padding:0 14px;font-size:12px;color:var(--muted)}
+.sg-message.error{color:var(--danger);padding:6px 14px}
