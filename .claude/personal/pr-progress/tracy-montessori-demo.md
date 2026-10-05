@@ -20,5 +20,10 @@ board move, mass/friction, piece move, refusals, stop ends plan).
 Observations: pause during the 1 s settling step waits for it to end; unedited
 baseline only gets cylinder + triangular prism into holes (cube/rect stay ~0.97 m).
 
-Next: tuple->dataclass in _next_instruction, run format_docstrings, report to user.
-Not done: visual browser check of the panel; commit (not requested).
+Done also: SteppingInstruction dataclass; black run (docformatter not installed in
+venv, so format_docstrings.py could not run). Affected suites: 1059 passed.
+Pre-existing failures (not ours): missing ROS pkgs (ur_robot_driver, aws warehouse);
+test_simulator_property_dict expects no 'condim' since commit 487f3fd651.
+
+Next: user to try the panel in the browser (not visually checked yet); commit when
+asked.
