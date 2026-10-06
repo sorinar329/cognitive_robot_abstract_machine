@@ -45,7 +45,16 @@ helper was 1.1 ms/body (as slow as a ratio call), hence the numpy path.
 Demo (instrumented, 1 run): ratio calls/check 101.8 -> 0.7, tick 0.74 -> 0.17 s, ticks
 61 -> 247, demo 97 -> 91 s; containment still 49% of tick (~26 ms/check, mostly building
 ~100 boxes; not profiled). docformatter missing from venv; ran black only.
-Next: commit when asked; then cascade, tick pacing.
+User: tick pacing before the cascade.
+Step 3 done (uncommitted): Segmind.tick_period (default 0.5 s, my pick - flagged to user);
+loop waits max(tick_period - held_for, pause_between_ticks). Tests:
+test_detectors_are_ticked_once_a_tick_period (failed first: 48 ticks in 0.5 s at 0.1 s
+period), test_changing_the_world_is_not_held_up_by_ticks_longer_than_the_tick_period.
+segmind suite 102 passed. Demo (uninstrumented, 1 run each, with bounds filter):
+off 73.3 s; period 0.25: 89.0 s/238 ticks/held 50%; 0.5: 81.2 s/120/38% (implemented:
+81.7 s/125/38%); 1.0: 78.2 s/65/26%. Spurious island_countertop placings (move_branch gap)
+at 0.25/0.5, not at 1.0 (fewer ticks in the gap, luck). Script: scratchpad pacing_cost.py.
+Next: user picks the default period; commit when asked; then the cascade.
 Observations: get_containment_pairs uses bodies_outside_end_effectors directly, so it
 skips bodies_left_out (robot bodies) unlike get_relation; each ratio call copies and
 transforms both meshes and builds the container's bounding box; Segmind's tick loop
