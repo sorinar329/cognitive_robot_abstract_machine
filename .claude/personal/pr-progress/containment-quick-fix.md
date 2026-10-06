@@ -78,6 +78,7 @@ HELD_UP_IN_THE_TRAY, LIFTED_OUT_OF_THE_TRAY, SET_ASIDE) in test/segmind_test/con
 tests use each file's _place / direct origin like their neighbours; held-up test moved to
 test_segmind_detectors.py (fails on main's detector); robot tests keep shelf inside the
 original _box_inside (box sunk into base_link never touches its mesh). 102 passed.
+Committed + pushed 8cba3a6521; PR #12 shows 9 files.
 Next: period default; PR description (tick period, CI numbers).
 
 ## containment-detector-fix: Segmind's ContainmentDetector slows the bullet world demo
