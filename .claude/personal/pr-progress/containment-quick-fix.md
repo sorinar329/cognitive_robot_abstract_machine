@@ -1,3 +1,22 @@
+## bullet-demo-place-heights: bullet world demo lays milk and spoon above the table
+
+Branch from sorin/main (04631c7bbc), 2026-10-06. Cause: LucaKro's 4f0c2ee2de hand-rounded
+place heights (milk 0.82, spoon 0.74) left them 7.3/9.3 mm above table_area_main (top
+0.7226); SupportedBy contact tolerance 5 mm -> no support/placing. Luca: a mistake.
+Fix (uncommitted; user: no new method, revert to the poses that worked): heights back to
+milk 0.81, spoon 0.73 (bowl 0.76 unchanged); along/across layout kept; ApartmentBody.TABLE
+added for the test. Test test/coraplex_test/test_bullet_world_demo_place_setting.py (demo
+loaded via importlib): each object at its target pose is SupportedBy the table; failed
+first for Milk/Spoon. Dropped the geometric not-sunk test (milk at 0.81 sinks 0.3 mm).
+8 passed with test_demo_scripts. Full demo: exit 0, placings for milk, bowl, spoon.
+User committed + pushed c505a1ad3f (heights + first test). Then (uncommitted): test
+simplified per user - apartment URDF only, no robot/reasoner, 6 SupportedBy checks (start:
+milk/bowl on island_countertop, spoon in cabinet10_drawer_top; laid: all on
+table_area_main), module-scoped worlds, names in a test-local ApartmentSurface StrEnum;
+ApartmentBody.TABLE removed from the demo again. 6 passed in 2.3 s (was ~9 s); with the
+broken heights 0.82/0.74 the Milk and Spoon table checks fail.
+Pushed 93f5c8dc87 (simplified test). Next: open a draft PR (bug label) when asked; gh not installed.
+
 ## containment-quick-fix: minimal containment fix (support before containment, robot excluded)
 
 Branch from sorin/main (0c5a90f8c1), 2026-10-06. containment-detector-fix (filter, bounds
@@ -34,7 +53,14 @@ Pushed the merge (6b227281d4) and the tick period (58e72da989, applied from 891b
 event_segmentation.py + its 2 tests; failed first with TypeError). segmind 104 passed.
 Demo: 114.7 s (off 109, before 169), 210 ticks, held 12%, events as plain main.
 PR #12 is not draft and gh is not installed: user to set draft / update description.
-Next: CI on PR #12; default period still my pick (0.5 s).
+CI timing (user asked): merged origin/main -> 95f341eb33 (with changes), pushed revert
+ec959185db (segmind == upstream main), restored 6427377059 (tree == 95f341eb33).
+CI (1 run each, all green): pipeline wall 18.1 vs 17.7 min; bullet demo job 10.9 vs 10.6,
+its Run Script step 6.3 vs 6.2 min; segmind Run tests 0.9 min (reverted steps hit the API
+rate limit). No measurable CI difference although local demo is 115 vs 172 s; Segmind does
+run in CI (no gating). CI logs need admin/token. Scripts: scratchpad ci_timings.py,
+ci_steps.py. Job times vary a lot between runs (experiments 14.3 vs 9.1 min, no change).
+Next: user decides how to explain the CI result (log/token, repeat runs); period default.
 
 ## containment-detector-fix: Segmind's ContainmentDetector slows the bullet world demo
 
