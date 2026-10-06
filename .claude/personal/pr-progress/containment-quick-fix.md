@@ -14,7 +14,14 @@ without support: test_insertions_bring_contact_and_containment, test_the_contain
 reports_gaining_and_losing_a_containment, test_an_object_is_contained_in_the_robot_when_it_is_
 not_left_out, test_containment_detector, test_insertion, test_a_containment_that_lasts_is_not_
 reported_lost_by_another_bodys_detector.
-Next: user decides how to treat the 6 tests; demo check; commit/PR (draft, bug label).
+User: rewrite the 6 to the new rule. Shared scene module test/segmind_test/trays.py
+(world_with_a_box, add_tray, set_down_in, hold_up_in, lift_out_of); robot tests set the box
+down on a shelf inside base_link; insertion uses a tray named tray_hole. segmind suite 102
+passed. (Careful: black on the whole test dir reformats unrelated files - format only
+touched files.) Demo (old pacing, 1 run): 87.7 s vs main ~100 s, off ~73 s; 761 ticks;
+events: 3 pick-ups (+1 extra bowl), placings on table_area_main (+ bowl island_countertop
+move_branch artefact), spoon in/out of cabinet10 drawer.
+Next: commit + push + draft PR (bug label) when the user says so.
 
 ## containment-detector-fix: Segmind's ContainmentDetector slows the bullet world demo
 
