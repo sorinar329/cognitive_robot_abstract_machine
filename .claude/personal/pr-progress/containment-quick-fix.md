@@ -69,6 +69,8 @@ Script 4.5 min -> with changes ~= off + 0.3 min; the earlier 6.3 min was runner 
 Final CI run with changes (2ab9112d76, all 24 green): pipeline wall 20.6 min, bullet demo
 Run Script 3.3 min, segmind Run tests 0.8 min. Demo step with changes across 3 runs: 6.3,
 4.5, 3.3 min; Segmind off 4.2; reverted 6.2 (one run). Runner noise ~ +-1.5 min.
+PR showed 25 files: base was stale fork main 04631c7bbc while branch had upstream merged;
+merged synced fork main f38d633f59 (PR #706) -> f05150884c pushed, PR now 10 files.
 Next: period default; PR description (tick period, CI numbers).
 
 ## containment-detector-fix: Segmind's ContainmentDetector slows the bullet world demo
