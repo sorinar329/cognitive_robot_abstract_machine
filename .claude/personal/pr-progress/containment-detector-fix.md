@@ -19,6 +19,15 @@ still 100 s: the tick loop pauses as long as it ticked, so Segmind holds the wor
 the time whatever a tick costs. Post-fix runs (2/2) show an extra milk PlacingEvent on
 island_countertop before the grasp; 0/3 pre-fix runs (event counts vary 38-49 anyway),
 suspected tick-timing effect, not proven.
+PlacingEvent investigated: (a) World.move_branch for a Connection6DoF (coraplex attach,
+executables.py:454) adds the new connection with identity offset inside modify_world, and
+sets the correct origin only after the block released the world lock -> a Segmind tick in
+that gap sees the milk at 2x its position (trace: 4.74,4.00,2.07 vs 2.37,2.00,1.03) ->
+LossOfSupport+Translation, sometimes re-support next tick. (b) PlacingDetector pairs a
+LossOfGrasp with any SupportEvent within +-15 s, so a support from before the grasp
+becomes a placing. Shorter ticks only made (a) likelier. Proposed: separate branch for (a)
+(test: a model-change callback reads the moved body's pose mid-move); (b) belongs to the
+detector refactor. Awaiting user.
 Next: user brainstorming a detector refactor; then commit/PR.
 Observations: get_containment_pairs uses bodies_outside_end_effectors directly, so it
 skips bodies_left_out (robot bodies) unlike get_relation; each ratio call copies and
