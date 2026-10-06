@@ -1,17 +1,26 @@
 ## hsr-mujoco-kitchen: HSR carries milk + cereal between the kitchen tables in MuJoCo
 
-Plan approved 2026-10-05 (plan file ~/.claude/plans/woolly-exploring-frost.md). Branch
-rebuilt on sorin/fera_exchange (no upstream set - do NOT push to fera_exchange).
-User decisions: full iai_kitchen xacro (two back tables); objects Milk + Cereal;
-servos needed; navigation not the focus -> teleported (kinematic) base is fine.
+Plan approved 2026-10-05 (~/.claude/plans/woolly-exploring-frost.md). Branch on
+sorin/fera_exchange, no upstream (do NOT push to fera_exchange). Nothing committed.
+User decisions: full iai_kitchen xacro (two back tables); Milk + Cereal; servos;
+navigation not the focus -> teleported base; 2026-10-06: keep teleport, no base motion
+while grasping, carry via attachment (MuJoCo weld) - chosen over a servoed planar base.
 
-Steps:
-1. [done] branch on fera_exchange, carried URDF axis fix + parse-only scene + tests.
-2. [ ] kinematic base: welded OmniDrive's child body follows the world drive pose in
-   MuJoCo (set_fixed_body_pose in world->sim sync). Test first.
-3. [ ] HSR servos in robots/hsrb.py (arm, neck, gripper, torso mimic) + gravity comp;
-   tuned gains flagged for review. Tests: hold park pose, track a step, grasp+lift.
-4. [ ] demo: xacro kitchen + HSR via RobotSpecification + Milk/Cereal on table_area_main;
-   plan navigate/pick/navigate/place x2; MuJoCo stepped + ControlledSimulation + cramera.
-   Test: both objects end on the jokkmokk table.
-5. [ ] record in cramera, republish artifact Vd6nG1PUmaLhRpJtYD5cDL, update todo tab 17.
+Done:
+1. branch + URDF axis fix (test_urdf) + scene tests.
+2. kinematic base: MujocoSynchronizer.place_welded_body; drive bodies follow the world
+   drive pose (test_multi_sim driven_box_world test). set_fixed_body_pose delegates.
+3. HSR servos (robots/hsrb.py: HSRBJointDrive table, ServoedHSRBPart mixin, base
+   passive-joint armature 0.01 - RK4 diverged on light damped wheels without it).
+   OPEN_HAND_ANGLE 0.3 -> 1.2 rad (0.3 gave a 4.6 cm gap < 6 cm carton).
+   test_hsr_mujoco.py: 7 tests incl. level-hand carton grasp+lift.
+4. weld fastening: MujocoEquality.active, MujocoSim.fasten/unfasten (3 tests).
+   demo: elliptic cone/impratio 10/noslip 10, condim 4 on objects,
+   full_body_controlled=False, hand_offset from arm_flex link (0.078 m),
+   HoldWhatTheHandGrips plan callback toggles the weld. Kinematic dry run OK.
+Findings: rigid contacts (montessori style) launch the milk with the HSR hand; squeeze
+limit 10 vs 100 made no difference -> kept URDF 100.
+
+Next: full MuJoCo run result; then demo test, black, wide suites, cramera recording,
+republish artifact Vd6nG1PUmaLhRpJtYD5cDL, todo tab 17.
+Open: finger spring stiffness 10 lets fingertips fold (weld masks it).
