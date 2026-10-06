@@ -30,7 +30,11 @@ plain main too (pre-existing). Breakdown on merged branch: 2678 ticks (old loop)
 CPU 52 s: containment rechecks 16.9 (spoon's 2 containers every tick, 3.5 ms each), contact
 15.5, support 12.5, motion 5.4 -> per-tick fixed costs x tick count; tick period (on
 containment-detector-fix 891bcc91cd) would cap ticks.
-Next: user decides: push the merge; bring the tick period over?
+Pushed the merge (6b227281d4) and the tick period (58e72da989, applied from 891bcc91cd:
+event_segmentation.py + its 2 tests; failed first with TypeError). segmind 104 passed.
+Demo: 114.7 s (off 109, before 169), 210 ticks, held 12%, events as plain main.
+PR #12 is not draft and gh is not installed: user to set draft / update description.
+Next: CI on PR #12; default period still my pick (0.5 s).
 
 ## containment-detector-fix: Segmind's ContainmentDetector slows the bullet world demo
 
