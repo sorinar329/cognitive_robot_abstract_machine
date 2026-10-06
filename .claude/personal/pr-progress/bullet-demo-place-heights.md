@@ -9,6 +9,12 @@ added for the test. Test test/coraplex_test/test_bullet_world_demo_place_setting
 loaded via importlib): each object at its target pose is SupportedBy the table; failed
 first for Milk/Spoon. Dropped the geometric not-sunk test (milk at 0.81 sinks 0.3 mm).
 8 passed with test_demo_scripts. Full demo: exit 0, placings for milk, bowl, spoon.
+User committed + pushed c505a1ad3f (heights + first test). Then (uncommitted): test
+simplified per user - apartment URDF only, no robot/reasoner, 6 SupportedBy checks (start:
+milk/bowl on island_countertop, spoon in cabinet10_drawer_top; laid: all on
+table_area_main), module-scoped worlds, names in a test-local ApartmentSurface StrEnum;
+ApartmentBody.TABLE removed from the demo again. 6 passed in 2.3 s (was ~9 s); with the
+broken heights 0.82/0.74 the Milk and Spoon table checks fail.
 Next: commit/push/draft PR (bug label) when the user says so.
 
 ## containment-quick-fix: minimal containment fix (support before containment, robot excluded)
