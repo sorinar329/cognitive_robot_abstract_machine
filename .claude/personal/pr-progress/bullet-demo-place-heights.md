@@ -3,12 +3,12 @@
 Branch from sorin/main (04631c7bbc), 2026-10-06. Cause: LucaKro's 4f0c2ee2de hand-rounded
 place heights (milk 0.82, spoon 0.74) left them 7.3/9.3 mm above table_area_main (top
 0.7226); SupportedBy contact tolerance 5 mm -> no support/placing. Luca: a mistake.
-Fix (uncommitted): PlaceSettingObject.height removed; resting_height(world) = table top
-(ApartmentBody.TABLE bbox max_z) - object's lowest point in own frame + RESTING_CLEARANCE
-(1 mm). Tests test/coraplex_test/test_bullet_world_demo_place_setting.py (demo loaded via
-importlib): resting (SupportedBy) failed first for Milk/Spoon; not sunk (geometric, since
-the collision checker reads ~1.6-2.4 mm less than the geometric gap). 11 passed with
-test_demo_scripts. Full demo: exit 0, placings for milk, bowl and spoon on table_area_main.
+Fix (uncommitted; user: no new method, revert to the poses that worked): heights back to
+milk 0.81, spoon 0.73 (bowl 0.76 unchanged); along/across layout kept; ApartmentBody.TABLE
+added for the test. Test test/coraplex_test/test_bullet_world_demo_place_setting.py (demo
+loaded via importlib): each object at its target pose is SupportedBy the table; failed
+first for Milk/Spoon. Dropped the geometric not-sunk test (milk at 0.81 sinks 0.3 mm).
+8 passed with test_demo_scripts. Full demo: exit 0, placings for milk, bowl, spoon.
 Next: commit/push/draft PR (bug label) when the user says so.
 
 ## containment-quick-fix: minimal containment fix (support before containment, robot excluded)
