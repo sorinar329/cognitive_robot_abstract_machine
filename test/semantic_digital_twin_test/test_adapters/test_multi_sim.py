@@ -8,6 +8,7 @@ from dataclasses import dataclass
 import mujoco
 import pytest
 import numpy
+from scipy.spatial.transform import Rotation
 import trimesh
 from PIL import Image
 from trimesh.visual.material import SimpleMaterial
@@ -27,6 +28,7 @@ from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.connections import (
     Connection6DoF,
     FixedConnection,
+    OmniDrive,
     RevoluteConnection,
 )
 from semantic_digital_twin.world_description.degree_of_freedom import (
@@ -60,6 +62,7 @@ from semantic_digital_twin.adapters.multi_sim import (
     MujocoSim,
     MujocoActuator,
     MujocoBuilder,
+    MujocoEquality,
     MujocoGeom,
     MujocoLight,
     MujocoSynchronizer,
@@ -1696,3 +1699,310 @@ def test_a_stepped_simulation_advances_exactly_the_requested_time(falling_box_wo
 
     fallen = 0.5 * 9.81 * duration.total_seconds() ** 2
     assert height == pytest.approx(1.0 - fallen, abs=0.01)
+
+
+# %% a base driven kinematically
+
+
+@pytest.fixture
+def driven_box_world() -> World:
+    """
+    A box hanging off an omni drive half a metre above the root, as a mobile robot's
+    base hangs off its drive.
+    """
+    world = World()
+    with world.modify_world():
+        root = Body(name=PrefixedName("root"))
+        world.add_body(root)
+        box = Body(name=PrefixedName("box"))
+        box.collision = ShapeCollection(
+            [Box(origin=HomogeneousTransformationMatrix(), scale=Scale(0.2, 0.2, 0.2))],
+            reference_frame=box,
+        )
+        world.add_connection(
+            OmniDrive.create_with_dofs(
+                world=world,
+                parent=root,
+                child=box,
+                parent_T_connection_expression=HomogeneousTransformationMatrix.from_xyz_rpy(
+                    z=0.5, reference_frame=root
+                ),
+            )
+        )
+    return world
+
+
+def test_a_drive_moved_in_the_world_moves_its_body_in_mujoco(driven_box_world):
+    """
+    MuJoCo holds a drive's body in place, so the body follows wherever the world puts
+    the drive rather than being driven there by physics.
+    """
+    box = driven_box_world.get_body_by_name("box")
+    drive = box.parent_connection
+    multi_sim = MujocoSim(world=driven_box_world, headless=headless)
+    multi_sim.start_stepped_simulation()
+    try:
+        drive.origin = HomogeneousTransformationMatrix.from_xyz_rpy(
+            x=0.5, y=-0.3, yaw=0.4, reference_frame=driven_box_world.root
+        )
+        multi_sim.step_simulation(timedelta(milliseconds=10))
+        position = multi_sim.simulator.get_body_position(body_name="box").result
+        quaternion = multi_sim.simulator.get_body_quaternion(body_name="box").result
+    finally:
+        stop_multisim_if_running(multi_sim)
+
+    world_pose = box.global_pose.to_np()
+    assert position == pytest.approx(world_pose[:3, 3], abs=1e-6)
+    assert Rotation.from_quat(quaternion, scalar_first=True).as_matrix() == (
+        pytest.approx(world_pose[:3, :3], abs=1e-6)
+    )
+
+
+def test_a_drive_moved_before_the_simulation_starts_puts_its_body_there(
+    driven_box_world,
+):
+    """
+    MuJoCo has no joint for a drive to supply its position, so the body has to be built
+    where the drive holds it rather than where the drive's reference frame is.
+    """
+    box = driven_box_world.get_body_by_name("box")
+    box.parent_connection.origin = HomogeneousTransformationMatrix.from_xyz_rpy(
+        x=0.5, y=-0.3, yaw=0.4, reference_frame=driven_box_world.root
+    )
+    multi_sim = MujocoSim(world=driven_box_world, headless=headless)
+    multi_sim.start_stepped_simulation()
+    try:
+        multi_sim.step_simulation(timedelta(milliseconds=10))
+        position = multi_sim.simulator.get_body_position(body_name="box").result
+    finally:
+        stop_multisim_if_running(multi_sim)
+
+    assert position == pytest.approx(box.global_pose.to_np()[:3, 3], abs=1e-6)
+
+
+# %% a body fastened to another
+
+
+PARCEL_OFFSET = 0.3
+"""
+How far along x the parcel hangs from the driven box, in metres.
+"""
+
+FASTENING_TOLERANCE = 0.01
+"""
+How far, in metres, a fastened body may end up from where its holder carries it.
+"""
+
+DRIVEN_DISTANCE = 0.5
+"""
+How far along x the driven box is moved in the fastening tests, in metres.
+"""
+
+DRIVEN_TURN = 0.5
+"""
+How far the driven box is turned in the fastening tests, in radians.
+"""
+
+TELEPORTED_DISTANCE = 2.0
+"""
+How far the driven box jumps in one go in the teleport test, in metres.
+"""
+
+DRIVE_STEPS = 50
+"""
+How many steps the driven box is moved in, as a controller moves a base.
+"""
+
+
+@pytest.fixture
+def parcel_beside_a_driven_box(driven_box_world) -> World:
+    """
+    The driven box with a loose parcel hanging in the air beside it, and a weld between
+    the two that is declared but not yet holding.
+    """
+    world = driven_box_world
+    box = world.get_body_by_name("box")
+    with world.modify_world():
+        parcel = Body(name=PrefixedName("parcel"))
+        parcel.collision = ShapeCollection(
+            [
+                Box(
+                    origin=HomogeneousTransformationMatrix(),
+                    scale=Scale(0.05, 0.05, 0.05),
+                )
+            ],
+            reference_frame=parcel,
+        )
+        world.add_connection(
+            Connection6DoF.create_with_dofs(
+                world=world,
+                parent=world.root,
+                child=parcel,
+                parent_T_connection_expression=HomogeneousTransformationMatrix(
+                    world.compute_forward_kinematics_np(world.root, box),
+                    reference_frame=world.root,
+                )
+                @ HomogeneousTransformationMatrix.from_xyz_rpy(x=PARCEL_OFFSET),
+            )
+        )
+        world.add_simulator_property(
+            MujocoEquality(
+                type=mujoco.mjtEq.mjEQ_WELD,
+                object_type=mujoco.mjtObj.mjOBJ_BODY,
+                name_1=box.name.name,
+                name_2=parcel.name.name,
+                data=[0.0] * 11,
+                active=False,
+            )
+        )
+    return world
+
+
+def body_position(multi_sim: MujocoSim, name: str) -> numpy.ndarray:
+    return numpy.array(multi_sim.simulator.get_body_position(body_name=name).result)
+
+
+def test_a_declared_weld_starts_out_not_holding(parcel_beside_a_driven_box):
+    multi_sim = MujocoSim(world=parcel_beside_a_driven_box, headless=headless)
+    multi_sim.start_stepped_simulation()
+    try:
+        multi_sim.step_simulation(timedelta(milliseconds=10))
+        start = body_position(multi_sim, "parcel")
+        multi_sim.step_simulation(timedelta(milliseconds=300))
+        end = body_position(multi_sim, "parcel")
+    finally:
+        stop_multisim_if_running(multi_sim)
+
+    assert end[2] < start[2] - FASTENING_TOLERANCE
+
+
+def test_a_fastened_body_travels_with_its_holder(parcel_beside_a_driven_box):
+    """
+    A body fastened to another keeps where it was relative to it, even while MuJoCo
+    moves the holder by putting it somewhere else rather than driving it there.
+    """
+    world = parcel_beside_a_driven_box
+    box = world.get_body_by_name("box")
+    parcel = world.get_body_by_name("parcel")
+    drive = box.parent_connection
+    multi_sim = MujocoSim(world=world, headless=headless)
+    multi_sim.start_stepped_simulation()
+    try:
+        multi_sim.step_simulation(timedelta(milliseconds=10))
+        multi_sim.fasten(parcel, box)
+        for step in range(1, DRIVE_STEPS + 1):
+            drive.origin = HomogeneousTransformationMatrix.from_xyz_rpy(
+                x=DRIVEN_DISTANCE * step / DRIVE_STEPS, reference_frame=world.root
+            )
+            multi_sim.step_simulation(timedelta(milliseconds=10))
+        multi_sim.step_simulation(timedelta(milliseconds=300))
+        box_at = body_position(multi_sim, "box")
+        parcel_at = body_position(multi_sim, "parcel")
+    finally:
+        stop_multisim_if_running(multi_sim)
+
+    assert parcel_at == pytest.approx(
+        box_at + [PARCEL_OFFSET, 0.0, 0.0], abs=FASTENING_TOLERANCE
+    )
+
+
+def test_a_fastened_body_turns_with_its_holder(parcel_beside_a_driven_box):
+    """
+    A fastened body keeps its orientation relative to its holder too, not only its
+    position.
+    """
+    world = parcel_beside_a_driven_box
+    box = world.get_body_by_name("box")
+    parcel = world.get_body_by_name("parcel")
+    drive = box.parent_connection
+    multi_sim = MujocoSim(world=world, headless=headless)
+    multi_sim.start_stepped_simulation()
+    try:
+        multi_sim.step_simulation(timedelta(milliseconds=10))
+        multi_sim.fasten(parcel, box)
+        for step in range(1, DRIVE_STEPS + 1):
+            drive.origin = HomogeneousTransformationMatrix.from_xyz_rpy(
+                yaw=DRIVEN_TURN * step / DRIVE_STEPS, reference_frame=world.root
+            )
+            multi_sim.step_simulation(timedelta(milliseconds=10))
+        multi_sim.step_simulation(timedelta(milliseconds=300))
+        box_orientation = multi_sim.simulator.get_body_quaternion(
+            body_name="box"
+        ).result
+        parcel_orientation = multi_sim.simulator.get_body_quaternion(
+            body_name="parcel"
+        ).result
+    finally:
+        stop_multisim_if_running(multi_sim)
+
+    assert Rotation.from_quat(parcel_orientation, scalar_first=True).as_matrix() == (
+        pytest.approx(
+            Rotation.from_quat(box_orientation, scalar_first=True).as_matrix(),
+            abs=FASTENING_TOLERANCE,
+        )
+    )
+
+
+def body_transform(multi_sim: MujocoSim, name: str) -> numpy.ndarray:
+    """
+    :return: Where MuJoCo has the body named ``name``, as a 4x4 transform.
+    """
+    transform = numpy.eye(4)
+    transform[:3, :3] = Rotation.from_quat(
+        multi_sim.simulator.get_body_quaternion(body_name=name).result,
+        scalar_first=True,
+    ).as_matrix()
+    transform[:3, 3] = body_position(multi_sim, name)
+    return transform
+
+
+def test_a_fastened_body_is_teleported_with_its_holder(parcel_beside_a_driven_box):
+    """
+    When a drive is put somewhere else in one jump, a body fastened to what it moves
+    arrives with it at once instead of being dragged after it.
+    """
+    world = parcel_beside_a_driven_box
+    box = world.get_body_by_name("box")
+    parcel = world.get_body_by_name("parcel")
+    drive = box.parent_connection
+    multi_sim = MujocoSim(world=world, headless=headless)
+    multi_sim.start_stepped_simulation()
+    try:
+        multi_sim.step_simulation(timedelta(milliseconds=10))
+        multi_sim.fasten(parcel, box)
+        box_T_parcel = numpy.linalg.inv(body_transform(multi_sim, "box")) @ (
+            body_transform(multi_sim, "parcel")
+        )
+        drive.origin = HomogeneousTransformationMatrix.from_xyz_rpy(
+            x=TELEPORTED_DISTANCE, yaw=DRIVEN_TURN, reference_frame=world.root
+        )
+        multi_sim.step_simulation(timedelta(milliseconds=10))
+        teleported_box_T_parcel = numpy.linalg.inv(body_transform(multi_sim, "box")) @ (
+            body_transform(multi_sim, "parcel")
+        )
+    finally:
+        stop_multisim_if_running(multi_sim)
+
+    assert teleported_box_T_parcel == pytest.approx(
+        box_T_parcel, abs=FASTENING_TOLERANCE
+    )
+
+
+def test_an_unfastened_body_falls_again(parcel_beside_a_driven_box):
+    world = parcel_beside_a_driven_box
+    box = world.get_body_by_name("box")
+    parcel = world.get_body_by_name("parcel")
+    multi_sim = MujocoSim(world=world, headless=headless)
+    multi_sim.start_stepped_simulation()
+    try:
+        multi_sim.step_simulation(timedelta(milliseconds=10))
+        multi_sim.fasten(parcel, box)
+        multi_sim.step_simulation(timedelta(milliseconds=100))
+        multi_sim.unfasten(parcel, box)
+        start = body_position(multi_sim, "parcel")
+        multi_sim.step_simulation(timedelta(milliseconds=300))
+        end = body_position(multi_sim, "parcel")
+    finally:
+        stop_multisim_if_running(multi_sim)
+
+    assert end[2] < start[2] - FASTENING_TOLERANCE

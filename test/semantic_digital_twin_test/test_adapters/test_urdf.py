@@ -106,6 +106,30 @@ def test_kitchen_parsing(kitchen_parser):
     assert len(world.connections) > 0
 
 
+def test_a_joint_keeps_an_axis_that_is_not_a_whole_number_direction(
+    kitchen_parser, urdf_paths
+):
+    """
+    A drawer whose axis is tilted slightly off the horizontal moves along that axis,
+    not along one rounded to whole numbers.
+    """
+    declared = urdfpy.URDF.from_xml_file(urdf_paths.kitchen)
+    tilted = next(
+        joint
+        for joint in declared.joints
+        if joint.axis is not None and any(component % 1 for component in joint.axis)
+    )
+
+    world = kitchen_parser.parse()
+
+    connection = next(
+        connection
+        for connection in world.connections
+        if connection.name.name == tilted.name
+    )
+    assert connection.axis.to_np()[:3] == pytest.approx(tilted.axis)
+
+
 def test_apartment_parsing(apartment_parser):
     world = apartment_parser.parse()
     world.validate()

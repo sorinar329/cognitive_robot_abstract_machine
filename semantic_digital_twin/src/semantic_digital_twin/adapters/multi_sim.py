@@ -69,6 +69,7 @@ from semantic_digital_twin.world_description.connections import (
     Connection6DoF,
     OmniDrive,
     DifferentialDrive,
+    WheeledDrive,
 )
 from semantic_digital_twin.world_description.geometry import (
     Box,
@@ -108,6 +109,45 @@ logger = logging.getLogger(__name__)
 MUJOCO_MISSING_ID = -1
 """
 The id :func:`mujoco.mj_name2id` answers with for a name the model does not hold.
+"""
+
+WELD_RELATIVE_POSITION = slice(3, 6)
+"""
+Where a MuJoCo weld's data holds the position of its second body in its first body's
+frame.
+"""
+
+WELD_RELATIVE_ORIENTATION = slice(6, 10)
+"""
+Where a MuJoCo weld's data holds the orientation of its second body in its first body's
+frame, as a quaternion with the scalar first.
+"""
+
+WELD_TORQUE_SCALE = 10
+"""
+Where a MuJoCo weld's data holds how strongly it holds orientation compared to position;
+zero leaves the second body free to turn.
+"""
+
+FULL_TORQUE_SCALE = 1.0
+"""
+The torque scale at which a weld holds orientation as firmly as position.
+"""
+
+FREE_JOINT_POSITION = slice(0, 3)
+"""
+Where a free joint's part of ``qpos`` holds its body's position in the world.
+"""
+
+FREE_JOINT_ORIENTATION = slice(3, 7)
+"""
+Where a free joint's part of ``qpos`` holds its body's orientation in the world, as a
+quaternion with the scalar first.
+"""
+
+FREE_JOINT_VELOCITY = slice(0, 6)
+"""
+Where a free joint's part of ``qvel`` holds its body's linear and angular velocity.
 """
 
 
@@ -350,18 +390,15 @@ class KinematicStructureEntityConverter(EntityConverter, ABC):
 
         kinematic_structure_entity_props = EntityConverter._convert(self, entity)
         # The simulator joint supplies the variable part, so the static frame must
-        # exclude it (see Connection.reference_origin_expression).
-        [
-            px,
-            py,
-            pz,
-            qx,
-            qy,
-            qz,
-            qw,
-        ] = entity.parent_connection.reference_origin_as_position_quaternion().evaluate()[
-            0
-        ]
+        # exclude it (see Connection.reference_origin_expression). A drive has no
+        # simulator joint, so its body is built where the drive holds it.
+        parent_connection = entity.parent_connection
+        static_frame = (
+            parent_connection.origin_as_position_quaternion()
+            if isinstance(parent_connection, WheeledDrive)
+            else parent_connection.reference_origin_as_position_quaternion()
+        )
+        [px, py, pz, qx, qy, qz, qw] = static_frame.evaluate()[0]
         kinematic_structure_entity_pos = [px, py, pz]
         kinematic_structure_entity_quat = [qw, qx, qy, qz]
         kinematic_structure_entity_props.update(
@@ -1154,6 +1191,12 @@ class MujocoEquality(SimulatorAdditionalProperty):
     data: List[float] = field(kw_only=True)
     """
     The data associated with the equality constraint.
+    """
+
+    active: bool = field(default=True, kw_only=True)
+    """
+    Whether the constraint holds from the start; one that does not can be switched on
+    while the simulation runs (see :meth:`MujocoSim.fasten`).
     """
 
 
@@ -2489,6 +2532,7 @@ class MujocoBuilder(MultiSimBuilder):
                 equality.name1 = mujoco_equality.name_1
                 equality.name2 = mujoco_equality.name_2
                 equality.data = mujoco_equality.data
+                equality.active = mujoco_equality.active
 
     def _build_tendons(self):
         """
@@ -3169,6 +3213,11 @@ class MujocoSynchronizer(MultiSimSynchronizer):
     never trigger. Distinct from ``sync_rate_hz <= 0``, which disables that direction entirely.
     """
 
+    fastening_welds: set[int] = field(default_factory=set, init=False)
+    """
+    The ids of the welds currently holding a body to its holder.
+    """
+
     sync_rate_hz: float = 30
     """
     Throttle (in wall-clock Hz) for the *sim → world* direction: how often
@@ -3598,7 +3647,169 @@ class MujocoSynchronizer(MultiSimSynchronizer):
                 return
 
             self._write_connections_to_qpos(positions, previous_positions)
+            self._place_moved_drive_bodies(positions, previous_positions)
             self._state_callback.update_previous_world_state()
+
+    def _place_moved_drive_bodies(
+        self, positions: numpy.ndarray, previous_positions: numpy.ndarray
+    ) -> None:
+        """
+        Put the body of every drive whose degrees of freedom changed where the world now
+        has it.
+
+        MuJoCo holds a drive's body without a joint (see
+        :attr:`MujocoBuilder._ignore_connection_types`), so the body follows wherever
+        the world moves the drive rather than being driven there by physics, and
+        whatever it holds fastened is carried along at once.
+
+        :param positions: The current ``world.state`` positions.
+        :param previous_positions: The positions as of the last notification.
+        """
+        state_index = self._world.state._index
+        moved = False
+        for drive in self._world.connections:
+            if not isinstance(drive, WheeledDrive):
+                continue
+            indices = [state_index[dof.id] for dof in drive.dofs]
+            if numpy.array_equal(positions[indices], previous_positions[indices]):
+                continue
+            self.place_welded_body(drive.child, drive.origin)
+            moved = True
+        if moved:
+            self._carry_fastened_bodies()
+
+    def place_welded_body(
+        self, body: Body, parent_T_body: HomogeneousTransformationMatrix
+    ) -> None:
+        """
+        Put a body MuJoCo holds without a joint somewhere else relative to its parent.
+
+        :param body: A body MuJoCo simulates without a joint.
+        :param parent_T_body: The body's new pose relative to its parent.
+        :raises MujocoEntityNotFoundError: If MuJoCo does not simulate ``body``.
+        """
+        model = self.simulator._mj_model
+        body_id = self.simulated_body_id(body)
+        transform = parent_T_body.to_np()
+        with self.simulator._model_lock:
+            model.body_pos[body_id] = transform[:3, 3]
+            model.body_quat[body_id] = Rotation.from_matrix(transform[:3, :3]).as_quat(
+                scalar_first=True
+            )
+
+    def fasten(self, body: Body, holder: Body) -> None:
+        """
+        Hold ``body`` where it now is relative to ``holder``, through the weld the world
+        declares between the two, until :meth:`unfasten`.
+
+        :param body: The body held.
+        :param holder: The body holding it.
+        :raises MujocoEntityNotFoundError: If the world declares no weld between them.
+        """
+        model = self.simulator._mj_model
+        data = self.simulator._mj_data
+        weld_id = self._weld_id(body, holder)
+        holder_id = self.simulated_body_id(holder)
+        body_id = self.simulated_body_id(body)
+        world_T_holder = self._body_transform(data, holder_id)
+        world_T_body = self._body_transform(data, body_id)
+        holder_T_body = numpy.linalg.inv(world_T_holder) @ world_T_body
+        with self.simulator._model_lock:
+            model.eq_data[weld_id][WELD_RELATIVE_POSITION] = holder_T_body[:3, 3]
+            model.eq_data[weld_id][WELD_RELATIVE_ORIENTATION] = Rotation.from_matrix(
+                holder_T_body[:3, :3]
+            ).as_quat(scalar_first=True)
+            model.eq_data[weld_id][WELD_TORQUE_SCALE] = FULL_TORQUE_SCALE
+            data.eq_active[weld_id] = 1
+        self.fastening_welds.add(weld_id)
+
+    def unfasten(self, body: Body, holder: Body) -> None:
+        """
+        Let go of a body :meth:`fasten` holds.
+
+        :param body: The body held.
+        :param holder: The body holding it.
+        :raises MujocoEntityNotFoundError: If the world declares no weld between them.
+        """
+        weld_id = self._weld_id(body, holder)
+        with self.simulator._model_lock:
+            self.simulator._mj_data.eq_active[weld_id] = 0
+        self.fastening_welds.discard(weld_id)
+
+    def _weld_id(self, body: Body, holder: Body) -> int:
+        """
+        :return: The id of the weld the world declares between ``holder`` and ``body``.
+        :raises MujocoEntityNotFoundError: If it declares none.
+        """
+        model = self.simulator._mj_model
+        ends = (self.simulated_body_id(holder), self.simulated_body_id(body))
+        for weld_id in range(model.neq):
+            if model.eq_type[weld_id] != mujoco.mjtEq.mjEQ_WELD:
+                continue
+            if (model.eq_obj1id[weld_id], model.eq_obj2id[weld_id]) == ends:
+                return weld_id
+        raise MujocoEntityNotFoundError(
+            entity_name=f"{holder.name.name} holding {body.name.name}",
+            entity_type=mujoco.mjtObj.mjOBJ_EQUALITY,
+        )
+
+    @staticmethod
+    def _body_transform(data: mujoco.MjData, body_id: int) -> numpy.ndarray:
+        """
+        :return: Where MuJoCo currently has the body ``body_id``, as a 4x4 transform.
+        """
+        transform = numpy.eye(4)
+        transform[:3, :3] = data.xmat[body_id].reshape(3, 3)
+        transform[:3, 3] = data.xpos[body_id]
+        return transform
+
+    def _carry_fastened_bodies(self) -> None:
+        """
+        Put every fastened body where its weld holds it relative to its holder, at rest.
+
+        A drive's body jumps rather than moves, and a weld alone would drag what it holds
+        after it. Only a body MuJoCo lets float freely can be put somewhere; any other
+        fastened body is left to its weld.
+        """
+        model = self.simulator._mj_model
+        data = self.simulator._mj_data
+        with self.simulator._model_lock:
+            mujoco.mj_kinematics(model, data)
+            for weld_id in self.fastening_welds:
+                joint_id = model.body_jntadr[model.eq_obj2id[weld_id]]
+                if (
+                    joint_id == MUJOCO_MISSING_ID
+                    or model.jnt_type[joint_id] != mujoco.mjtJoint.mjJNT_FREE
+                ):
+                    continue
+                holder_T_body = numpy.eye(4)
+                holder_T_body[:3, :3] = Rotation.from_quat(
+                    model.eq_data[weld_id][WELD_RELATIVE_ORIENTATION], scalar_first=True
+                ).as_matrix()
+                holder_T_body[:3, 3] = model.eq_data[weld_id][WELD_RELATIVE_POSITION]
+                world_T_body = (
+                    self._body_transform(data, model.eq_obj1id[weld_id]) @ holder_T_body
+                )
+                joint_position = data.qpos[model.jnt_qposadr[joint_id] :]
+                joint_position[FREE_JOINT_POSITION] = world_T_body[:3, 3]
+                joint_position[FREE_JOINT_ORIENTATION] = Rotation.from_matrix(
+                    world_T_body[:3, :3]
+                ).as_quat(scalar_first=True)
+                data.qvel[model.jnt_dofadr[joint_id] :][FREE_JOINT_VELOCITY] = 0.0
+
+    def simulated_body_id(self, body: Body) -> int:
+        """
+        :return: The id MuJoCo knows ``body`` by.
+        :raises MujocoEntityNotFoundError: If MuJoCo does not simulate ``body``.
+        """
+        body_id = mujoco.mj_name2id(
+            self.simulator._mj_model, mujoco.mjtObj.mjOBJ_BODY, body.name.name
+        )
+        if body_id == MUJOCO_MISSING_ID:
+            raise MujocoEntityNotFoundError(
+                entity_name=body.name.name, entity_type=mujoco.mjtObj.mjOBJ_BODY
+            )
+        return body_id
 
     def stop(self):
         if "read_data_from_simulator" in self.simulator.__dict__:
@@ -3823,14 +4034,28 @@ class MujocoSim(MultiSim):
         :param body: A body MuJoCo simulates without a joint.
         :param parent_T_body: The body's new pose relative to its parent.
         """
-        transform = parent_T_body.to_np()
-        model = self.simulator._mj_model
-        body_id = self._simulated_body_id(body)
-        with self.simulator._model_lock:
-            model.body_pos[body_id] = transform[:3, 3]
-            model.body_quat[body_id] = Rotation.from_matrix(transform[:3, :3]).as_quat(
-                scalar_first=True
-            )
+        self.synchronizer.place_welded_body(body, parent_T_body)
+
+    def fasten(self, body: Body, holder: Body) -> None:
+        """
+        Hold ``body`` where it now is relative to ``holder``, through the weld the world
+        declares between the two, until :meth:`unfasten`.
+
+        :param body: The body held.
+        :param holder: The body holding it.
+        :raises MujocoEntityNotFoundError: If the world declares no weld between them.
+        """
+        self.synchronizer.fasten(body, holder)
+
+    def unfasten(self, body: Body, holder: Body) -> None:
+        """
+        Let go of a body :meth:`fasten` holds.
+
+        :param body: The body held.
+        :param holder: The body holding it.
+        :raises MujocoEntityNotFoundError: If the world declares no weld between them.
+        """
+        self.synchronizer.unfasten(body, holder)
 
     def body_friction(self, body: Body) -> Optional[ContactFriction]:
         """
@@ -3875,12 +4100,7 @@ class MujocoSim(MultiSim):
         :return: The id MuJoCo knows ``body`` by.
         :raises MujocoEntityNotFoundError: If MuJoCo does not simulate ``body``.
         """
-        body_id = self._mujoco_body_id(body)
-        if body_id == MUJOCO_MISSING_ID:
-            raise MujocoEntityNotFoundError(
-                entity_name=body.name.name, entity_type=mujoco.mjtObj.mjOBJ_BODY
-            )
-        return body_id
+        return self.synchronizer.simulated_body_id(body)
 
     def _colliding_geom_ids(self, body: Body) -> List[int]:
         """
