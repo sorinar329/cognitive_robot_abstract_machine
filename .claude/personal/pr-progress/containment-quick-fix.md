@@ -71,6 +71,13 @@ Run Script 3.3 min, segmind Run tests 0.8 min. Demo step with changes across 3 r
 4.5, 3.3 min; Segmind off 4.2; reverted 6.2 (one run). Runner noise ~ +-1.5 min.
 PR showed 25 files: base was stale fork main 04631c7bbc while branch had upstream merged;
 merged synced fork main f38d633f59 (PR #706) -> f05150884c pushed, PR now 10 files.
+Tests aligned with existing ones (user, uncommitted): trays.py and
+test_containment_on_coming_to_rest.py removed; fixture box_and_trays (world, box, tray,
+tray_hole) + position constants (SET_DOWN_IN_THE_TRAY, SET_DOWN_IN_THE_HOLE,
+HELD_UP_IN_THE_TRAY, LIFTED_OUT_OF_THE_TRAY, SET_ASIDE) in test/segmind_test/conftest.py;
+tests use each file's _place / direct origin like their neighbours; held-up test moved to
+test_segmind_detectors.py (fails on main's detector); robot tests keep shelf inside the
+original _box_inside (box sunk into base_link never touches its mesh). 102 passed.
 Next: period default; PR description (tick period, CI numbers).
 
 ## containment-detector-fix: Segmind's ContainmentDetector slows the bullet world demo
