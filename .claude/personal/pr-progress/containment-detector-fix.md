@@ -54,7 +54,15 @@ segmind suite 102 passed. Demo (uninstrumented, 1 run each, with bounds filter):
 off 73.3 s; period 0.25: 89.0 s/238 ticks/held 50%; 0.5: 81.2 s/120/38% (implemented:
 81.7 s/125/38%); 1.0: 78.2 s/65/26%. Spurious island_countertop placings (move_branch gap)
 at 0.25/0.5, not at 1.0 (fewer ticks in the gap, luck). Script: scratchpad pacing_cost.py.
-Next: user picks the default period; commit when asked; then the cascade.
+No-lock experiment (tick without outer lock, 0.5 s): 83.5 s, no errors, but ~60 bogus
+pick-ups/placings (torn reads) -> lock stays; the lock is not the cost.
+Breakdown (scratchpad tick_breakdown.py, 0.5 s, demo 81.7 s vs off 73.3 s = +8.4 s):
+Segmind thread CPU 8.1 s (wall 30.9 s, rest waiting for the interpreter lock; lock wait
+0.4 s) -> demo cost ~= Segmind CPU. CPU: containment 6.7 (bounds_in_root_frame 5.6 over
+38844 calls, ratio 1.0), contact 0.5, support 0.5, motion 0.3. cProfile is useless here
+(3.12 profiles all threads). Proposed order: cache each body's local corners (bounds) ->
+cascade -> period; separate process later.
+Next: user picks the default period and what to do next; commit when asked.
 Observations: get_containment_pairs uses bodies_outside_end_effectors directly, so it
 skips bodies_left_out (robot bodies) unlike get_relation; each ratio call copies and
 transforms both meshes and builds the container's bounding box; Segmind's tick loop
