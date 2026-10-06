@@ -27,7 +27,7 @@ LossOfSupport+Translation, sometimes re-support next tick. (b) PlacingDetector p
 LossOfGrasp with any SupportEvent within +-15 s, so a support from before the grasp
 becomes a placing. Shorter ticks only made (a) likelier. Proposed: separate branch for (a)
 (test: a model-change callback reads the moved body's pose mid-move); (b) belongs to the
-detector refactor. Awaiting user.
+detector refactor. User: not fixed here; both added as tasks in todo tab 19 (with notes).
 Next: user brainstorming a detector refactor; then commit/PR.
 Observations: get_containment_pairs uses bodies_outside_end_effectors directly, so it
 skips bodies_left_out (robot bodies) unlike get_relation; each ratio call copies and
