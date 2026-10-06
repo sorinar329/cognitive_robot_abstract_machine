@@ -28,7 +28,24 @@ LossOfGrasp with any SupportEvent within +-15 s, so a support from before the gr
 becomes a placing. Shorter ticks only made (a) likelier. Proposed: separate branch for (a)
 (test: a model-change callback reads the moved body's pose mid-move); (b) belongs to the
 detector refactor. User: not fixed here; both added as tasks in todo tab 19 (with notes).
-Next: user brainstorming a detector refactor; then commit/PR.
+Robot exclusion committed (037efdd944). User's refactor idea (2026-10-06, photo): run all
+detectors once at start, then Translation -> Contact -> Support -> Containment cascade,
+containment only on a new support, against container annotations or the supporter's parent
+chain. My review: good, but needs end-of-containment on movement, misses container-moves /
+no-new-support cases, no self-correction, no single Container annotation in sdt
+(IsStorageSpace, HasCaseAsRootBody, DrinkingContainer, ...), placed objects reattach to
+world root (placing.py:84), duty cycle unchanged. Agreed order: bounds filter -> cascade ->
+tick pacing.
+Step 2 done (uncommitted): exact bounding-box filter. Bounds.overlaps (geometry.py),
+ShapeCollection.bounds_in_root_frame (FK np + shape mesh-bounds corners, superset of what
+InsideOf measures), ContainmentDetector skips non-overlapping candidates and objects without
+collision. Tests: 3 Bounds, 2 bounds_in_root_frame, 2 detector (measured == {environment};
+no-collision object). geometry + segmind suites 208 passed. Existing as_bounding_box_collection
+helper was 1.1 ms/body (as slow as a ratio call), hence the numpy path.
+Demo (instrumented, 1 run): ratio calls/check 101.8 -> 0.7, tick 0.74 -> 0.17 s, ticks
+61 -> 247, demo 97 -> 91 s; containment still 49% of tick (~26 ms/check, mostly building
+~100 boxes; not profiled). docformatter missing from venv; ran black only.
+Next: commit when asked; then cascade, tick pacing.
 Observations: get_containment_pairs uses bodies_outside_end_effectors directly, so it
 skips bodies_left_out (robot bodies) unlike get_relation; each ratio call copies and
 transforms both meshes and builds the container's bounding box; Segmind's tick loop
