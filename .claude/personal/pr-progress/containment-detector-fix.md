@@ -62,7 +62,13 @@ Segmind thread CPU 8.1 s (wall 30.9 s, rest waiting for the interpreter lock; lo
 38844 calls, ratio 1.0), contact 0.5, support 0.5, motion 0.3. cProfile is useless here
 (3.12 profiles all threads). Proposed order: cache each body's local corners (bounds) ->
 cascade -> period; separate process later.
-Next: user picks the default period and what to do next; commit when asked.
+Step 4 done (uncommitted, user: "start with 1"): bounds_in_root_frame now uses the
+already-cached ShapeCollection.combined_mesh bounds (corners -> FK) instead of rebuilding
+each shape's mesh (Box.mesh built a trimesh per call). No new test (no behaviour change;
+existing bounds tests cover). 210 passed (geometry + segmind). Demo: Segmind CPU 8.1 ->
+3.6 s, bounds 5.6 -> 0.9 s; demo 77.7 / 77.2 s (off 73.3). Remaining CPU: containment
+2.2 (ratio 1.1, bounds 0.9), contact 0.5, support 0.5, motion 0.3.
+Next: user picks default period; commit when asked; then the cascade.
 Observations: get_containment_pairs uses bodies_outside_end_effectors directly, so it
 skips bodies_left_out (robot bodies) unlike get_relation; each ratio call copies and
 transforms both meshes and builds the container's bounding box; Segmind's tick loop
