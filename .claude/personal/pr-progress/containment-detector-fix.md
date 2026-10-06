@@ -11,7 +11,15 @@ off 73.4/72.9 s, on 100.0/100.1 s -> +27 s (+37%), not +115 s; absolute times fa
 the claim's 195/309 s. Instrumented: 48 ticks, mean 0.98 s (0.54-4.1); containment 80% of
 tick time (claim 97%); 3 checks/tick x 1 object x 145-146 candidates = ~435 ratio calls
 per tick (claim 432 confirmed), 1.8 ms each; 43 of the candidates are PR2 bodies.
-Next: user decides on the fix; test-first.
+Step 1 done (uncommitted): ContainmentDetector honours exclude_robot (bodies_left_out);
+test_robot_bodies.py: test_an_object_is_not_contained_in_the_robot (failed first: base_link,
+torso_lift_link) + companion with exclude_robot=False. segmind suite 98 passed.
+Effect: ratio calls/check 145 -> 102, tick 0.98 -> 0.74 s, but ticks 48 -> 61 and demo
+still 100 s: the tick loop pauses as long as it ticked, so Segmind holds the world ~half
+the time whatever a tick costs. Post-fix runs (2/2) show an extra milk PlacingEvent on
+island_countertop before the grasp; 0/3 pre-fix runs (event counts vary 38-49 anyway),
+suspected tick-timing effect, not proven.
+Next: user brainstorming a detector refactor; then commit/PR.
 Observations: get_containment_pairs uses bodies_outside_end_effectors directly, so it
 skips bodies_left_out (robot bodies) unlike get_relation; each ratio call copies and
 transforms both meshes and builds the container's bounding box; Segmind's tick loop
