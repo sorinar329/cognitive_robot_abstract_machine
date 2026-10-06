@@ -79,6 +79,7 @@ tests use each file's _place / direct origin like their neighbours; held-up test
 test_segmind_detectors.py (fails on main's detector); robot tests keep shelf inside the
 original _box_inside (box sunk into base_link never touches its mesh). 102 passed.
 Committed + pushed 8cba3a6521; PR #12 shows 9 files.
+CI on 8cba3a6521: 24/24 green, wall 16.5 min, demo Run Script 3.9 min, segmind Run tests 0.8 min. Demo step with changes so far: 6.3, 4.5, 3.3, 3.9 (mean 4.5); off 4.2; reverted 6.2.
 Next: period default; PR description (tick period, CI numbers).
 
 ## containment-detector-fix: Segmind's ContainmentDetector slows the bullet world demo
