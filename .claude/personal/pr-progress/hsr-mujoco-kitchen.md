@@ -1,7 +1,7 @@
 ## hsr-mujoco-kitchen: HSR carries milk + cereal between the kitchen tables in MuJoCo
 
 Plan approved 2026-10-05 (~/.claude/plans/woolly-exploring-frost.md). Branch on
-sorin/fera_exchange, no upstream (do NOT push to fera_exchange). Nothing committed.
+sorin/fera_exchange; pushed to sorin/hsr-mujoco-kitchen (do NOT push to fera_exchange).
 User decisions: full iai_kitchen xacro (two back tables); Milk + Cereal; servos;
 navigation not the focus -> teleported base; 2026-10-06: keep teleport, no base motion
 while grasping, carry via attachment (MuJoCo weld) - chosen over a servoed planar base.
@@ -35,6 +35,7 @@ limit 10 vs 100 made no difference -> kept URDF 100.
    glitch frames + pick markers fixed; artifact Vd6nG1PUmaLhRpJtYD5cDL v2 published;
    todo tab 17 ticked + 6 Oct note. Tally restored, MUJOCO_LOG.TXT + test.srdf removed.
 
-Next: user decides on commit (nothing committed/pushed).
+8. committed 98dd976033 and pushed to sorin/hsr-mujoco-kitchen (new branch, tracks it;
+   fera_exchange untouched). Findings added as open tasks in todo tab 17. No PR opened.
 Open: finger spring stiffness 10 lets fingertips fold (weld masks it); Giskard pitches
 the hand 16.7 deg during the lift (harmless with the weld).
