@@ -21,6 +21,14 @@ Done:
 Findings: rigid contacts (montessori style) launch the milk with the HSR hand; squeeze
 limit 10 vs 100 made no difference -> kept URDF 100.
 
-Next: full MuJoCo run result; then demo test, black, wide suites, cramera recording,
-republish artifact Vd6nG1PUmaLhRpJtYD5cDL, todo tab 17.
-Open: finger spring stiffness 10 lets fingertips fold (weld masks it).
+5. placement fixed (2026-10-06): weld eq_data[10] torque scale was 0 -> weld held
+   position only; fasten now sets it to 1 (test: fastened body turns with holder).
+   Teleported base dragged the welded object after it -> fingers locked it 2.4 cm off
+   and 5 deg leaning, toppled on release. Synchronizer now owns fasten/unfasten and puts
+   fastened free bodies at their weld pose whenever a drive moves (teleport test).
+   Full run: milk + cereal upright at goal; demo test + HSR + urdf tests pass (25).
+
+Next: wide suites (running), cramera recording, republish artifact
+Vd6nG1PUmaLhRpJtYD5cDL, todo tab 17, restore .living_worlds_tally, rm MUJOCO_LOG.TXT.
+Open: finger spring stiffness 10 lets fingertips fold (weld masks it); Giskard pitches
+the hand 16.7 deg during the lift (harmless with the weld).
