@@ -60,7 +60,13 @@ its Run Script step 6.3 vs 6.2 min; segmind Run tests 0.9 min (reverted steps hi
 rate limit). No measurable CI difference although local demo is 115 vs 172 s; Segmind does
 run in CI (no gating). CI logs need admin/token. Scripts: scratchpad ci_timings.py,
 ci_steps.py. Job times vary a lot between runs (experiments 14.3 vs 9.1 min, no change).
-Next: user decides how to explain the CI result (log/token, repeat runs); period default.
+Segmind-off CI run (temp 9fdff586af, undone df41dee189): demo Run Script 4.2 min.
+Local CI-like (4 cores, QT offscreen, LIBGL software): off 109.4 s, reverted 165.7 s
+(Segmind CPU 61.7), with 113.8 s (CPU 5.0). Overlay has no segmind (ruled out).
+Instrumented CI run (temp 451b0092b0, undone 2ab9112d76; phases via ::notice annotation):
+construct 0.78 s, first tick 1.67 s, 449 ticks 53 s wall / 21.5 s CPU, demo 261 s; Run
+Script 4.5 min -> with changes ~= off + 0.3 min; the earlier 6.3 min was runner noise.
+Next: optional repeated runs for a firm CI number; period default; PR description.
 
 ## containment-detector-fix: Segmind's ContainmentDetector slows the bullet world demo
 
