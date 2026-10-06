@@ -28,7 +28,13 @@ limit 10 vs 100 made no difference -> kept URDF 100.
    fastened free bodies at their weld pose whenever a drive moves (teleport test).
    Full run: milk + cereal upright at goal; demo test + HSR + urdf tests pass (25).
 
-Next: wide suites (running), cramera recording, republish artifact
-Vd6nG1PUmaLhRpJtYD5cDL, todo tab 17, restore .living_worlds_tally, rm MUJOCO_LOG.TXT.
+6. wide suites: 4225 passed; failures are env (DAiSy, gazebo warehouse, PR2, ROS command
+   publishing), xdist flakes (coraplex pick-up, cramera: pass serially), and
+   test_a_geom_carries_its_masks_under_mujocos_names (pre-existing on fera_exchange: condim).
+7. recorded via CORAPLEX_VISUALIZATION=cramera; bundle downsampled 1/6 (fps 18.21 = 2x),
+   glitch frames + pick markers fixed; artifact Vd6nG1PUmaLhRpJtYD5cDL v2 published;
+   todo tab 17 ticked + 6 Oct note. Tally restored, MUJOCO_LOG.TXT + test.srdf removed.
+
+Next: user decides on commit (nothing committed/pushed).
 Open: finger spring stiffness 10 lets fingertips fold (weld masks it); Giskard pitches
 the hand 16.7 deg during the lift (harmless with the weld).
