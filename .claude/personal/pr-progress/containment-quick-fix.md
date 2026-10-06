@@ -66,7 +66,10 @@ Local CI-like (4 cores, QT offscreen, LIBGL software): off 109.4 s, reverted 165
 Instrumented CI run (temp 451b0092b0, undone 2ab9112d76; phases via ::notice annotation):
 construct 0.78 s, first tick 1.67 s, 449 ticks 53 s wall / 21.5 s CPU, demo 261 s; Run
 Script 4.5 min -> with changes ~= off + 0.3 min; the earlier 6.3 min was runner noise.
-Next: optional repeated runs for a firm CI number; period default; PR description.
+Final CI run with changes (2ab9112d76, all 24 green): pipeline wall 20.6 min, bullet demo
+Run Script 3.3 min, segmind Run tests 0.8 min. Demo step with changes across 3 runs: 6.3,
+4.5, 3.3 min; Segmind off 4.2; reverted 6.2 (one run). Runner noise ~ +-1.5 min.
+Next: period default; PR description (tick period, CI numbers).
 
 ## containment-detector-fix: Segmind's ContainmentDetector slows the bullet world demo
 
