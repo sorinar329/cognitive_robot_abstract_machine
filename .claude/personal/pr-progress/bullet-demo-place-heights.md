@@ -15,7 +15,7 @@ milk/bowl on island_countertop, spoon in cabinet10_drawer_top; laid: all on
 table_area_main), module-scoped worlds, names in a test-local ApartmentSurface StrEnum;
 ApartmentBody.TABLE removed from the demo again. 6 passed in 2.3 s (was ~9 s); with the
 broken heights 0.82/0.74 the Milk and Spoon table checks fail.
-Next: commit/push/draft PR (bug label) when the user says so.
+Pushed 93f5c8dc87 (simplified test). Next: open a draft PR (bug label) when asked; gh not installed.
 
 ## containment-quick-fix: minimal containment fix (support before containment, robot excluded)
 
