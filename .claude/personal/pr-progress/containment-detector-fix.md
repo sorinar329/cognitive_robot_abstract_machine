@@ -6,8 +6,12 @@ Very high priority todo. Claim to verify first (pasted by user): bullet world de
 ContainmentDetector.get_containment_pairs -> InsideOf.compute_containment_ratio 432x per
 tick (3 watched objects x 144 bodies outside the hands).
 
-Plan: 1. measure off / on / instrumented runs of coraplex_bullet_world_demo (running).
-2. report to user; then fix test-first (no code changes yet).
+Measured 2026-10-06 (scratchpad segmind_cost.py, quiet machine, 2 runs each):
+off 73.4/72.9 s, on 100.0/100.1 s -> +27 s (+37%), not +115 s; absolute times far below
+the claim's 195/309 s. Instrumented: 48 ticks, mean 0.98 s (0.54-4.1); containment 80% of
+tick time (claim 97%); 3 checks/tick x 1 object x 145-146 candidates = ~435 ratio calls
+per tick (claim 432 confirmed), 1.8 ms each; 43 of the candidates are PR2 bodies.
+Next: user decides on the fix; test-first.
 Observations: get_containment_pairs uses bodies_outside_end_effectors directly, so it
 skips bodies_left_out (robot bodies) unlike get_relation; each ratio call copies and
 transforms both meshes and builds the container's bounding box; Segmind's tick loop
