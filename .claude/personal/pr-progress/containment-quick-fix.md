@@ -21,7 +21,16 @@ passed. (Careful: black on the whole test dir reformats unrelated files - format
 touched files.) Demo (old pacing, 1 run): 87.7 s vs main ~100 s, off ~73 s; 761 ticks;
 events: 3 pick-ups (+1 extra bowl), placings on table_area_main (+ bowl island_countertop
 move_branch artefact), spoon in/out of cabinet10 drawer.
-Next: commit + push + draft PR (bug label) when the user says so.
+User pushed it as 835632224c + e02b95ded4 (trays.py and new test file - CI segmind
+failure on PR #12 was these two files missing) and opened PR sorinar329#12 (not draft).
+Merged sorin/main (154 commits, no conflicts, local only, not pushed); ORM regenerated;
+segmind 102 passed; test_demo.py exit 0. Merged main itself: demo off 109 s, Segmind on
+172 s (plain main) vs 169 s (quick fix); milk/spoon get no support/placing on the table on
+plain main too (pre-existing). Breakdown on merged branch: 2678 ticks (old loop), Segmind
+CPU 52 s: containment rechecks 16.9 (spoon's 2 containers every tick, 3.5 ms each), contact
+15.5, support 12.5, motion 5.4 -> per-tick fixed costs x tick count; tick period (on
+containment-detector-fix 891bcc91cd) would cap ticks.
+Next: user decides: push the merge; bring the tick period over?
 
 ## containment-detector-fix: Segmind's ContainmentDetector slows the bullet world demo
 
