@@ -105,7 +105,8 @@ class ContainmentDetector(AbstractDetector):
         Computes containment relationships.
 
         A tracked object is never checked against the bodies :meth:`bodies_left_out`
-        names.
+        names, nor against a body whose bounds do not overlap its own, as such a body
+        cannot hold any of it.
 
         :param tracked_objects: Bodies that should be checked.
         :return: Mapping of body → containing bodies.
@@ -118,11 +119,19 @@ class ContainmentDetector(AbstractDetector):
             if body not in left_out
         ]
 
+        candidate_bounds = {
+            body: body.collision.bounds_in_root_frame() for body in candidates
+        }
+
         for tracked_object in tracked_objects:
+            if not tracked_object.collision:
+                continue
+            tracked_bounds = tracked_object.collision.bounds_in_root_frame()
             containers = {
                 body
-                for body in candidates
+                for body, bounds in candidate_bounds.items()
                 if tracked_object is not body
+                and tracked_bounds.overlaps(bounds)
                 and InsideOf(tracked_object, body).compute_containment_ratio()
                 > self.containment_threshold
             }

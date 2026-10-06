@@ -9,7 +9,7 @@ from __future__ import annotations
 from giskardpy.motion_statechart.context import MotionStatechartContext
 from typing_extensions import List
 
-from semantic_digital_twin.reasoning.predicates import InContactWith
+from semantic_digital_twin.reasoning.predicates import InContactWith, InsideOf
 from segmind.datastructures.events import SupportEvent
 from segmind.detectors.base import SegmindContext
 from segmind.datastructures.events import ContactEvent, ContainmentEvent
@@ -248,3 +248,43 @@ def test_an_object_is_contained_in_the_robot_when_it_is_not_left_out(pr2_world_c
     box = _box_inside(pr2_world_copy, base)
 
     assert base in _containers_detected_for(pr2_world_copy, box, exclude_robot=False)
+
+
+# %% containment is measured only against what is around an object
+
+
+def test_containment_is_measured_only_against_bodies_around_an_object(
+    cylinder_bot_world, monkeypatch
+):
+    """
+    A body whose bounding box does not reach an object's cannot hold any of it, so the
+    costly measure of how far the object lies inside is only taken for the body around
+    it - not for the other environment body, nor for the robot standing apart.
+    """
+    environment = cylinder_bot_world.get_body_by_name("environment")
+    box = _box_inside(cylinder_bot_world, environment)
+    measured = set()
+    measure = InsideOf.compute_containment_ratio
+
+    def recording_measure(relation: InsideOf) -> float:
+        measured.add(relation.other)
+        return measure(relation)
+
+    monkeypatch.setattr(InsideOf, "compute_containment_ratio", recording_measure)
+
+    _containers_detected_for(cylinder_bot_world, box, exclude_robot=False)
+
+    assert measured == {environment}
+
+
+def test_an_object_without_collision_geometry_is_contained_in_nothing(
+    cylinder_bot_world,
+):
+    """
+    An object with no geometry has nothing that could lie inside a body.
+    """
+    environment = cylinder_bot_world.get_body_by_name("environment")
+    box = _box_inside(cylinder_bot_world, environment)
+    box.collision.shapes.clear()
+
+    assert _containers_detected_for(cylinder_bot_world, box) == []

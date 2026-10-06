@@ -7,7 +7,8 @@ from functools import cached_property
 
 import numpy as np
 import numpy.typing as npt
-from trimesh import Trimesh
+from trimesh import Trimesh, transform_points
+from trimesh.bounds import corners
 from trimesh.util import concatenate
 from typing_extensions import (
     Dict,
@@ -33,6 +34,7 @@ from semantic_digital_twin.spatial_types import (
 from semantic_digital_twin.world_description.geometry import (
     Shape,
     AxisAlignedBox,
+    Bounds,
     PointT,
     VolumetricBoundingBox,
     Color,
@@ -170,6 +172,22 @@ class ShapeCollection(SubclassJSONSerializer):
             mesh.apply_transform(transform)
             transformed_meshes.append(mesh)
         return concatenate(transformed_meshes)
+
+    def bounds_in_root_frame(self) -> Bounds[npt.NDArray[np.float64]]:
+        """
+        The axis-aligned bounds of :attr:`combined_mesh` where the world places it,
+        expressed in the world's root frame.
+
+        Every point of the placed mesh lies within them; for a collection turned off the
+        world's axes they are larger than the mesh.
+        """
+        root_T_self = self.world.compute_forward_kinematics_np(
+            self.world.root, self.reference_frame
+        )
+        placed_corners = transform_points(
+            corners(self.combined_mesh.bounds), root_T_self
+        )
+        return Bounds(placed_corners.min(axis=0), placed_corners.max(axis=0))
 
     def as_bounding_box_collection_at_origin(
         self, origin: HomogeneousTransformationMatrix

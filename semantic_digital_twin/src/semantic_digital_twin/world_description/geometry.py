@@ -1241,6 +1241,20 @@ class Bounds(Generic[T], SubClassSafeGeneric):
     The corner with the largest coordinate on every axis.
     """
 
+    def overlaps(self, other: Bounds[T]) -> bool:
+        """
+        Whether this region and ``other`` share at least one point; regions that only
+        touch do.
+
+        Assumes both are expressed in the same frame with plain numeric arrays, as
+        :meth:`VolumetricBoundingBox.to_array_bounds` returns them.
+
+        :param other: The region to compare against.
+        """
+        return bool(
+            np.all(self.lower <= other.upper) and np.all(other.lower <= self.upper)
+        )
+
     def clip_segment(
         self, start: npt.NDArray[np.float64], direction: npt.NDArray[np.float64]
     ) -> Optional[SimpleInterval]:

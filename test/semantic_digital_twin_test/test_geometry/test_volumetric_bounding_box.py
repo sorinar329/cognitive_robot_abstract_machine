@@ -8,7 +8,10 @@ from semantic_digital_twin.robots.hsrb import HSRB
 from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix, Point3
 from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.connections import FixedConnection
-from semantic_digital_twin.world_description.geometry import VolumetricBoundingBox
+from semantic_digital_twin.world_description.geometry import (
+    Bounds,
+    VolumetricBoundingBox,
+)
 from semantic_digital_twin.world_description.shape_collection import (
     BoundingBoxCollection,
 )
@@ -164,3 +167,29 @@ def test_contains(pr2_apartment_state_reset):
     point = Point3(0, 0, 0, reference_frame=pr2_apartment_state_reset.root)
 
     assert bb.contains(point)
+
+
+# %% whether two bounds overlap
+
+
+def _unit_bounds_at(x: float) -> Bounds[np.ndarray]:
+    """
+    :return: The bounds of a unit cube whose lower corner stands at ``x`` on the x axis.
+    """
+    lower = np.array([x, 0.0, 0.0])
+    return Bounds(lower, lower + 1.0)
+
+
+def test_bounds_sharing_space_overlap():
+    assert _unit_bounds_at(0.0).overlaps(_unit_bounds_at(0.5))
+
+
+def test_bounds_that_only_touch_overlap():
+    """
+    A point on a face lies inside the box of either side, so touching counts.
+    """
+    assert _unit_bounds_at(0.0).overlaps(_unit_bounds_at(1.0))
+
+
+def test_bounds_apart_on_one_axis_do_not_overlap():
+    assert not _unit_bounds_at(0.0).overlaps(_unit_bounds_at(1.5))
