@@ -108,8 +108,7 @@ Merged upstream origin/main (57 new, fork main not synced) -> 096897d472, local 
 conflict in test_several_watched_bodies.py (upstream: conversions became properties, e.g.
 global_pose.position) - kept ours. segmind 102 passed; bullet demo exit 0 in 129 s with 3
 pick-ups, 3 placings on table_area_main (height fix now upstream), spoon in/out of drawer;
-place-setting test passes. Not pushed: fork main 57 behind upstream -> PR would show extra
-files until synced.
+place-setting test passes. User synced fork main; pushed 096897d472, PR #12 shows 9 files (not draft; gh missing).
 Next: period default; PR description (tick period, CI numbers).
 
 ## containment-detector-fix: Segmind's ContainmentDetector slows the bullet world demo
