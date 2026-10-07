@@ -14,6 +14,13 @@ cylinder height (parser doubles sizes, so size[1] is full height - PR change is 
 multi_sim ContactDimensionality/cylinder converter, with tests; real/rviz need testing
 (reply only). No gh/token: replies to be drafted for the user. Verify MuJoCo run headless
 (scratchpad tracy_report.py).
+Done and pushed b4fcbb209e (FF from 487f3fd651 via merge e5421d900d): GraspCandidate from
+above with grasp height in the pose; MontessoriScene + build_scene(world=None); real backend
+running_robot()/run(scene, robot); Color.CYAN/YELLOW; Mesh.triangular_prism in sdt geometry
+(+3 tests, MESH_FILE_PRECISION); README updated. MuJoCo headless 122 s: cylinder and triangle
+through, cube and rect wedged ~7 mm in their holes - identical at 487f3fd651 (pre-existing).
+RViz backend runs (8 s). condim/cylinder tests already on main. Replies drafted in chat
+(not posted: no gh/token); PR description not updated; PR stays draft.
 
 ## bullet-demo-place-heights: bullet world demo lays milk and spoon above the table
 
