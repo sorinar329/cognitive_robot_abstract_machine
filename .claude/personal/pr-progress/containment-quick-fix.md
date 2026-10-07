@@ -1,3 +1,27 @@
+## tracy-montessori-demo (PR sorinar329#11): address the user's 12 review comments
+
+Working on local branch tracy-montessori-review (from sorin/tracy-montessori-demo 487f3fd651),
+pushed to tracy-montessori-demo; local tracy-montessori-demo holds fera WiP bae2ecce26, leave it.
+Merged sorin/main (e5421d900d): one conflict in coraplex/plans/executables.py resolved by
+keeping both main's simulation_time_limit/failures and the PR's simulation_pacer. coraplex
+651 passed (7 DAiSy errors: ur_robot_driver not installed locally), sdt multi_sim/mjcf 43
+passed. User chose: port to main's grasp API (GraspCandidate), then comments.
+Plan: (A) port PickUpAction to GraspCandidate, grasp height in the grasp pose (drops
+_shape_around_the_grasp_point); (B) comments: no Callable/Tuple aliases; sdt colors instead
+of color_of_hue; answer GRASP_HEIGHT question; triangular prism into sdt geometry; drop
+build_offline_world park/open if unneeded, world init in build_scene; explain mjcf condim +
+cylinder height (parser doubles sizes, so size[1] is full height - PR change is right) and
+multi_sim ContactDimensionality/cylinder converter, with tests; real/rviz need testing
+(reply only). No gh/token: replies to be drafted for the user. Verify MuJoCo run headless
+(scratchpad tracy_report.py).
+Done and pushed b4fcbb209e (FF from 487f3fd651 via merge e5421d900d): GraspCandidate from
+above with grasp height in the pose; MontessoriScene + build_scene(world=None); real backend
+running_robot()/run(scene, robot); Color.CYAN/YELLOW; Mesh.triangular_prism in sdt geometry
+(+3 tests, MESH_FILE_PRECISION); README updated. MuJoCo headless 122 s: cylinder and triangle
+through, cube and rect wedged ~7 mm in their holes - identical at 487f3fd651 (pre-existing).
+RViz backend runs (8 s). condim/cylinder tests already on main. Replies drafted in chat
+(not posted: no gh/token); PR description not updated; PR stays draft.
+
 ## bullet-demo-place-heights: bullet world demo lays milk and spoon above the table
 
 Branch from sorin/main (04631c7bbc), 2026-10-06. Cause: LucaKro's 4f0c2ee2de hand-rounded
@@ -80,6 +104,12 @@ test_segmind_detectors.py (fails on main's detector); robot tests keep shelf ins
 original _box_inside (box sunk into base_link never touches its mesh). 102 passed.
 Committed + pushed 8cba3a6521; PR #12 shows 9 files.
 CI on 8cba3a6521: 24/24 green, wall 16.5 min, demo Run Script 3.9 min, segmind Run tests 0.8 min. Demo step with changes so far: 6.3, 4.5, 3.3, 3.9 (mean 4.5); off 4.2; reverted 6.2.
+Merged upstream origin/main (57 new, fork main not synced) -> 096897d472, local only. One
+conflict in test_several_watched_bodies.py (upstream: conversions became properties, e.g.
+global_pose.position) - kept ours. segmind 102 passed; bullet demo exit 0 in 129 s with 3
+pick-ups, 3 placings on table_area_main (height fix now upstream), spoon in/out of drawer;
+place-setting test passes. Not pushed: fork main 57 behind upstream -> PR would show extra
+files until synced.
 Next: period default; PR description (tick period, CI numbers).
 
 ## containment-detector-fix: Segmind's ContainmentDetector slows the bullet world demo
