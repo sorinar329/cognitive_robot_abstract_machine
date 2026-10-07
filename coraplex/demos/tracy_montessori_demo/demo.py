@@ -10,19 +10,12 @@ out differs. Pick :data:`BACKEND` and run this file from its own folder::
 
 from __future__ import annotations
 
-import colorsys
 import copy
-import math
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Callable, List, Tuple
-
-import numpy as np
-import trimesh
+from typing import List, Optional
 
 from coraplex.datastructures.dataclasses import Context
-from coraplex.datastructures.enums import ApproachDirection, Arms, VerticalAlignment
-from coraplex.datastructures.grasp import GraspDescription
 from coraplex.plans.factories import sequential
 from coraplex.plans.plan import Plan
 from coraplex.robot_plans.actions.core.pick_up import PickUpAction
@@ -30,14 +23,19 @@ from coraplex.robot_plans.actions.core.placing import PlaceAction
 from coraplex.robot_plans.actions.core.robot_body import ParkArmsAction
 from montessori_board import BoardGeometry, HoleShape, board_body
 from semantic_digital_twin.adapters.urdf import URDFParser
-from semantic_digital_twin.datastructures.definitions import (
-    GripperState,
-    StaticJointState,
-)
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
+from semantic_digital_twin.grasping.grasp_candidates import (
+    GraspCandidate,
+    HasGraspCandidates,
+)
 from semantic_digital_twin.robots.tracy import Tracy
-from semantic_digital_twin.semantic_annotations.mixins import HasRootBody
-from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix, Pose
+from semantic_digital_twin.spatial_types import (
+    HomogeneousTransformationMatrix,
+    Point3,
+    Pose,
+    Vector3,
+)
+from semantic_digital_twin.spatial_types.spatial_types import RotationMatrix
 from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.contact import ContactParameters
 from semantic_digital_twin.world_description.connections import (
@@ -128,11 +126,6 @@ How far above the board's lid a piece is let go of, so it drops into its hole ra
 than being pushed against the lid.
 """
 
-PICK_ARM = Arms.LEFT
-"""
-The arm that does the sorting; the arm every Tracy demo in this repository uses.
-"""
-
 RESTING_CLEARANCE = 0.001
 """
 Gap left between a piece and what it stands on, so it rests rather than intersects.
@@ -145,7 +138,7 @@ Gap left between a piece and what it stands on, so it rests rather than intersec
 @dataclass
 class MontessoriPiece:
     """
-    One loose piece, and where it is let go of over its hole.
+    One loose piece, how it is grasped, and where it is let go of over its hole.
     """
 
     body: Body
@@ -153,9 +146,14 @@ class MontessoriPiece:
     The piece itself.
     """
 
-    annotation: HasRootBody
+    annotation: HasGraspCandidates
     """
-    What names the piece for an action that takes an annotation rather than a body.
+    What names the piece for the actions that take it.
+    """
+
+    grasp: GraspCandidate
+    """
+    How the piece is taken: from above, low on its sides (see :data:`GRASP_HEIGHT`).
     """
 
     release_pose: Pose
@@ -164,42 +162,6 @@ class MontessoriPiece:
     way that hole is.
     """
 
-
-BuildsWorld = Callable[[], Tuple[World, Tracy]]
-"""
-Builds a world holding Tracy, for a backend that does not get one handed to it.
-"""
-
-BuildsScene = Callable[[World], List[MontessoriPiece]]
-"""
-Stands the board and the pieces in a world.
-"""
-
-BuildsPlan = Callable[[Context, List[MontessoriPiece]], Plan]
-"""
-Builds the sorting plan for the pieces a scene put in a world.
-"""
-
-
-def color_of_hue(hue: int) -> Color:
-    """
-    The colour a hue measured by OpenCV names, at full saturation and brightness.
-
-    :param hue: The hue, on OpenCV's scale of 0 to 180.
-    :return: The colour.
-    """
-    return Color(*colorsys.hsv_to_rgb(hue / 180, 1.0, 1.0))
-
-
-PALE_BLUE = color_of_hue(86)
-"""
-Colour of the cube and the cylinder, measured off the real pieces.
-"""
-
-YELLOW = color_of_hue(21)
-"""
-Colour of the two prisms, measured off the real pieces.
-"""
 
 PIECE_HEIGHT = 0.03
 """
@@ -225,9 +187,10 @@ GRASP_HEIGHT = FINGER_PAD_CLOSING_TRAVEL + CLOSED_PAD_CLEARANCE
 How far above its bottom face a piece is grasped.
 
 A grasp brings the tool frame to the grasp point, and the pads end there while the hand
-is open, so the closed pads stay :data:`CLOSED_PAD_CLEARANCE` above the table and cover
-the rest of the piece. Grasped at its middle instead, a piece is held by its top few
-millimetres only and swings between the pads.
+is open; closing, they travel :data:`FINGER_PAD_CLOSING_TRAVEL` further down. Grasped
+this high, the closed pads stay :data:`CLOSED_PAD_CLEARANCE` above the table and cover
+the rest of the piece. Grasped at its middle instead, the closing pads would reach below
+the piece's bottom face and press into the table.
 """
 
 CUBE_EDGE_LENGTH = 0.03
@@ -280,47 +243,20 @@ class PieceSpecification:
     """
 
 
-def _triangular_prism(side: float, height: float, color: Color) -> Mesh:
-    """
-    An upright prism of equilateral cross-section, centred on the middle of its bounding
-    box, its apex pointing along its own +x, the way the triangular hole points.
-
-    The fingers close along the piece's own x, so they hold it by one flat face and the
-    opposite edge; closing on two of its slanted faces would squeeze it out of the hand.
-    Centred on its centroid instead, the flat face would stand closer to the middle than
-    the apex, and the fingers, which move together, would meet only the face.
-
-    :param side: Side of the cross-section.
-    :param height: How tall the prism stands.
-    :param color: Colour it is drawn in.
-    :return: The prism.
-    """
-    circumradius = side / math.sqrt(3)
-    inradius = side / (2 * math.sqrt(3))
-    outline = np.array(
-        [[circumradius, 0.0], [-inradius, side / 2], [-inradius, -side / 2]]
-    )
-    solid = trimesh.creation.extrude_triangulation(
-        vertices=outline, faces=np.array([[0, 1, 2]]), height=height
-    )
-    solid.apply_translation([-(circumradius - inradius) / 2, 0.0, -height / 2])
-    mesh = Mesh.from_trimesh(mesh=solid)
-    mesh.color = color
-    return mesh
-
-
 PIECE_SPECIFICATIONS = (
     PieceSpecification(
         name="cube",
         shape=Box(
             scale=Scale(CUBE_EDGE_LENGTH, CUBE_EDGE_LENGTH, PIECE_HEIGHT),
-            color=PALE_BLUE,
+            color=Color.CYAN(),
         ),
         hole=HoleShape.SQUARE,
     ),
     PieceSpecification(
         name="cylinder",
-        shape=Cylinder(width=CYLINDER_DIAMETER, height=PIECE_HEIGHT, color=PALE_BLUE),
+        shape=Cylinder(
+            width=CYLINDER_DIAMETER, height=PIECE_HEIGHT, color=Color.CYAN()
+        ),
         hole=HoleShape.CIRCLE,
     ),
     PieceSpecification(
@@ -329,13 +265,13 @@ PIECE_SPECIFICATIONS = (
             scale=Scale(
                 RECTANGULAR_PRISM_WIDTH, RECTANGULAR_PRISM_LENGTH, PIECE_HEIGHT
             ),
-            color=YELLOW,
+            color=Color.YELLOW(),
         ),
         hole=HoleShape.RECTANGLE,
     ),
     PieceSpecification(
         name="triangular_prism",
-        shape=_triangular_prism(TRIANGULAR_PRISM_SIDE, PIECE_HEIGHT, YELLOW),
+        shape=Mesh.triangular_prism(TRIANGULAR_PRISM_SIDE, PIECE_HEIGHT),
         hole=HoleShape.TRIANGLE,
     ),
 )
@@ -344,38 +280,75 @@ The pieces the demo sorts, in the order it sorts them.
 """
 
 
-# %% building the world the demo runs in
+# %% the scene the demo runs in
+
+TOP_GRASP_ORIENTATION = RotationMatrix.from_vectors(
+    x=Vector3.NEGATIVE_Z(), y=Vector3.X()
+)
+"""
+How every piece is grasped: approached from above, with the fingers closing along the
+piece's own x, so they hold the triangular prism by one flat face and the opposite edge;
+closing on two of its slanted faces would squeeze it out of the hand.
+"""
 
 
-def build_offline_world() -> Tuple[World, Tracy]:
+@dataclass
+class MontessoriScene:
     """
-    Build a world holding nothing but Tracy, read from its own description, with both
-    arms parked and both grippers open.
-
-    Loading Tracy this way also equips its arms and grippers with the position servos and
-    the gravity compensation a physical simulation needs, so the same world serves both
-    the MuJoCo and the RViz backend.
-
-    :return: The world, and the Tracy standing in it.
+    Tracy at its table, with the shape-sorting board and the loose pieces in front of it.
     """
-    world = URDFParser.from_file(Tracy.get_ros_file_path()).parse()
-    robot = Tracy.from_world(world)
-    for arm in (robot.left_arm, robot.right_arm):
-        arm.get_joint_state_by_type(StaticJointState.PARK).apply_to(world)
-        arm.end_effector.get_joint_state_by_type(GripperState.OPEN).apply_to(world)
-    return world, robot
+
+    world: World
+    """
+    The world everything stands in.
+    """
+
+    robot: Tracy
+    """
+    The robot that sorts the pieces.
+    """
+
+    pieces: List[MontessoriPiece]
+    """
+    The loose pieces, in the order they are sorted.
+    """
+
+    def build_plan(self, context: Context) -> Plan:
+        """
+        Pick every piece up in turn and let it go over the hole it fits through.
+
+        The plan begins by parking the arms: a simulated Tracy starts where its
+        description leaves it, the real one wherever it was left.
+
+        :param context: The context the actions are built in.
+        :return: The plan that sorts the pieces.
+        """
+        arm = self.robot.left_arm
+        actions = [ParkArmsAction(self.robot.all_arms)]
+        for piece in self.pieces:
+            actions.append(PickUpAction(piece.grasp, arm))
+            actions.append(PlaceAction(piece.annotation, piece.release_pose))
+        actions.append(ParkArmsAction(self.robot.all_arms))
+        return sequential(actions, context=context).plan
 
 
-def build_scene(world: World) -> List[MontessoriPiece]:
+def build_scene(world: Optional[World] = None) -> MontessoriScene:
     """
     Stand the shape-sorting board and the loose pieces on Tracy's table.
 
     The board is bolted down, while every piece hangs off a connection with six degrees
     of freedom, which is what lets the robot take it somewhere else.
 
-    :param world: The world to build the scene in.
-    :return: The pieces, in the order they are sorted.
+    :param world: The world holding Tracy, as fetched from the real robot. Without one,
+        a world holding nothing but Tracy is read from its own description, which also
+        equips its arms and grippers with the servos a physical simulation needs.
+    :return: The scene.
     """
+    if world is None:
+        world = URDFParser.from_file(Tracy.get_ros_file_path()).parse()
+        Tracy.from_world(world)
+    [robot] = world.get_semantic_annotations_by_type(Tracy)
+
     geometry = BoardGeometry.from_mesh()
     board_z = TABLE_TOP_Z - geometry.bottom
     lid_top_z = board_z + geometry.lid_top
@@ -403,7 +376,7 @@ def build_scene(world: World) -> List[MontessoriPiece]:
             release_pose = Pose.from_xyz_rpy(
                 BOARD_X + hole_x,
                 BOARD_Y + hole_y,
-                lid_top_z + RELEASE_HEIGHT + GRASP_HEIGHT,
+                lid_top_z + RELEASE_HEIGHT + PIECE_HEIGHT / 2,
                 reference_frame=world.root,
             )
             pieces.append(
@@ -415,7 +388,7 @@ def build_scene(world: World) -> List[MontessoriPiece]:
                 )
             )
 
-    return pieces
+    return MontessoriScene(world=world, robot=robot, pieces=pieces)
 
 
 def _stand_piece_on_the_table(
@@ -434,12 +407,14 @@ def _stand_piece_on_the_table(
     :return: The piece.
     """
     body = Body(name=PrefixedName(specification.name))
-    body.collision = ShapeCollection(
-        [_shape_around_the_grasp_point(specification, body)], reference_frame=body
+    collision_shape, visual_shape = (
+        copy.deepcopy(specification.shape),
+        copy.deepcopy(specification.shape),
     )
-    body.visual = ShapeCollection(
-        [_shape_around_the_grasp_point(specification, body)], reference_frame=body
-    )
+    for shape in (collision_shape, visual_shape):
+        shape.origin = HomogeneousTransformationMatrix(reference_frame=body)
+    body.collision = ShapeCollection([collision_shape], reference_frame=body)
+    body.visual = ShapeCollection([visual_shape], reference_frame=body)
     world.add_kinematic_structure_entity(body)
     world.add_connection(
         Connection6DoF.create_with_dofs(
@@ -450,64 +425,28 @@ def _stand_piece_on_the_table(
             parent_T_connection_expression=HomogeneousTransformationMatrix.from_xyz_rpy(
                 PIECE_ROW_X,
                 row_y,
-                TABLE_TOP_Z + RESTING_CLEARANCE + GRASP_HEIGHT,
+                TABLE_TOP_Z + RESTING_CLEARANCE + PIECE_HEIGHT / 2,
             ),
         )
     )
 
     ContactParameters.create_for_grasped_object().apply_to([body])
 
-    annotation = HasRootBody(root=body)
+    annotation = HasGraspCandidates(root=body)
     world.add_semantic_annotations([annotation])
-    return MontessoriPiece(body=body, annotation=annotation, release_pose=release_pose)
-
-
-def _shape_around_the_grasp_point(
-    specification: PieceSpecification, body: Body
-) -> Shape:
-    """
-    The piece's geometry placed so that ``body``'s origin, which a grasp aims at, lies
-    :data:`GRASP_HEIGHT` above the piece's bottom face.
-
-    :param specification: What the piece is.
-    :param body: The body the geometry belongs to.
-    :return: A copy of the piece's geometry, raised above the body's origin.
-    """
-    shape = copy.deepcopy(specification.shape)
-    shape.origin = HomogeneousTransformationMatrix.from_xyz_rpy(
-        z=PIECE_HEIGHT / 2 - GRASP_HEIGHT, reference_frame=body
+    grasp = GraspCandidate(
+        annotation,
+        Pose(
+            position=Point3(
+                0.0, 0.0, GRASP_HEIGHT - PIECE_HEIGHT / 2, reference_frame=body
+            ),
+            orientation=TOP_GRASP_ORIENTATION.to_quaternion(),
+            reference_frame=body,
+        ),
     )
-    return shape
-
-
-# %% the plan, the same wherever it runs
-
-
-def build_plan(context: Context, pieces: List[MontessoriPiece]) -> Plan:
-    """
-    Pick every piece up in turn and let it go over the hole it fits through.
-
-    The plan still begins by parking the arms: a simulated Tracy already starts parked,
-    but the real one starts wherever it was left.
-
-    :param context: The context the actions are built in.
-    :param pieces: The pieces to sort.
-    :return: The plan that sorts them.
-    """
-    grasp = GraspDescription(
-        ApproachDirection.FRONT,
-        VerticalAlignment.TOP,
-        context.robot.left_arm.end_effector,
-        rotate_gripper=True,
+    return MontessoriPiece(
+        body=body, annotation=annotation, grasp=grasp, release_pose=release_pose
     )
-
-    actions = [ParkArmsAction(Arms.BOTH)]
-    for piece in pieces:
-        actions.append(PickUpAction(piece.annotation, PICK_ARM, grasp))
-        actions.append(PlaceAction(piece.body, piece.release_pose, PICK_ARM))
-    actions.append(ParkArmsAction(Arms.BOTH))
-
-    return sequential(actions, context=context).plan
 
 
 # %% running it
@@ -523,18 +462,19 @@ def main() -> None:
     if BACKEND is Backend.MUJOCO:
         import mujoco_demo
 
-        mujoco_demo.run(build_offline_world, build_scene, build_plan)
+        mujoco_demo.run(build_scene())
         return
 
     if BACKEND is Backend.RVIZ:
         import rviz_demo
 
-        rviz_demo.run(build_offline_world, build_scene, build_plan)
+        rviz_demo.run(build_scene())
         return
 
     import real_demo
 
-    real_demo.run(build_scene, build_plan)
+    with real_demo.running_robot() as robot:
+        real_demo.run(build_scene(robot.world), robot)
 
 
 if __name__ == "__main__":

@@ -35,7 +35,7 @@ from semantic_digital_twin.world_description.contact import (
 )
 
 if TYPE_CHECKING:
-    from demo import BuildsPlan, BuildsScene, BuildsWorld, MontessoriPiece
+    from demo import MontessoriPiece, MontessoriScene
 
 HEADLESS = False
 """
@@ -94,27 +94,22 @@ How little a contact gives way under load: nearly not at all, as between solid b
 """
 
 
-def run(
-    build_world: BuildsWorld, build_scene: BuildsScene, build_plan: BuildsPlan
-) -> None:
+def run(scene: MontessoriScene) -> None:
     """
     Carry the sorting plan out against MuJoCo physics.
 
-    :param build_world: Builds the world Tracy stands in.
-    :param build_scene: Stands the board and the pieces in that world.
-    :param build_plan: Builds the plan that sorts them.
+    :param scene: Tracy, the board and the pieces.
     """
-    world, robot = build_world()
-    pieces = build_scene(world)
-    _resist_turning_between_the_pads(pieces)
+    world = scene.world
+    _resist_turning_between_the_pads(scene.pieces)
     _make_every_contact_rigid(world)
     context = Context(
         world=world,
-        robot=robot,
+        robot=scene.robot,
         evaluate_conditions=False,
         update_world_model_attachment=False,
     )
-    plan = build_plan(context, pieces)
+    plan = scene.build_plan(context)
 
     simulation = MujocoSim(
         world=world,

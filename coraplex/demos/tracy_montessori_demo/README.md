@@ -49,30 +49,34 @@ RViz backend, or ROS to run the MuJoCo one.
 
 | File | Role |
 |---|---|
-| `demo.py` | The entry point. Holds `BACKEND`, the pieces, every hardcoded pose, `build_scene()`, `build_plan()`, and the dispatch. |
+| `demo.py` | The entry point. Holds `BACKEND`, the pieces, every hardcoded pose, `build_scene()`, the `MontessoriScene` it returns (which builds the plan), and the dispatch. |
 | `montessori_board.py` | The board: its holes read off the mesh, and a body with the mesh to look at and boxes to collide with. |
 | `resources/board.stl` | The board's mesh. |
 | `rviz_demo.py` | Kinematic run, published for RViz. |
 | `mujoco_demo.py` | Physics run, controller and physics stepped in lockstep. |
 | `real_demo.py` | Real robot, through giskard. |
 
-The backends do not import `demo`; `demo` passes its builder callables down to them. That
-is what keeps the import from being circular, and it is why each backend's `run()` takes
-functions rather than reaching for the scene itself. `demo.py` declares the three callable
-types (`BuildsWorld`, `BuildsScene`, `BuildsPlan`) and the backends import them under a
-`TYPE_CHECKING` guard, which costs nothing at runtime.
+The backends do not import `demo`; `demo` builds the scene and hands it down. That is what
+keeps the import from being circular. Each backend's `run()` takes a `MontessoriScene` —
+the world, Tracy and the pieces — and asks it for the plan; the backends import the type
+under a `TYPE_CHECKING` guard, which costs nothing at runtime. The real robot's world only
+exists once its stack is up, so `real_demo.running_robot()` brings the stack up first and
+`build_scene` is given the world it fetched; the other backends let `build_scene` read
+Tracy from its own description.
 
 ## What the plan does
 
 ```
-ParkArmsAction(BOTH)
+ParkArmsAction(all arms)
 for each piece:
-    PickUpAction(piece, LEFT, grasp from the front, aligned to the top)
-    PlaceAction(piece, 1 cm above its hole, turned to match it, LEFT)
-ParkArmsAction(BOTH)
+    PickUpAction(the piece's top grasp, left arm)
+    PlaceAction(piece, 1 cm above its hole, turned to match it)
+ParkArmsAction(all arms)
 ```
 
-`PICK_ARM = Arms.LEFT`, which is the arm every Tracy demo in this repository uses.
+Every piece offers one `GraspCandidate`: approached from above, the fingers closing along
+the piece's own x, at `GRASP_HEIGHT` above its bottom face. The left arm sorts, as in
+every Tracy demo in this repository.
 
 Note this does **not** use `TransportAction` the way the bullet world demo does. Tracy is
 fixed-base and has no torso, so the bullet demo's three staples are all unusable here:

@@ -22,7 +22,7 @@ from semantic_digital_twin.adapters.ros.visualization.viz_marker import (
 )
 
 if TYPE_CHECKING:
-    from demo import BuildsPlan, BuildsScene, BuildsWorld
+    from demo import MontessoriScene
 
 NODE_NAME = "tracy_montessori_demo_rviz"
 """
@@ -30,18 +30,13 @@ Name the demo's own ROS node carries.
 """
 
 
-def run(
-    build_world: BuildsWorld, build_scene: BuildsScene, build_plan: BuildsPlan
-) -> None:
+def run(scene: MontessoriScene) -> None:
     """
     Draw the scene in RViz and carry the sorting plan out kinematically.
 
-    :param build_world: Builds the world Tracy stands in.
-    :param build_scene: Stands the board and the pieces in that world.
-    :param build_plan: Builds the plan that sorts them.
+    :param scene: Tracy, the board and the pieces.
     """
-    world, robot = build_world()
-    pieces = build_scene(world)
+    world = scene.world
 
     rclpy.init()
     node = rclpy.create_node(NODE_NAME)
@@ -50,7 +45,7 @@ def run(
     world.notify_state_change()
 
     context = Context(
-        world=world, robot=robot, ros_node=node, evaluate_conditions=False
+        world=world, robot=scene.robot, ros_node=node, evaluate_conditions=False
     )
     with simulated_robot:
-        build_plan(context, pieces).perform()
+        scene.build_plan(context).perform()

@@ -13,20 +13,23 @@ import signal
 import subprocess
 import threading
 import time
-from typing import TYPE_CHECKING
+from contextlib import contextmanager
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Iterator
 
 import rclpy
 from rclpy.executors import MultiThreadedExecutor
+from rclpy.node import Node
 
 from coraplex.datastructures.dataclasses import Context
 from coraplex.datastructures.enums import ExecutionType
 from coraplex.execution_environment import ExecutionEnvironment
 from semantic_digital_twin.adapters.ros.world_fetcher import fetch_world_from_service
 from semantic_digital_twin.adapters.ros.world_synchronizer import WorldSynchronizer
-from semantic_digital_twin.robots.tracy import Tracy
+from semantic_digital_twin.world import World
 
 if TYPE_CHECKING:
-    from demo import BuildsPlan, BuildsScene
+    from demo import MontessoriScene
 
 GISKARD_LAUNCH_COMMAND = (
     "ros2",
@@ -67,12 +70,31 @@ Whether the robot avoids collisions while it sorts.
 """
 
 
-def run(build_scene: BuildsScene, build_plan: BuildsPlan) -> None:
+@dataclass
+class RunningRobot:
     """
-    Carry the sorting plan out on the real robot.
+    The real Tracy's stack, up and reachable: its world and the node the demo talks
+    through.
+    """
 
-    :param build_scene: Stands the board and the pieces in the fetched world.
-    :param build_plan: Builds the plan that sorts them.
+    world: World
+    """
+    The world fetched from the stack, kept in step with what the robot does.
+    """
+
+    node: Node
+    """
+    The demo's own node, spun on a thread of its own.
+    """
+
+
+@contextmanager
+def running_robot() -> Iterator[RunningRobot]:
+    """
+    Bring the robot's controllers up and fetch the world they hold; shut them down when
+    the demo is done.
+
+    :return: The running robot, for as long as the context lasts.
     """
     giskard_process = subprocess.Popen(
         list(GISKARD_LAUNCH_COMMAND), start_new_session=True
@@ -91,19 +113,27 @@ def run(build_scene: BuildsScene, build_plan: BuildsPlan) -> None:
             node=node, timeout_seconds=WORLD_FETCH_TIMEOUT_SECONDS
         )
         WorldSynchronizer(_world=world, node=node)
-        [robot] = world.get_semantic_annotations_by_type(Tracy)
-
-        pieces = build_scene(world)
-        context = Context(
-            world=world, robot=robot, ros_node=node, evaluate_conditions=False
-        )
-        plan = build_plan(context, pieces)
-
-        with ExecutionEnvironment(
-            execution_type=ExecutionType.REAL,
-            collision_avoidance=COLLISION_AVOIDANCE,
-        ):
-            plan.perform()
+        yield RunningRobot(world=world, node=node)
     finally:
         os.killpg(os.getpgid(giskard_process.pid), signal.SIGTERM)
         giskard_process.wait()
+
+
+def run(scene: MontessoriScene, robot: RunningRobot) -> None:
+    """
+    Carry the sorting plan out on the real robot.
+
+    :param scene: Tracy, the board and the pieces, stood in the fetched world.
+    :param robot: The running robot the scene was built in.
+    """
+    context = Context(
+        world=scene.world,
+        robot=scene.robot,
+        ros_node=robot.node,
+        evaluate_conditions=False,
+    )
+    with ExecutionEnvironment(
+        execution_type=ExecutionType.REAL,
+        collision_avoidance=COLLISION_AVOIDANCE,
+    ):
+        scene.build_plan(context).perform()
