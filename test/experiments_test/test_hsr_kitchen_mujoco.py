@@ -4,6 +4,7 @@ kitchen, simulated in MuJoCo.
 """
 
 import os
+from enum import StrEnum
 
 import mujoco
 import pytest
@@ -12,7 +13,11 @@ from experiments.hsr_kitchen_mujoco.demo import (
     CARRIED_OBJECTS,
     KitchenTable,
     build_world,
+    driving_path,
     goal_pose,
+    kitchen_navigation_map,
+    picking_pose,
+    placing_pose,
     run,
     start_pose,
     table_extent,
@@ -37,6 +42,17 @@ PLACEMENT_TOLERANCE = 0.03
 """
 How far, in metres, an object may come to rest from where it was meant to be set down.
 """
+
+
+class KitchenWall(StrEnum):
+    """
+    The kitchen's walls a test checks the HSR's way against, by their bodies' names.
+    """
+
+    MIDDLE = "middle_wall"
+    """
+    The low wall between the cooking table and the dining table.
+    """
 
 
 @pytest.fixture(scope="module")
@@ -91,6 +107,39 @@ def test_every_body_of_the_scene_is_simulated(world: World):
     ]
 
     assert missing == []
+
+
+# %% the way between the tables
+
+
+@pytest.mark.parametrize("carried", CARRIED_OBJECTS, ids=lambda carried: carried.name)
+def test_the_way_to_the_destination_table_goes_around_the_middle_wall(
+    world: World, carried
+):
+    start = picking_pose(world, carried)
+    goal = placing_pose(world, carried)
+    wall = (
+        world.get_body_by_name(KitchenWall.MIDDLE)
+        .collision.as_bounding_box_collection_in_frame(world.root)
+        .bounding_box()
+    )
+    wall_bounds = wall.to_array_bounds()
+    wall_middle = (wall.min_z + wall.max_z) / 2
+
+    path = driving_path(kitchen_navigation_map(world), start, goal)
+
+    corners = [start, *path]
+    for leaving, reaching in zip(corners, corners[1:]):
+        leaving_point = leaving.to_position().to_np()[:3]
+        reaching_point = reaching.to_position().to_np()[:3]
+        leaving_point[2] = reaching_point[2] = wall_middle
+        assert (
+            wall_bounds.clip_segment(leaving_point, reaching_point - leaving_point)
+            is None
+        )
+    assert path[-1].to_position().to_np()[:3] == pytest.approx(
+        goal.to_position().to_np()[:3]
+    )
 
 
 # %% the run

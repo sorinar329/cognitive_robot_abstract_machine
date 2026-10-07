@@ -6,8 +6,9 @@ The kitchen is semantic_digital_twin's predetermined
 :class:`~semantic_digital_twin.predetermined_maps.kitchen_environment.KitchenEnvironment`:
 the HSR picks both objects up from the cooking table, either side of its cooktop, and
 sets them down on the dining table on the other side of the low middle wall. Its arm,
-head and hand are driven by servos; its base is moved by its drive and MuJoCo follows it
-there rather than rolling it on its wheels.
+head and hand are driven by servos; its base drives around the middle wall along a way
+planned through the kitchen, and MuJoCo follows it there rather than rolling it on its
+wheels.
 
 Run it with::
 
@@ -20,7 +21,7 @@ import math
 from dataclasses import dataclass, field
 from datetime import timedelta
 from enum import StrEnum
-from typing_extensions import Optional, Type
+from typing_extensions import List, Optional, Type
 
 import mujoco
 from coraplex.datastructures.dataclasses import Context
@@ -39,12 +40,18 @@ from coraplex.plans.plan_callbacks import PlanCallback
 from coraplex.plans.plan_node import ActionNode, MotionNode, PlanNode
 from coraplex.robot_plans.actions.base import ActionDescription
 from coraplex.robot_plans.motions.gripper import MoveGripperMotion
-from coraplex.robot_plans.actions.core.navigation import NavigateAction
 from coraplex.robot_plans.actions.core.pick_up import PickUpAction
 from coraplex.robot_plans.actions.core.placing import PlaceAction
 from coraplex.robot_plans.actions.core.robot_body import ParkArmsAction
+from coraplex.robot_plans.motions.base import BaseMotion
 from coraplex.visualization import WorldVisualization
 from giskardpy.executor import SteppedSimulationPacer
+from giskardpy.motion_statechart.goals.templates import Parallel
+from giskardpy.motion_statechart.tasks.cartesian_tasks import (
+    CartesianOrientation,
+    CartesianPositionStraight,
+)
+from krrood.exceptions import DataclassException
 from semantic_digital_twin.adapters.controlled_simulation import ControlledSimulation
 from semantic_digital_twin.adapters.multi_sim import (
     ContactDimensionality,
@@ -61,23 +68,32 @@ from semantic_digital_twin.predetermined_maps.kitchen_environment import (
 from semantic_digital_twin.robots.hsrb import HSRB, HSRBJoint
 from semantic_digital_twin.semantic_annotations.semantic_annotations import (
     Cereal,
+    Floor,
     Food,
     Milk,
 )
 from semantic_digital_twin.spatial_types.spatial_types import (
     HomogeneousTransformationMatrix,
+    Point2,
+    Point3,
     Pose,
 )
 from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.connections import Connection6DoF
 from semantic_digital_twin.world_description.contact import ContactParameters
+from semantic_digital_twin.world_description.graph_of_convex_sets.boxes import (
+    PlanarGraphOfBoundingBoxes,
+)
 from semantic_digital_twin.world_description.geometry import (
     Box,
     Color,
     Scale,
     VolumetricBoundingBox,
 )
-from semantic_digital_twin.world_description.shape_collection import ShapeCollection
+from semantic_digital_twin.world_description.shape_collection import (
+    BoundingBoxCollection,
+    ShapeCollection,
+)
 from semantic_digital_twin.world_description.world_entity import Body
 
 # %% the kitchen
@@ -161,7 +177,7 @@ MILK = CarriedObject(
     annotation_type=Milk,
     scale=Scale(0.06, 0.06, 0.2),
     color=Color(0.95, 0.95, 0.95),
-    start_x=0.75,
+    start_x=0.8,
     goal_y=5.5,
 )
 
@@ -170,7 +186,7 @@ CEREAL = CarriedObject(
     annotation_type=Cereal,
     scale=Scale(0.15, 0.06, 0.2),
     color=Color(0.85, 0.55, 0.15),
-    start_x=1.85,
+    start_x=1.8,
     goal_y=5.9,
 )
 
@@ -276,6 +292,163 @@ def hand_offset(world: World) -> float:
     return float(world.compute_forward_kinematics_np(robot.root, flexed_link)[1, 3])
 
 
+# %% driving between the tables
+
+FLOOR_CLEARANCE = 0.02
+"""
+How high above the floor the HSR's way is looked for, in metres: above the floors
+themselves, which are no obstacle, and below anything the base could not drive over.
+"""
+
+BASE_MARGIN = 0.05
+"""
+How much room the HSR's way leaves beside its base on every side, in metres.
+"""
+
+
+@dataclass
+class NoWayThroughTheKitchen(DataclassException):
+    """
+    Raised when no way through the kitchen leads from one standing pose to another.
+    """
+
+    start: Pose
+    """
+    Where the HSR stands.
+    """
+
+    goal: Pose
+    """
+    Where it was to drive to.
+    """
+
+    def error_message(self) -> str:
+        return f"The HSR finds no way through the kitchen from {self.start} to {self.goal}."
+
+    def suggest_correction(self) -> str:
+        return (
+            "Stand the HSR where its base fits, clear of the furniture and the walls."
+        )
+
+
+@dataclass
+class DriveMotion(BaseMotion):
+    """
+    Drives the robot's base to a pose along a straight line, rather than putting it
+    there.
+    """
+
+    target: Pose
+    """
+    Where the base drives to.
+    """
+
+    def perform(self):
+        return
+
+    @property
+    def _motion_chart(self) -> Parallel:
+        return Parallel(
+            nodes=[
+                CartesianPositionStraight(
+                    root_link=self.world.root,
+                    tip_link=self.robot.root,
+                    goal_point=self.target.to_position(),
+                ),
+                CartesianOrientation(
+                    root_link=self.world.root,
+                    tip_link=self.robot.root,
+                    goal_orientation=self.target.to_rotation_matrix(),
+                ),
+            ]
+        )
+
+
+def kitchen_navigation_map(world: World) -> PlanarGraphOfBoundingBoxes:
+    """
+    :return: Where in the kitchen the HSR's base fits, from the kitchen alone, so that
+        neither the HSR nor what it carries stands in its own way.
+    """
+    kitchen = KitchenEnvironment().get_world()
+    floors = [
+        body.collision.as_bounding_box_collection_in_frame(kitchen.root).bounding_box()
+        for floor in kitchen.get_semantic_annotations_by_type(Floor)
+        for body in floor.bodies
+    ]
+    robot = world.get_semantic_annotations_by_type(HSRB)[0]
+    base = robot.mobile_base.root.collision.as_bounding_box_collection_in_frame(
+        world.root
+    ).bounding_box()
+    robot_height = max(
+        body.collision.as_bounding_box_collection_in_frame(world.root)
+        .bounding_box()
+        .max_z
+        for body in robot.bodies
+        if body.collision
+    )
+    search_space = BoundingBoxCollection(
+        [
+            VolumetricBoundingBox(
+                min(floor.min_x for floor in floors),
+                min(floor.min_y for floor in floors),
+                FLOOR_CLEARANCE,
+                max(floor.max_x for floor in floors),
+                max(floor.max_y for floor in floors),
+                robot_height,
+                HomogeneousTransformationMatrix(reference_frame=kitchen.root),
+            )
+        ],
+        kitchen.root,
+    )
+    base_half_width = max(base.max_x - base.min_x, base.max_y - base.min_y) / 2
+    return PlanarGraphOfBoundingBoxes.navigation_map_from_world(
+        kitchen,
+        search_space=search_space,
+        bloat_obstacles=base_half_width + BASE_MARGIN,
+    )
+
+
+def driving_path(
+    navigation_map: PlanarGraphOfBoundingBoxes, start: Pose, goal: Pose
+) -> List[Pose]:
+    """
+    The base keeps facing the way it faces at ``start`` until it has reached ``goal``'s
+    position, and only then turns, so it drives straight from one corner of the way to
+    the next.
+
+    :return: The poses the HSR's base drives through from ``start`` to ``goal``, around
+        everything in the kitchen, ending at ``goal``.
+    :raises NoWayThroughTheKitchen: When no way leads from ``start`` to ``goal``.
+    """
+    frame = navigation_map.search_space.reference_frame
+    start_x, start_y, _ = start.to_position().to_np()[:3]
+    goal_x, goal_y, _ = goal.to_position().to_np()[:3]
+    points = navigation_map.path_from_to(
+        Point2(start_x, start_y, reference_frame=frame),
+        Point2(goal_x, goal_y, reference_frame=frame),
+    )
+    if points is None:
+        raise NoWayThroughTheKitchen(start=start, goal=goal)
+    reference_frame = goal.reference_frame
+    corners = [
+        Pose(
+            position=Point3(*point.to_np()[:2], 0.0, reference_frame=reference_frame),
+            orientation=start.to_quaternion(),
+            reference_frame=reference_frame,
+        )
+        for point in points[1:]
+    ]
+    return [*corners, goal]
+
+
+def drive_along(path: List[Pose]) -> List[DriveMotion]:
+    """
+    :return: The motions that drive the HSR's base through ``path``, one pose after the
+        other.
+    """
+    return [DriveMotion(pose) for pose in path]
+
+
 # %% building the world and the plan
 
 
@@ -348,7 +521,9 @@ def _stand_on_the_source_table(
 
 def build_plan(context: Context) -> Plan:
     """
-    Carry every object from the source table to the destination table, one at a time.
+    Carry every object from the source table to the destination table, one at a time,
+    driving around the middle wall with the arm pulled in, so the object in the hand
+    sweeps over nothing on the way.
 
     :param context: The context the actions are built in.
     :return: The plan.
@@ -358,16 +533,26 @@ def build_plan(context: Context) -> Plan:
     grasp = GraspDescription(
         ApproachDirection.FRONT, VerticalAlignment.NoAlignment, arm.end_effector
     )
+    navigation_map = kitchen_navigation_map(world)
+    standing = Pose.from_xyz_rpy(
+        *context.robot.root.global_pose.to_position().to_np()[:3],
+        yaw=math.pi / 2,
+        reference_frame=world.root,
+    )
     actions = [ParkArmsAction(Arms.BOTH)]
     for carried in CARRIED_OBJECTS:
         annotation = world.get_semantic_annotations_by_type(carried.annotation_type)[0]
+        picking = picking_pose(world, carried)
+        placing = placing_pose(world, carried)
         actions += [
-            NavigateAction(picking_pose(world, carried)),
+            *drive_along(driving_path(navigation_map, standing, picking)),
             PickUpAction(annotation, Arms.LEFT, grasp),
-            NavigateAction(placing_pose(world, carried)),
+            ParkArmsAction(Arms.BOTH),
+            *drive_along(driving_path(navigation_map, picking, placing)),
             PlaceAction(annotation.root, goal_pose(world, carried), Arms.LEFT),
             ParkArmsAction(Arms.BOTH),
         ]
+        standing = placing
     return sequential(actions, context=context).plan
 
 
