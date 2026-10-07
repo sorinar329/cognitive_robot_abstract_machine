@@ -19,6 +19,7 @@ from coraplex.plans.failures import (
     MotionViolatedCollisionAvoidance,
     PlanFailure,
 )
+from giskardpy.executor import NoPacing, Pacer
 from giskardpy.motion_statechart.context import MotionStatechartContext
 from giskardpy.motion_statechart.data_types import LifeCycleValues
 from giskardpy.motion_statechart.exceptions import (
@@ -250,6 +251,15 @@ class GiskardExecutable(Executable):
     to the motion state chart.
     """
 
+    simulation_pacer: ClassVar[Optional[Pacer]] = None
+    """
+    What holds the control loop of a simulated execution between two ticks.
+
+    Without one the loop runs as fast as the hardware allows, which is what a
+    kinematically moved world wants. A physically simulated world sets a pacer that
+    steps its physics instead, so the controller and the physics advance in lockstep.
+    """
+
     @classproperty
     def simulation_time_limit(self) -> timedelta:
         """
@@ -401,6 +411,11 @@ class GiskardExecutable(Executable):
         :raises MotionExceededSimulationTimeLimit: When the motion runs for longer than
             :attr:`simulation_time_limit`.
         """
+        pacer = (
+            NoPacing()
+            if GiskardExecutable.simulation_pacer is None
+            else GiskardExecutable.simulation_pacer
+        )
         qp_controller_config = QPControllerConfig(
             target_frequency=50, prediction_horizon=4, verbose=False
         )
@@ -410,6 +425,7 @@ class GiskardExecutable(Executable):
                 qp_controller_config=qp_controller_config,
             ),
             ros_node=self.context.ros_node,
+            pacer=pacer,
         )
         time_limit = GiskardExecutable.simulation_time_limit
         maximum_ticks = time_limit.total_seconds() / qp_controller_config.control_dt
@@ -429,6 +445,7 @@ class GiskardExecutable(Executable):
                     if ticks >= maximum_ticks:
                         raise MotionExceededSimulationTimeLimit(time_limit)
                     executor.tick()
+                    pacer.sleep()
                     ticks += 1
                 history.end_active_motions()
             except BaseException as error:
@@ -496,6 +513,8 @@ class MoveBranchExecutable(Executable):
         """
         Move the branch and report the attached node's execution outcome.
         """
+        if not self.context.update_world_model_attachment:
+            return
         with self.execution_scope():
             self.context.world.move_branch(self.body, self.new_parent)
 
