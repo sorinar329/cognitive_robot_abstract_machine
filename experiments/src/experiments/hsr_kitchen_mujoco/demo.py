@@ -1,11 +1,13 @@
 """
-The Toyota HSR carries a milk carton and a cereal box from one table of the IAI kitchen
-to the other, simulated in MuJoCo.
+The Toyota HSR carries a milk carton and a cereal box from one table of the kitchen to
+another, simulated in MuJoCo.
 
-The kitchen is the full IAI kitchen, whose two tables stand at its back: the HSR picks
-both objects up from the table behind the low partition and sets them down on the dining
-table next to it. Its arm, head and hand are driven by servos; its base is moved by its
-drive and MuJoCo follows it there rather than rolling it on its wheels.
+The kitchen is semantic_digital_twin's predetermined
+:class:`~semantic_digital_twin.predetermined_maps.kitchen_environment.KitchenEnvironment`:
+the HSR picks both objects up from the cooking table, either side of its cooktop, and
+sets them down on the dining table on the other side of the low middle wall. Its arm,
+head and hand are driven by servos; its base is moved by its drive and MuJoCo follows it
+there rather than rolling it on its wheels.
 
 Run it with::
 
@@ -50,9 +52,12 @@ from semantic_digital_twin.adapters.multi_sim import (
     MujocoGeom,
     MujocoSim,
 )
-from semantic_digital_twin.api import RobotSpecification, WorldSpecification
+from semantic_digital_twin.api import RobotSpecification
 from semantic_digital_twin.datastructures.definitions import GripperState
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
+from semantic_digital_twin.predetermined_maps.kitchen_environment import (
+    KitchenEnvironment,
+)
 from semantic_digital_twin.robots.hsrb import HSRB, HSRBJoint
 from semantic_digital_twin.semantic_annotations.semantic_annotations import (
     Cereal,
@@ -77,25 +82,20 @@ from semantic_digital_twin.world_description.world_entity import Body
 
 # %% the kitchen
 
-KITCHEN_DESCRIPTION = "package://iai_kitchen/urdf_obj/iai_kitchen_python.urdf.xacro"
-"""
-The full IAI kitchen, with the two tables at its back.
-"""
-
 
 class KitchenTable(StrEnum):
     """
     The tables the objects are carried between, by their bodies' names in the kitchen.
     """
 
-    SOURCE = "table_area_main"
+    SOURCE = "cooking_table"
     """
-    The table behind the low partition, where both objects start.
+    The cooking table against the back wall, where both objects start.
     """
 
-    DESTINATION = "dining_area_jokkmokk_table_main"
+    DESTINATION = "dining_table"
     """
-    The dining table, where both objects end up.
+    The dining table on the other side of the middle wall, where both objects end up.
     """
 
 
@@ -146,7 +146,8 @@ class CarriedObject:
 
     start_x: float
     """
-    Where along the source table the object starts, in the kitchen's x.
+    Where along the source table the object starts, in the kitchen's x, clear of the
+    cooktop in the table's middle.
     """
 
     goal_y: float
@@ -160,8 +161,8 @@ MILK = CarriedObject(
     annotation_type=Milk,
     scale=Scale(0.06, 0.06, 0.2),
     color=Color(0.95, 0.95, 0.95),
-    start_x=-2.6,
-    goal_y=0.1,
+    start_x=0.75,
+    goal_y=5.5,
 )
 
 CEREAL = CarriedObject(
@@ -169,8 +170,8 @@ CEREAL = CarriedObject(
     annotation_type=Cereal,
     scale=Scale(0.15, 0.06, 0.2),
     color=Color(0.85, 0.55, 0.15),
-    start_x=-2.2,
-    goal_y=0.5,
+    start_x=1.85,
+    goal_y=5.9,
 )
 
 CARRIED_OBJECTS = (MILK, CEREAL)
@@ -187,7 +188,7 @@ close enough to reach without leaning over the table.
 STANDING_DISTANCE = 0.45
 """
 How far from a table's edge the HSR's base stands while it works there, in metres:
-clear of the edge and of the partition, with the object within the arm's reach.
+clear of the edge, with the object within the arm's reach.
 """
 
 SETTLING_CLEARANCE = 0.002
@@ -207,15 +208,15 @@ and falls over once it is let go; dropped from a centimetre it lands upright.
 def start_pose(world: World, carried: CarriedObject) -> HomogeneousTransformationMatrix:
     """
     :return: Where ``carried`` stands on the source table, near its edge facing the
-        partition, which is where the HSR reaches over to it from. Its x axis points
-        away from the HSR, the direction a front grasp approaches it in.
+        room, which is where the HSR reaches over to it from. Its x axis points away
+        from the HSR, the direction a front grasp approaches it in.
     """
     extent = table_extent(world, KitchenTable.SOURCE)
     return HomogeneousTransformationMatrix.from_xyz_rpy(
         x=carried.start_x,
-        y=extent.max_y - EDGE_INSET,
+        y=extent.min_y + EDGE_INSET,
         z=extent.max_z + carried.scale.z / 2 + SETTLING_CLEARANCE,
-        yaw=-math.pi / 2,
+        yaw=math.pi / 2,
         reference_frame=world.root,
     )
 
@@ -238,14 +239,14 @@ def goal_pose(world: World, carried: CarriedObject) -> Pose:
 
 def picking_pose(world: World, carried: CarriedObject) -> Pose:
     """
-    :return: Where the HSR stands to pick ``carried`` up: across the partition from it,
-        facing the source table, with its hand rather than its base in line with it.
+    :return: Where the HSR stands to pick ``carried`` up: in front of the source
+        table, facing it, with its hand rather than its base in line with it.
     """
     extent = table_extent(world, KitchenTable.SOURCE)
     return Pose.from_xyz_rpy(
-        x=carried.start_x - hand_offset(world),
-        y=extent.max_y + STANDING_DISTANCE,
-        yaw=-math.pi / 2,
+        x=carried.start_x + hand_offset(world),
+        y=extent.min_y - STANDING_DISTANCE,
+        yaw=math.pi / 2,
         reference_frame=world.root,
     )
 
@@ -280,13 +281,11 @@ def hand_offset(world: World) -> float:
 
 def build_world() -> World:
     """
-    :return: The kitchen with the HSR standing across the partition from the source
-        table, and the milk and the cereal on that table.
+    :return: The kitchen with the HSR standing in front of the source table, and the
+        milk and the cereal on that table.
     """
-    world = WorldSpecification.from_urdf(
-        KITCHEN_DESCRIPTION, robots=[RobotSpecification(HSRB)]
-    ).to_domain_object()
-    robot = world.get_semantic_annotations_by_type(HSRB)[0]
+    world = KitchenEnvironment().get_world()
+    robot = RobotSpecification(HSRB).spawn(world)
     robot.mobile_base.full_body_controlled = False
     robot.root.parent_connection.origin = picking_pose(
         world, CARRIED_OBJECTS[0]

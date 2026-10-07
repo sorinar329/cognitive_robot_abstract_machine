@@ -1,5 +1,5 @@
 """
-The HSR carrying a milk carton and a cereal box between the two tables of the IAI
+The HSR carrying a milk carton and a cereal box between two tables of the predetermined
 kitchen, simulated in MuJoCo.
 """
 
@@ -18,6 +18,9 @@ from experiments.hsr_kitchen_mujoco.demo import (
     table_extent,
 )
 from semantic_digital_twin.adapters.multi_sim import MujocoSim
+from semantic_digital_twin.predetermined_maps.kitchen_environment import (
+    KitchenEnvironment,
+)
 from semantic_digital_twin.world import World
 
 runs_in_ci = pytest.mark.skipif(
@@ -49,6 +52,14 @@ def position_of(world: World, name: str):
 
 
 # %% the scene
+
+
+def test_the_scene_is_the_predetermined_kitchen(world: World):
+    kitchen = KitchenEnvironment().get_world()
+
+    assert {body.name.name for body in kitchen.bodies} <= {
+        body.name.name for body in world.bodies
+    }
 
 
 @pytest.mark.parametrize("table", list(KitchenTable))
