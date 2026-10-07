@@ -1,27 +1,38 @@
 from __future__ import annotations
 
-import logging
 from contextlib import AbstractContextManager, ExitStack, nullcontext
-from datetime import datetime
+from datetime import datetime, timedelta
 from dataclasses import dataclass, field
 
 from typing_extensions import Callable, List, Dict, ClassVar, Optional, TYPE_CHECKING
 
 from coraplex.datastructures.enums import ExecutionType
 from coraplex.exceptions import (
-    MotionDidNotFinish,
     ConditionNotSatisfied,
     UnknownExecutionType,
+)
+from coraplex.plans.failures import (
+    CandidateLimitReached,
+    EmptyUnderspecified,
+    MotionExceededSimulationTimeLimit,
+    MotionMadeNoProgress,
+    MotionViolatedCollisionAvoidance,
+    PlanFailure,
 )
 from giskardpy.executor import NoPacing, Pacer
 from giskardpy.motion_statechart.context import MotionStatechartContext
 from giskardpy.motion_statechart.data_types import LifeCycleValues
+from giskardpy.motion_statechart.exceptions import (
+    CollisionViolatedError,
+    NoProgressError,
+)
 from giskardpy.motion_statechart.goals.collision_avoidance import (
     ExternalCollisionAvoidance,
     SelfCollisionAvoidance,
 )
 from giskardpy.motion_statechart.graph_node import CancelMotion
 from giskardpy.motion_statechart.graph_node import EndMotion, Goal, Task
+from giskardpy.motion_statechart.monitors.progress_monitors import StillProgressing
 from giskardpy.motion_statechart.motion_statechart import (
     MotionStatechart,
     StateHistoryObserver,
@@ -29,6 +40,7 @@ from giskardpy.motion_statechart.motion_statechart import (
 from giskardpy.qp.qp_controller_config import QPControllerConfig
 from giskardpy.ros_executor import Ros2Executor
 from krrood.entity_query_language.factories import evaluate_condition
+from krrood.ormatic.utils import classproperty
 from krrood.symbolic_math.symbolic_math import Scalar, trinary_logic_not
 from semantic_digital_twin.world_description.world_entity import Body
 
@@ -40,8 +52,6 @@ if TYPE_CHECKING:
     from coraplex.plans.plan_node import MotionNode
     from coraplex.plans.underspecified import UnderspecifiedNode
     from coraplex.datastructures.dataclasses import Context
-
-logger = logging.getLogger(__name__)
 
 
 # %% native motion history
@@ -250,6 +260,14 @@ class GiskardExecutable(Executable):
     steps its physics instead, so the controller and the physics advance in lockstep.
     """
 
+    @classproperty
+    def simulation_time_limit(self) -> timedelta:
+        """
+        :return: The simulated time after which a simulated motion is given up on, however it is
+        progressing.
+        """
+        return timedelta(minutes=2)
+
     @property
     def giskard_executables(self) -> List[GiskardExecutable]:
         """
@@ -259,7 +277,9 @@ class GiskardExecutable(Executable):
 
     def prepare_for_execution(self) -> None:
         """
-        Extend the motion state chart with the nodes that terminate it.
+        Extend the motion state chart with the nodes that terminate it: one that cancels
+        the motion once it reaches its goal, and one that gives up on it once it stops
+        approaching one.
 
         This runs just before compilation rather than during parsing, because the
         execution type is only known once an
@@ -273,6 +293,11 @@ class GiskardExecutable(Executable):
         end_motion = EndMotion()
         end_motion.start_condition = end_trigger
         self.motion_state_chart.add_node(end_motion)
+
+        self.motion_state_chart.add_node(
+            still_progressing := StillProgressing(monitored_node=self.root_node)
+        )
+        self.motion_state_chart.add_node(still_progressing.cancel_motion())
 
     def _add_condition_monitors(self, end_trigger: Scalar) -> Scalar:
         """
@@ -343,6 +368,12 @@ class GiskardExecutable(Executable):
         """
         Completes the motion state chart and executes it according to the execution
         type.
+
+        :raises MotionMadeNoProgress: When the motion stops approaching its goal.
+        :raises MotionExceededSimulationTimeLimit: When a simulated motion runs for
+            longer than :attr:`simulation_time_limit`.
+        :raises MotionViolatedCollisionAvoidance: When the motion brings bodies closer
+            to each other than collision avoidance allows.
         """
         if len(self.motion_mappings) == 0:
             return
@@ -350,33 +381,55 @@ class GiskardExecutable(Executable):
             return
         self.prepare_for_execution()
 
-        match GiskardExecutable.execution_type:
-            case ExecutionType.SIMULATED:
-                self._execute_simulation()
-            case ExecutionType.REAL:
-                self._execute_real()
-            case _:
-                raise UnknownExecutionType(GiskardExecutable.execution_type)
+        try:
+            match GiskardExecutable.execution_type:
+                case ExecutionType.SIMULATED:
+                    self._execute_simulation()
+                case ExecutionType.REAL:
+                    self._execute_real()
+                case _:
+                    raise UnknownExecutionType(GiskardExecutable.execution_type)
+        except NoProgressError as stalled:
+            raise MotionMadeNoProgress(stalled) from stalled
+        except CollisionViolatedError as violation:
+            raise MotionViolatedCollisionAvoidance(violation) from violation
 
     def _execute_simulation(self) -> None:
         """
-        Execute the native chart while projecting its recorded motion states.
+        Compiles the motion state chart and ticks it in the world of the context until
+        it is done or gives up.
+
+        The chart's own stall monitor decides when a motion is hopeless, so a motion
+        that keeps converging is never cut off for taking many ticks.
+
+        The recorded motion states are projected onto the motion nodes of the plan
+        while the chart runs.
+
+        :raises NoProgressError: When the motion stops approaching its goal. The error
+            names the tasks that stalled, and :meth:`execute` turns it into a
+            :class:`~coraplex.plans.failures.MotionMadeNoProgress`.
+        :raises MotionExceededSimulationTimeLimit: When the motion runs for longer than
+            :attr:`simulation_time_limit`.
         """
         pacer = (
             NoPacing()
             if GiskardExecutable.simulation_pacer is None
             else GiskardExecutable.simulation_pacer
         )
+        qp_controller_config = QPControllerConfig(
+            target_frequency=50, prediction_horizon=4, verbose=False
+        )
         executor = Ros2Executor(
             context=MotionStatechartContext(
                 world=self.context.world,
-                qp_controller_config=QPControllerConfig(
-                    target_frequency=50, prediction_horizon=4, verbose=False
-                ),
+                qp_controller_config=qp_controller_config,
             ),
             ros_node=self.context.ros_node,
             pacer=pacer,
         )
+        time_limit = GiskardExecutable.simulation_time_limit
+        maximum_ticks = time_limit.total_seconds() / qp_controller_config.control_dt
+        # Stop the robot and tear the chart down even when a tick raises.
         with ExitStack() as cleanup:
             history = MotionPlanHistory(self.motion_state_chart, self.motion_mappings)
             cleanup.callback(history.stop)
@@ -387,21 +440,14 @@ class GiskardExecutable(Executable):
             cleanup.callback(executor.set_velocity_acceleration_jerk_to_zero)
             try:
                 executor.compile(self.motion_state_chart)
-                for _ in range(
-                    len(self.motion_mappings) * self.context.ticks_per_motion
-                ):
+                ticks = 0
+                while not executor.motion_statechart.is_end_motion():
+                    if ticks >= maximum_ticks:
+                        raise MotionExceededSimulationTimeLimit(time_limit)
                     executor.tick()
                     pacer.sleep()
-                    if executor.motion_statechart.is_end_motion():
-                        history.end_active_motions()
-                        return
-                unfinished_nodes = [
-                    node
-                    for node in self.motion_state_chart.nodes
-                    if node.life_cycle_state
-                    not in [LifeCycleValues.SUCCEEDED, LifeCycleValues.NOT_STARTED]
-                ]
-                raise MotionDidNotFinish(unfinished_nodes)
+                    ticks += 1
+                history.end_active_motions()
             except BaseException as error:
                 history.end_active_motions(
                     LifeCycleValues.FAILED
@@ -484,8 +530,9 @@ class UnderspecifiedExecutable(Executable):
     is reached. Only then is the underspecified statement grounded, so the query sees
     the correct world state (e.g. the torso already raised, the object already in the
     gripper). Candidates are tried in order until one executes without raising a
-    :class:`~pycram.plans.failures.PlanFailure`; if the generator is exhausted,
-    :class:`~pycram.plans.failures.EmptyUnderspecified` is raised.
+    :class:`~pycram.plans.failures.PlanFailure`; if the node gives up after its candidate
+    limit, :class:`~coraplex.plans.failures.CandidateLimitReached` is raised, and if the
+    generator is exhausted before, :class:`~pycram.plans.failures.EmptyUnderspecified`.
     """
 
     node: UnderspecifiedNode = field(kw_only=True)
@@ -494,13 +541,13 @@ class UnderspecifiedExecutable(Executable):
     """
 
     def execute(self) -> None:
-        from coraplex.plans.failures import PlanFailure, EmptyUnderspecified
-
         while self.node.advance():
             try:
-                self.node.current_candidate.parse().execute()
+                self.node.current_candidate_sequence.parse().execute()
                 self.node.stop_grounding()
                 return
             except PlanFailure:
                 continue
+        if self.node.reached_candidate_limit:
+            raise CandidateLimitReached(self.node, self.node.candidate_limit)
         raise EmptyUnderspecified()
