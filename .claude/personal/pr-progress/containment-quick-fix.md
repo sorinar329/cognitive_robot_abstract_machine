@@ -109,6 +109,11 @@ conflict in test_several_watched_bodies.py (upstream: conversions became propert
 global_pose.position) - kept ours. segmind 102 passed; bullet demo exit 0 in 129 s with 3
 pick-ups, 3 placings on table_area_main (height fix now upstream), spoon in/out of drawer;
 place-setting test passes. User synced fork main; pushed 096897d472, PR #12 shows 9 files (not draft; gh missing).
+2026-10-08: merged fork main (73 new, none touch segmind) -> 167bf8779b, local only.
+segmind 102 passed; bullet demo exit 0, 3 pick-ups, 3 placings, spoon in/out. PR has no
+description and no labels. Review given in chat (side-effecting bodies_come_to_rest; silent
+no-containment without SupportDetector; candidates built every tick; tick_period default
+open; motion-window timing change; trade-offs to state in description).
 Next: period default; PR description (tick period, CI numbers).
 
 ## containment-detector-fix: Segmind's ContainmentDetector slows the bullet world demo
