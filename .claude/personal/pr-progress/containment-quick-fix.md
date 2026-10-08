@@ -114,6 +114,9 @@ segmind 102 passed; bullet demo exit 0, 3 pick-ups, 3 placings, spoon in/out. PR
 description and no labels. Review given in chat (side-effecting bodies_come_to_rest; silent
 no-containment without SupportDetector; candidates built every tick; tick_period default
 open; motion-window timing change; trade-offs to state in description).
+Pushed merge 167bf8779b and fixes for review points 1-3, 8 (split bodies_come_to_rest /
+remember_supporters, early return, docstring, 2 tests): segmind 104 passed, demo unchanged.
+PR description drafted in chat for the user (gh missing).
 Next: period default; PR description (tick period, CI numbers).
 
 ## containment-detector-fix: Segmind's ContainmentDetector slows the bullet world demo
