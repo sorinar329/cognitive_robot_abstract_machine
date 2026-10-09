@@ -118,6 +118,13 @@ Pushed merge 167bf8779b and fixes for review points 1-3, 8 (split bodies_come_to
 remember_supporters, early return, docstring, 2 tests): segmind 104 passed, demo unchanged.
 PR description drafted in chat for the user (gh missing).
 Next: period default; PR description (tick period, CI numbers).
+2026-10-09: upstream PR is cram2#717; Naren (CHANGES_REQUESTED) 3 comments addressed, uncommitted for
+user review: (1) overrunning tick now pauses as long as it held: wait max(period-held, held, pause)
++ test test_a_tick_as_long_as_its_period_is_followed_by_a_pause_as_long_as_it_took (failed first,
+4 > 3.5 ticks); (2)+(3) tray constants -> conftest BoxAndTrays dataclass (fields world/box/tray/
+tray_hole, poses as properties), tests use attributes, no tuple unpacking. segmind 105 passed.
+Not done: main's RESTING_ON_THE_TABLE/WHERE_THE_MILK_STOOD, SHELF_*/TICK_PERIOD module constants;
+bullet demo not re-run; replies to Naren not drafted.
 
 ## containment-detector-fix: Segmind's ContainmentDetector slows the bullet world demo
 
