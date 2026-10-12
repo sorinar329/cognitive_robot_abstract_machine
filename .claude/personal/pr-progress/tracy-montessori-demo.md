@@ -16,4 +16,11 @@ The scene-graph/simulation-control work this note used to describe is committed 
   designator: 137 passed, 33 skipped. Headless MuJoCo demo end to end: cube, cylinder,
   triangular prism in holes; rectangular prism on the lid (z 0.969).
 
-Next: user reviews PR #11; it is still a draft.
+2026-10-12 (later): review round on #11 addressed locally, NOT committed (user checks in PyCharm):
+ShapeSortingPiece annotation in SDT (grasp from object, tests incl. JSON round trip);
+demo.py -> MontessoriEnvironment dataclass (fields, get_world/populate/build_plan,
+holes_of_pieces = naive mapping, release pose computed in plan), Backend -> ExecutionType
+CLI arg; viewer-shutdown change reverted (patch saved in session scratchpad) for a later PR;
+mujoco_demo settings all kept: ablation showed each is needed in some combination and
+outcomes are run-sensitive. Physics run = baseline exactly (3/4 in, rectangle on lid).
+Next: user reviews, commit + push, reply to the 11 threads.
