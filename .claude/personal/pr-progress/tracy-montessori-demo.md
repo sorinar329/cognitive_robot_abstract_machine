@@ -23,4 +23,7 @@ holes_of_pieces = naive mapping, release pose computed in plan), Backend -> Exec
 CLI arg; viewer-shutdown change reverted (patch saved in session scratchpad) for a later PR;
 mujoco_demo settings all kept: ablation showed each is needed in some combination and
 outcomes are run-sensitive. Physics run = baseline exactly (3/4 in, rectangle on lid).
+Then (user asked): ContactDimensionality removed entirely (enum, MujocoGeom field, mjcf condim
+parse, 2 tests, demo twisting helper); physics run now 4/4 pieces through their holes,
+deterministic over repeats. SDT adapters diff vs main = cylinder fix only.
 Next: user reviews, commit + push, reply to the 11 threads.
