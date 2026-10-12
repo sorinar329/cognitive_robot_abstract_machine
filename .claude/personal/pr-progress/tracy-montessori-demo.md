@@ -4,7 +4,7 @@ The scene-graph/simulation-control work this note used to describe is committed 
 `origin/fera_exchange` (bae2ecce26), not on this branch.
 
 2026-10-12: local branch fast-forwarded to origin (b4fcbb209e), then cram2/main merged in
-(239 commits) with --no-commit; NOT committed, user reviews in PyCharm.
+(239 commits); pushed as 7dffe5ca8c (merge) + 4bf737878a (demo migration).
 - executables.py conflict: took main's side. Main's PhysicallySimulatedRobot +
   GiskardExecutable.simulation replace this branch's simulation_pacer, and main skips
   MoveBranch under PHYSICALLY_SIMULATED, replacing Context.update_world_model_attachment
@@ -16,4 +16,4 @@ The scene-graph/simulation-control work this note used to describe is committed 
   designator: 137 passed, 33 skipped. Headless MuJoCo demo end to end: cube, cylinder,
   triangular prism in holes; rectangular prism on the lid (z 0.969).
 
-Next: user reviews, then commit the merge and push.
+Next: user reviews PR #11; it is still a draft.
