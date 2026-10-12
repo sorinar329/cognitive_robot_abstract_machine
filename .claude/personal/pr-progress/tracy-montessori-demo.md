@@ -1,29 +1,19 @@
-## tracy-montessori-demo: live scene graph + simulation control (cramera)
+## tracy-montessori-demo (fork PR #11 -> sorinar329:main): Tracy Montessori demos
 
-Goal: opt-in cramera panel showing the scene graph (bodies, pose, mass, friction),
-editable at runtime, plus play/pause/stop for the stepped MuJoCo demo. Decisions
-(2026-10-05, user): opt-in extension; edit poses + mass + friction; must also move
-the board (a fixed body) -> "fixed" placement = fixed connections up to the root.
+The scene-graph/simulation-control work this note used to describe is committed on
+`origin/fera_exchange` (bae2ecce26), not on this branch.
 
-Done (uncommitted, nothing pushed):
-1. SDT: MujocoSim body mass/inertia/friction + fixed-body pose setters;
-   adapters/controlled_simulation.py (ControlledSimulation, Placement, SimulatedBody,
-   BodyPose/Mass/FrictionChange); exceptions; SteppedSimulation protocol.
-2. giskardpy: SteppedSimulationPacer typed with SteppedSimulation.
-3. coraplex: attach_simulation on PlanVisualization/WorldVisualization/Plugin.
-4. cramera: live/simulation_control.py, bridge.scene_graph, /simulation routes,
-   bundle signature includes fixed origins, panels/scene_graph + core/scene-graph.js,
-   README + core_scope updated.
-5. demo: mujoco_demo wraps + attaches ControlledSimulation.
-Verified: unit suites green; live headless demo driven over HTTP (pause freezes,
-board move, mass/friction, piece move, refusals, stop ends plan).
-Observations: pause during the 1 s settling step waits for it to end; unedited
-baseline only gets cylinder + triangular prism into holes (cube/rect stay ~0.97 m).
+2026-10-12: local branch fast-forwarded to origin (b4fcbb209e), then cram2/main merged in
+(239 commits) with --no-commit; NOT committed, user reviews in PyCharm.
+- executables.py conflict: took main's side. Main's PhysicallySimulatedRobot +
+  GiskardExecutable.simulation replace this branch's simulation_pacer, and main skips
+  MoveBranch under PHYSICALLY_SIMULATED, replacing Context.update_world_model_attachment
+  (field dropped, dataclasses.py = main).
+- Demos migrated: mujoco_demo uses PhysicallySimulatedRobot; rviz_demo uses
+  kinematically_simulated_robot; demo.py `.to_quaternion()` -> `.quaternion` (main
+  2a7c5c4178); README "Two changes outside this folder" rewritten as "Running under physics".
+- Verified: SDT multi_sim/shape, physics_simulators, coraplex executables + motion
+  designator: 137 passed, 33 skipped. Headless MuJoCo demo end to end: cube, cylinder,
+  triangular prism in holes; rectangular prism on the lid (z 0.969).
 
-Done also: SteppingInstruction dataclass; black run (docformatter not installed in
-venv, so format_docstrings.py could not run). Affected suites: 1059 passed.
-Pre-existing failures (not ours): missing ROS pkgs (ur_robot_driver, aws warehouse);
-test_simulator_property_dict expects no 'condim' since commit 487f3fd651.
-
-Next: user to try the panel in the browser (not visually checked yet); commit when
-asked.
+Next: user reviews, then commit the merge and push.
