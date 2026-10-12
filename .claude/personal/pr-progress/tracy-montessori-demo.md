@@ -26,4 +26,4 @@ outcomes are run-sensitive. Physics run = baseline exactly (3/4 in, rectangle on
 Then (user asked): ContactDimensionality removed entirely (enum, MujocoGeom field, mjcf condim
 parse, 2 tests, demo twisting helper); physics run now 4/4 pieces through their holes,
 deterministic over repeats. SDT adapters diff vs main = cylinder fix only.
-Next: user reviews, commit + push, reply to the 11 threads.
+Pushed as 45a0963d28. Next: user re-reviews; reply to the 11 threads (drafts given in chat).
