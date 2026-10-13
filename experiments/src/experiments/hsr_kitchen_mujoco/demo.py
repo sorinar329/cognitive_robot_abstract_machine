@@ -1,14 +1,12 @@
 """
-The Toyota HSR carries a milk carton and a cereal box from one table of the kitchen to
-another, simulated in MuJoCo.
+The Toyota HSR picks a milk carton up from a table of the kitchen and sets it down
+further back on the same table, simulated in MuJoCo.
 
 The kitchen is semantic_digital_twin's predetermined
-:class:`~semantic_digital_twin.predetermined_maps.kitchen_environment.KitchenEnvironment`:
-the HSR picks both objects up from the cooking table, either side of its cooktop, and
-sets them down on the dining table on the other side of the low middle wall. Its arm,
-head and hand are driven by servos; its base drives around the middle wall along a way
-planned through the kitchen, and MuJoCo follows it there rather than rolling it on its
-wheels.
+:class:`~semantic_digital_twin.predetermined_maps.kitchen_environment.KitchenEnvironment`.
+The HSR's arm, head and hand are driven by servos, and the carton is held by nothing
+but the friction between it and the fingers: it is neither moved under the hand in the
+world model nor fastened to it in MuJoCo.
 
 Run it with::
 
@@ -18,265 +16,166 @@ Run it with::
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
 from datetime import timedelta
 from enum import StrEnum
-from typing_extensions import List, Optional, Type
 
 import mujoco
 from coraplex.datastructures.dataclasses import Context
-from coraplex.datastructures.enums import (
-    ApproachDirection,
-    Arms,
-    ExecutionType,
-    VerticalAlignment,
-)
-from coraplex.datastructures.grasp import GraspDescription
+from coraplex.datastructures.enums import ExecutionType
 from coraplex.execution_environment import ExecutionEnvironment
 from coraplex.plans.executables import GiskardExecutable
 from coraplex.plans.factories import sequential
 from coraplex.plans.plan import Plan
-from coraplex.plans.plan_callbacks import PlanCallback
-from coraplex.plans.plan_node import ActionNode, MotionNode, PlanNode
-from coraplex.robot_plans.actions.base import ActionDescription
-from coraplex.robot_plans.motions.gripper import MoveGripperMotion
 from coraplex.robot_plans.actions.core.pick_up import PickUpAction
 from coraplex.robot_plans.actions.core.placing import PlaceAction
 from coraplex.robot_plans.actions.core.robot_body import ParkArmsAction
-from coraplex.robot_plans.motions.base import BaseMotion
-from coraplex.visualization import WorldVisualization
 from giskardpy.executor import SteppedSimulationPacer
-from giskardpy.motion_statechart.goals.templates import Parallel
-from giskardpy.motion_statechart.tasks.cartesian_tasks import (
-    CartesianOrientation,
-    CartesianPositionStraight,
-)
-from krrood.exceptions import DataclassException
-from semantic_digital_twin.adapters.controlled_simulation import ControlledSimulation
 from semantic_digital_twin.adapters.multi_sim import (
     ContactDimensionality,
-    MujocoEquality,
     MujocoGeom,
     MujocoSim,
 )
 from semantic_digital_twin.api import RobotSpecification
-from semantic_digital_twin.datastructures.definitions import GripperState
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
+from semantic_digital_twin.grasping.grasp_candidates import GraspCandidate
 from semantic_digital_twin.predetermined_maps.kitchen_environment import (
     KitchenEnvironment,
 )
 from semantic_digital_twin.robots.hsrb import HSRB, HSRBJoint
-from semantic_digital_twin.semantic_annotations.semantic_annotations import (
-    Cereal,
-    Floor,
-    Food,
-    Milk,
-)
+from semantic_digital_twin.semantic_annotations.semantic_annotations import Milk
 from semantic_digital_twin.spatial_types.spatial_types import (
     HomogeneousTransformationMatrix,
-    Point2,
-    Point3,
     Pose,
 )
 from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.connections import Connection6DoF
 from semantic_digital_twin.world_description.contact import ContactParameters
-from semantic_digital_twin.world_description.graph_of_convex_sets.boxes import (
-    PlanarGraphOfBoundingBoxes,
-)
 from semantic_digital_twin.world_description.geometry import (
     Box,
     Color,
     Scale,
     VolumetricBoundingBox,
 )
-from semantic_digital_twin.world_description.shape_collection import (
-    BoundingBoxCollection,
-    ShapeCollection,
-)
+from semantic_digital_twin.world_description.shape_collection import ShapeCollection
 from semantic_digital_twin.world_description.world_entity import Body
 
-# %% the kitchen
+# %% the scene
 
 
-class KitchenTable(StrEnum):
+class SceneBody(StrEnum):
     """
-    The tables the objects are carried between, by their bodies' names in the kitchen.
-    """
-
-    SOURCE = "cooking_table"
-    """
-    The cooking table against the back wall, where both objects start.
+    The bodies of the scene the demo refers to, by their names.
     """
 
-    DESTINATION = "dining_table"
+    TABLE = "cooking_table"
     """
-    The dining table on the other side of the middle wall, where both objects end up.
-    """
-
-
-def table_top_height(world: World, table: KitchenTable) -> float:
-    """
-    :return: The height of the top of ``table`` above the kitchen floor.
-    """
-    return float(table_extent(world, table).max_z)
-
-
-def table_extent(world: World, table: KitchenTable) -> VolumetricBoundingBox:
-    """
-    :return: The axis-aligned box ``table`` occupies in the kitchen's frame.
-    """
-    body = world.get_body_by_name(table)
-    return body.collision.as_bounding_box_collection_in_frame(world.root).bounding_box()
-
-
-# %% what is carried
-
-
-@dataclass(frozen=True)
-class CarriedObject:
-    """
-    One object the HSR carries, where it starts and where it is set down.
+    The kitchen's cooking table against the back wall, where the milk stands.
     """
 
-    name: str
+    MILK = "milk"
     """
-    The name of the object's body.
-    """
-
-    annotation_type: Type[Food]
-    """
-    What the object is.
-    """
-
-    scale: Scale
-    """
-    The object's extents: along the gripper's approach, across the gripper, and its
-    height.
-    """
-
-    color: Color
-    """
-    The object's colour.
-    """
-
-    start_x: float
-    """
-    Where along the source table the object starts, in the kitchen's x, clear of the
-    cooktop in the table's middle.
-    """
-
-    goal_y: float
-    """
-    Where along the destination table the object is set down, in the kitchen's y.
+    The milk carton the HSR picks up and sets down.
     """
 
 
-MILK = CarriedObject(
-    name="milk",
-    annotation_type=Milk,
-    scale=Scale(0.06, 0.06, 0.2),
-    color=Color(0.95, 0.95, 0.95),
-    start_x=0.8,
-    goal_y=5.5,
-)
-
-CEREAL = CarriedObject(
-    name="cereal",
-    annotation_type=Cereal,
-    scale=Scale(0.15, 0.06, 0.2),
-    color=Color(0.85, 0.55, 0.15),
-    start_x=1.8,
-    goal_y=5.9,
-)
-
-CARRIED_OBJECTS = (MILK, CEREAL)
+MILK_SCALE = Scale(0.06, 0.06, 0.2)
 """
-The objects, in the order they are carried.
+The milk carton's extents: along the gripper's approach, across the gripper, and its
+height.
+"""
+
+MILK_COLOR = Color(0.95, 0.95, 0.95)
+"""
+The milk carton's colour.
+"""
+
+MILK_START_X = 0.8
+"""
+Where along the table the milk stands, in the kitchen's x, clear of the cooktop in the
+table's middle.
 """
 
 EDGE_INSET = 0.1
 """
-How far in from the edge the HSR faces an object stands or is set down, in metres:
-close enough to reach without leaning over the table.
+How far in from the table's edge facing the HSR the milk stands, in metres: close
+enough to reach without leaning over the table.
 """
 
 STANDING_DISTANCE = 0.45
 """
-How far from a table's edge the HSR's base stands while it works there, in metres:
-clear of the edge, with the object within the arm's reach.
+How far from the table's edge the HSR's base stands, in metres: clear of the edge, with
+the milk within the arm's reach.
 """
 
 SETTLING_CLEARANCE = 0.002
 """
-How far above a table top an object is put, so it settles onto it rather than starting
+How far above the table top the milk is put, so it settles onto it rather than starting
 inside it.
+"""
+
+PLACING_DISTANCE = 0.1
+"""
+How much further back on the table the milk is set down than where it stood, in metres:
+straight ahead of the HSR, which reaches no further sideways without moving its base.
 """
 
 RELEASE_CLEARANCE = 0.01
 """
-How far above the destination table the HSR lets an object go, in metres: pressed onto
-the table by a hand that tracks its target only so closely, an object tips in the hand
-and falls over once it is let go; dropped from a centimetre it lands upright.
+How far above the table the HSR lets the milk go, in metres: pressed onto the table by
+a hand that tracks its target only so closely, the carton tips in the hand and falls
+over once it is let go; dropped from a centimetre it lands upright.
 """
 
 
-def start_pose(world: World, carried: CarriedObject) -> HomogeneousTransformationMatrix:
+def table_extent(world: World) -> VolumetricBoundingBox:
     """
-    :return: Where ``carried`` stands on the source table, near its edge facing the
-        room, which is where the HSR reaches over to it from. Its x axis points away
-        from the HSR, the direction a front grasp approaches it in.
+    :return: The axis-aligned box the table occupies in the kitchen's frame.
     """
-    extent = table_extent(world, KitchenTable.SOURCE)
+    body = world.get_body_by_name(SceneBody.TABLE)
+    return body.collision.as_bounding_box_collection_in_frame(world.root).bounding_box()
+
+
+def start_pose(world: World) -> HomogeneousTransformationMatrix:
+    """
+    :return: Where the milk stands on the table, near its edge facing the room. Its x
+        axis points away from the HSR, the direction the grasp at its origin
+        approaches it in.
+    """
+    extent = table_extent(world)
     return HomogeneousTransformationMatrix.from_xyz_rpy(
-        x=carried.start_x,
+        x=MILK_START_X,
         y=extent.min_y + EDGE_INSET,
-        z=extent.max_z + carried.scale.z / 2 + SETTLING_CLEARANCE,
+        z=extent.max_z + MILK_SCALE.z / 2 + SETTLING_CLEARANCE,
         yaw=math.pi / 2,
         reference_frame=world.root,
     )
 
 
-def goal_pose(world: World, carried: CarriedObject) -> Pose:
+def goal_pose(world: World) -> Pose:
     """
-    :return: Where ``carried`` is set down on the destination table, near its edge
-        facing the kitchen, its x axis pointing away from the HSR as it did when it
-        was picked up.
+    :return: Where the milk is set down: :data:`PLACING_DISTANCE` further back on the
+        table than where it stood, turned as it was.
     """
-    extent = table_extent(world, KitchenTable.DESTINATION)
+    extent = table_extent(world)
     return Pose.from_xyz_rpy(
-        x=extent.max_x - EDGE_INSET,
-        y=carried.goal_y,
-        z=extent.max_z + carried.scale.z / 2 + RELEASE_CLEARANCE,
-        yaw=math.pi,
+        x=MILK_START_X,
+        y=extent.min_y + EDGE_INSET + PLACING_DISTANCE,
+        z=extent.max_z + MILK_SCALE.z / 2 + RELEASE_CLEARANCE,
+        yaw=math.pi / 2,
         reference_frame=world.root,
     )
 
 
-def picking_pose(world: World, carried: CarriedObject) -> Pose:
+def standing_pose(world: World) -> Pose:
     """
-    :return: Where the HSR stands to pick ``carried`` up: in front of the source
-        table, facing it, with its hand rather than its base in line with it.
+    :return: Where the HSR stands: in front of the table, facing it, with its hand
+        rather than its base in line with the milk.
     """
-    extent = table_extent(world, KitchenTable.SOURCE)
+    extent = table_extent(world)
     return Pose.from_xyz_rpy(
-        x=carried.start_x + hand_offset(world),
+        x=MILK_START_X + hand_offset(world),
         y=extent.min_y - STANDING_DISTANCE,
         yaw=math.pi / 2,
-        reference_frame=world.root,
-    )
-
-
-def placing_pose(world: World, carried: CarriedObject) -> Pose:
-    """
-    :return: Where the HSR stands to set ``carried`` down: beside the destination
-        table, facing it, with its hand rather than its base in line with the goal.
-    """
-    extent = table_extent(world, KitchenTable.DESTINATION)
-    return Pose.from_xyz_rpy(
-        x=extent.max_x + STANDING_DISTANCE,
-        y=carried.goal_y + hand_offset(world),
-        yaw=math.pi,
         reference_frame=world.root,
     )
 
@@ -285,168 +184,11 @@ def hand_offset(world: World) -> float:
     """
     :return: How far to its left of its base's centre the HSR carries its hand, in
         metres: the arm swings about a flex joint mounted beside the torso, and the
-        base, which does not move while the HSR grasps, has to make up for it.
+        base, which does not move, has to make up for it.
     """
     robot = world.get_semantic_annotations_by_type(HSRB)[0]
     flexed_link = world.get_connection_by_name(HSRBJoint.ARM_FLEX).child
     return float(world.compute_forward_kinematics_np(robot.root, flexed_link)[1, 3])
-
-
-# %% driving between the tables
-
-FLOOR_CLEARANCE = 0.02
-"""
-How high above the floor the HSR's way is looked for, in metres: above the floors
-themselves, which are no obstacle, and below anything the base could not drive over.
-"""
-
-BASE_MARGIN = 0.05
-"""
-How much room the HSR's way leaves beside its base on every side, in metres.
-"""
-
-
-@dataclass
-class NoWayThroughTheKitchen(DataclassException):
-    """
-    Raised when no way through the kitchen leads from one standing pose to another.
-    """
-
-    start: Pose
-    """
-    Where the HSR stands.
-    """
-
-    goal: Pose
-    """
-    Where it was to drive to.
-    """
-
-    def error_message(self) -> str:
-        return f"The HSR finds no way through the kitchen from {self.start} to {self.goal}."
-
-    def suggest_correction(self) -> str:
-        return (
-            "Stand the HSR where its base fits, clear of the furniture and the walls."
-        )
-
-
-@dataclass
-class DriveMotion(BaseMotion):
-    """
-    Drives the robot's base to a pose along a straight line, rather than putting it
-    there.
-    """
-
-    target: Pose
-    """
-    Where the base drives to.
-    """
-
-    def perform(self):
-        return
-
-    @property
-    def _motion_chart(self) -> Parallel:
-        return Parallel(
-            nodes=[
-                CartesianPositionStraight(
-                    root_link=self.world.root,
-                    tip_link=self.robot.root,
-                    goal_point=self.target.to_position(),
-                ),
-                CartesianOrientation(
-                    root_link=self.world.root,
-                    tip_link=self.robot.root,
-                    goal_orientation=self.target.to_rotation_matrix(),
-                ),
-            ]
-        )
-
-
-def kitchen_navigation_map(world: World) -> PlanarGraphOfBoundingBoxes:
-    """
-    :return: Where in the kitchen the HSR's base fits, from the kitchen alone, so that
-        neither the HSR nor what it carries stands in its own way.
-    """
-    kitchen = KitchenEnvironment().get_world()
-    floors = [
-        body.collision.as_bounding_box_collection_in_frame(kitchen.root).bounding_box()
-        for floor in kitchen.get_semantic_annotations_by_type(Floor)
-        for body in floor.bodies
-    ]
-    robot = world.get_semantic_annotations_by_type(HSRB)[0]
-    base = robot.mobile_base.root.collision.as_bounding_box_collection_in_frame(
-        world.root
-    ).bounding_box()
-    robot_height = max(
-        body.collision.as_bounding_box_collection_in_frame(world.root)
-        .bounding_box()
-        .max_z
-        for body in robot.bodies
-        if body.collision
-    )
-    search_space = BoundingBoxCollection(
-        [
-            VolumetricBoundingBox(
-                min(floor.min_x for floor in floors),
-                min(floor.min_y for floor in floors),
-                FLOOR_CLEARANCE,
-                max(floor.max_x for floor in floors),
-                max(floor.max_y for floor in floors),
-                robot_height,
-                HomogeneousTransformationMatrix(reference_frame=kitchen.root),
-            )
-        ],
-        kitchen.root,
-    )
-    base_half_width = max(base.max_x - base.min_x, base.max_y - base.min_y) / 2
-    return PlanarGraphOfBoundingBoxes.navigation_map_from_world(
-        kitchen,
-        search_space=search_space,
-        bloat_obstacles=base_half_width + BASE_MARGIN,
-    )
-
-
-def driving_path(
-    navigation_map: PlanarGraphOfBoundingBoxes, start: Pose, goal: Pose
-) -> List[Pose]:
-    """
-    The base keeps facing the way it faces at ``start`` until it has reached ``goal``'s
-    position, and only then turns, so it drives straight from one corner of the way to
-    the next.
-
-    :return: The poses the HSR's base drives through from ``start`` to ``goal``, around
-        everything in the kitchen, ending at ``goal``.
-    :raises NoWayThroughTheKitchen: When no way leads from ``start`` to ``goal``.
-    """
-    frame = navigation_map.search_space.reference_frame
-    start_x, start_y, _ = start.to_position().to_np()[:3]
-    goal_x, goal_y, _ = goal.to_position().to_np()[:3]
-    points = navigation_map.path_from_to(
-        Point2(start_x, start_y, reference_frame=frame),
-        Point2(goal_x, goal_y, reference_frame=frame),
-    )
-    if points is None:
-        raise NoWayThroughTheKitchen(start=start, goal=goal)
-    reference_frame = goal.reference_frame
-    corners = [
-        Pose(
-            position=Point3(*point.to_np()[:2], 0.0, reference_frame=reference_frame),
-            orientation=start.to_quaternion(),
-            reference_frame=reference_frame,
-        )
-        for point in points[1:]
-    ]
-    return [*corners, goal]
-
-
-def drive_along(path: List[Pose]) -> List[DriveMotion]:
-    """
-    :return: The motions that drive the HSR's base through ``path``, one pose after the
-        other.
-    """
-    return [DriveMotion(pose) for pose in path]
 
 
 # %% building the world and the plan
@@ -454,41 +196,31 @@ def drive_along(path: List[Pose]) -> List[DriveMotion]:
 
 def build_world() -> World:
     """
-    :return: The kitchen with the HSR standing in front of the source table, and the
-        milk and the cereal on that table.
+    :return: The kitchen with the HSR standing in front of the table, and the milk on
+        the table.
     """
     world = KitchenEnvironment().get_world()
     robot = RobotSpecification(HSRB).spawn(world)
     robot.mobile_base.full_body_controlled = False
-    robot.root.parent_connection.origin = picking_pose(
-        world, CARRIED_OBJECTS[0]
-    ).to_homogeneous_matrix()
-    palm = robot.get_arms()[0].end_effector.root
+    robot.root.parent_connection.origin = standing_pose(world).homogeneous_matrix
     with world.modify_world():
-        for carried in CARRIED_OBJECTS:
-            _stand_on_the_source_table(world, carried, palm)
+        _stand_the_milk_on_the_table(world)
     return world
 
 
-def _stand_on_the_source_table(
-    world: World, carried: CarriedObject, palm: Body
-) -> None:
+def _stand_the_milk_on_the_table(world: World) -> None:
     """
-    Stand ``carried`` on the source table, free to be picked up, and declare the weld
-    that holds it in the HSR's hand while it is carried (see
-    :class:`HoldWhatTheHandGrips`).
+    Stand the milk on the table, free to be picked up and held by friction.
 
     :param world: The world being built, already open for modification.
-    :param carried: The object to stand there.
-    :param palm: The HSR's palm, which holds the object while it is carried.
     """
-    body = Body(name=PrefixedName(carried.name))
+    body = Body(name=PrefixedName(SceneBody.MILK))
     shapes = ShapeCollection(
         [
             Box(
                 origin=HomogeneousTransformationMatrix(reference_frame=body),
-                scale=carried.scale,
-                color=carried.color,
+                scale=MILK_SCALE,
+                color=MILK_COLOR,
             )
         ],
         reference_frame=body,
@@ -501,122 +233,32 @@ def _stand_on_the_source_table(
             world=world,
             parent=world.root,
             child=body,
-            name=PrefixedName(f"{carried.name}_connection"),
-            parent_T_connection_expression=start_pose(world, carried),
+            name=PrefixedName(f"{SceneBody.MILK}_connection"),
+            parent_T_connection_expression=start_pose(world),
         )
     )
     ContactParameters.create_for_grasped_object().apply_to([body])
-    world.add_semantic_annotations([carried.annotation_type(root=body)])
-    world.add_simulator_property(
-        MujocoEquality(
-            type=mujoco.mjtEq.mjEQ_WELD,
-            object_type=mujoco.mjtObj.mjOBJ_BODY,
-            name_1=palm.name.name,
-            name_2=body.name.name,
-            data=[0.0] * WELD_DATA_LENGTH,
-            active=False,
-        )
-    )
+    world.add_semantic_annotations([Milk(root=body)])
 
 
 def build_plan(context: Context) -> Plan:
     """
-    Carry every object from the source table to the destination table, one at a time,
-    driving around the middle wall with the arm pulled in, so the object in the hand
-    sweeps over nothing on the way.
+    Pick the milk up and set it down further back on the table.
 
     :param context: The context the actions are built in.
     :return: The plan.
     """
-    world = context.world
-    arm = context.robot.get_arms()[0]
-    grasp = GraspDescription(
-        ApproachDirection.FRONT, VerticalAlignment.NoAlignment, arm.end_effector
-    )
-    navigation_map = kitchen_navigation_map(world)
-    standing = Pose.from_xyz_rpy(
-        *context.robot.root.global_pose.to_position().to_np()[:3],
-        yaw=math.pi / 2,
-        reference_frame=world.root,
-    )
-    actions = [ParkArmsAction(Arms.BOTH)]
-    for carried in CARRIED_OBJECTS:
-        annotation = world.get_semantic_annotations_by_type(carried.annotation_type)[0]
-        picking = picking_pose(world, carried)
-        placing = placing_pose(world, carried)
-        actions += [
-            *drive_along(driving_path(navigation_map, standing, picking)),
-            PickUpAction(annotation, Arms.LEFT, grasp),
-            ParkArmsAction(Arms.BOTH),
-            *drive_along(driving_path(navigation_map, picking, placing)),
-            PlaceAction(annotation.root, goal_pose(world, carried), Arms.LEFT),
-            ParkArmsAction(Arms.BOTH),
-        ]
-        standing = placing
-    return sequential(actions, context=context).plan
-
-
-# %% carrying what the hand holds
-
-
-WELD_DATA_LENGTH = 11
-"""
-How many numbers a MuJoCo weld's data holds: an anchor, a relative pose and a torque
-scale.
-"""
-
-
-@dataclass
-class HoldWhatTheHandGrips(PlanCallback):
-    """
-    Holds an object in the HSR's hand from the moment the hand closes on it in a pick
-    up until it opens to set the object down.
-
-    The HSR's base is moved by putting it somewhere else rather than by driving it
-    there, which friction cannot carry a held object through; the weld does.
-    """
-
-    simulation: MujocoSim = field(kw_only=True)
-    """
-    The simulation the object is held in.
-    """
-
-    palm: Body = field(kw_only=True)
-    """
-    The HSR's palm, which holds the object.
-    """
-
-    def on_start(self, node: PlanNode) -> None:
-        placing = self._gripper_motion_within(node, GripperState.OPEN, PlaceAction)
-        if placing is None:
-            return
-        self.simulation.unfasten(placing.object_designator, self.palm)
-
-    def on_end(self, node: PlanNode) -> None:
-        picking = self._gripper_motion_within(node, GripperState.CLOSE, PickUpAction)
-        if picking is None:
-            return
-        self.simulation.fasten(picking.object_designator.root, self.palm)
-
-    @staticmethod
-    def _gripper_motion_within(
-        node: PlanNode, motion: GripperState, action_type: Type[ActionDescription]
-    ) -> Optional[ActionDescription]:
-        """
-        :return: The action of ``action_type`` that ``node`` belongs to, if ``node``
-            moves the gripper as ``motion`` says, else None.
-        """
-        if not isinstance(node, MotionNode):
-            return None
-        designator = node.designator
-        if not isinstance(designator, MoveGripperMotion) or designator.motion != motion:
-            return None
-        for ancestor in node.path:
-            if isinstance(ancestor, ActionNode) and isinstance(
-                ancestor.designator, action_type
-            ):
-                return ancestor.designator
-        return None
+    robot = context.robot
+    milk = context.world.get_semantic_annotations_by_type(Milk)[0]
+    return sequential(
+        [
+            ParkArmsAction(robot.all_arms),
+            PickUpAction(GraspCandidate.from_body_origin(milk), robot.all_arms[0]),
+            PlaceAction(milk, goal_pose(context.world)),
+            ParkArmsAction(robot.all_arms),
+        ],
+        context=context,
+    ).plan
 
 
 # %% running it in MuJoCo
@@ -628,8 +270,8 @@ How much simulated time one physics step covers, in seconds.
 
 SETTLING_DURATION = timedelta(seconds=1)
 """
-How long the scene is left to settle before the HSR starts, so the objects rest on the
-table rather than being grasped mid-fall.
+How long the scene is left to settle before the HSR starts and after it is done, so the
+milk rests on the table.
 """
 
 HEADLESS = False
@@ -658,8 +300,7 @@ object stays where the fingers hold it.
 
 def run(world: World, headless: bool = HEADLESS) -> None:
     """
-    Carry out the plan against MuJoCo physics, offering the simulation to the
-    visualization for control.
+    Carry out the plan against MuJoCo physics, the milk held by friction alone.
 
     :param world: The world :func:`build_world` built.
     :param headless: Whether to run without MuJoCo's viewer.
@@ -672,10 +313,8 @@ def run(world: World, headless: bool = HEADLESS) -> None:
         update_world_model_attachment=False,
     )
     plan = build_plan(context)
-    visualization = WorldVisualization.from_environment(world).start()
-    visualization.attach_plan(plan)
 
-    _resist_turning_in_the_hand(world)
+    _resist_turning_in_the_hand(world.get_body_by_name(SceneBody.MILK))
     simulation = MujocoSim(
         world=world,
         headless=headless,
@@ -685,40 +324,31 @@ def run(world: World, headless: bool = HEADLESS) -> None:
         noslip_iterations=NO_SLIP_ITERATIONS,
     )
     simulation.start_stepped_simulation()
-    plan.node_callbacks.append(
-        HoldWhatTheHandGrips(
-            plan=plan,
-            simulation=simulation,
-            palm=robot.get_arms()[0].end_effector.root,
-        )
-    )
-    controlled = ControlledSimulation(simulation)
-    visualization.attach_simulation(controlled)
     previous_pacer = GiskardExecutable.simulation_pacer
-    GiskardExecutable.simulation_pacer = SteppedSimulationPacer(controlled)
+    GiskardExecutable.simulation_pacer = SteppedSimulationPacer(simulation)
     try:
-        controlled.step_simulation(SETTLING_DURATION)
+        simulation.step_simulation(SETTLING_DURATION)
         with ExecutionEnvironment(execution_type=ExecutionType.SIMULATED):
             plan.perform()
+        simulation.step_simulation(SETTLING_DURATION)
     finally:
         GiskardExecutable.simulation_pacer = previous_pacer
         simulation.stop_simulation()
 
 
-def _resist_turning_in_the_hand(world: World) -> None:
+def _resist_turning_in_the_hand(held: Body) -> None:
     """
-    Have MuJoCo resolve every carried object's twisting friction, so the object does
-    not swing about the line the fingers hold it along.
+    Have MuJoCo resolve the twisting friction on a held body, so it does not swing about
+    the line the fingers hold it along.
 
-    :param world: The world the objects stand in.
+    :param held: The body the hand holds.
     """
-    for carried in CARRIED_OBJECTS:
-        for shape in world.get_body_by_name(carried.name).collision.shapes:
-            shape.add_simulator_property(
-                MujocoGeom(
-                    contact_dimensionality=ContactDimensionality.SLIDING_AND_TWISTING
-                )
+    for shape in held.collision.shapes:
+        shape.add_simulator_property(
+            MujocoGeom(
+                contact_dimensionality=ContactDimensionality.SLIDING_AND_TWISTING
             )
+        )
 
 
 if __name__ == "__main__":

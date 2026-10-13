@@ -27,7 +27,7 @@ from semantic_digital_twin.world_description.world_state_trajectory_plotter impo
 )
 
 if TYPE_CHECKING:
-    from semantic_digital_twin.adapters.multi_sim import SteppedSimulation
+    from semantic_digital_twin.adapters.multi_sim import MujocoSim
 
 
 @dataclass
@@ -135,9 +135,9 @@ class SteppedSimulationPacer(Pacer):
     world back.
     """
 
-    simulation: SteppedSimulation
+    simulation: MujocoSim
     """
-    The simulation to step; a MuJoCo simulation has to be started with
+    The simulation to step; it has to be started with
     :meth:`~semantic_digital_twin.adapters.multi_sim.MujocoSim.start_stepped_simulation`
     already.
     """

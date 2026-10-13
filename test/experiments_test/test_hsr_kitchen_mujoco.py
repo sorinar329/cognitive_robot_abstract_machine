@@ -1,23 +1,17 @@
 """
-The HSR carrying a milk carton and a cereal box between two tables of the predetermined
-kitchen, simulated in MuJoCo.
+The HSR picking a milk carton up from a table of the predetermined kitchen and setting
+it down further back, simulated in MuJoCo with the carton held by friction alone.
 """
 
 import os
-from enum import StrEnum
 
 import mujoco
 import pytest
 
 from experiments.hsr_kitchen_mujoco.demo import (
-    CARRIED_OBJECTS,
-    KitchenTable,
+    SceneBody,
     build_world,
-    driving_path,
     goal_pose,
-    kitchen_navigation_map,
-    picking_pose,
-    placing_pose,
     run,
     start_pose,
     table_extent,
@@ -40,19 +34,8 @@ The id MuJoCo answers with for a name its model does not hold.
 
 PLACEMENT_TOLERANCE = 0.03
 """
-How far, in metres, an object may come to rest from where it was meant to be set down.
+How far, in metres, the milk may come to rest from where it was meant to be set down.
 """
-
-
-class KitchenWall(StrEnum):
-    """
-    The kitchen's walls a test checks the HSR's way against, by their bodies' names.
-    """
-
-    MIDDLE = "middle_wall"
-    """
-    The low wall between the cooking table and the dining table.
-    """
 
 
 @pytest.fixture(scope="module")
@@ -60,11 +43,18 @@ def world() -> World:
     return build_world()
 
 
+@pytest.fixture(scope="module")
+def world_after_the_run() -> World:
+    world = build_world()
+    run(world, headless=True)
+    return world
+
+
 def position_of(world: World, name: str):
     """
     :return: Where the world holds the body named ``name``.
     """
-    return world.get_body_by_name(name).global_pose.to_position().to_np()[:3]
+    return world.get_body_by_name(name).global_pose.position.to_np()[:3]
 
 
 # %% the scene
@@ -78,20 +68,14 @@ def test_the_scene_is_the_predetermined_kitchen(world: World):
     }
 
 
-@pytest.mark.parametrize("table", list(KitchenTable))
-def test_the_kitchen_has_both_tables(world: World, table: KitchenTable):
-    assert world.get_body_by_name(table).name.name == table
-
-
-@pytest.mark.parametrize("carried", CARRIED_OBJECTS, ids=lambda carried: carried.name)
-def test_every_object_starts_on_the_source_table(world: World, carried):
-    extent = table_extent(world, KitchenTable.SOURCE)
-    x, y, _ = position_of(world, carried.name)
+def test_the_milk_starts_on_the_table(world: World):
+    extent = table_extent(world)
+    x, y, _ = position_of(world, SceneBody.MILK)
 
     assert extent.min_x < x < extent.max_x
     assert extent.min_y < y < extent.max_y
-    assert position_of(world, carried.name) == pytest.approx(
-        start_pose(world, carried).to_position().to_np()[:3]
+    assert position_of(world, SceneBody.MILK) == pytest.approx(
+        start_pose(world).position.to_np()[:3]
     )
 
 
@@ -109,54 +93,29 @@ def test_every_body_of_the_scene_is_simulated(world: World):
     assert missing == []
 
 
-# %% the way between the tables
-
-
-@pytest.mark.parametrize("carried", CARRIED_OBJECTS, ids=lambda carried: carried.name)
-def test_the_way_to_the_destination_table_goes_around_the_middle_wall(
-    world: World, carried
-):
-    start = picking_pose(world, carried)
-    goal = placing_pose(world, carried)
-    wall = (
-        world.get_body_by_name(KitchenWall.MIDDLE)
-        .collision.as_bounding_box_collection_in_frame(world.root)
-        .bounding_box()
-    )
-    wall_bounds = wall.to_array_bounds()
-    wall_middle = (wall.min_z + wall.max_z) / 2
-
-    path = driving_path(kitchen_navigation_map(world), start, goal)
-
-    corners = [start, *path]
-    for leaving, reaching in zip(corners, corners[1:]):
-        leaving_point = leaving.to_position().to_np()[:3]
-        reaching_point = reaching.to_position().to_np()[:3]
-        leaving_point[2] = reaching_point[2] = wall_middle
-        assert (
-            wall_bounds.clip_segment(leaving_point, reaching_point - leaving_point)
-            is None
-        )
-    assert path[-1].to_position().to_np()[:3] == pytest.approx(
-        goal.to_position().to_np()[:3]
-    )
-
-
 # %% the run
 
 
 @runs_in_ci
-def test_the_hsr_carries_every_object_to_the_destination_table():
+def test_the_hsr_sets_the_milk_down_where_it_was_meant_to(
+    world_after_the_run: World,
+):
     """
-    After the plan has run against MuJoCo physics, each object rests where it was meant
-    to be set down on the destination table.
+    Held by nothing but friction, the milk travels with the hand and comes to rest
+    where the plan set it down.
     """
-    world = build_world()
+    assert position_of(world_after_the_run, SceneBody.MILK) == pytest.approx(
+        goal_pose(world_after_the_run).position.to_np()[:3],
+        abs=PLACEMENT_TOLERANCE,
+    )
 
-    run(world, headless=True)
 
-    for carried in CARRIED_OBJECTS:
-        assert position_of(world, carried.name) == pytest.approx(
-            goal_pose(world, carried).to_position().to_np()[:3],
-            abs=PLACEMENT_TOLERANCE,
-        )
+@runs_in_ci
+def test_the_milk_is_never_attached_to_the_hand(world_after_the_run: World):
+    """
+    Picking the milk up does not move it under the hand in the world model, so it stays
+    a body of the kitchen throughout.
+    """
+    milk = world_after_the_run.get_body_by_name(SceneBody.MILK)
+
+    assert milk.parent_connection.parent is world_after_the_run.root

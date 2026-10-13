@@ -38,9 +38,6 @@ logger = get_logger(__name__)
 if TYPE_CHECKING:
     from coraplex.plans.plan import Plan
     from giskardpy.motion_statechart.motion_statechart import StateHistory
-    from semantic_digital_twin.adapters.controlled_simulation import (
-        ControlledSimulation,
-    )
 
 # %% world synchronization
 
@@ -299,20 +296,10 @@ class LiveVisualization(PlanVisualization):
         self._plan_callbacks.append(callback)
         return callback
 
-    def attach_simulation(self, simulation: ControlledSimulation) -> None:
-        """
-        Let the viewer list the simulation's bodies, and pause, resume, stop and change
-        it.
-
-        :param simulation: The simulation the viewer may control.
-        """
-        self.bridge.simulation = simulation
-
     def stop(self) -> None:
         """
         Finalize the recording and release this session's callbacks, server and queries.
         """
-        self.bridge.simulation = None
         for callback in self._plan_callbacks:
             callback.stop()
         self._plan_callbacks.clear()

@@ -107,7 +107,7 @@ def driven_parts(robot: HSRB) -> list:
     """
     :return: The parts of the HSR whose joints are driven in a physical simulation.
     """
-    arm = robot.get_arms()[0]
+    arm = robot.all_arms[0]
     torso = robot.get_torso()
     return [arm, arm.end_effector, torso.neck, torso]
 
@@ -151,7 +151,7 @@ def test_the_driven_parts_carry_their_own_weight(spawned_hsr):
 
 def test_the_open_hand_leaves_room_for_a_carton(spawned_hsr):
     world = spawned_hsr._world
-    spawned_hsr.get_arms()[0].end_effector.get_joint_state_by_type(
+    spawned_hsr.all_arms[0].end_effector.get_joint_state_by_type(
         GripperState.OPEN
     ).apply_to(world)
     world.notify_state_change()
@@ -172,11 +172,11 @@ def test_the_open_hand_leaves_room_for_a_carton(spawned_hsr):
 )
 def test_the_servos_hold_the_parked_arm_up(spawned_hsr):
     world = spawned_hsr._world
-    spawned_hsr.get_arms()[0].get_joint_state_by_type(StaticJointState.PARK).apply_to(
+    spawned_hsr.all_arms[0].get_joint_state_by_type(StaticJointState.PARK).apply_to(
         world
     )
     world.notify_state_change()
-    tool_frame = spawned_hsr.get_arms()[0].end_effector.tool_frame
+    tool_frame = spawned_hsr.all_arms[0].end_effector.tool_frame
     parked = world.compute_forward_kinematics_np(world.root, tool_frame)[:3, 3]
 
     simulation = MujocoSim(world=world, headless=True)
@@ -216,7 +216,7 @@ def test_a_commanded_arm_joint_is_driven_there(spawned_hsr):
 )
 def test_the_gripper_closes_when_told_to(spawned_hsr):
     world = spawned_hsr._world
-    gripper = spawned_hsr.get_arms()[0].end_effector
+    gripper = spawned_hsr.all_arms[0].end_effector
     gripper.get_joint_state_by_type(GripperState.OPEN).apply_to(world)
     world.notify_state_change()
     hand_motor = world.get_connection_by_name(HSRBJoint.HAND_MOTOR)
@@ -243,7 +243,7 @@ def stand_carton_between_the_open_fingers(robot: HSRB) -> Body:
     :return: The carton.
     """
     world = robot._world
-    gripper = robot.get_arms()[0].end_effector
+    gripper = robot.all_arms[0].end_effector
     gripper.get_joint_state_by_type(GripperState.OPEN).apply_to(world)
     world.get_connection_by_name(HSRBJoint.ARM_FLEX).position = 0.0
     world.get_connection_by_name(HSRBJoint.WRIST_FLEX).position = -math.pi / 2
@@ -310,7 +310,7 @@ def test_the_hand_holds_a_carton_it_closed_on_while_lifting_it(spawned_hsr):
     """
     world = spawned_hsr._world
     carton = stand_carton_between_the_open_fingers(spawned_hsr)
-    gripper = spawned_hsr.get_arms()[0].end_effector
+    gripper = spawned_hsr.all_arms[0].end_effector
     arm_lift = world.get_connection_by_name(HSRBJoint.ARM_LIFT)
 
     simulation = MujocoSim(
