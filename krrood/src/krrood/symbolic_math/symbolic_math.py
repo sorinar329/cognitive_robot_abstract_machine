@@ -651,7 +651,10 @@ class SymbolicMathType(ABC):
         return self.shape[0]
 
     def free_variables(self) -> List[FloatVariable]:
-        return [FloatVariable._registry[s] for s in ca.symvar(self.casadi_sx)]
+        return [
+            FloatVariable._registry[symbol.element_hash()]
+            for symbol in ca.symvar(self.casadi_sx)
+        ]
 
     def is_constant(self) -> bool:
         return self.casadi_sx.is_constant()
@@ -1077,6 +1080,13 @@ class Scalar(SerializableSymbolicMathType):
         self.casadi_sx = to_sx(data)
         super().__post_init__()
 
+    @classmethod
+    def from_casadi_sx(cls, casadi_sx: ca.SX) -> Self:
+        result = cls.__new__(cls)
+        result.casadi_sx = casadi_sx
+        result.pinned_free_variables = []
+        return result
+
     def _verify_type(self):
         if self.casadi_sx.shape != (1, 1):
             raise NotScalerError(self.casadi_sx.shape)
@@ -1101,7 +1111,7 @@ class Scalar(SerializableSymbolicMathType):
         """
         Determine whether the scalar is constantly true.
         """
-        return self.is_constant() and bool(self == True)
+        return self.casadi_sx.is_one()
 
     def is_constant_unknown(self) -> bool:
         """
@@ -1113,7 +1123,7 @@ class Scalar(SerializableSymbolicMathType):
         """
         Determine whether the scalar is constantly false.
         """
-        return self.is_constant() and bool(self == False)
+        return self.casadi_sx.is_zero()
 
     def is_true(self) -> Scalar:
         """
@@ -1171,24 +1181,24 @@ class Scalar(SerializableSymbolicMathType):
         raise HasFreeVariablesError(self.free_variables())
 
     def __neg__(self) -> Scalar:
-        return Scalar.from_casadi_sx(self.casadi_sx.__neg__())
+        return Scalar.from_casadi_sx(ca.SX.unary(ca.OP_NEG, self.casadi_sx))
 
     def __invert__(self) -> Scalar:
-        return Scalar.from_casadi_sx(ca.logic_not(self.casadi_sx))
+        return Scalar.from_casadi_sx(ca.SX.unary(ca.OP_NOT, self.casadi_sx))
 
     def __and__(self, other: Scalar | FloatVariable) -> Scalar:
         if is_constant_false(self):
             return self
         if is_constant_false(other):
             return other
-        return Scalar.from_casadi_sx(ca.logic_and(to_sx(self), to_sx(other)))
+        return Scalar.from_casadi_sx(ca.SX.binary(ca.OP_AND, to_sx(self), to_sx(other)))
 
     def __or__(self, other: Scalar | FloatVariable) -> Scalar:
         if is_constant_true(self):
             return self
         if is_constant_true(other):
             return other
-        return Scalar.from_casadi_sx(ca.logic_or(to_sx(self), to_sx(other)))
+        return Scalar.from_casadi_sx(ca.SX.binary(ca.OP_OR, to_sx(self), to_sx(other)))
 
     # %% Comparison operations
     def _compare(self, other: ScalarData, op_f: Callable) -> Scalar:
@@ -1211,7 +1221,7 @@ class Scalar(SerializableSymbolicMathType):
         :param other: Value to compare with.
         :return: A scalar representing the equality comparison.
         """
-        return self._compare(other, operator.eq)
+        return self._compare(other, partial(ca.SX.binary, ca.OP_EQ))
 
     def __ne__(self, other: ScalarData) -> Scalar:
         """
@@ -1220,7 +1230,7 @@ class Scalar(SerializableSymbolicMathType):
         :param other: Value to compare with.
         :return: A scalar representing the inequality comparison.
         """
-        return self._compare(other, operator.ne)
+        return self._compare(other, partial(ca.SX.binary, ca.OP_NE))
 
     def __le__(self, other: ScalarData) -> Scalar:
         """
@@ -1229,7 +1239,7 @@ class Scalar(SerializableSymbolicMathType):
         :param other: Value to compare with.
         :return: A scalar representing the comparison result.
         """
-        return self._compare(other, operator.le)
+        return self._compare(other, partial(ca.SX.binary, ca.OP_LE))
 
     def __lt__(self, other: ScalarData) -> Scalar:
         """
@@ -1238,7 +1248,7 @@ class Scalar(SerializableSymbolicMathType):
         :param other: Value to compare with.
         :return: A scalar representing the comparison result.
         """
-        return self._compare(other, operator.lt)
+        return self._compare(other, partial(ca.SX.binary, ca.OP_LT))
 
     def __ge__(self, other: ScalarData) -> Scalar:
         """
@@ -1247,7 +1257,9 @@ class Scalar(SerializableSymbolicMathType):
         :param other: Value to compare with.
         :return: A scalar representing the comparison result.
         """
-        return self._compare(other, operator.ge)
+        return self._compare(
+            other, lambda left, right: ca.SX.binary(ca.OP_LE, right, left)
+        )
 
     def __gt__(self, other: ScalarData) -> Scalar:
         """
@@ -1256,7 +1268,9 @@ class Scalar(SerializableSymbolicMathType):
         :param other: Value to compare with.
         :return: A scalar representing the comparison result.
         """
-        return self._compare(other, operator.gt)
+        return self._compare(
+            other, lambda left, right: ca.SX.binary(ca.OP_LT, right, left)
+        )
 
     # %% Arithmatic operations
     def __float__(self):
@@ -1295,34 +1309,34 @@ class Scalar(SerializableSymbolicMathType):
         return Scalar.from_casadi_sx(op(a, b))
 
     def __add__(self, other: ScalarData) -> Scalar:
-        return self._binary(other, operator.add)
+        return self._binary(other, partial(ca.SX.binary, ca.OP_ADD))
 
     def __radd__(self, other: ScalarData) -> Scalar:
-        return self._rbinary(other, operator.add)
+        return self._rbinary(other, partial(ca.SX.binary, ca.OP_ADD))
 
     def __sub__(self, other: ScalarData) -> Scalar:
-        return self._binary(other, operator.sub)
+        return self._binary(other, partial(ca.SX.binary, ca.OP_SUB))
 
     def __rsub__(self, other: ScalarData) -> Scalar:
-        return self._rbinary(other, operator.sub)
+        return self._rbinary(other, partial(ca.SX.binary, ca.OP_SUB))
 
     def __mul__(self, other: ScalarData) -> Scalar:
-        return self._binary(other, operator.mul)
+        return self._binary(other, partial(ca.SX.binary, ca.OP_MUL))
 
     def __rmul__(self, other: ScalarData) -> Scalar:
-        return self._rbinary(other, operator.mul)
+        return self._rbinary(other, partial(ca.SX.binary, ca.OP_MUL))
 
     def __truediv__(self, other: ScalarData) -> Scalar:
-        return self._binary(other, operator.truediv)
+        return self._binary(other, partial(ca.SX.binary, ca.OP_DIV))
 
     def __rtruediv__(self, other: ScalarData) -> Scalar:
-        return self._rbinary(other, operator.truediv)
+        return self._rbinary(other, partial(ca.SX.binary, ca.OP_DIV))
 
     def __pow__(self, other: ScalarData) -> Scalar:
-        return self._binary(other, operator.pow)
+        return self._binary(other, partial(ca.SX.binary, ca.OP_POW))
 
     def __rpow__(self, other: ScalarData) -> Scalar:
-        return self._rbinary(other, operator.pow)
+        return self._rbinary(other, partial(ca.SX.binary, ca.OP_POW))
 
     def __floordiv__(self, other: ScalarData) -> Scalar:
         return self._binary(other, lambda a, b: ca.floor(to_sx(a) / to_sx(b)))
@@ -1331,10 +1345,10 @@ class Scalar(SerializableSymbolicMathType):
         return self._rbinary(other, lambda a, b: ca.floor(to_sx(a) / to_sx(b)))
 
     def __mod__(self, other: ScalarData) -> Scalar:
-        return self._binary(other, ca.fmod)
+        return self._binary(other, partial(ca.SX.binary, ca.OP_FMOD))
 
     def __rmod__(self, other: ScalarData) -> Scalar:
-        return self._rbinary(other, ca.fmod)
+        return self._rbinary(other, partial(ca.SX.binary, ca.OP_FMOD))
 
 
 @dataclass(eq=False, init=False, repr=False)
@@ -1353,12 +1367,11 @@ class FloatVariable(Scalar):
     several variables may share.
     """
 
-    _registry: ClassVar[weakref.WeakValueDictionary[ca.SX, FloatVariable]] = (
+    _registry: ClassVar[weakref.WeakValueDictionary[int, FloatVariable]] = (
         weakref.WeakValueDictionary()
     )
     """
-    Keeps track of which FloatVariable instances are associated with which which
-    casadi.SX instances.
+    The living FloatVariable instances, by the hash of their casadi symbol.
 
     Needed to recreate the FloatVariables from a casadi expression.
     .. warning:: Does not ensure that two FloatVariable instances are identical.
@@ -1386,7 +1399,7 @@ class FloatVariable(Scalar):
         self.name = name
         self.id = uuid4() if id is None else id
         casadi_sx = ca.SX.sym(self.name)
-        self._registry[casadi_sx] = self
+        self._registry[casadi_sx.element_hash()] = self
         self._registry_by_id[self.id] = self
         super().__init__(casadi_sx)
 
@@ -2351,7 +2364,7 @@ def is_constant_true(expression: Scalar) -> bool:
     :param expression: The scalar expression to test.
     :return: True if the expression is exactly the constant 1, otherwise False.
     """
-    return bool(expression == 1)
+    return to_sx(expression).is_one()
 
 
 def is_constant_false(expression: Scalar) -> bool:
@@ -2361,29 +2374,48 @@ def is_constant_false(expression: Scalar) -> bool:
     :param expression: The scalar expression to test.
     :return: True if the expression is exactly the constant 0, otherwise False.
     """
-    return bool(expression == 0)
+    return to_sx(expression).is_zero()
 
 
-def logic_and(left: ScalarData, right: ScalarData) -> Scalar:
+def logic_and(*args: ScalarData) -> Scalar:
     """
     Logical conjunction on symbolic scalars.
 
-    :param left: The left operand.
-    :param right: The right operand.
-    :return: The symbolic result of left AND right.
+    :param args: The operands.
+    :return: The symbolic result of all operands combined by AND.
+    :raises NotEnoughArgumentsError: If no operand is given.
     """
-    return left & right
+    return _combine_logic(operator.and_, args)
 
 
-def logic_or(left: ScalarData, right: ScalarData) -> Scalar:
+def logic_or(*args: ScalarData) -> Scalar:
     """
     Logical disjunction on symbolic scalars.
 
-    :param left: The left operand.
-    :param right: The right operand.
-    :return: The symbolic result of left OR right.
+    :param args: The operands.
+    :return: The symbolic result of all operands combined by OR.
+    :raises NotEnoughArgumentsError: If no operand is given.
     """
-    return left | right
+    return _combine_logic(operator.or_, args)
+
+
+def _combine_logic(
+    logic_operator: Callable[[Scalar, ScalarData], Scalar], args: Sequence[ScalarData]
+) -> Scalar:
+    """
+    :param logic_operator: The two-argument operator to fold the operands with.
+    :param args: The operands.
+    :return: The operands folded from the left by `logic_operator`.
+    :raises NotEnoughArgumentsError: If no operand is given.
+    """
+    if len(args) < 1:
+        raise NotEnoughArgumentsError(
+            minimum_number_of_arguments=1, actual_number_of_arguments=len(args)
+        )
+    result = args[0] if isinstance(args[0], Scalar) else Scalar(args[0])
+    for argument in args[1:]:
+        result = logic_operator(result, argument)
+    return result
 
 
 def logic_not(expression: ScalarData) -> Scalar:
@@ -2706,7 +2738,7 @@ def if_eq_cases(
     ind = to_sx(-1)
     for i, (b, b_result) in enumerate(b_result_cases):
         b_sx = to_sx(b)
-        ind = ca.if_else(ca.eq(a_sx, b_sx), i, ind)
+        ind = ca.if_else(ca.SX.binary(ca.OP_EQ, a_sx, b_sx), i, ind)
         result_sx_list.append(to_sx(b_result))
 
     result_sx = ca.conditional(ind, result_sx_list, to_sx(else_result))

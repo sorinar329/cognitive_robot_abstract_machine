@@ -17,8 +17,6 @@ from enum import StrEnum
 from typing import Callable, List, Optional, Tuple
 
 from coraplex.datastructures.dataclasses import Context
-from coraplex.datastructures.enums import ApproachDirection, Arms, VerticalAlignment
-from coraplex.datastructures.grasp import GraspDescription
 from coraplex.plans.factories import sequential
 from coraplex.plans.plan import Plan
 from coraplex.robot_plans.actions.core.pick_up import PickUpAction
@@ -30,12 +28,17 @@ from semantic_digital_twin.datastructures.definitions import (
     StaticJointState,
 )
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
+from semantic_digital_twin.grasping.grasp_candidates import (
+    GraspCandidate,
+    HasGraspCandidates,
+)
 from semantic_digital_twin.robots.tracy import Tracy
-from semantic_digital_twin.semantic_annotations.mixins import HasRootBody
 from semantic_digital_twin.spatial_types import (
     HomogeneousTransformationMatrix,
     Point3,
     Pose,
+    RotationMatrix,
+    Vector3,
 )
 from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.contact import ContactParameters
@@ -143,11 +146,6 @@ How far above what it is stacked on a cube is let go of, so it settles onto it r
 than being pushed into it.
 """
 
-PICK_ARM = Arms.LEFT
-"""
-The arm that does the stacking; the arm every Tracy demo in this repository uses.
-"""
-
 RESTING_CLEARANCE = 0.001
 """
 Gap left between a cube and the table, so it rests rather than intersects.
@@ -210,7 +208,7 @@ def cube_color(index: int, number_of_cubes: int) -> Color:
 @dataclass
 class StackedCube:
     """
-    One cube, and where it is let go of on the tower.
+    One cube, how it is grasped, and where it is let go of on the tower.
     """
 
     body: Body
@@ -218,9 +216,14 @@ class StackedCube:
     The cube itself.
     """
 
-    annotation: HasRootBody
+    annotation: HasGraspCandidates
     """
-    What names the cube for an action that takes an annotation rather than a body.
+    What names the cube for the actions that take it.
+    """
+
+    grasp: GraspCandidate
+    """
+    How the cube is taken: from above, low on its sides (see :data:`GRASP_HEIGHT`).
     """
 
     release_pose: Pose
@@ -383,9 +386,20 @@ def _stand_cube_on_the_table(
 
     ContactParameters.create_for_grasped_object().apply_to([body])
 
-    annotation = HasRootBody(root=body)
+    annotation = HasGraspCandidates(root=body)
     world.add_semantic_annotations([annotation])
-    return StackedCube(body=body, annotation=annotation, release_pose=release_pose)
+    grasp = GraspCandidate(
+        annotation,
+        Pose(
+            orientation=RotationMatrix.from_vectors(
+                x=Vector3.NEGATIVE_Z(), y=Vector3.X()
+            ).quaternion,
+            reference_frame=body,
+        ),
+    )
+    return StackedCube(
+        body=body, annotation=annotation, grasp=grasp, release_pose=release_pose
+    )
 
 
 def _cube_around_the_grasp_point(color: Color, body: Body) -> Box:
@@ -441,18 +455,12 @@ def build_plan(context: Context, cubes: List[StackedCube]) -> Plan:
     :param cubes: The cubes to stack, bottom first.
     :return: The plan that stacks them.
     """
-    grasp = GraspDescription(
-        ApproachDirection.FRONT,
-        VerticalAlignment.TOP,
-        context.robot.left_arm.end_effector,
-        rotate_gripper=True,
-    )
-
-    actions = [ParkArmsAction(Arms.BOTH)]
+    robot = context.robot
+    actions = [ParkArmsAction(robot.all_arms)]
     for cube in cubes:
-        actions.append(PickUpAction(cube.annotation, PICK_ARM, grasp))
-        actions.append(PlaceAction(cube.body, cube.release_pose, PICK_ARM))
-    actions.append(ParkArmsAction(Arms.BOTH))
+        actions.append(PickUpAction(cube.grasp, robot.left_arm))
+        actions.append(PlaceAction(cube.annotation, cube.release_pose))
+    actions.append(ParkArmsAction(robot.all_arms))
 
     return sequential(actions, context=context).plan
 

@@ -4,9 +4,8 @@ The stacking demo carried out against MuJoCo physics, in a MuJoCo viewer.
 The physics is stepped from the control loop rather than from a thread of its own: every
 tick of the controller writes its command into the world, the servos take it as their set
 point, and the physics advances one cycle before the next tick reads the world back. That
-is what :class:`~giskardpy.executor.SteppedSimulationPacer` does, and
-:data:`~coraplex.plans.executables.GiskardExecutable.simulation_pacer` is where a plan
-picks it up.
+is what :class:`~coraplex.execution_environment.PhysicallySimulatedRobot` has every
+motion of a plan do.
 """
 
 from __future__ import annotations
@@ -18,10 +17,7 @@ import mujoco
 import numpy as np
 
 from coraplex.datastructures.dataclasses import Context
-from coraplex.datastructures.enums import ExecutionType
-from coraplex.execution_environment import ExecutionEnvironment
-from coraplex.plans.executables import GiskardExecutable
-from giskardpy.executor import SteppedSimulationPacer
+from coraplex.execution_environment import PhysicallySimulatedRobot
 from semantic_digital_twin.adapters.multi_sim import (
     ContactDimensionality,
     MujocoGeom,
@@ -116,7 +112,6 @@ def run(
         world=world,
         robot=robot,
         evaluate_conditions=False,
-        update_world_model_attachment=False,
     )
     plan = build_plan(context, cubes)
 
@@ -130,14 +125,11 @@ def run(
     )
     simulation.start_stepped_simulation()
     _weigh_the_cubes(simulation, cubes)
-    previous_pacer = GiskardExecutable.simulation_pacer
-    GiskardExecutable.simulation_pacer = SteppedSimulationPacer(simulation)
     try:
         simulation.step_simulation(SETTLING_DURATION)
-        with ExecutionEnvironment(execution_type=ExecutionType.SIMULATED):
+        with PhysicallySimulatedRobot(simulation=simulation):
             plan.perform()
     finally:
-        GiskardExecutable.simulation_pacer = previous_pacer
         simulation.stop_simulation()
 
 
