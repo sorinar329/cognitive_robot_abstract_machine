@@ -25,6 +25,8 @@ RViz backend runs (8 s). condim/cylinder tests already on main. Replies drafted 
 KINEMATICALLY edit kept): ShapeSortingPiece -> MontessoriPiece (sdt + tests + demo + README),
 README lines 191-219 removed, folder renamed coraplex/demos/coraplex_tracy_montessori_demo
 (git mv). ORM regenerated; test_grasp_candidates 23 passed; demo imports. Next: user commits.
+User committed 88913390d0 + 1af6509d3f (own README). Merged sorin/main 48380020a0 -> 5eb228fde4
+(no conflicts, README untouched), local only. grasp+shape tests 75 passed; demo imports.
 
 ## bullet-demo-place-heights: bullet world demo lays milk and spoon above the table
 
