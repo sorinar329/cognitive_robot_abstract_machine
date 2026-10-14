@@ -17,7 +17,7 @@ from experiments.hsr_kitchen_mujoco.demo import (
     table_extent,
 )
 from semantic_digital_twin.adapters.multi_sim import MujocoSim
-from semantic_digital_twin.predetermined_maps.kitchen_environment import (
+from semantic_digital_twin.predefined_maps.kitchen_environment import (
     KitchenEnvironment,
 )
 from semantic_digital_twin.world import World

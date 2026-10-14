@@ -12,8 +12,14 @@ from coraplex.datastructures.dataclasses import Context
 from coraplex.datastructures.enums import (
     MovementType,
 )
-from coraplex.execution_environment import simulated_robot, real_robot
+from coraplex.execution_environment import (
+    PhysicallySimulatedRobot,
+    real_robot,
+    kinematically_simulated_robot,
+)
+from coraplex.exceptions import FingerWidthNeedsPhysics
 from coraplex.plans.executables import MoveBranchExecutable
+from giskardpy.motion_statechart.monitors.overwrite_state_monitors import SetOdometry
 from coraplex.plans.factories import sequential, execute_single
 from coraplex.plans.plan_node import MotionNode, ActionNode
 from coraplex.robot_plans.actions.core.navigation import NavigateAction
@@ -22,6 +28,7 @@ from coraplex.robot_plans.actions.core.placing import PlaceAction
 from coraplex.robot_plans.actions.core.robot_body import MoveTorsoAction
 from coraplex.robot_plans.motions.container import ClosingMotion, OpeningMotion
 from coraplex.robot_plans.motions.gripper import (
+    MoveFingersToWidthMotion,
     MoveGripperMotion,
     MoveTCPWaypointsMotion,
     MoveTCPWaypointsAlignedMotion,
@@ -38,6 +45,7 @@ from giskardpy.motion_statechart.monitors.monitors import LocalMinimumReached
 from giskardpy.motion_statechart.tasks.cartesian_tasks import (
     CartesianOrientation,
     CartesianPose,
+    CartesianPosition,
     CartesianPositionTrajectory,
     CartesianPositionVelocityLimit,
     CartesianRotationVelocityLimit,
@@ -100,7 +108,7 @@ def test_pick_up_motion(pr2_apartment_context):
         context=test_context,
     )
     assert pick_up.plan is not None
-    with simulated_robot:
+    with kinematically_simulated_robot:
         root.perform()
 
     pick_up_node = root.plan.get_nodes_by_designator_type(PickUpAction)[0]
@@ -134,6 +142,41 @@ def test_move_motion_chart(pr2_apartment_context):
 
     assert msc
     np.testing.assert_equal(msc.goal_pose.position.to_np(), np.array([1, 1, 1, 1]))
+
+
+def test_a_simulated_base_is_written_where_it_was_sent(pr2_apartment_context):
+    """
+    A robot simulated against the world's own belief about where it is can be put at a
+    pose by saying so.
+    """
+    world, _, context = pr2_apartment_context
+    motion = MoveMotion(
+        Pose(Point3.from_iterable([1, 1, 1]), reference_frame=world.root)
+    )
+
+    with kinematically_simulated_robot:
+        execute_single(motion, context=context)
+
+        assert isinstance(motion.motion_chart, SetOdometry)
+
+
+def test_a_physically_simulated_base_is_driven_where_it_was_sent(
+    pr2_apartment_context,
+):
+    """
+    A robot whose wheels have to carry it cannot be put at a pose by saying so, which is
+    why performing in physics is told apart from performing against the world's own
+    belief.
+    """
+    world, _, context = pr2_apartment_context
+    motion = MoveMotion(
+        Pose(Point3.from_iterable([1, 1, 1]), reference_frame=world.root)
+    )
+
+    with PhysicallySimulatedRobot(simulation=None):
+        execute_single(motion, context=context)
+
+        assert isinstance(motion.motion_chart, CartesianPose)
 
 
 def test_move_tool_center_point_motion_uses_tight_threshold(pr2_apartment_context):
@@ -812,7 +855,7 @@ def test_stretch_base_motion_follows_the_execution_environment(
         assert motion.get_alternative_motion() is StretchMoveReal
         assert isinstance(motion.motion_chart, DifferentialDriveBaseGoal)
 
-    with simulated_robot:
+    with kinematically_simulated_robot:
         assert motion.get_alternative_motion() is StretchMoveSim
 
 
@@ -911,3 +954,63 @@ def test_grasping_action_frees_the_gripper_for_its_whole_approach(
     )
     assert len(reach_nodes) == 2
     assert all(node.designator.allow_gripper_collision is True for node in reach_nodes)
+
+
+# %% sending the fingers to a width
+
+
+def test_fingers_sent_to_a_width_aim_one_fingertip_at_the_other(pr2_apartment_context):
+    """
+    The distance between the fingertips is what Giskard is given, so it finds the joint
+    positions that realise it rather than being told them.
+    """
+    _, _, context = pr2_apartment_context
+    gripper = context.robot.left_arm.end_effector
+    motion = MoveFingersToWidthMotion(gripper=gripper, width=0.04)
+
+    with PhysicallySimulatedRobot(simulation=None):
+        execute_single(motion, context=context)
+
+        chart = motion.motion_chart
+        assert isinstance(chart, CartesianPosition)
+        assert chart.root_link is gripper.finger.tip
+        assert chart.tip_link is gripper.thumb.tip
+
+
+def test_a_squeeze_sends_the_fingers_past_the_width(pr2_apartment_context):
+    _, _, context = pr2_apartment_context
+    gripper = context.robot.left_arm.end_effector
+    width = 0.04
+    squeeze = 0.001
+
+    with PhysicallySimulatedRobot(simulation=None):
+        touching = MoveFingersToWidthMotion(gripper=gripper, width=width)
+        pressing = MoveFingersToWidthMotion(
+            gripper=gripper, width=width, squeeze=squeeze
+        )
+        execute_single(touching, context=context)
+        execute_single(pressing, context=context)
+
+        apart = touching.motion_chart.goal_point.to_np()[:3].ravel()
+        pressed = pressing.motion_chart.goal_point.to_np()[:3].ravel()
+
+    assert np.linalg.norm(pressed) == pytest.approx(np.linalg.norm(apart) - 2 * squeeze)
+
+
+def test_fingers_are_not_sent_to_a_width_where_nothing_pushes_back(
+    pr2_apartment_context,
+):
+    """
+    Closing to an object's own width only means something where the object resists; in a
+    world moved kinematically a held body hangs off the tool frame however the fingers
+    stand.
+    """
+    _, _, context = pr2_apartment_context
+    gripper = context.robot.left_arm.end_effector
+    motion = MoveFingersToWidthMotion(gripper=gripper, width=0.04)
+
+    with kinematically_simulated_robot:
+        execute_single(motion, context=context)
+
+        with pytest.raises(FingerWidthNeedsPhysics):
+            motion.motion_chart

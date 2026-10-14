@@ -3,7 +3,7 @@ The Toyota HSR picks a milk carton up from a table of the kitchen and sets it do
 further back on the same table, simulated in MuJoCo.
 
 The kitchen is semantic_digital_twin's predetermined
-:class:`~semantic_digital_twin.predetermined_maps.kitchen_environment.KitchenEnvironment`.
+:class:`~semantic_digital_twin.predefined_maps.kitchen_environment.KitchenEnvironment`.
 The HSR's arm, head and hand are driven by servos, and the carton is held by nothing
 but the friction between it and the fingers: it is neither moved under the hand in the
 world model nor fastened to it in MuJoCo.
@@ -21,24 +21,21 @@ from enum import StrEnum
 
 import mujoco
 from coraplex.datastructures.dataclasses import Context
-from coraplex.datastructures.enums import ExecutionType
-from coraplex.execution_environment import ExecutionEnvironment
-from coraplex.plans.executables import GiskardExecutable
+from coraplex.execution_environment import PhysicallySimulatedRobot
 from coraplex.plans.factories import sequential
 from coraplex.plans.plan import Plan
 from coraplex.robot_plans.actions.core.pick_up import PickUpAction
 from coraplex.robot_plans.actions.core.placing import PlaceAction
 from coraplex.robot_plans.actions.core.robot_body import ParkArmsAction
-from giskardpy.executor import SteppedSimulationPacer
 from semantic_digital_twin.adapters.multi_sim import (
     ContactDimensionality,
     MujocoGeom,
     MujocoSim,
 )
-from semantic_digital_twin.api import RobotSpecification
+from semantic_digital_twin.specifications.robots import RobotSpecification
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.grasping.grasp_candidates import GraspCandidate
-from semantic_digital_twin.predetermined_maps.kitchen_environment import (
+from semantic_digital_twin.predefined_maps.kitchen_environment import (
     KitchenEnvironment,
 )
 from semantic_digital_twin.robots.hsrb import HSRB, HSRBJoint
@@ -306,12 +303,7 @@ def run(world: World, headless: bool = HEADLESS) -> None:
     :param headless: Whether to run without MuJoCo's viewer.
     """
     robot = world.get_semantic_annotations_by_type(HSRB)[0]
-    context = Context(
-        world=world,
-        robot=robot,
-        evaluate_conditions=False,
-        update_world_model_attachment=False,
-    )
+    context = Context(world=world, robot=robot, evaluate_conditions=False)
     plan = build_plan(context)
 
     _resist_turning_in_the_hand(world.get_body_by_name(SceneBody.MILK))
@@ -324,15 +316,12 @@ def run(world: World, headless: bool = HEADLESS) -> None:
         noslip_iterations=NO_SLIP_ITERATIONS,
     )
     simulation.start_stepped_simulation()
-    previous_pacer = GiskardExecutable.simulation_pacer
-    GiskardExecutable.simulation_pacer = SteppedSimulationPacer(simulation)
     try:
         simulation.step_simulation(SETTLING_DURATION)
-        with ExecutionEnvironment(execution_type=ExecutionType.SIMULATED):
+        with PhysicallySimulatedRobot(simulation=simulation):
             plan.perform()
         simulation.step_simulation(SETTLING_DURATION)
     finally:
-        GiskardExecutable.simulation_pacer = previous_pacer
         simulation.stop_simulation()
 
 
