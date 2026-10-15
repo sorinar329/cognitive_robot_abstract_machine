@@ -1,6 +1,7 @@
 """
-The HSR picking a milk carton up from a table of the predetermined kitchen and setting
-it down further back, simulated in MuJoCo with the carton held by friction alone.
+The HSR picking a milk carton up from a table of the predefined kitchen, carrying it
+along the table and setting it down there, simulated in MuJoCo with the carton held by
+friction alone.
 """
 
 import os

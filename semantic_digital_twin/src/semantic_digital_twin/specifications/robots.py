@@ -68,7 +68,8 @@ class RobotSpecification:
 
         The robot is annotated while it still owns the world it was parsed into, so that
         the annotation's name-based lookups cannot be confused by an equally named joint
-        of a robot already present in ``world``.
+        of a robot already present in ``world``. The servos of an active drive are
+        declared once the drive exists.
 
         :param world: The world the robot is merged into.
         :return: The semantic annotation of the merged robot.
@@ -108,14 +109,16 @@ class RobotSpecification:
                 ),
             )
             world.merge_world(robot_world, root_connection=odom_C_robot)
+            robot = cast("AbstractRobot", world.get_semantic_annotation_by_id(robot_id))
             if is_active:
                 odom_C_robot.has_hardware_interface = True
+                robot.mobile_base.declare_drive_servos()
 
         # The start pose touches DoF state, so it is set after the modification block.
         if is_active and self.odom_T_robot_start is not None:
             odom_C_robot.origin = self.odom_T_robot_start
 
-        return cast("AbstractRobot", world.get_semantic_annotation_by_id(robot_id))
+        return robot
 
     @staticmethod
     def _create_odom_body() -> Body:

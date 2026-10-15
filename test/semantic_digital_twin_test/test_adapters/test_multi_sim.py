@@ -10,6 +10,7 @@ import pytest
 import numpy
 import trimesh
 from PIL import Image
+from scipy.spatial.transform import Rotation
 from trimesh.visual.material import SimpleMaterial
 
 from semantic_digital_twin.adapters.mesh import STLParser
@@ -48,8 +49,11 @@ from semantic_digital_twin.world_description.world_entity import (
     Body,
     Region,
     Actuator,
+    ContactExclusion,
     GravityCompensation,
+    PositionServo,
 )
+from semantic_digital_twin.world_description.connection_properties import ServoGains
 
 from physics_simulators.mujoco_simulator import MujocoSimulator
 from physics_simulators.base_simulator import SimulatorState
@@ -559,6 +563,35 @@ def test_builder_writes_a_geoms_contact_bitmasks(tmp_path):
     ]
     assert geom.contype == 2
     assert geom.conaffinity == 4
+
+
+def test_builder_keeps_every_geom_of_a_body_excluded_from_contact_contactless(
+    tmp_path,
+):
+    world = World()
+    with world.modify_world():
+        root = Body(name=PrefixedName("root"))
+        world.add_body(root)
+        link = Body(
+            name=PrefixedName("link"),
+            collision=ShapeCollection(
+                [Box(scale=Scale(1, 1, 1)), Box(scale=Scale(0.5, 0.5, 0.5))]
+            ),
+        )
+        link.add_simulator_property(ContactExclusion())
+        world.add_kinematic_structure_entity(link)
+        world.add_connection(FixedConnection(parent=root, child=link))
+
+    builder = MujocoBuilder()
+    builder.build_world(world=world, file_path=str(tmp_path / "scene.xml"))
+
+    masks = [
+        (geom.contype, geom.conaffinity)
+        for body in builder.spec.bodies
+        for geom in body.geoms
+        if body.name == "link"
+    ]
+    assert masks == [(ContactCategories.NONE, ContactCategories.NONE)] * 2
 
 
 def _world_with_one_twisting_box() -> World:
@@ -1781,3 +1814,144 @@ def test_a_drive_moved_before_the_simulation_starts_puts_its_body_there(
         stop_multisim_if_running(multi_sim)
 
     assert position == pytest.approx(box.global_pose.to_np()[:3, 3], abs=1e-6)
+
+
+# %% a base moved by its drive's servos
+
+
+@pytest.fixture
+def servo_driven_box_world(driven_box_world) -> World:
+    """
+    The box hanging off its omni drive, the drive's x, y and yaw each driven by a
+    position servo, as a mobile robot's base is driven in a physical simulation.
+    """
+    drive = driven_box_world.get_body_by_name("box").parent_connection
+    translation = ServoGains(stiffness=2_000.0, damping=400.0, torque_limit=200.0)
+    rotation = ServoGains(stiffness=50.0, damping=10.0, torque_limit=20.0)
+    with driven_box_world.modify_world():
+        for degree_of_freedom, gains in (
+            (drive.x, translation),
+            (drive.y, translation),
+            (drive.yaw, rotation),
+        ):
+            servo = PositionServo(
+                name=PrefixedName(
+                    f"{degree_of_freedom.name.name}_servo",
+                    prefix=degree_of_freedom.name.prefix,
+                ),
+                gains=gains,
+            )
+            servo.add_dof(degree_of_freedom)
+            driven_box_world.add_actuator(servo)
+    return driven_box_world
+
+
+def _simulated_pose_of_box(multi_sim: MujocoSim) -> numpy.ndarray:
+    """
+    :return: Where MuJoCo holds the box, as a homogeneous transform in its world frame.
+    """
+    position = multi_sim.simulator.get_body_position(body_name="box").result
+    quaternion_wxyz = multi_sim.simulator.get_body_quaternion(body_name="box").result
+    pose = numpy.eye(4)
+    pose[:3, :3] = Rotation.from_quat(quaternion_wxyz, scalar_first=True).as_matrix()
+    pose[:3, 3] = position
+    return pose
+
+
+def _command_the_box_to(
+    world: World, x: float, y: float = 0.0, yaw: float = 0.0
+) -> None:
+    """
+    Give the box's drive a new pose, as a controller commands a mobile base.
+    """
+    world.get_body_by_name("box").parent_connection.origin = (
+        HomogeneousTransformationMatrix.from_xyz_rpy(
+            x=x, y=y, yaw=yaw, reference_frame=world.root
+        )
+    )
+
+
+def test_a_servoed_drive_carries_its_body_to_the_commanded_pose(
+    servo_driven_box_world,
+):
+    box = servo_driven_box_world.get_body_by_name("box")
+    multi_sim = MujocoSim(world=servo_driven_box_world, headless=headless)
+    multi_sim.start_stepped_simulation()
+    try:
+        _command_the_box_to(servo_driven_box_world, x=0.5, y=-0.3, yaw=0.4)
+        multi_sim.step_simulation(timedelta(seconds=3))
+        reached = _simulated_pose_of_box(multi_sim)
+    finally:
+        stop_multisim_if_running(multi_sim)
+
+    commanded = box.global_pose.to_np()
+    assert reached[:3, 3] == pytest.approx(commanded[:3, 3], abs=0.01)
+    assert reached[:3, :3] == pytest.approx(commanded[:3, :3], abs=0.01)
+
+
+def test_a_servoed_drive_moves_its_body_rather_than_teleporting_it(
+    servo_driven_box_world,
+):
+    """
+    The body has mass and the servo a force limit, so a hundredth of a second after a
+    new command the body has covered only a small part of the way.
+    """
+    multi_sim = MujocoSim(world=servo_driven_box_world, headless=headless)
+    multi_sim.start_stepped_simulation()
+    try:
+        _command_the_box_to(servo_driven_box_world, x=0.5)
+        multi_sim.step_simulation(timedelta(milliseconds=10))
+        reached = _simulated_pose_of_box(multi_sim)
+    finally:
+        stop_multisim_if_running(multi_sim)
+
+    assert reached[0, 3] < 0.5 / 10
+
+
+def test_a_servoed_drive_cannot_push_its_body_through_a_wall(servo_driven_box_world):
+    world = servo_driven_box_world
+    with world.modify_world():
+        wall = Body(name=PrefixedName("wall"))
+        wall.collision = ShapeCollection(
+            [Box(origin=HomogeneousTransformationMatrix(), scale=Scale(0.1, 1.0, 1.0))],
+            reference_frame=wall,
+        )
+        world.add_connection(
+            FixedConnection(
+                parent=world.root,
+                child=wall,
+                parent_T_connection_expression=HomogeneousTransformationMatrix.from_xyz_rpy(
+                    x=0.5, z=0.5, reference_frame=world.root
+                ),
+            )
+        )
+    multi_sim = MujocoSim(world=world, headless=headless)
+    multi_sim.start_stepped_simulation()
+    try:
+        _command_the_box_to(world, x=1.0)
+        multi_sim.step_simulation(timedelta(seconds=3))
+        reached = _simulated_pose_of_box(multi_sim)
+    finally:
+        stop_multisim_if_running(multi_sim)
+
+    wall_face = 0.5 - 0.1 / 2
+    half_box = 0.2 / 2
+    assert reached[0, 3] == pytest.approx(wall_face - half_box, abs=0.01)
+
+
+def test_a_servoed_drive_holds_its_body_where_the_simulation_starts(
+    servo_driven_box_world,
+):
+    box = servo_driven_box_world.get_body_by_name("box")
+    _command_the_box_to(servo_driven_box_world, x=0.5, y=-0.3, yaw=0.4)
+    multi_sim = MujocoSim(world=servo_driven_box_world, headless=headless)
+    multi_sim.start_stepped_simulation()
+    try:
+        multi_sim.step_simulation(timedelta(seconds=1))
+        reached = _simulated_pose_of_box(multi_sim)
+    finally:
+        stop_multisim_if_running(multi_sim)
+
+    commanded = box.global_pose.to_np()
+    assert reached[:3, 3] == pytest.approx(commanded[:3, 3], abs=0.01)
+    assert reached[:3, :3] == pytest.approx(commanded[:3, :3], abs=0.01)

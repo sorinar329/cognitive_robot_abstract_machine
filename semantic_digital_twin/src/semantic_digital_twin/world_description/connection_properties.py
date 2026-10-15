@@ -94,3 +94,22 @@ class JointServo:
     """
     The joint's own inertia and friction, felt on top of the servo's torque.
     """
+
+
+@dataclass
+class DriveServoGains:
+    """
+    How hard the servos of a mobile base's drive pull it towards the pose it was given
+    in a physical simulation: one servo along each of the drive's x and y, and one
+    turning it about its z.
+    """
+
+    translation: ServoGains
+    """
+    The gains of the servos along the drive's x and y, in newtons.
+    """
+
+    rotation: ServoGains
+    """
+    The gains of the servo turning the drive about its z, in newton metres.
+    """

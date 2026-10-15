@@ -1,12 +1,13 @@
 """
-The Toyota HSR picks a milk carton up from a table of the kitchen and sets it down
-further back on the same table, simulated in MuJoCo.
+The Toyota HSR picks a milk carton up from a table of the kitchen, drives along the
+table carrying it over the cooktop, and sets it down on the cooktop's far side,
+simulated in MuJoCo.
 
 The kitchen is semantic_digital_twin's predetermined
 :class:`~semantic_digital_twin.predefined_maps.kitchen_environment.KitchenEnvironment`.
-The HSR's arm, head and hand are driven by servos, and the carton is held by nothing
-but the friction between it and the fingers: it is neither moved under the hand in the
-world model nor fastened to it in MuJoCo.
+The HSR's base, arm, head and hand are driven by servos, and the carton is held by
+nothing but the friction between it and the fingers: it is neither moved under the hand
+in the world model nor fastened to it in MuJoCo.
 
 Run it with::
 
@@ -25,6 +26,7 @@ from coraplex.execution_environment import PhysicallySimulatedRobot
 from coraplex.plans.factories import sequential
 from coraplex.plans.plan import Plan
 from coraplex.robot_plans.actions.core.pick_up import PickUpAction
+from coraplex.robot_plans.actions.core.navigation import NavigateAction
 from coraplex.robot_plans.actions.core.placing import PlaceAction
 from coraplex.robot_plans.actions.core.robot_body import ParkArmsAction
 from semantic_digital_twin.adapters.multi_sim import (
@@ -110,10 +112,11 @@ How far above the table top the milk is put, so it settles onto it rather than s
 inside it.
 """
 
-PLACING_DISTANCE = 0.1
+CARRYING_DISTANCE = 0.95
 """
-How much further back on the table the milk is set down than where it stood, in metres:
-straight ahead of the HSR, which reaches no further sideways without moving its base.
+How far along the table the HSR carries the milk, in the kitchen's x: from the left of
+the cooktop, over it, to its right, where the base still stands clear of the middle
+wall.
 """
 
 RELEASE_CLEARANCE = 0.01
@@ -150,27 +153,30 @@ def start_pose(world: World) -> HomogeneousTransformationMatrix:
 
 def goal_pose(world: World) -> Pose:
     """
-    :return: Where the milk is set down: :data:`PLACING_DISTANCE` further back on the
+    :return: Where the milk is set down: :data:`CARRYING_DISTANCE` further along the
         table than where it stood, turned as it was.
     """
     extent = table_extent(world)
     return Pose.from_xyz_rpy(
-        x=MILK_START_X,
-        y=extent.min_y + EDGE_INSET + PLACING_DISTANCE,
+        x=MILK_START_X + CARRYING_DISTANCE,
+        y=extent.min_y + EDGE_INSET,
         z=extent.max_z + MILK_SCALE.z / 2 + RELEASE_CLEARANCE,
         yaw=math.pi / 2,
         reference_frame=world.root,
     )
 
 
-def standing_pose(world: World) -> Pose:
+def standing_pose(
+    world: World, milk_pose: Pose | HomogeneousTransformationMatrix
+) -> Pose:
     """
-    :return: Where the HSR stands: in front of the table, facing it, with its hand
-        rather than its base in line with the milk.
+    :param milk_pose: Where on the table the milk stands or is to be set down.
+    :return: Where the HSR stands to reach the milk there: in front of the table,
+        facing it, with its hand rather than its base in line with the milk.
     """
     extent = table_extent(world)
     return Pose.from_xyz_rpy(
-        x=MILK_START_X + hand_offset(world),
+        x=float(milk_pose.position.to_np()[0]) + hand_offset(world),
         y=extent.min_y - STANDING_DISTANCE,
         yaw=math.pi / 2,
         reference_frame=world.root,
@@ -199,7 +205,9 @@ def build_world() -> World:
     world = KitchenEnvironment().get_world()
     robot = RobotSpecification(HSRB).spawn(world)
     robot.mobile_base.full_body_controlled = False
-    robot.root.parent_connection.origin = standing_pose(world).homogeneous_matrix
+    robot.root.parent_connection.origin = standing_pose(
+        world, start_pose(world)
+    ).homogeneous_matrix
     with world.modify_world():
         _stand_the_milk_on_the_table(world)
     return world
@@ -240,18 +248,20 @@ def _stand_the_milk_on_the_table(world: World) -> None:
 
 def build_plan(context: Context) -> Plan:
     """
-    Pick the milk up and set it down further back on the table.
+    Pick the milk up, drive along the table holding it, and set it down there.
 
     :param context: The context the actions are built in.
     :return: The plan.
     """
     robot = context.robot
     milk = context.world.get_semantic_annotations_by_type(Milk)[0]
+    goal = goal_pose(context.world)
     return sequential(
         [
             ParkArmsAction(robot.all_arms),
             PickUpAction(GraspCandidate.from_body_origin(milk), robot.all_arms[0]),
-            PlaceAction(milk, goal_pose(context.world)),
+            NavigateAction(standing_pose(context.world, goal)),
+            PlaceAction(milk, goal),
             ParkArmsAction(robot.all_arms),
         ],
         context=context,

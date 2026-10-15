@@ -9,7 +9,7 @@ from importlib.resources import files
 from pathlib import Path
 from typing import Self, List
 
-from typing_extensions import ClassVar, Dict
+from typing_extensions import Dict
 
 from krrood.ormatic.utils import classproperty
 from semantic_digital_twin.adapters.sensors.lidar import Lidar, LidarSource
@@ -52,6 +52,7 @@ from semantic_digital_twin.robots.robot_parts import (
 )
 from semantic_digital_twin.spatial_types import Quaternion, Vector3
 from semantic_digital_twin.world_description.connection_properties import (
+    DriveServoGains,
     JointDynamics,
     JointServo,
     ServoGains,
@@ -61,6 +62,7 @@ from semantic_digital_twin.world_description.connections import (
     OmniDrive,
 )
 from semantic_digital_twin.world_description.world_entity import (
+    Body,
     KinematicStructureEntity,
 )
 
@@ -661,13 +663,26 @@ class HSRBMobileBase(
 
     full_body_controlled: bool = field(default=True, kw_only=True)
 
-    PASSIVE_JOINT_ARMATURE: ClassVar[float] = 0.01
-    """
-    The rotor inertia given to the base's passive joints in a physical simulation.
+    @classproperty
+    def passive_joint_armature(cls) -> float:
+        """
+        The rotor inertia given to the base's passive joints in a physical simulation.
 
-    The wheels are light and damped, and MuJoCo's RK4 integration of them diverges
-    within milliseconds when they have none; this much keeps them stable.
-    """
+        The wheels are light and damped, and MuJoCo's RK4 integration of them diverges
+        within milliseconds when they have none; this much keeps them stable.
+        """
+        return 0.01
+
+    @classproperty
+    def drive_servo_gains(cls) -> DriveServoGains:
+        return DriveServoGains(
+            translation=ServoGains(
+                stiffness=50_000.0, damping=10_000.0, torque_limit=3_000.0
+            ),
+            rotation=ServoGains(
+                stiffness=5_000.0, damping=1_000.0, torque_limit=1_000.0
+            ),
+        )
 
     @property
     def passive_connections(self) -> List[ActiveConnection1DOF]:
@@ -684,10 +699,18 @@ class HSRBMobileBase(
             if isinstance(entity.parent_connection, ActiveConnection1DOF)
         ]
 
+    @property
+    def rolling_bodies(self) -> List[Body]:
+        return [
+            connection.child
+            for connection in self.passive_connections
+            if isinstance(connection.child, Body)
+        ]
+
     def _setup_servos(self) -> None:
         for connection in self.passive_connections:
             connection.dynamics = replace(
-                connection.dynamics, armature=self.PASSIVE_JOINT_ARMATURE
+                connection.dynamics, armature=self.passive_joint_armature
             )
 
     def setup_hardware_interfaces(self):

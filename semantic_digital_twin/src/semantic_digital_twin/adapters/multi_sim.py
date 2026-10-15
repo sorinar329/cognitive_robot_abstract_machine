@@ -77,6 +77,7 @@ from semantic_digital_twin.world_description.geometry import (
     Color,
 )
 from semantic_digital_twin.world_description.contact import ContactParameters
+from semantic_digital_twin.world_description.degree_of_freedom import DegreeOfFreedom
 from semantic_digital_twin.world_description.world_entity import (
     Region,
     Body,
@@ -85,6 +86,7 @@ from semantic_digital_twin.world_description.world_entity import (
     Connection,
     WorldEntity,
     Actuator,
+    ContactExclusion,
     PositionServo,
 )
 from semantic_digital_twin.mixin import (
@@ -318,6 +320,79 @@ class EntityConverter(ABC):
 
 
 @dataclass
+class DriveJoint:
+    """
+    One of the three joints a physical simulation moves the body under a servoed drive
+    on: a slide along the drive's x or y, or a hinge about its z.
+
+    A drive is servoed when a servo drives each of its x, y and yaw; the body under any
+    other drive is welded where the drive holds it.
+    """
+
+    drive: WheeledDrive
+    """
+    The drive whose body the joint moves.
+    """
+
+    degree_of_freedom: DegreeOfFreedom
+    """
+    The degree of freedom of the drive the joint moves along.
+    """
+
+    joint_type: mujoco.mjtJoint
+    """
+    Whether the joint slides or turns.
+    """
+
+    axis: numpy.ndarray
+    """
+    The direction the joint slides along or turns about, in the drive's frame.
+    """
+
+    @property
+    def name(self) -> str:
+        """
+        The joint's name in the simulator, unique among the joints of every drive.
+        """
+        return f"{self.drive.name.name}_{self.degree_of_freedom.name.name}"
+
+    @classmethod
+    def of(cls, drive: WheeledDrive) -> List[DriveJoint]:
+        """
+        :param drive: A servoed drive.
+        :return: The joints the drive's body moves on, in the order the simulator
+            applies them: the two slides, then the turn about the place they slid to.
+        """
+        return [
+            cls(drive, drive.x, mujoco.mjtJoint.mjJNT_SLIDE, numpy.array([1.0, 0, 0])),
+            cls(drive, drive.y, mujoco.mjtJoint.mjJNT_SLIDE, numpy.array([0, 1.0, 0])),
+            cls(
+                drive, drive.yaw, mujoco.mjtJoint.mjJNT_HINGE, numpy.array([0, 0, 1.0])
+            ),
+        ]
+
+    @classmethod
+    def of_every_servoed_drive(cls, world: World) -> List[DriveJoint]:
+        """
+        :param world: The world to search.
+        :return: The joints of every servoed drive in ``world``.
+        """
+        actuated_ids = {
+            degree_of_freedom.id
+            for actuator in world.actuators
+            for degree_of_freedom in actuator.dofs
+        }
+        drive_joints = []
+        for connection in world.connections:
+            if not isinstance(connection, WheeledDrive):
+                continue
+            joints = cls.of(connection)
+            if all(joint.degree_of_freedom.id in actuated_ids for joint in joints):
+                drive_joints.extend(joints)
+        return drive_joints
+
+
+@dataclass
 class KinematicStructureEntityConverter(EntityConverter, ABC):
     """
     Converts a KinematicStructureEntity object to a dictionary of body properties for Multiverse simulator.
@@ -340,12 +415,16 @@ class KinematicStructureEntityConverter(EntityConverter, ABC):
 
         kinematic_structure_entity_props = EntityConverter._convert(self, entity)
         # The simulator joint supplies the variable part, so the static frame must
-        # exclude it (see Connection.reference_origin_expression). A drive has no
-        # simulator joint, so its body is built where the drive holds it.
+        # exclude it (see Connection.reference_origin_expression). A drive that is not
+        # servoed has no simulator joint, so its body is built where the drive holds it.
         parent_connection = entity.parent_connection
+        is_welded_drive = isinstance(parent_connection, WheeledDrive) and not any(
+            joint.drive is parent_connection
+            for joint in DriveJoint.of_every_servoed_drive(entity._world)
+        )
         static_frame = (
             parent_connection.origin_as_position_quaternion()
-            if isinstance(parent_connection, WheeledDrive)
+            if is_welded_drive
             else parent_connection.reference_origin_as_position_quaternion()
         )
         [px, py, pz, qx, qy, qz, qw] = static_frame.evaluate()[0]
@@ -894,13 +973,20 @@ class MujocoActuator(UniqueSimulatorProperty):
         gains = servo.gains
         [degree_of_freedom] = servo.dofs
         limits = degree_of_freedom.limits
+        control_range = [limits.lower.position, limits.upper.position]
+        is_unlimited = None in control_range
         return cls(
             dynamics_type=mujoco.mjtDyn.mjDYN_NONE,
             gain_type=mujoco.mjtGain.mjGAIN_FIXED,
             gain_parameters=[gains.stiffness] + [0.0] * 9,
             bias_type=mujoco.mjtBias.mjBIAS_AFFINE,
             bias_parameters=[0.0, -gains.stiffness, -gains.damping] + [0.0] * 7,
-            control_range=[limits.lower.position, limits.upper.position],
+            control_limited=(
+                mujoco.mjtLimited.mjLIMITED_FALSE
+                if is_unlimited
+                else mujoco.mjtLimited.mjLIMITED_AUTO
+            ),
+            control_range=[0.0, 0.0] if is_unlimited else control_range,
             force_range=[-gains.torque_limit, gains.torque_limit],
         )
 
@@ -1967,8 +2053,18 @@ class MujocoBuilder(MultiSimBuilder):
         key_element.set("name", "home")
         key_element.set("time", "0")
         qpos = []
+        drive_joints = DriveJoint.of_every_servoed_drive(self.world)
         for body in self.world.bodies_topologically_sorted:
             parent_connection = body.parent_connection
+            body_drive_joints = [
+                joint for joint in drive_joints if joint.drive is parent_connection
+            ]
+            if body_drive_joints:
+                qpos += [
+                    self.world.state[joint.degree_of_freedom.id].position
+                    for joint in body_drive_joints
+                ]
+                continue
             if (
                 isinstance(parent_connection, self._ignore_connection_types)
                 or parent_connection is None
@@ -2055,6 +2151,9 @@ class MujocoBuilder(MultiSimBuilder):
                 mujoco_geom_props.pop("contype")
                 mujoco_geom_props.pop("conaffinity")
             geom_props.update(mujoco_geom_props)
+        if parent.get_simulator_property_of_type(ContactExclusion) is not None:
+            geom_props["contype"] = ContactCategories.NONE
+            geom_props["conaffinity"] = ContactCategories.NONE
         geom_spec = parent_body_spec.add_geom(**geom_props)
         if geom_spec.type == mujoco.mjtGeom.mjGEOM_BOX and geom_spec.size[2] == 0:
             geom_spec.type = mujoco.mjtGeom.mjGEOM_PLANE
@@ -2251,6 +2350,14 @@ class MujocoBuilder(MultiSimBuilder):
         return material_name
 
     def _build_connection(self, connection: Connection):
+        drive_joints = [
+            joint
+            for joint in DriveJoint.of_every_servoed_drive(self.world)
+            if joint.drive is connection
+        ]
+        if drive_joints:
+            self._build_drive_joints(drive_joints)
+            return
         if isinstance(connection, self._ignore_connection_types):
             return
         joint_props = MujocoJointConverter.convert(connection)
@@ -2289,11 +2396,39 @@ class MujocoBuilder(MultiSimBuilder):
                 action="add",
             )
 
+    def _build_drive_joints(self, drive_joints: List[DriveJoint]) -> None:
+        """
+        Add the joints a servoed drive's body moves on to that body, placed and turned
+        as the drive's frame is relative to the body.
+
+        :param drive_joints: The joints of one servoed drive, in the order the simulator
+            applies them.
+        """
+        drive = drive_joints[0].drive
+        body_spec = self._find_entity(
+            entity_type=mujoco.mjtObj.mjOBJ_BODY, entity_name=drive.child.name.name
+        )
+        if body_spec is None:
+            raise MujocoEntityNotFoundError(
+                entity_name=drive.child.name.name,
+                entity_type=mujoco.mjtObj.mjOBJ_BODY,
+            )
+        child_T_drive = inverse_frame(drive.connection_T_child_expression.to_np())
+        for joint in drive_joints:
+            body_spec.add_joint(
+                name=joint.name,
+                type=joint.joint_type,
+                pos=child_T_drive[:3, 3].tolist(),
+                axis=(child_T_drive[:3, :3] @ joint.axis).tolist(),
+            )
+
     def _build_actuator(self, actuator: Actuator):
         actuator_props = MujocoActuatorConverter.convert(actuator)
-        dof_names = actuator_props.pop("dof_names")
-        assert len(dof_names) == 1, "Actuator must be associated with exactly one DOF."
-        actuator_props.update(self._transmission_for_degree_of_freedom(dof_names[0]))
+        actuator_props.pop("dof_names")
+        [degree_of_freedom] = actuator.dofs
+        actuator_props.update(
+            self._transmission_for_degree_of_freedom(degree_of_freedom)
+        )
         actuator_name = actuator.name.name
         actuator_spec = self.spec.add_actuator(**actuator_props)
         if actuator_spec is None:
@@ -2303,22 +2438,33 @@ class MujocoBuilder(MultiSimBuilder):
                 action="add",
             )
 
-    def _transmission_for_degree_of_freedom(self, dof_name: str) -> Dict[str, Any]:
+    def _transmission_for_degree_of_freedom(
+        self, degree_of_freedom: DegreeOfFreedom
+    ) -> Dict[str, Any]:
         """
-        :param dof_name: The name of the degree of freedom an actuator drives.
+        :param degree_of_freedom: The degree of freedom an actuator drives.
         :return: The actuator's transmission properties: the joint moving that degree
-            of freedom, or the tendon of that name if no joint does.
+            of freedom, or the tendon of its name if no joint does.
         """
-        connection = next(
+        drive_joint = next(
             (
-                conn
-                for conn in self.world.connections
-                if dof_name in [dof.name.name for dof in conn.dofs]
+                joint
+                for joint in DriveJoint.of_every_servoed_drive(self.world)
+                if joint.degree_of_freedom is degree_of_freedom
             ),
             None,
         )
+        if drive_joint is not None:
+            return {"target": drive_joint.name, "trntype": mujoco.mjtTrn.mjTRN_JOINT}
+        connection = next(
+            (conn for conn in self.world.connections if degree_of_freedom in conn.dofs),
+            None,
+        )
         if connection is None:
-            return {"target": dof_name, "trntype": mujoco.mjtTrn.mjTRN_TENDON}
+            return {
+                "target": degree_of_freedom.name.name,
+                "trntype": mujoco.mjtTrn.mjTRN_TENDON,
+            }
         connection_name = connection.name.name
         joint_spec = self._find_entity(
             entity_type=mujoco.mjtObj.mjOBJ_JOINT, entity_name=connection_name
@@ -3330,7 +3476,7 @@ class MujocoSynchronizer(MultiSimSynchronizer):
                             )
                         else:
                             self._command_actuator(
-                                connection,
+                                connection.raw_dof,
                                 actuator_name,
                                 positions,
                                 previous_positions,
@@ -3338,6 +3484,14 @@ class MujocoSynchronizer(MultiSimSynchronizer):
                             )
                     case _:
                         self._warn_unsupported_connection("world→sim", connection)
+            for drive_joint in DriveJoint.of_every_servoed_drive(self._world):
+                self._command_actuator(
+                    drive_joint.degree_of_freedom,
+                    actuator_name_by_dof_id[drive_joint.degree_of_freedom.id],
+                    positions,
+                    previous_positions,
+                    state_index,
+                )
 
     def _actuator_names_by_degree_of_freedom(self) -> Dict[Any, str]:
         """
@@ -3352,26 +3506,27 @@ class MujocoSynchronizer(MultiSimSynchronizer):
 
     def _command_actuator(
         self,
-        connection: ActiveConnection1DOF,
+        degree_of_freedom: DegreeOfFreedom,
         actuator_name: str,
         positions: numpy.ndarray,
         previous_positions: numpy.ndarray,
         state_index: Dict[Any, int],
     ) -> None:
         """
-        Hand the world's position for ``connection`` to its actuator as a set point,
-        instead of writing it into ``qpos``: the joint then reaches it through the
-        actuator's own dynamics, as fast and as hard as its gains allow, rather than
+        Hand the world's position for ``degree_of_freedom`` to its actuator as a set
+        point, instead of writing it into ``qpos``: the joint then reaches it through
+        the actuator's own dynamics, as fast and as hard as its gains allow, rather than
         being teleported there. No-op if the value is unchanged.
 
-        :param connection: The actuated 1DoF connection whose value is commanded.
+        :param degree_of_freedom: The actuated degree of freedom whose value is
+            commanded.
         :param actuator_name: Name of the actuator driving it.
         :param positions: The current ``world.state`` positions.
         :param previous_positions: The positions as of the last notification,
             compared against ``positions`` to decide whether to command.
         :param state_index: Maps a DoF id to its column in those two arrays.
         """
-        column = state_index[connection.raw_dof.id]
+        column = state_index[degree_of_freedom.id]
         if positions[column] == previous_positions[column]:
             return
         self.simulator.set_actuator_control(
