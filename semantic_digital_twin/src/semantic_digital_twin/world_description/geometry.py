@@ -447,7 +447,7 @@ class Shape(ABC, SubclassJSONSerializer, HasSimulatorProperties):
     A texture applied to this shape's surface, or ``None`` for a flat ``color``.
 
     Only meaningful for primitive shapes (:class:`Box`, :class:`Cylinder`,
-    :class:`Sphere`); :class:`Mesh` shapes carry their own texture as part of their
+    :class:`Capsule`, :class:`Sphere`); :class:`Mesh` shapes carry their own texture as part of their
     trimesh visual instead.
     """
 
@@ -1171,6 +1171,67 @@ class Cylinder(Shape):
             -half_height,
             half_width,
             half_width,
+            half_height,
+            self.origin,
+        )
+
+
+@dataclass(eq=False)
+class Capsule(Shape):
+    """
+    A capsule shape.
+
+    Long axis is the local z-axis, centered on the origin: a cylindrical
+    section with a hemisphere on each end.
+    """
+
+    radius: float = 0.5
+    """
+    Radius of the cylindrical section and the hemispherical ends.
+    """
+
+    height: float = 0.5
+    """
+    Total tip-to-tip extent along the local z-axis, caps included.
+    """
+
+    @property
+    def cylinder_length(self) -> float:
+        """
+        :return: Length of the cylindrical section between the two hemispheres.
+        """
+        return self.height - 2.0 * self.radius
+
+    @property
+    def volume(self) -> float:
+        return (
+            math.pi * self.radius**2 * self.cylinder_length
+            + 4.0 / 3.0 * math.pi * self.radius**3
+        )
+
+    @property
+    def mesh(self) -> trimesh.Trimesh:
+        """
+        Returns a trimesh object representing the capsule.
+        """
+        mesh = trimesh.creation.capsule(height=self.cylinder_length, radius=self.radius)
+        mesh.visual.vertex_colors = trimesh.visual.color.to_rgba(self.color.to_rgba())
+        return mesh
+
+    @property
+    def local_frame_bounding_box(self) -> VolumetricBoundingBox:
+        """
+        Returns the bounding box of the capsule.
+
+        The bounding box is axis-aligned and centered at the origin.
+        """
+        half_height = self.height / 2
+        return VolumetricBoundingBox(
+            -self.radius,
+            -self.radius,
+            -half_height,
+            self.radius,
+            self.radius,
             half_height,
             self.origin,
         )

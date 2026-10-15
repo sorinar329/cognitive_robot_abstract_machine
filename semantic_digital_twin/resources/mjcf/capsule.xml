@@ -1,0 +1,13 @@
+<mujoco>
+  <worldbody>
+    <body name="sized_capsule_body">
+      <geom name="sized_capsule" type="capsule" size="0.05 0.1"/>
+    </body>
+    <body name="segment_capsule_body">
+      <geom name="segment_capsule" type="capsule" fromto="0 0 0 0 0 0.4" size="0.06"/>
+    </body>
+    <body name="segment_cylinder_body">
+      <geom name="segment_cylinder" type="cylinder" fromto="0 0 0 1 0 0" size="0.01"/>
+    </body>
+  </worldbody>
+</mujoco>

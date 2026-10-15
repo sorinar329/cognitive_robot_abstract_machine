@@ -53,6 +53,7 @@ from semantic_digital_twin.world_description.contact import (
 )
 from semantic_digital_twin.world_description.geometry import (
     Box,
+    Capsule,
     Sphere,
     Cylinder,
     Scale,
@@ -383,6 +384,17 @@ class MJCFParser(WorldModelParser):
                     origin=origin_transform,
                     width=size[0],
                     height=size[1],
+                    color=color,
+                    texture=self._resolve_primitive_texture(mujoco_geom),
+                )
+            case mujoco.mjtGeom.mjGEOM_CAPSULE:
+                # MuJoCo sizes a capsule by radius and half the cylindrical
+                # section; ``size`` above holds both doubled, so the radius is
+                # halved back while the height adds both doubled extents.
+                return Capsule(
+                    origin=origin_transform,
+                    radius=size[0] / 2,
+                    height=size[1] + size[0],
                     color=color,
                     texture=self._resolve_primitive_texture(mujoco_geom),
                 )

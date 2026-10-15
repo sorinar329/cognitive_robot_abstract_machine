@@ -72,6 +72,7 @@ from semantic_digital_twin.world_description.connections import (
 )
 from semantic_digital_twin.world_description.geometry import (
     Box,
+    Capsule,
     Cylinder,
     Sphere,
     Shape,
@@ -534,6 +535,15 @@ class CylinderConverter(ShapeConverter, ABC):
     """
 
     entity_type: ClassVar[Type[Cylinder]] = Cylinder
+
+
+@dataclass
+class CapsuleConverter(ShapeConverter, ABC):
+    """
+    Converts a Capsule object to a dictionary of capsule properties for Multiverse simulator.
+    """
+
+    entity_type: ClassVar[Type[Capsule]] = Capsule
 
 
 @dataclass
@@ -1494,6 +1504,20 @@ class MujocoCylinderConverter(MujocoGeomConverter, CylinderConverter):
             MujocoGeomConverter._post_convert(self, entity, shape_props, **kwargs)
         )
         shape_props.update({"size": [entity.radius, entity.height / 2, 0.0]})
+        return shape_props
+
+
+@dataclass
+class MujocoCapsuleConverter(MujocoGeomConverter, CapsuleConverter):
+    type: mujoco.mjtGeom = mujoco.mjtGeom.mjGEOM_CAPSULE
+
+    def _post_convert(
+        self, entity: Capsule, shape_props: Dict[str, Any], **kwargs
+    ) -> Dict[str, Any]:
+        shape_props.update(
+            MujocoGeomConverter._post_convert(self, entity, shape_props, **kwargs)
+        )
+        shape_props.update({"size": [entity.radius, entity.cylinder_length / 2, 0.0]})
         return shape_props
 
 
