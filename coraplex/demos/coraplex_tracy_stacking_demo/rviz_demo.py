@@ -1,5 +1,5 @@
 """
-The montessori demo drawn in RViz, with Tracy moved kinematically rather than simulated.
+The stacking demo drawn in RViz, with Tracy moved kinematically rather than simulated.
 
 Watch it with a ``MarkerArray`` display on ``/semworld/viz_marker``, whose durability has
 to be set to transient local for the markers to arrive.
@@ -15,36 +15,29 @@ from typing import TYPE_CHECKING
 import rclpy
 
 from coraplex.datastructures.dataclasses import Context
-from coraplex.execution_environment import simulated_robot
+from coraplex.execution_environment import kinematically_simulated_robot
 from semantic_digital_twin.adapters.ros.tf_publisher import TFPublisher
 from semantic_digital_twin.adapters.ros.visualization.viz_marker import (
     VizMarkerPublisher,
 )
+from semantic_digital_twin.robots.tracy import Tracy
 
 if TYPE_CHECKING:
-    from demo import BuildsPlan, BuildsScene, BuildsWorld
-
-NODE_NAME = "tracy_montessori_demo_rviz"
-"""
-Name the demo's own ROS node carries.
-"""
+    from demo import StackingEnvironment
+    from semantic_digital_twin.world import World
 
 
-def run(
-    build_world: BuildsWorld, build_scene: BuildsScene, build_plan: BuildsPlan
-) -> None:
+def run(environment: StackingEnvironment, world: World) -> None:
     """
-    Draw the scene in RViz and carry the sorting plan out kinematically.
+    Draw the scene in RViz and carry the stacking plan out kinematically.
 
-    :param build_world: Builds the world Tracy stands in.
-    :param build_scene: Stands the board and the pieces in that world.
-    :param build_plan: Builds the plan that sorts them.
+    :param environment: The scene, with the plan that stacks its cubes.
+    :param world: The world the environment stood Tracy and the cubes in.
     """
-    world, robot = build_world()
-    pieces = build_scene(world)
+    [robot] = world.get_semantic_annotations_by_type(Tracy)
 
     rclpy.init()
-    node = rclpy.create_node(NODE_NAME)
+    node = rclpy.create_node("tracy_stacking_demo_rviz")
     TFPublisher(node=node, _world=world)
     VizMarkerPublisher(_world=world, node=node)
     world.notify_state_change()
@@ -52,5 +45,5 @@ def run(
     context = Context(
         world=world, robot=robot, ros_node=node, evaluate_conditions=False
     )
-    with simulated_robot:
-        build_plan(context, pieces).perform()
+    with kinematically_simulated_robot:
+        environment.build_plan(context).perform()
