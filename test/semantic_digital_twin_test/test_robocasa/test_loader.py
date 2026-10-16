@@ -138,3 +138,30 @@ def test_load_task_unknown_name_raises(robocasa_loader):
             layout_id=LayoutType.LAYOUT001,
             style_id=StyleType.STYLE001,
         )
+
+
+def test_load_task_keeps_the_joints_where_robocasa_set_them(robocasa_loader):
+    """
+    A drawer RoboCasa opens to set a task up stands open in the loaded world, as far
+    as RoboCasa opened it.
+    """
+    from robocasa.models.scenes.scene_registry import LayoutType, StyleType
+
+    environment = robocasa_loader.build_task_environment(
+        "PickPlaceCounterToDrawer",
+        layout_id=LayoutType.LAYOUT001,
+        style_id=StyleType.STYLE001,
+    )
+    model, data = environment.sim.model, environment.sim.data
+    [drawer_joint] = [
+        model.joint_id2name(joint)
+        for joint in range(model.njnt)
+        if environment.drawer.name in (model.joint_id2name(joint) or "")
+    ]
+    opened_to = float(data.qpos[model.jnt_qposadr[model.joint_name2id(drawer_joint)]])
+
+    task = robocasa_loader.load_task_from_environment(environment)
+
+    assert task.world.get_connection_by_name(drawer_joint).position == pytest.approx(
+        opened_to
+    )
