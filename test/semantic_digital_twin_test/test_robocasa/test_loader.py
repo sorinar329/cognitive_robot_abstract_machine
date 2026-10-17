@@ -21,6 +21,7 @@ from semantic_digital_twin.semantic_annotations.natural_language import (
 from semantic_digital_twin.semantic_annotations.semantic_annotations import (
     Dishwasher,
     Drawer,
+    Floor,
 )
 from semantic_digital_twin.world_description.connections import ActiveConnection1DOF
 from semantic_digital_twin.world import World
@@ -309,6 +310,36 @@ def test_load_task_names_the_fixtures_the_task_refers_to(robocasa_loader):
     assert task.referenced_fixtures["drawer"].name.name.startswith(
         environment.drawer.name
     )
+
+
+def test_load_task_marks_the_kitchen_floor_as_a_floor(robocasa_loader):
+    """
+    The floor of the kitchen is annotated as one, so that a robot's paths can be laid
+    out in the free space above it.
+    """
+    from robocasa.models.fixtures.others import Floor as RoboCasaFloor
+    from robocasa.models.scenes.scene_registry import LayoutType, StyleType
+
+    environment = robocasa_loader.build_task_environment(
+        "OpenDrawer",
+        layout_id=LayoutType.LAYOUT001,
+        style_id=StyleType.STYLE001,
+        seed=0,
+    )
+    floor_names = [
+        name
+        for name, fixture in environment.fixtures.items()
+        if isinstance(fixture, RoboCasaFloor)
+    ]
+
+    task = robocasa_loader.load_task_from_environment(environment)
+
+    floors = {
+        annotation.root.name.name
+        for annotation in task.world.get_semantic_annotations_by_type(Floor)
+    }
+    assert floor_names
+    assert all(any(floor.startswith(name) for floor in floors) for name in floor_names)
 
 
 def test_load_task_puts_a_drawer_on_its_rails_with_its_handle(robocasa_loader):
