@@ -1,4 +1,5 @@
 import os.path
+from copy import deepcopy
 
 import numpy as np
 import plotly.graph_objects as go
@@ -18,6 +19,7 @@ from semantic_digital_twin.exceptions import (
     NoSupportingSurfaceError,
     PointOccupiedError,
 )
+from semantic_digital_twin.robots.hsrb import HSRB
 from semantic_digital_twin.semantic_annotations.semantic_annotations import Floor
 from semantic_digital_twin.spatial_types import Point2, Point3, Pose
 from semantic_digital_twin.spatial_types.spatial_types import (
@@ -178,6 +180,45 @@ def test_from_world(table_world: World):
         start_unsearched = Point3(-10, -10, -10, reference_frame=table_world.root)
         target_unsearched = Point3(10, 10, 10, reference_frame=table_world.root)
         graph_of_convex_sets.path_from_to(start_unsearched, target_unsearched)
+
+
+def test_a_body_left_out_of_the_obstacles_leaves_its_space_free(table_world: World):
+    """
+    What is to be reached into, such as an object to grasp, is left out of the
+    obstacles, so that the space it fills counts as free.
+    """
+    search_space = BoundingBoxCollection(
+        [
+            VolumetricBoundingBox(
+                min_x=-5,
+                max_x=-2,
+                min_y=-1,
+                max_y=2,
+                min_z=0,
+                max_z=2,
+                origin=HomogeneousTransformationMatrix(
+                    reference_frame=table_world.root
+                ),
+            )
+        ],
+        table_world.root,
+    )
+    top = table_world.get_body_by_name("top")
+    inside_the_top = (
+        top.collision.as_bounding_box_collection_in_frame(table_world.root)
+        .bounding_box()
+        .center
+    )
+
+    with_the_top = VolumetricGraphOfBoundingBoxes.free_space_from_world(
+        table_world, search_space=search_space
+    )
+    without_the_top = VolumetricGraphOfBoundingBoxes.free_space_from_world(
+        table_world, search_space=search_space, excluded_bodies=[top]
+    )
+
+    assert not with_the_top.is_free(inside_the_top)
+    assert without_the_top.is_free(inside_the_top)
 
 
 def test_constrain_to_free_space_requires_floatlike_fields(table_world: World):
@@ -586,6 +627,30 @@ def _floor_with_an_obstacle_standing_on_it() -> Floor:
     return floor
 
 
+def test_a_robot_navigates_only_where_its_base_keeps_its_margin_from_obstacles(
+    _hsr_world_setup,
+):
+    """
+    The space a robot navigates is the floor's free space kept clear of every obstacle
+    by the base's radius and the margin asked for.
+    """
+    floor = _floor_with_an_obstacle_standing_on_it()
+    world = floor._world
+    world.merge_world(deepcopy(_hsr_world_setup))
+    robot = world.get_semantic_annotations_by_type(HSRB)[0]
+    clearance = robot.mobile_base.base_radius + 0.1
+    obstacle_side = 0.2
+
+    navigable_space = floor.navigable_space(robot, margin=0.1)
+
+    assert not navigable_space.is_free(
+        Point2(obstacle_side + clearance - 0.05, 0.0, reference_frame=world.root)
+    )
+    assert navigable_space.is_free(
+        Point2(obstacle_side + clearance + 0.05, 0.0, reference_frame=world.root)
+    )
+
+
 def test_planar_free_space_uses_the_supporting_surface_as_search_space():
     """
     HasSupportingSurface.planar_free_space must derive its search space from the
@@ -846,3 +911,79 @@ def test_the_unchecked_lookup_answers_with_nothing_for_an_occupied_point(
     under_the_table = Point2(-3.5, 0.5, reference_frame=table_world.root)
 
     assert navigation_map._node_of_point(under_the_table) is None
+
+
+# %% asking whether a point is free
+
+
+def test_a_point_in_a_free_box_is_free(table_world: World):
+    navigation_map = _navigation_map_around_the_table(table_world)
+
+    assert navigation_map.is_free(Point2(-4.5, -0.5, reference_frame=table_world.root))
+
+
+def test_a_point_no_free_box_covers_is_not_free(table_world: World):
+    navigation_map = _navigation_map_around_the_table(table_world)
+
+    assert not navigation_map.is_free(
+        Point2(-3.5, 0.5, reference_frame=table_world.root)
+    )
+
+
+def test_a_point_outside_the_search_space_is_not_free(table_world: World):
+    """
+    Nothing is known about what stands beyond the search space, so nothing there is
+    free to move to.
+    """
+    navigation_map = _navigation_map_around_the_table(table_world)
+
+    assert not navigation_map.is_free(Point2(10, 10, reference_frame=table_world.root))
+
+
+def test_whether_a_point_is_free_does_not_depend_on_its_frame(table_world: World):
+    navigation_map = _navigation_map_around_the_table(table_world)
+    table_top = table_world.get_body_by_name("top")
+    free = Point2(-4.5, -0.5, reference_frame=table_world.root)
+
+    assert navigation_map.is_free(table_world.transform(free, table_top))
+
+
+# %% the free point nearest a point
+
+
+def test_the_nearest_free_point_of_a_free_point_is_the_point_itself(table_world: World):
+    navigation_map = _navigation_map_around_the_table(table_world)
+    free = Point2(-4.5, -0.5, reference_frame=table_world.root)
+
+    nearest = table_world.transform(
+        navigation_map.nearest_free_point(free), table_world.root
+    )
+
+    assert nearest.to_np()[:2] == pytest.approx(free.to_np()[:2])
+
+
+def test_the_nearest_free_point_of_an_occupied_point_is_free_and_nearer_than_others(
+    table_world: World,
+):
+    """
+    Of all free points, the one answered lies nearest: no free box comes closer.
+    """
+    navigation_map = _navigation_map_around_the_table(table_world)
+    under_the_table = Point2(-3.5, 0.5, reference_frame=table_world.root)
+
+    nearest = navigation_map.nearest_free_point(under_the_table)
+
+    assert navigation_map.is_free(nearest)
+    distance = np.linalg.norm(
+        table_world.transform(nearest, table_world.root).to_np()[:2]
+        - under_the_table.to_np()[:2]
+    )
+    corners = [
+        table_world.transform(corner, table_world.root).to_np()[:2]
+        for node in navigation_map.graph.nodes()
+        for corner in node.get_points()
+    ]
+    assert all(
+        np.linalg.norm(corner - under_the_table.to_np()[:2]) >= distance - 1e-9
+        for corner in corners
+    )
