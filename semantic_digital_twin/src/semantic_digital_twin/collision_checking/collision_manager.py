@@ -25,8 +25,10 @@ from semantic_digital_twin.collision_checking.collision_rules import (
     AllowCollisionForAdjacentPairs,
     AllowNonRobotCollisions,
     AvoidCollisionRule,
+    AvoidExternalCollisions,
     AllowCollisionRule,
 )
+from semantic_digital_twin.exceptions import NoExternalCollisionRuleError
 from semantic_digital_twin.collision_checking.pybullet_collision_detector import (
     BulletCollisionDetector,
 )
@@ -298,6 +300,25 @@ class CollisionManager(ModelChangeCallback):
             if value is not None:
                 return value
         raise ValueError(f"No buffer-zone rule found for {body_a, body_b}")
+
+    def external_collision_rule(self, body: Body) -> AvoidExternalCollisions:
+        """
+        :param body: A body of a robot.
+        :return: The highest-priority rule avoiding collisions between ``body`` and the
+            bodies outside its robot.
+        :raises NoExternalCollisionRuleError: If no such rule covers ``body``.
+        """
+        for rule in reversed(self.rules):
+            if not isinstance(rule, AvoidExternalCollisions):
+                continue
+            covered = (
+                rule.robot.bodies_with_collision
+                if rule.body_subset is None
+                else rule.body_subset
+            )
+            if body in covered:
+                return rule
+        raise NoExternalCollisionRuleError(body)
 
     @memoize
     def get_violated_distance(self, body_a: Body, body_b: Body) -> float:
