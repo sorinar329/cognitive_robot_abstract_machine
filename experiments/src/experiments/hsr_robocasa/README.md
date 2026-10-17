@@ -5,8 +5,10 @@ kitchen, simulated in MuJoCo. RoboCasa composes the kitchen and samples the obje
 the HSR replaces RoboCasa's robot, every object is held by friction alone, and a
 drawer moves only as far as the HSR's hold on its handle pulls or pushes it.
 
-The kitchen is RoboCasa's layout 1, style 1, with everything standing on the floor
-lowered from RoboCasa's 0.92 m counters to 0.75 m, where the HSR reaches.
+The kitchen is RoboCasa's layout 1, style 1, as RoboCasa builds it, with its 0.92 m
+counters. A task can be given a lower `counter_height`, which scales everything
+standing on the floor down with the counters; results in such a kitchen are not
+RoboCasa's tasks any more and are reported apart.
 
 | Task (class in `pick_place.py`) | What the HSR does | Seed | Object |
 |---|---|---|---|
@@ -26,10 +28,40 @@ lowered from RoboCasa's 0.92 m counters to 0.75 m, where the HSR reaches.
 | `OpenOven` | takes the bar along the top of the oven's door and lets the door down (layout 2, which has an oven) |
 | `CloseOven` | takes the bar of the door RoboCasa let down from below and swings the door up, then takes the bar again from the front and presses the door shut (layout 2) |
 
-The drawer tasks and `PickPlaceDrawerToCounter` lower the counters to 0.84 m only: RoboCasa takes a drawer for the
-top drawer only while its middle stands 0.7 m to 0.9 m high. RoboCasa counts a drawer
+| Task (class in `composite.py`) | What the HSR does | Seed |
+|---|---|---|
+| `BreadAndCheese` | lays the bread roll and the cheese on the cutting board, each on a strip of the board of its own | 6 |
+| `DefrostByCategory` | drops the two fruits of a pile into the sink and sets the two vegetables into the bowl | 0 |
+
+Of these, `PickPlaceCounterToSink`, `OpenDrawer`, `CloseDrawer` and `CloseOven`
+succeed in RoboCasa's kitchen as built. The others fail there, with the HSR's
+collision margins as configured, and their tests are marked as expected failures
+with the reason:
+
+- `PickPlaceCounterToStove`, `PickPlaceStoveToCounter`: no place on the floor that
+  keeps the base outside its collision buffer zone lets the arm reach the pan.
+- `PickPlaceSinkToCounter`, `PickPlaceDrawerToCounter`, `BreadAndCheese`,
+  `DefrostByCategory`: reaching the object, the arm comes within its collision
+  buffer zone of the counter, and collision avoidance stops it.
+- `OpenOven`: the door opens fully, but backing the hand off the released bar
+  stalls.
+
+RoboCasa counts a drawer
 open at 95 % of its travel and closed at 5 %, an oven door open at 90 % and closed at
 0.5 %.
+
+Where the HSR stands, how it gets there and how its hand comes in are planned on
+graphs of convex sets (GCS), not set by hand:
+
+- The HSR starts, parked, on the free floor nearest where RoboCasa starts its own
+  robot, and drives along GCS paths of the floor.
+- It stands where its base keeps outside its collision buffer zone, where its arm
+  reaches every pose of the next action and keeps its own buffer zones at each, and
+  where a path leads.
+- To take an object, it tries hand tilts from level down and headings from the
+  nearest floor round, and takes the first whose hand path is free in a 3D GCS
+  around the object and that it has somewhere to stand for, picking and placing.
+- Of several objects, it moves the one nearest the floor first that it can reach.
 
 Every task is watched by SegMind while it runs, and the tests take its word for
 success: a pick-and-place task has to end with a placing of the object on its
@@ -94,7 +126,7 @@ cd ~/cram2/cognitive_robot_abstract_machine
     test/experiments_test/hsr_robocasa_test
 ```
 
-The nine full runs show as skipped: they only run with `CI=true`.
+The eleven full runs show as skipped: they only run with `CI=true`.
 
 **Full runs**: each task performed in MuJoCo, about 90 s per pick-and-place task and
 60 s per drawer task. Cap the memory,

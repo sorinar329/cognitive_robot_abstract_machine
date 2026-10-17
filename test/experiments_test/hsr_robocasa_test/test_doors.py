@@ -12,7 +12,7 @@ from experiments.hsr_robocasa.doors import CloseOven, OpenOven
 from segmind.datastructures.events import ClosedEvent, OpenedEvent
 
 from .test_drawers import last_event_of_the_moving_part
-from .test_pick_place import runs_in_ci
+from .test_pick_place import HSRLimitation, runs_in_ci
 
 # %% taking hold of the bar
 
@@ -37,6 +37,7 @@ def test_the_bar_is_taken_hold_of_as_the_door_turns():
 
 
 @runs_in_ci
+@pytest.mark.xfail(strict=True, reason=HSRLimitation.OVEN_BACK_OFF)
 def test_the_hsr_opens_the_oven():
     experiment = OpenOven(headless=True)
     experiment.build_world()

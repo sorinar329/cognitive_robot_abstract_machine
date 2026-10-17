@@ -39,12 +39,6 @@ class HSRTaskAtDrawer(HSRHandleTask, ABC):
     One of RoboCasa's tasks at its top drawer, performed by the HSR.
     """
 
-    counter_height: float = 0.84
-    """
-    Lowered less than for the other tasks: RoboCasa takes a drawer for the top drawer
-    its drawer tasks work only while the drawer's middle stands 0.7 m to 0.9 m high.
-    """
-
     @property
     def drawer(self) -> Drawer:
         """
@@ -107,13 +101,6 @@ class HSRDrawerTask(HSRTaskAtDrawer, ABC):
         which the drawer's front comes towards as the drawer opens.
         """
         return self.arm_links(list(ArmLink))
-
-    @property
-    def first_target(self) -> np.ndarray:
-        """
-        The middle of the drawer's handle.
-        """
-        return self.handle_middle
 
     def build_plan(self, context: Context) -> Plan:
         return self.handle_plan(context, self.drawer_action)

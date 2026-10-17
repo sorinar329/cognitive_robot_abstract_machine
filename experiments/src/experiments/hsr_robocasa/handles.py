@@ -19,7 +19,7 @@ from coraplex.datastructures.dataclasses import Context
 from coraplex.plans.factories import sequential
 from coraplex.plans.plan import Plan
 from coraplex.robot_plans.actions.core.container import ContainerAction
-from coraplex.robot_plans.actions.core.navigation import NavigateAction
+from coraplex.robot_plans.actions.core.navigation import PathPlanningNavigateAction
 from coraplex.robot_plans.actions.core.robot_body import ParkArmsAction
 from semantic_digital_twin.grasping.grasp_candidates import GraspCandidate
 from semantic_digital_twin.semantic_annotations.semantic_annotations import Handle
@@ -33,6 +33,7 @@ from semantic_digital_twin.world_description.connections import (
     RevoluteConnection,
 )
 
+from experiments.hsr_robocasa.exceptions import NoStandingPoseError
 from experiments.hsr_robocasa.robocasa_task import HSRRoboCasaTask
 
 
@@ -41,13 +42,6 @@ class HSRHandleTask(HSRRoboCasaTask, ABC):
     """
     One of RoboCasa's tasks in which the HSR takes hold of a fixture's handle from the
     front and moves the fixture by it.
-    """
-
-    handle_reach: float = 0.6
-    """
-    How far in front of its base's centre the HSR takes hold of the handle: from the
-    front, and with its hand level the arm reaches 0.37 m to 0.70 m ahead at a
-    handle's height.
     """
 
     tool_frame_tolerance: float = 0.02
@@ -159,22 +153,26 @@ class HSRHandleTask(HSRRoboCasaTask, ABC):
         :param context: The context the actions are built in.
         :param build_action: Builds the action that moves the fixture by its handle,
             from the handle and the arm, and the grasp as ``grasp``.
-        :return: The plan that stands in front of the handle, moves the arm to where
-            taking hold of the handle starts its approach, and moves the fixture.
+        :return: The plan that drives to where the arm reaches the handle, moves the
+            arm to where taking hold of the handle starts its approach, and moves the
+            fixture.
         """
         robot = context.robot
         arm = robot.all_arms[0]
         grasp = self.handle_grasp()
         action = build_action(self.handle, arm, grasp=grasp)
-        pre_grasp = action.grasp_pose_sequence(
+        taking_hold = action.grasp_pose_sequence(
             grasp.world_T_grasp, arm.end_effector, grasp
-        ).pre_grasp
-        standing_pose = self.standing_pose(self.handle_middle, self.handle_reach)
+        )
+        goals = self.in_kitchen_frame([taking_hold.pre_grasp, taking_hold.grasp])
+        standing_pose = self.standing_pose(goals, robot.root.global_pose)
+        if standing_pose is None:
+            raise NoStandingPoseError(goals)
         return sequential(
             [
                 ParkArmsAction(robot.all_arms),
-                NavigateAction(standing_pose),
-                *self.arm_motions_to(pre_grasp, standing_pose),
+                PathPlanningNavigateAction(standing_pose),
+                *self.arm_motions_to(taking_hold.pre_grasp, standing_pose),
                 action,
                 ParkArmsAction(robot.all_arms),
             ],

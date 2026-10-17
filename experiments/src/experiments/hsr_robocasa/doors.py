@@ -112,13 +112,6 @@ class HSROvenDoorTask(HSRHandleTask, ABC):
             + self.robot.all_arms[0].end_effector.bodies_with_collision
         )
 
-    @property
-    def first_target(self) -> np.ndarray:
-        """
-        The middle of the door's bar.
-        """
-        return self.handle_middle
-
     def build_plan(self, context: Context) -> Plan:
         return self.handle_plan(context, self.door_action)
 
@@ -141,14 +134,6 @@ class OpenOven(HSROvenDoorTask):
 class CloseOven(HSROvenDoorTask):
     """
     Close the oven's door, which RoboCasa has opened.
-    """
-
-    handle_reach: float = 0.59
-    """
-    RoboCasa has let the door down, so its bar faces the floor and is taken from below
-    and in front, the hand tilted up as the door is. Tilted up that steeply, the arm
-    reaches the bar only 0.46 m to 0.60 m ahead, and where taking hold of it starts
-    its approach, lower down, only from 0.52 m on.
     """
 
     approach_clearance: float = 0.05
