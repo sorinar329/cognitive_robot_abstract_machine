@@ -400,6 +400,11 @@ class FixtureReference(StrEnum):
     The fixture a door task works.
     """
 
+    DINING_COUNTER = "dining_counter"
+    """
+    The counter people sit at, on stools.
+    """
+
 
 class LayoutKey(StrEnum):
     """

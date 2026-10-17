@@ -9,7 +9,11 @@ import pytest
 pytest.importorskip("robocasa", reason="robocasa is not installed")
 pytest.importorskip("robosuite", reason="robosuite is not installed")
 
-from experiments.hsr_robocasa.composite import BreadAndCheese, DefrostByCategory
+from experiments.hsr_robocasa.composite import (
+    BreadAndCheese,
+    DefrostByCategory,
+    RecycleBottlesByType,
+)
 from experiments.hsr_robocasa.pick_place import HSRPickPlaceTask, TaskObject
 from semantic_digital_twin.semantic_annotations.semantic_annotations import Sink
 from segmind.datastructures.events import LossOfGraspEvent, PlacingEvent
@@ -64,6 +68,40 @@ def test_fruit_goes_into_the_sink_and_vegetables_into_the_bowl():
     ]
 
 
+def test_each_middle_bottle_is_set_down_next_to_bottles_of_its_kind():
+    """
+    Where a bottle is let go lies within RoboCasa's cluster threshold of a bottle of
+    its kind, and outside every other bottle's footprint grown by its own radius and
+    the hand's half width.
+    """
+    experiment = RecycleBottlesByType(headless=True)
+    experiment.build_world()
+
+    for moved in experiment.moved_objects:
+        experiment.moving = moved
+        spot = experiment.release_point[:2]
+        own_kind = [
+            experiment.extent(experiment.world.get_body_by_name(sample)).center.to_np()[
+                :2
+            ]
+            for sample in experiment.samples_of_its_kind
+        ]
+        assert (
+            min(np.linalg.norm(spot - sample) for sample in own_kind)
+            <= RecycleBottlesByType.cluster_threshold
+        )
+        for other in experiment.task.manipulated_objects:
+            if other.name.name == moved:
+                continue
+            extent = experiment.extent(other)
+            clearance = experiment.bottle_radius + experiment.hand_half_width
+            off_centre = np.abs(spot - extent.center.to_np()[:2])
+            half_sizes = np.array([extent.width, extent.depth]) / 2
+            # To a millimetre: the free space grows each of the bottle's shapes, not
+            # the box around all of them.
+            assert np.any(off_centre >= half_sizes + clearance - 0.001)
+
+
 # %% the run
 
 
@@ -111,3 +149,29 @@ def test_segmind_sees_fruit_put_into_the_sink_and_vegetables_into_the_bowl():
     experiment.run()
 
     assert objects_put_down_in_their_receptacles(experiment)
+
+
+@runs_in_ci
+@pytest.mark.xfail(strict=True, reason=HSRLimitation.OBJECTS_TOO_CLOSE)
+def test_segmind_sees_each_middle_bottle_put_down_next_to_its_kind():
+    experiment = RecycleBottlesByType(headless=True)
+    experiment.build_world()
+
+    experiment.run()
+
+    assert objects_put_down_in_their_receptacles(experiment)
+    for moved in experiment.moved_objects:
+        experiment.moving = moved
+        bottle = experiment.extent(experiment.world.get_body_by_name(moved))
+        assert (
+            min(
+                np.linalg.norm(
+                    bottle.center.to_np()[:2]
+                    - experiment.extent(
+                        experiment.world.get_body_by_name(sample)
+                    ).center.to_np()[:2]
+                )
+                for sample in experiment.samples_of_its_kind
+            )
+            <= RecycleBottlesByType.cluster_threshold
+        )

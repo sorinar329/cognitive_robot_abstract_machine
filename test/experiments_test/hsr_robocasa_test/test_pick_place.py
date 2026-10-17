@@ -59,6 +59,14 @@ class HSRLimitation(StrEnum):
     At RoboCasa's counter height, the forearm comes down to the counter's edge.
     """
 
+    OBJECTS_TOO_CLOSE = (
+        "Objects stand closer together than the hand's width, so no approach to one "
+        "keeps the hand clear of its neighbour."
+    )
+    """
+    RoboCasa sets the objects down nearly touching.
+    """
+
     OVEN_BACK_OFF = (
         "The door opens fully, but backing the hand off the released bar stalls."
     )
