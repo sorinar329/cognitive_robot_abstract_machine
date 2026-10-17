@@ -149,7 +149,7 @@ class PathPlanningNavigateAction(ActionDescription):
         The floor the robot stands on, whose free space the path is laid out in.
 
         A world with several storeys puts more than one floor below the robot; the one
-        it stands on is the topmost of those it stands within the footprint of.
+        it stands on is the topmost of those it stands on, see :meth:`_stands_on`.
 
         :raises NoFloorBelowRobot: If the robot stands over no annotated floor.
         :return: The floor the robot drives on.
@@ -175,15 +175,15 @@ class PathPlanningNavigateAction(ActionDescription):
     def _stands_on(self, floor: Floor) -> bool:
         """
         :param floor: The floor to test.
-        :return: Whether the robot's base rests within this floor's footprint and no
-            lower than its top.
+        :return: Whether the robot's base rests within this floor's footprint and
+            above its bottom: a base that has settled into a floor stands on it.
         """
         extent = self._extent_of(floor)
         base_pose = self.robot.root.global_pose
         return (
             extent.min_x <= float(base_pose.x) <= extent.max_x
             and extent.min_y <= float(base_pose.y) <= extent.max_y
-            and extent.max_z <= float(base_pose.z)
+            and extent.min_z <= float(base_pose.z)
         )
 
     def _path(self) -> list[Pose]:
@@ -230,18 +230,22 @@ class PathPlanningNavigateAction(ActionDescription):
         """
         The points the robot travels through to get from where it stands to the target.
 
-        :return: The path, beginning at the robot's own position and ending at the
-            target's.
+        :return: The path, through the floor kept clear by the base's radius and the
+            distance its collision avoidance must not let it undercut, beginning at the
+            robot's own position, or at the free point nearest it where the robot stands
+            closer to an obstacle than that, and ending at the target's.
         """
-        base_pose = self.robot.root.global_pose
-        free_space = self._floor.planar_free_space(
-            max_height=self.robot.as_bounding_box_collection_in_frame(self.robot.root)
-            .bounding_box()
-            .scale.z,
-            bloat_obstacles=self.robot.mobile_base.base_radius,
+        navigable_space = self._floor.navigable_space(
+            self.robot,
+            self.world.collision_manager.external_collision_rule(
+                self.robot.mobile_base.root
+            ).violated_distance,
         )
-        return free_space.path_from_to(
-            Point2.from_pose(base_pose), Point2.from_pose(self.target)
+        return navigable_space.path_from_to(
+            navigable_space.nearest_free_point(
+                Point2.from_pose(self.robot.root.global_pose)
+            ),
+            Point2.from_pose(self.target),
         )
 
 
