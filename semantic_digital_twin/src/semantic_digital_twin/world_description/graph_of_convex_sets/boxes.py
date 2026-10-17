@@ -16,6 +16,7 @@ from random_events.product_algebra import SimpleEvent
 from rtree import index
 from typing_extensions import (
     Generic,
+    Iterable,
     List,
     Optional,
     Dict,
@@ -262,6 +263,37 @@ class GraphOfBoundingBoxes(
             if node.contains(point):
                 return node
         return None
+
+    def is_free(self, point: PointT) -> bool:
+        """
+        :param point: The point to check, in any reference frame.
+        :return: Whether the point lies in one of this graph's free-space nodes; a
+            point beyond the region this graph was built over is not.
+        """
+        point = self.world.transform(point, self.search_space.reference_frame)
+        return (
+            self.search_space.contains(point) and self._node_of_point(point) is not None
+        )
+
+    def nearest_free_point(self, point: PointT) -> PointT:
+        """
+        :param point: The point to start from, in any reference frame.
+        :return: The point of this graph's free space nearest ``point``, in the search
+            space's reference frame: ``point`` itself where it is free.
+        """
+        reference_frame = self.search_space.reference_frame
+        coordinates = self.world.transform(point, reference_frame).to_np()[
+            : self.dimensionality
+        ]
+        clamped_into_each_node = [
+            np.clip(coordinates, bounds.lower, bounds.upper)
+            for bounds in (node.to_array_bounds() for node in self.graph.nodes())
+        ]
+        nearest = min(
+            clamped_into_each_node,
+            key=lambda clamped: np.linalg.norm(clamped - coordinates),
+        )
+        return type(point)(*nearest, reference_frame=reference_frame)
 
     def node_of_point(self, point: PointT) -> BoxT:
         """
@@ -589,6 +621,8 @@ class VolumetricGraphOfBoundingBoxes(
         tolerance=0.001,
         bloat_obstacles: float = 0.0,
         bloat_walls: float = 0.0,
+        obstacle_height_clearance: float = 0.01,
+        excluded_bodies: Iterable[Body] = (),
     ) -> Self:
         """
         Create a connectivity graph from the free space in the belief state of the
@@ -601,8 +635,11 @@ class VolumetricGraphOfBoundingBoxes(
             an obstacle.
         :param tolerance: The tolerance for the intersection when calculating the
             connectivity.
-        :param bloat_obstacles: The amount to bloat the obstacles.
+        :param bloat_obstacles: The amount to bloat the obstacles in x and y.
         :param bloat_walls: The amount to bloat the walls.
+        :param obstacle_height_clearance: The amount to bloat the obstacles in z.
+        :param excluded_bodies: Bodies that are not obstacles, such as an object to be
+            reached into.
         :return: The connectivity graph. If no obstacles are found, an empty graph is
             returned.
         """
@@ -612,6 +649,8 @@ class VolumetricGraphOfBoundingBoxes(
                 semantic_wall_annotation,
                 bloat_obstacles,
                 bloat_walls,
+                obstacle_height_clearance,
+                excluded_bodies,
             )
         )
 
@@ -652,6 +691,8 @@ class VolumetricGraphOfBoundingBoxes(
         search_space: BoundingBoxCollection[VolumetricBoundingBox, Point3],
         tolerance=0.001,
         bloat_obstacles: float = 0.0,
+        obstacle_height_clearance: float = 0.01,
+        excluded_bodies: Iterable[Body] = (),
     ) -> Self:
         """
         Create a connectivity graph from the free space in the belief state of the
@@ -661,7 +702,10 @@ class VolumetricGraphOfBoundingBoxes(
         :param search_space: The search space for the connectivity graph.
         :param tolerance: The tolerance for the intersection when calculating the
             connectivity.
-        :param bloat_obstacles: The amount to bloat the obstacles.
+        :param bloat_obstacles: The amount to bloat the obstacles in x and y.
+        :param obstacle_height_clearance: The amount to bloat the obstacles in z.
+        :param excluded_bodies: Bodies that are not obstacles, such as an object to be
+            reached into.
         :return: The connectivity graph.
         """
         semantic_annotation = SemanticEnvironmentAnnotation(
@@ -673,6 +717,8 @@ class VolumetricGraphOfBoundingBoxes(
             semantic_obstacle_annotation=semantic_annotation,
             tolerance=tolerance,
             bloat_obstacles=bloat_obstacles,
+            obstacle_height_clearance=obstacle_height_clearance,
+            excluded_bodies=excluded_bodies,
         )
 
 

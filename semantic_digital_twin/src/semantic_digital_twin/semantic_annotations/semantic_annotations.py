@@ -78,7 +78,12 @@ from semantic_digital_twin.specifications.semantic_annotations import (
 )
 
 if TYPE_CHECKING:
+    from semantic_digital_twin.robots.robot_part_mixins import HasMobileBase
+    from semantic_digital_twin.robots.robot_parts import AbstractRobot
     from semantic_digital_twin.world import World
+    from semantic_digital_twin.world_description.graph_of_convex_sets.boxes import (
+        PlanarGraphOfBoundingBoxes,
+    )
 
 
 @dataclass(eq=False)
@@ -625,6 +630,23 @@ class Wardrobe(Cabinet): ...
 
 @dataclass(eq=False)
 class Floor(HasSupportingSurface):
+    def navigable_space(
+        self, robot: AbstractRobot | HasMobileBase, margin: float
+    ) -> PlanarGraphOfBoundingBoxes:
+        """
+        :param robot: A robot with a mobile base, standing on this floor.
+        :param margin: How far, beyond its radius, the base is to keep from obstacles.
+        :return: The free space above this floor that the robot's base can stand in:
+            kept clear of every obstacle up to the robot's height by the base's radius
+            and ``margin``.
+        """
+        return self.planar_free_space(
+            max_height=robot.as_bounding_box_collection_in_frame(robot.root)
+            .bounding_box()
+            .scale.z,
+            bloat_obstacles=robot.mobile_base.base_radius + margin,
+        )
+
     @classmethod
     def create_with_new_body_from_polytope_in_world(
         cls,
@@ -1513,7 +1535,9 @@ class SemanticEnvironmentAnnotation(HasRootBody):
     """
 
     def obstacle_entities(
-        self, search_space: BoundingBoxCollection[VolumetricBoundingBox, Point3]
+        self,
+        search_space: BoundingBoxCollection[VolumetricBoundingBox, Point3],
+        excluded_bodies: Iterable[Body] = (),
     ) -> List[Body]:
         """
         Collect the obstacle bodies to consider within ``search_space``.
@@ -1523,14 +1547,13 @@ class SemanticEnvironmentAnnotation(HasRootBody):
 
         :param search_space: The search space; its reference frame is used to look up
             the owning world.
+        :param excluded_bodies: Bodies that are not obstacles either, such as an object
+            to be reached into.
         :return: The obstacle bodies to consider.
         """
         world = search_space.reference_frame._world
-        return [
-            body
-            for body in self.bodies_with_collision
-            if body not in world.robot_bodies_with_collision
-        ]
+        left_out = set(world.robot_bodies_with_collision) | set(excluded_bodies)
+        return [body for body in self.bodies_with_collision if body not in left_out]
 
     def build_bloated_obstacle_collection(
         self,
@@ -1539,6 +1562,7 @@ class SemanticEnvironmentAnnotation(HasRootBody):
         bloat_obstacles: float = 0.0,
         bloat_walls: float = 0.0,
         obstacle_height_clearance: float = 0.01,
+        excluded_bodies: Iterable[Body] = (),
     ) -> BoundingBoxCollection[VolumetricBoundingBox, Point3]:
         """
         Collect and bloat this annotation's obstacle bounding boxes.
@@ -1555,12 +1579,14 @@ class SemanticEnvironmentAnnotation(HasRootBody):
             dimension.
         :param obstacle_height_clearance: Amount to expand every obstacle bounding box
             in z, regardless of ``bloat_obstacles``/``bloat_walls``.
+        :param excluded_bodies: Bodies that are not obstacles, see
+            :meth:`obstacle_entities`.
         :return: A collection of the bloated obstacle and wall bounding boxes.
         """
         world_root = search_space.reference_frame
         origin = HomogeneousTransformationMatrix(reference_frame=world_root)
 
-        entities_to_consider = self.obstacle_entities(search_space)
+        entities_to_consider = self.obstacle_entities(search_space, excluded_bodies)
 
         collections = (
             entity.collision.as_bounding_box_collection_at_origin(origin)
