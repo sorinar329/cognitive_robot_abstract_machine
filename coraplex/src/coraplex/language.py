@@ -262,11 +262,8 @@ class TryInOrderNode(ExecutesSequentially):
                 child.perform()
             except PlanFailure:
                 continue
-        failed = all(
-            [child.status == LifeCycleValues.FAILED for child in self.children]
-        )
-        if failed:
-            raise AllChildrenFailed(self)
+            return
+        raise AllChildrenFailed(self)
 
 
 @dataclass(eq=False)

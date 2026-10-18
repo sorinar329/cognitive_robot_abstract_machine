@@ -259,6 +259,23 @@ def test_exception_try_in_order(pr2_apartment_context):
     assert plan.root.status == LifeCycleValues.SUCCEEDED
 
 
+def test_try_in_order_stops_at_the_first_child_that_succeeds(pr2_apartment_context):
+    """
+    The children are alternatives: once one succeeds, the others are not tried.
+    """
+    world, robot_view, context = pr2_apartment_context
+    tried = []
+
+    plan = try_in_order(
+        [code(partial(tried.append, "first")), code(partial(tried.append, "second"))],
+        context,
+    ).plan
+    plan.perform()
+
+    assert tried == ["first"]
+    assert plan.root.status == LifeCycleValues.SUCCEEDED
+
+
 def test_exception_try_all(pr2_apartment_context):
     world, robot_view, context = pr2_apartment_context
 
