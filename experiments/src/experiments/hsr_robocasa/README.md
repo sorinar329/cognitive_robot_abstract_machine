@@ -33,6 +33,7 @@ RoboCasa's tasks any more and are reported apart.
 | `BreadAndCheese` | lays the bread roll and the cheese on the cutting board, each on a strip of the board of its own | 6 |
 | `DefrostByCategory` | drops the two fruits of a pile into the sink and sets the two vegetables into the bowl | 0 |
 | `RecycleBottlesByType` | moves the bottles in the middle of the dining counter next to the group of their kind, plastic or glass (layout 2) | 1 |
+| `AlignSilverware` | lays the fork left of the plate at a seat of the dining counter and the spoon right of it, along the seat (layout 2) | 2 |
 
 Of these, `PickPlaceCounterToSink`, `OpenDrawer`, `CloseDrawer` and `CloseOven`
 succeed in RoboCasa's kitchen as built. The others fail there, with the HSR's
@@ -49,6 +50,14 @@ with the reason:
 - `RecycleBottlesByType`: the first bottle is moved, but the other two stand
   closer together than the hand's width, so no approach to one keeps the hand clear
   of the other.
+- `AlignSilverware`: laid along the seat beside the plate, as RoboCasa's thresholds
+  need it, a piece needs a hand heading the HSR has no place on the floor to reach
+  from; laid across the seat, it lies beyond the lateral threshold.
+
+`PortionOnSize` is not built: its bowls stand in a wall cabinet with doors, 1.46 m
+high, and are 18 cm to 27 cm wide, out of the HSR's reach and wider than its hand.
+`PortionHotDogs` and `SetupWineGlasses` need RoboCasa objects that only its aigen
+assets have, which the loader skips.
 
 RoboCasa counts a drawer
 open at 95 % of its travel and closed at 5 %, an oven door open at 90 % and closed at
@@ -130,7 +139,7 @@ cd ~/cram2/cognitive_robot_abstract_machine
     test/experiments_test/hsr_robocasa_test
 ```
 
-The twelve full runs show as skipped: they only run with `CI=true`.
+The thirteen full runs show as skipped: they only run with `CI=true`.
 
 **Full runs**: each task performed in MuJoCo, about 90 s per pick-and-place task and
 60 s per drawer task. Cap the memory,

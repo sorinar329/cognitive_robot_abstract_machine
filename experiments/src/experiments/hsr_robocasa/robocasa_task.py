@@ -47,6 +47,9 @@ from semantic_digital_twin.spatial_types.spatial_types import (
 from semantic_digital_twin.specifications.robots import RobotSpecification
 from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.geometry import VolumetricBoundingBox
+from semantic_digital_twin.world_description.graph_of_convex_sets.boxes import (
+    PlanarGraphOfBoundingBoxes,
+)
 from semantic_digital_twin.world_description.world_entity import (
     Body,
     KinematicStructureEntity,
@@ -405,6 +408,11 @@ class FixtureReference(StrEnum):
     The counter people sit at, on stools.
     """
 
+    STOOL = "stool"
+    """
+    The stool of the seat a table setting task sets the table for.
+    """
+
 
 class LayoutKey(StrEnum):
     """
@@ -497,6 +505,30 @@ class RowOffTheFloor(StrEnum):
     WALL_STACKS = "wall_stacks"
     """
     Fixtures stacked on a wall, as some layouts spell it.
+    """
+
+
+@dataclass
+class StanceSearch:
+    """
+    What the search for a standing pose reads, built once for a scene that stands
+    still while the plan is built.
+    """
+
+    navigable_space: PlanarGraphOfBoundingBoxes
+    """
+    The floor the HSR's base stands on without entering the buffer zone its collision
+    avoidance keeps it out of.
+    """
+
+    planning_world: World
+    """
+    A copy of the kitchen to try arm configurations out in.
+    """
+
+    arm_plane: HSRBArmPlane
+    """
+    Finds the arm's joint positions and reach.
     """
 
 
@@ -828,13 +860,32 @@ class HSRRoboCasaTask(ABC):
             reference_frame=self.world.root,
         )
 
+    def stance_search(self) -> StanceSearch:
+        """
+        :return: What :meth:`standing_pose` reads, built for the scene as it stands
+            now: the floor the base stands on without entering the buffer zone its
+            collision avoidance keeps it out of, a :meth:`planning_world` and an arm
+            plane.
+        """
+        return StanceSearch(
+            navigable_space=self.floor.navigable_space(
+                self.robot, self.base_collision_rule.buffer_zone_distance
+            ),
+            planning_world=self.planning_world(),
+            arm_plane=HSRBArmPlane(),
+        )
+
     def standing_pose(
-        self, tool_frame_goals: list[np.ndarray], start: Pose
+        self,
+        tool_frame_goals: list[np.ndarray],
+        start: Pose,
+        search: StanceSearch,
     ) -> Pose | None:
         """
         :param tool_frame_goals: Where the tool frame is to be, one after the other, in
             the kitchen's frame, all along the first one's approach.
         :param start: Where the HSR stands before it goes there.
+        :param search: The :meth:`stance_search` for the scene as it stands.
         :return: Where the HSR stands to put its tool frame at every goal: facing along
             the first goal's approach, on floor its base stands on without entering the
             buffer zone its collision avoidance keeps it out of, since from closer the
@@ -851,7 +902,7 @@ class HSRRoboCasaTask(ABC):
         heading = math.atan2(approach[1], approach[0])
         world_R_base = Rotation.from_euler("z", heading).as_matrix()
         floor_height = self.robot.root.global_pose.to_np()[2, 3]
-        arm_plane = HSRBArmPlane()
+        arm_plane = search.arm_plane
         reaches = [
             arm_plane.reachable_distances(
                 goal[2, 3] - floor_height, world_R_base.T @ goal[:3, :3]
@@ -860,11 +911,8 @@ class HSRRoboCasaTask(ABC):
         ]
         if not all(reaches):
             return None
-        navigable_space = self.floor.navigable_space(
-            self.robot, self.base_collision_rule.buffer_zone_distance
-        )
+        navigable_space = search.navigable_space
         here = navigable_space.nearest_free_point(Point2.from_pose(start))
-        planning_world = self.planning_world()
         first_reach = reaches[0]
         middle = (first_reach[0] + first_reach[-1]) / 2
         for distance in sorted(first_reach, key=lambda reach: abs(reach - middle)):
@@ -875,7 +923,10 @@ class HSRRoboCasaTask(ABC):
                 and navigable_space.is_free(standing_point)
                 and navigable_space.path_from_to(here, standing_point) is not None
                 and self.arm_keeps_its_buffer_zones(
-                    planning_world, arm_plane, candidate.to_np(), tool_frame_goals
+                    search.planning_world,
+                    arm_plane,
+                    candidate.to_np(),
+                    tool_frame_goals,
                 )
             ):
                 return candidate

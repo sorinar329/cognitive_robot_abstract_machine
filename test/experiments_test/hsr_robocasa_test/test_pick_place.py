@@ -67,6 +67,14 @@ class HSRLimitation(StrEnum):
     RoboCasa sets the objects down nearly touching.
     """
 
+    PLACING_HEADING_OUT_OF_REACH = (
+        "Laid along the seat beside the plate, as RoboCasa's thresholds need it, the "
+        "piece needs a hand heading the HSR has no place on the floor to reach from."
+    )
+    """
+    Laid across the seat instead, the piece lies beyond the lateral threshold.
+    """
+
     OVEN_BACK_OFF = (
         "The door opens fully, but backing the hand off the released bar stalls."
     )

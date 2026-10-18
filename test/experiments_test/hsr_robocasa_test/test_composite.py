@@ -10,6 +10,7 @@ pytest.importorskip("robocasa", reason="robocasa is not installed")
 pytest.importorskip("robosuite", reason="robosuite is not installed")
 
 from experiments.hsr_robocasa.composite import (
+    AlignSilverware,
     BreadAndCheese,
     DefrostByCategory,
     RecycleBottlesByType,
@@ -102,6 +103,31 @@ def test_each_middle_bottle_is_set_down_next_to_bottles_of_its_kind():
             assert np.any(off_centre >= half_sizes + clearance - 0.001)
 
 
+def placed_beside_the_plate(experiment: AlignSilverware, middle: np.ndarray) -> bool:
+    """
+    :return: Whether ``middle`` lies on the side of the plate the object being moved
+        belongs on, within RoboCasa's thresholds, in the seat's frame.
+    """
+    plate = experiment.extent(
+        experiment.world.get_body_by_name(experiment.plate)
+    ).center.to_np()[:2]
+    lateral, forward = experiment.in_seat_frame(middle - plate)
+    return (
+        np.sign(lateral) == experiment.side
+        and abs(lateral) <= AlignSilverware.lateral_threshold
+        and abs(forward) <= AlignSilverware.forward_threshold
+    )
+
+
+def test_the_fork_is_set_down_left_of_the_plate_and_the_spoon_right():
+    experiment = AlignSilverware(headless=True)
+    experiment.build_world()
+
+    for moved in experiment.moved_objects:
+        experiment.moving = moved
+        assert placed_beside_the_plate(experiment, experiment.release_point[:2])
+
+
 # %% the run
 
 
@@ -175,3 +201,18 @@ def test_segmind_sees_each_middle_bottle_put_down_next_to_its_kind():
             )
             <= RecycleBottlesByType.cluster_threshold
         )
+
+
+@runs_in_ci
+@pytest.mark.xfail(strict=True, reason=HSRLimitation.PLACING_HEADING_OUT_OF_REACH)
+def test_segmind_sees_the_fork_and_spoon_put_down_beside_the_plate():
+    experiment = AlignSilverware(headless=True)
+    experiment.build_world()
+
+    experiment.run()
+
+    assert objects_put_down_in_their_receptacles(experiment)
+    for moved in experiment.moved_objects:
+        experiment.moving = moved
+        middle = experiment.extent(experiment.world.get_body_by_name(moved)).center
+        assert placed_beside_the_plate(experiment, middle.to_np()[:2])

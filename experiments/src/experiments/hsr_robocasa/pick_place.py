@@ -29,7 +29,9 @@ from coraplex.robot_plans.actions.core.navigation import PathPlanningNavigateAct
 from coraplex.robot_plans.actions.core.pick_up import PickUpAction
 from coraplex.robot_plans.actions.core.placing import PlaceAction
 from coraplex.robot_plans.actions.core.robot_body import ParkArmsAction
+from coraplex.robot_plans.actions.base import ActionDescription
 from coraplex.robot_plans.mixins import GraspPoseSequence
+from coraplex.robot_plans.motions.base import BaseMotion
 from segmind.detectors.agent_event_detector_nodes import GraspDetector
 from segmind.detectors.coarse_event_detector_nodes import PlacingDetector
 from segmind.event_segmentation import Segmind
@@ -561,6 +563,7 @@ class HSRPickPlaceTask(HSRRoboCasaTask, ABC):
                 self.grasp(approaches[0]), arm, retreat_distance=self.lift
             ).approach_clearance
         )
+        stance_search = self.stance_search()
         for approach in approaches:
             grasp = self.grasp(approach)
             pick_up = PickUpAction(grasp, arm, retreat_distance=self.lift)
@@ -574,6 +577,7 @@ class HSRPickPlaceTask(HSRRoboCasaTask, ABC):
                     [picking.pre_grasp, picking.grasp, picking.retreat]
                 ),
                 robot.root.global_pose,
+                stance_search,
             )
             if picking_pose is None:
                 continue
@@ -586,14 +590,18 @@ class HSRPickPlaceTask(HSRRoboCasaTask, ABC):
                     [placing.grasp, placing.retreat, placing.pre_grasp]
                 ),
                 picking_pose,
+                stance_search,
             )
             if placing_pose is not None:
-                return self._picking_and_placing_plan(
-                    context, picking, picking_pose, pick_up, placing_pose, place
-                )
+                return sequential(
+                    self._picking_and_placing_steps(
+                        context, picking, picking_pose, pick_up, placing_pose, place
+                    ),
+                    context=context,
+                ).plan
         return None
 
-    def _picking_and_placing_plan(
+    def _picking_and_placing_steps(
         self,
         context: Context,
         picking: GraspPoseSequence,
@@ -601,25 +609,22 @@ class HSRPickPlaceTask(HSRRoboCasaTask, ABC):
         pick_up: PickUpAction,
         placing_pose: Pose,
         place: PlaceAction,
-    ) -> Plan:
+    ) -> list[ActionDescription | BaseMotion]:
         """
-        :return: The plan that drives to ``picking_pose``, moves the arm to where
-            ``picking`` starts, carries out ``pick_up``, drives to ``placing_pose``
-            and carries out ``place``, the arms parked before and after.
+        :return: The steps that drive to ``picking_pose``, move the arm to where
+            ``picking`` starts, carry out ``pick_up``, drive to ``placing_pose`` and
+            carry out ``place``, the arms parked before and after.
         """
         robot = context.robot
-        return sequential(
-            [
-                ParkArmsAction(robot.all_arms),
-                PathPlanningNavigateAction(picking_pose),
-                *self.arm_motions_to(picking.pre_grasp, picking_pose),
-                pick_up,
-                PathPlanningNavigateAction(placing_pose),
-                place,
-                ParkArmsAction(robot.all_arms),
-            ],
-            context=context,
-        ).plan
+        return [
+            ParkArmsAction(robot.all_arms),
+            PathPlanningNavigateAction(picking_pose),
+            *self.arm_motions_to(picking.pre_grasp, picking_pose),
+            pick_up,
+            PathPlanningNavigateAction(placing_pose),
+            place,
+            ParkArmsAction(robot.all_arms),
+        ]
 
     def prepare_contacts(self) -> None:
         """
@@ -737,7 +742,59 @@ class PickPlaceSinkToCounter(HSRPickPlaceTask):
 
 
 @dataclass
-class PickPlaceDrawerToCounter(HSRPickPlaceTask, HSRTaskAtDrawer):
+class HSRLongObjectTask(HSRPickPlaceTask, ABC):
+    """
+    A pick-and-place task whose object is long and lies flat, taken by the HSR with its
+    fingers closing across the object's length.
+    """
+
+    @property
+    def long_axis(self) -> np.ndarray:
+        """
+        The horizontal direction the object is longest along, pointing towards the
+        counter.
+        """
+        food = self.food.root
+        extent = food.collision.as_bounding_box_collection_in_frame(food).bounding_box()
+        rotation = food.global_pose.to_np()[:3, :3]
+        axis = rotation[:2, 0] if extent.depth >= extent.width else rotation[:2, 1]
+        axis = axis / np.linalg.norm(axis)
+        return axis if axis[1] >= 0.0 else -axis
+
+    def grasp(self, approach: Approach) -> GraspCandidate:
+        """
+        :return: The grasp that takes the object at :attr:`grasp_point`, coming in as
+            ``approach`` says, the fingers closing across the object's long axis; as
+            :meth:`HSRPickPlaceTask.grasp` where the approach runs along that axis,
+            since closing across the heading then closes across it too.
+        """
+        direction = np.array(
+            [
+                math.cos(approach.heading) * math.cos(approach.tilt),
+                math.sin(approach.heading) * math.cos(approach.tilt),
+                -math.sin(approach.tilt),
+            ]
+        )
+        closing = np.cross(direction, [*self.long_axis, 0.0])
+        if np.isclose(np.linalg.norm(closing), 0.0):
+            return super().grasp(approach)
+        closing /= np.linalg.norm(closing)
+        world_T_grasp = np.eye(4)
+        world_T_grasp[:3, 0] = direction
+        world_T_grasp[:3, 1] = closing
+        world_T_grasp[:3, 2] = np.cross(direction, closing)
+        world_T_grasp[:3, 3] = self.grasp_point
+        food_T_grasp = self.world.transform(
+            HomogeneousTransformationMatrix(
+                world_T_grasp, reference_frame=self.world.root
+            ).pose,
+            self.food.root,
+        )
+        return GraspCandidate(self.food, food_T_grasp)
+
+
+@dataclass
+class PickPlaceDrawerToCounter(HSRLongObjectTask, HSRTaskAtDrawer):
     """
     Pick the object from the open drawer and place it on the counter.
     """
@@ -805,50 +862,6 @@ class PickPlaceDrawerToCounter(HSRPickPlaceTask, HSRTaskAtDrawer):
             annotation.root
             for annotation in self.world.get_semantic_annotations_by_type(CounterTop)
         ]
-
-    @property
-    def long_axis(self) -> np.ndarray:
-        """
-        The horizontal direction the object is longest along, pointing towards the
-        counter.
-        """
-        food = self.food.root
-        extent = food.collision.as_bounding_box_collection_in_frame(food).bounding_box()
-        rotation = food.global_pose.to_np()[:3, :3]
-        axis = rotation[:2, 0] if extent.depth >= extent.width else rotation[:2, 1]
-        axis = axis / np.linalg.norm(axis)
-        return axis if axis[1] >= 0.0 else -axis
-
-    def grasp(self, approach: Approach) -> GraspCandidate:
-        """
-        :return: The grasp that takes the object at :attr:`grasp_point`, coming in as
-            ``approach`` says, the fingers closing across the object's long axis; as
-            :meth:`HSRPickPlaceTask.grasp` where the approach runs along that axis,
-            since closing across the heading then closes across it too.
-        """
-        direction = np.array(
-            [
-                math.cos(approach.heading) * math.cos(approach.tilt),
-                math.sin(approach.heading) * math.cos(approach.tilt),
-                -math.sin(approach.tilt),
-            ]
-        )
-        closing = np.cross(direction, [*self.long_axis, 0.0])
-        if np.isclose(np.linalg.norm(closing), 0.0):
-            return super().grasp(approach)
-        closing /= np.linalg.norm(closing)
-        world_T_grasp = np.eye(4)
-        world_T_grasp[:3, 0] = direction
-        world_T_grasp[:3, 1] = closing
-        world_T_grasp[:3, 2] = np.cross(direction, closing)
-        world_T_grasp[:3, 3] = self.grasp_point
-        food_T_grasp = self.world.transform(
-            HomogeneousTransformationMatrix(
-                world_T_grasp, reference_frame=self.world.root
-            ).pose,
-            self.food.root,
-        )
-        return GraspCandidate(self.food, food_T_grasp)
 
     @property
     def receptacle(self) -> Body:

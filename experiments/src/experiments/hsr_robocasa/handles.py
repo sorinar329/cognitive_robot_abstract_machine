@@ -165,7 +165,9 @@ class HSRHandleTask(HSRRoboCasaTask, ABC):
             grasp.world_T_grasp, arm.end_effector, grasp
         )
         goals = self.in_kitchen_frame([taking_hold.pre_grasp, taking_hold.grasp])
-        standing_pose = self.standing_pose(goals, robot.root.global_pose)
+        standing_pose = self.standing_pose(
+            goals, robot.root.global_pose, self.stance_search()
+        )
         if standing_pose is None:
             raise NoStandingPoseError(goals)
         return sequential(

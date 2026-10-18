@@ -12,6 +12,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import StrEnum
 
+import math
+
 import numpy as np
 from krrood.ormatic.utils import classproperty
 from semantic_digital_twin.adapters.robocasa_dataset.mujoco_compat import (
@@ -25,9 +27,17 @@ from semantic_digital_twin.semantic_annotations.semantic_annotations import (
     Sink,
 )
 from semantic_digital_twin.spatial_types import Point2
+from semantic_digital_twin.spatial_types.spatial_types import (
+    HomogeneousTransformationMatrix,
+    Pose,
+)
 from semantic_digital_twin.world_description.world_entity import Body
 
-from experiments.hsr_robocasa.pick_place import HSRPickPlaceTask, TaskObject
+from experiments.hsr_robocasa.pick_place import (
+    HSRLongObjectTask,
+    HSRPickPlaceTask,
+    TaskObject,
+)
 from experiments.hsr_robocasa.robocasa_task import FixtureReference
 
 with robocasa_version_assertions_relaxed():
@@ -308,6 +318,165 @@ class RecycleBottlesByType(HSRPickPlaceTask):
                 self.release_height + extent.height / 2 + self.release_clearance,
             ]
         )
+
+
+# %% setting the table
+
+
+class TableSetting(StrEnum):
+    """
+    The bodies RoboCasa adds for the silverware task, by the names it gives them.
+    """
+
+    FORK = "fork_main"
+    """
+    The fork, to go left of the plate.
+    """
+
+    SPOON = "spoon_main"
+    """
+    The spoon, to go right of the plate.
+    """
+
+    PLATE = "plate_main"
+    """
+    The plate at the seat.
+    """
+
+
+@dataclass
+class AlignSilverware(HSRLongObjectTask):
+    """
+    Lay the fork left of the plate at a seat of the dining counter and the spoon right
+    of it: RoboCasa's composite task of its setting the table activity.
+    """
+
+    layout: LayoutType = LayoutType.LAYOUT002
+    """
+    A kitchen with a dining counter and stools, which the task needs.
+    """
+
+    seed: int = 2
+    """
+    The seed RoboCasa samples the task with: fork and spoon lying flat on the counter
+    by the wall.
+    """
+
+    @classproperty
+    def lateral_threshold(cls) -> float:
+        """
+        How far, in metres, a piece may lie to its side of the plate, along the seat,
+        for RoboCasa to count it beside the plate.
+        """
+        return 0.25
+
+    @classproperty
+    def forward_threshold(cls) -> float:
+        """
+        How far, in metres, a piece may lie in front of or behind the plate for
+        RoboCasa to count it beside the plate.
+        """
+        return 0.10
+
+    @property
+    def plate(self) -> StrEnum:
+        """
+        The name of the plate.
+        """
+        return TableSetting.PLATE
+
+    @property
+    def moved_objects(self) -> list[StrEnum]:
+        """
+        The fork, then the spoon.
+        """
+        return [TableSetting.FORK, TableSetting.SPOON]
+
+    @property
+    def side(self) -> int:
+        """
+        The side of the plate, along the seat, the piece being moved belongs on: -1
+        for the fork, on the left, 1 for the spoon, on the right.
+        """
+        return -1 if self.moving == TableSetting.FORK else 1
+
+    @property
+    def receptacle(self) -> Body:
+        """
+        The dining counter.
+        """
+        return self.task.referenced_fixtures[FixtureReference.DINING_COUNTER]
+
+    @property
+    def _seat_turn(self) -> float:
+        """
+        The angle RoboCasa turns the kitchen's frame by into the seat's, from the
+        stool's yaw.
+        """
+        stool = self.task.referenced_fixtures[FixtureReference.STOOL]
+        world_T_stool = stool.global_pose.to_np()
+        return math.pi - math.atan2(world_T_stool[1, 0], world_T_stool[0, 0])
+
+    def in_seat_frame(self, vector: np.ndarray) -> np.ndarray:
+        """
+        :param vector: A horizontal vector, in the kitchen's frame.
+        :return: The vector along the seat and forward from it, as RoboCasa measures
+            them.
+        """
+        turn = self._seat_turn
+        return np.array(
+            [
+                math.cos(turn) * vector[0] - math.sin(turn) * vector[1],
+                math.sin(turn) * vector[0] + math.cos(turn) * vector[1],
+            ]
+        )
+
+    @property
+    def release_point(self) -> np.ndarray:
+        """
+        Where the centre of the piece is to be let go: its underside
+        :attr:`release_clearance` above the counter, on its :attr:`side` of the plate,
+        as far from the plate's centre as the plate's half width along the seat, the
+        piece's half width and the hand's half width, in line with the plate.
+        """
+        turn = self._seat_turn
+        along_the_seat = np.array([math.cos(turn), -math.sin(turn)])
+        plate = self.extent(self.world.get_body_by_name(self.plate))
+        piece = self.extent(self.food.root)
+        plate_half_width = (
+            abs(along_the_seat[0]) * plate.width + abs(along_the_seat[1]) * plate.depth
+        ) / 2
+        distance = (
+            plate_half_width + min(piece.width, piece.depth) / 2 + self.hand_half_width
+        )
+        middle = plate.center.to_np()[:2] + self.side * distance * along_the_seat
+        return np.array(
+            [*middle, self.release_height + piece.height / 2 + self.release_clearance]
+        )
+
+    def goal(self) -> Pose:
+        """
+        :return: Where the piece is to be put: its centre at :attr:`release_point`,
+            turned about the vertical to lie along the seat's forward direction, as a
+            table is set.
+        """
+        turn = self._seat_turn
+        forward = np.array([math.sin(turn), math.cos(turn)])
+        long_axis = self.long_axis
+        turn_to_forward = math.atan2(forward[1], forward[0]) - math.atan2(
+            long_axis[1], long_axis[0]
+        )
+        world_T_piece = self.food.root.global_pose.to_np()
+        rotation = HomogeneousTransformationMatrix.from_xyz_rpy(
+            yaw=turn_to_forward
+        ).to_np()
+        world_T_piece[:3, :3] = rotation[:3, :3] @ world_T_piece[:3, :3]
+        world_T_piece[:3, 3] += (
+            self.release_point - self.extent(self.food.root).center.to_np()[:3]
+        )
+        return HomogeneousTransformationMatrix(
+            world_T_piece, reference_frame=self.world.root
+        ).pose
 
 
 if __name__ == "__main__":
