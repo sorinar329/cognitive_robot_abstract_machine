@@ -38,5 +38,6 @@ first). MuJoCo headless: cylinder+triangle through, cube+rect wedge (= pre-merge
 3 cm camera_pole buffer (not row-dependent; fix belongs in Tracy's collision rules). README axis
 fixed (apex +x, released unturned), 4/4 claim corrected. User chose rename MontessoriPiece ->
 ShapeSortingPiece (sdt, tests, demo, README). Tests 80 + sdt annotations/orm 244 passed.
-Replies drafted in chat (no gh). Next: user reviews; commit/push when asked; PR stays draft.
+Replies drafted in chat (no gh). Pushed: merge 6e1e57ee66 + e9a2993b3b to sorin/tracy-montessori-demo
+(cram2#738 head). #738 is not draft and gh is missing: user to set draft and post the replies.
 
