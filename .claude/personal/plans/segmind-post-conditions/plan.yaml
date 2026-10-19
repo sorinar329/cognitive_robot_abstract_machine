@@ -1,0 +1,63 @@
+schema_version: 1
+id: segmind-post-conditions
+title: Segmind judges the post-conditions of coraplex actions
+description: >-
+  Segmind watches a coraplex plan, sees every action as it runs and judges each action's
+  post-condition from the events it detects (a pick-up holds when the object loses its
+  support and the arm's hand holds it), recording one verdict per action. Actions Segmind
+  has no expectation for fall back to their geometric EQL post-condition. Robot-agnostic,
+  so PR2, Tiago and HSR use it unchanged.
+default_repository: sorinar329/cognitive_robot_abstract_machine
+
+waves:
+  - id: judging
+    name: "Wave 1: Segmind judges post-conditions"
+    description: The expectations per action, the judge and its tests over PR2, Tiago and HSR.
+  - id: adoption
+    name: "Wave 2: Adoption"
+    description: Demos and experiments read verdicts instead of hand-assembled event checks.
+
+tracks:
+  - id: judge
+    name: Judge
+    wave: judging
+    description: segmind/post_conditions, depending on coraplex.
+  - id: demos
+    name: Demos and experiments
+    wave: adoption
+    description: The bullet world demo (PR2) and the HSR RoboCasa experiments.
+
+items:
+  - id: kinematic-grasp-spike
+    title: Spike - do kinematic picks produce Grasp and LossOfSupport events for PR2, Tiago and HSR
+    track: judge
+    depends_on: []
+    status: not started
+    notes: >-
+      No PR. PickUpAction and PlaceAction kinematically in the multi-robot apartment with
+      GraspDetector, SupportDetector and PlacingDetector watching the milk. If grasps do not
+      show kinematically, the pick-up expectation falls back to LossOfSupport plus the
+      attached connection; bring that back to the user.
+  - id: segmind-post-conditions
+    title: ActionExpectation per action, PostConditionJudge and verdicts in segmind
+    branch: segmind-post-conditions
+    track: judge
+    depends_on: [kinematic-grasp-spike]
+    status: not started
+    notes: >-
+      Based on sorin/main. Adds segmind -> coraplex dependency. Expectations for PickUp,
+      Place, Open, Close, Grasping; world fallback for the rest; NOT_WATCHED verdicts;
+      Segmind.create_for_plan and judging(plan). Tests in test/segmind_test/
+      test_post_conditions.py over pr2, tiago, hsrb.
+  - id: bullet-demo-verdicts
+    title: Bullet world demo reports verdicts and its test asserts every verdict holds
+    track: demos
+    depends_on: [segmind-post-conditions]
+    status: not started
+  - id: hsr-robocasa-verdicts
+    title: HSR RoboCasa experiments read verdicts instead of their own event checks
+    branch: hsr-robocasa
+    track: demos
+    depends_on: [segmind-post-conditions]
+    status: blocked
+    blockers: ["HSR RoboCasa direction to be rediscussed internally"]
