@@ -22,13 +22,28 @@ from krrood.ormatic.custom_types import NumpyType
 from krrood.adapters.json_serializer import SubclassJSONSerializer
 from krrood.ormatic.ormatic import ORMatic
 
-from segmind.event_segmentation import Segmind
-from segmind.exceptions import NoSemanticAnnotationToWatch
+from segmind.event_segmentation import Segmind, Tick
+from segmind.exceptions import NoSemanticAnnotationToWatch, SegmindIsNotWatching
+from segmind.post_conditions.expectations import (
+    ActionExpectation,
+    GraspingExpectation,
+    PickUpExpectation,
+    PlaceExpectation,
+)
+from segmind.post_conditions.judge import PostConditionJudge, PostConditionVerdict
 
 ignored_classes = {
     SubclassJSONSerializer,
     Segmind,
+    Tick,
     NoSemanticAnnotationToWatch,
+    SegmindIsNotWatching,
+    ActionExpectation,
+    GraspingExpectation,
+    PickUpExpectation,
+    PlaceExpectation,
+    PostConditionJudge,
+    PostConditionVerdict,
 }
 
 dependencies = []

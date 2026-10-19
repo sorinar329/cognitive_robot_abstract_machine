@@ -10,6 +10,7 @@ import threading
 import time
 from collections import Counter
 from dataclasses import dataclass, field
+from datetime import datetime
 
 import pytest
 from giskardpy.motion_statechart.context import MotionStatechartContext
@@ -30,7 +31,7 @@ from segmind.detectors.base import (
 )
 from segmind.detectors.coarse_event_detector_nodes import PickUpDetector
 from segmind.event_segmentation import Segmind
-from segmind.exceptions import NoSemanticAnnotationToWatch
+from segmind.exceptions import NoSemanticAnnotationToWatch, SegmindIsNotWatching
 from semantic_digital_twin.semantic_annotations.semantic_annotations import Food, Milk
 from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
 from semantic_digital_twin.world_description.world_entity import Body
@@ -350,6 +351,36 @@ def test_stopping_ends_the_watching_thread(milk_in_the_apartment):
         detector.ticked.wait(TICK_TIMEOUT)
 
     assert not segmentation.is_watching
+
+
+def test_the_world_is_seen_at_rest_after_a_moment_once_enough_ticks_ran_after_it(
+    milk_in_the_apartment,
+):
+    world, milk, _ = milk_in_the_apartment
+    segmentation = Segmind(
+        world=world, detectors=[TranslationDetector(tracked_object=milk)]
+    )
+
+    with segmentation:
+        moment = datetime.now()
+        seen_at_rest = segmentation.seen_at_rest_after(moment)
+        ticks_in_between = [
+            tick
+            for tick in segmentation.ticks
+            if tick.started >= moment and tick.ended <= seen_at_rest
+        ]
+
+    assert len(ticks_in_between) == segmentation.ticks_to_see_the_world_at_rest
+
+
+def test_the_world_cannot_be_seen_at_rest_while_it_is_not_watched(
+    milk_in_the_apartment,
+):
+    world, _, _ = milk_in_the_apartment
+    segmentation = Segmind(world=world, detectors=[DetectorCountingItsTicks()])
+
+    with pytest.raises(SegmindIsNotWatching):
+        segmentation.seen_at_rest_after(datetime.now())
 
 
 # %% watching the objects a plan handles

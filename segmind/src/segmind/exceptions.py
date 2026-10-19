@@ -29,3 +29,17 @@ class NoSemanticAnnotationToWatch(DataclassException):
 
     def suggest_correction(self) -> str:
         return "Annotate a body of the world with that type, or ask for another type."
+
+
+@dataclass
+class SegmindIsNotWatching(DataclassException):
+    """
+    Raised when SegMind is asked what it saw after a moment while its detectors are not
+    being ticked, so it would never see it.
+    """
+
+    def error_message(self) -> str:
+        return "SegMind is not watching the world, so it cannot see it after a moment."
+
+    def suggest_correction(self) -> str:
+        return "Ask while SegMind is entered, between its start and its stop."
