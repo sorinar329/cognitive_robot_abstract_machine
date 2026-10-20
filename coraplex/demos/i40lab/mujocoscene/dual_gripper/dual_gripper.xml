@@ -1,0 +1,31 @@
+<mujoco>
+  <body name="dual_gripper" pos="0 0 0">
+    <geom name="dg_part_01" type="mesh" mesh="dual_gripper_part_01"
+          contype="0" conaffinity="0"
+          rgba="0.82 0.82 0.82 1"/>
+    <geom name="dg_part_02" type="mesh" mesh="dual_gripper_part_02"
+          contype="0" conaffinity="0"
+          rgba="0.82 0.82 0.82 1"/>
+    <geom name="dg_part_03" type="mesh" mesh="dual_gripper_part_03"
+          contype="0" conaffinity="0"
+          rgba="0.82 0.82 0.82 1"/>
+    <geom name="dg_part_04" type="mesh" mesh="dual_gripper_part_04"
+          contype="0" conaffinity="0"
+          rgba="0.82 0.82 0.82 1"/>
+    <geom name="dg_part_05" type="mesh" mesh="dual_gripper_part_05"
+          contype="0" conaffinity="0"
+          rgba="0.82 0.82 0.82 1"/>
+    <geom name="dg_part_06" type="mesh" mesh="dual_gripper_part_06"
+          contype="0" conaffinity="0"
+          rgba="0.82 0.82 0.82 1"/>
+    <geom name="dg_part_07" type="mesh" mesh="dual_gripper_part_07"
+          contype="0" conaffinity="0"
+          rgba="0.82 0.82 0.82 1"/>
+    <geom name="dg_part_08" type="mesh" mesh="dual_gripper_part_08"
+          contype="0" conaffinity="0"
+          rgba="0.82 0.82 0.82 1"/>
+    <geom name="dg_part_09" type="mesh" mesh="dual_gripper_part_09"
+          contype="0" conaffinity="0"
+          rgba="0.82 0.82 0.82 1"/>
+  </body>
+</mujoco>

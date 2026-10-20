@@ -1,0 +1,15 @@
+
+<mujocoinclude>
+	<!-- <position kp="1500" kv="100" class="size3" name="ur5e_shoulder_pan"  joint="shoulder_pan"/>
+    <position kp="1500" kv="100" class="size3" name="ur5e_shoulder_lift" joint="shoulder_lift"/>
+    <position kp="1500" kv="100" class="size3_limited" name="ur5e_elbow"         joint="elbow"/>
+    <position kp="800" kv="50" class="size1" name="ur5e_wrist_1"       joint="wrist_1"/>
+    <position kp="800" kv="50" class="size1" name="ur5e_wrist_2"       joint="wrist_2"/>
+    <position kp="800" kv="50" class="size1" name="ur5e_wrist_3"       joint="wrist_3"/> -->
+    <position kp="15000" kv="200" class="size3" name="ur5e_shoulder_pan"  joint="shoulder_pan"/>
+    <position kp="15000" kv="200" class="size3" name="ur5e_shoulder_lift" joint="shoulder_lift"/>
+    <position kp="15000" kv="200" class="size3_limited" name="ur5e_elbow"         joint="elbow"/>
+    <position kp="8000" kv="100" class="size1" name="ur5e_wrist_1"       joint="wrist_1"/>
+    <position kp="8000" kv="100" class="size1" name="ur5e_wrist_2"       joint="wrist_2"/>
+    <position kp="8000" kv="100" class="size1" name="ur5e_wrist_3"       joint="wrist_3"/>
+</mujocoinclude>

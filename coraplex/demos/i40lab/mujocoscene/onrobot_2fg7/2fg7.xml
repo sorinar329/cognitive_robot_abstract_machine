@@ -1,0 +1,64 @@
+<mujoco model="onrobot_2fg7">
+
+  <asset>
+    <mesh name="quick_changer" file="./assets/visual/Quick_Changer_Robot_side_1.stl" scale="0.001 0.001 0.001"/>
+    <mesh name="official_base" file="./assets/visual/official_base_onrobot.stl" scale="0.001 0.001 0.001"/>
+    <mesh name="left_finger" file="./assets/visual/official_left_finger.stl" scale="0.001 0.001 0.001"/>
+    <mesh name="right_finger" file="./assets/visual/official_right_finger.stl" scale="0.001 0.001 0.001"/>
+    <mesh name="left_finger_col" file="./assets/collision/official_left_finger.stl" scale="0.001 0.001 0.001"/>
+    <mesh name="right_finger_col" file="./assets/collision/official_right_finger.stl" scale="0.001 0.001 0.001"/>
+  </asset>
+
+  <default>
+    <default class="2fg7">
+      <joint damping="1.0"/>
+      <position kp="800" kv="25"/>
+    </default>
+  </default>
+
+  <worldbody>
+    <body name="2fg7_base" pos="0 0 0" quat="0.500000 -0.500000 0.500000 0.500000" childclass="2fg7">
+      <!-- Quick Changer (mounting interface) -->
+      <geom name="2fg7_quick_changer" type="mesh" mesh="quick_changer"
+            contype="0" conaffinity="0" rgba="0.82 0.82 0.82 1"
+            pos="0 0 0" quat="0.5 -0.5 0.5 -0.5"/>
+      <!-- Base body -->
+      <geom name="2fg7_base_body" type="mesh" mesh="official_base"
+            contype="0" conaffinity="0" rgba="0.82 0.82 0.82 1"
+            pos="-0.05539 -0.14017 -0.28046" quat="0.707107 0.707107 0 0"/>
+
+      <!-- Left finger (body at OPEN pose, q=0 -> open, q=0.0175 -> closed) -->
+      <body name="left_finger" pos="-0.0477 0 0">
+        <inertial mass="0.05" pos="0 0 0" diaginertia="0.00005 0.00005 0.00005"/>
+        <joint name="left_finger_joint" type="slide" axis="1 0 0" range="0 0.0175"/>
+        <geom name="2fg7_left_finger_vis" type="mesh" mesh="left_finger"
+              contype="0" conaffinity="0" rgba="0.82 0.82 0.82 1"
+              pos="-0.05539 -0.14017 -0.28046" quat="0.707107 0.707107 0 0"/>
+        <geom name="2fg7_left_finger_col" type="mesh" mesh="left_finger_col"
+              pos="-0.05539 -0.14017 -0.28046" quat="0.707107 0.707107 0 0"/>
+      </body>
+
+      <!-- Right finger (body at OPEN pose, q=0 -> open, q=0.0175 -> closed) -->
+      <body name="right_finger" pos="0.0477 0 0">
+        <inertial mass="0.05" pos="0 0 0" diaginertia="0.00005 0.00005 0.00005"/>
+        <joint name="right_finger_joint" type="slide" axis="-1 0 0" range="0 0.0175"/>
+        <geom name="2fg7_right_finger_vis" type="mesh" mesh="right_finger"
+              contype="0" conaffinity="0" rgba="0.82 0.82 0.82 1"
+              pos="-0.05539 -0.14017 -0.28046" quat="0.707107 0.707107 0 0"/>
+        <geom name="2fg7_right_finger_col" type="mesh" mesh="right_finger_col"
+              pos="-0.05539 -0.14017 -0.28046" quat="0.707107 0.707107 0 0"/>
+      </body>
+
+      <!-- TCP -->
+      <body name="gripper_tcp" pos="0 0 0.1386">
+        <site name="pinch" pos="0 0 0" type="sphere" group="5" rgba="0.9 0.9 0.9 1" size="0.005"/>
+      </body>
+    </body>
+  </worldbody>
+
+  <actuator>
+    <position name="left_finger_act" joint="left_finger_joint" class="2fg7" forcerange="-40 40" ctrlrange="0 0.0175"/>
+    <position name="right_finger_act" joint="right_finger_joint" class="2fg7" forcerange="-40 40" ctrlrange="0 0.0175"/>
+  </actuator>
+
+</mujoco>
