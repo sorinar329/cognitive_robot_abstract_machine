@@ -30,7 +30,7 @@ folder**:
 | `demo.py` | What every run shares: `MontessoriScene` — every hardcoded pose and size as a field, with the pieces (`ShapeSortingPieceSet`), how solid the bodies are (`SolidContact`) and how low a piece is gripped (`PieceGrip`) — the plan that sorts the pieces (`ShapeSortingPlan`), and `DemoRunner`, the base of the runners. |
 | `montessori_board.py` | The board: its holes read off the mesh (`BoardGeometry`), and the body with the mesh to look at and boxes to collide with (`ShapeSortingBoard`). |
 | `resources/board.stl` | The board's mesh. |
-| `mujoco_demo.py` | `MujocoRunner`: physics run, controller and physics stepped in lockstep. |
+| `mujoco_demo.py` | `MujocoRunner`: physics run, controller and physics stepped in lockstep, with SegMind judging whether each action achieved what it is for (`verdicts`). |
 | `rviz_demo.py` | `RvizRunner`: kinematic run, published for RViz. |
 | `real_demo.py` | `RealRunner`: real robot, through giskard. |
 
@@ -103,6 +103,14 @@ they have not been tuned for margin. Treat them as a starting point.
 
 `mujoco_demo.py` performs the plan inside coraplex's `PhysicallySimulatedRobot`
 (`coraplex/src/coraplex/execution_environment.py`).
+
+SegMind watches the pieces while the plan runs, and its `PostConditionJudge`
+(`segmind/src/segmind/post_conditions/`) judges every action as it ends; the verdicts are
+logged and kept in `MujocoRunner.verdicts`. A pick-up holds when the gripper took hold of
+the piece and the piece lost the table's support; a placing holds when the gripper let go
+and the piece came to rest on something the robot does not move. In the run below every
+pick-up holds, and the placings hold for the two pieces that drop through onto the drawer
+floors and not for the two that wedge in their holes, which only touch the board.
 
 Collision avoidance is off in every run. Parked, Tracy's upper arms already stand right
 at the 3 cm buffer its collision avoidance keeps from the `camera_pole` between them, so

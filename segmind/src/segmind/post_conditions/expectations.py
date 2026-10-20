@@ -154,8 +154,8 @@ class PickUpExpectation(ActionExpectation[PickUpAction]):
 @dataclass
 class PlaceExpectation(ActionExpectation[PlaceAction]):
     """
-    A placing holds when no hand has hold of the object in the end and something other
-    than the robot came to support it.
+    A placing holds when no hand has hold of the object in the end and something the
+    robot does not move came to support it.
     """
 
     def watched_bodies(self, action: PlaceAction) -> list[Body]:
@@ -165,13 +165,16 @@ class PlaceExpectation(ActionExpectation[PlaceAction]):
         self, action: PlaceAction, events: list[EventWithTrackedObjects]
     ) -> list[DetectionEvent]:
         placed = action.object_designator.root
-        robot_bodies = set(action.robot.bodies)
+        world = placed._world
         return self.last_grasp_change(events, placed) + [
             event
             for event in events
             if isinstance(event, SupportEvent)
             and event.tracked_object is placed
-            and event.with_object not in robot_bodies
+            and not (
+                event.with_object in action.robot.bodies
+                and world.is_body_controlled(event.with_object)
+            )
         ]
 
     def holds(self, action: PlaceAction, evidence: list[DetectionEvent]) -> bool:

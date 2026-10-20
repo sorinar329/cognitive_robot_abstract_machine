@@ -9,11 +9,14 @@ tick of the controller writes its command into the world, the servos take it as 
 point, and the physics advances one cycle before the next tick reads the world back. That
 is what :class:`~coraplex.execution_environment.PhysicallySimulatedRobot` has every
 motion of a plan do.
+
+SegMind watches the pieces while the plan runs and judges, action by action, whether
+each achieved what it is for.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import timedelta
 
 import mujoco
@@ -21,6 +24,10 @@ import mujoco
 from coraplex.datastructures.dataclasses import Context
 from coraplex.execution_environment import PhysicallySimulatedRobot
 from demo import DemoRunner, ShapeSortingPlan
+from segmind.detectors.agent_event_detector_nodes import GraspDetector
+from segmind.detectors.spatial_relation_detector_nodes import SupportDetector
+from segmind.event_segmentation import Segmind
+from segmind.post_conditions.judge import PostConditionJudge, PostConditionVerdict
 from semantic_digital_twin.adapters.multi_sim import MujocoSim
 from semantic_digital_twin.robots.tracy import Tracy
 
@@ -66,6 +73,12 @@ class MujocoRunner(DemoRunner):
     for them.
     """
 
+    verdicts: list[PostConditionVerdict] = field(init=False, default_factory=list)
+    """
+    Whether each action of the last run achieved what it is for, as SegMind judged it;
+    those judged before the plan failed, if it failed.
+    """
+
     def run(self) -> None:
         world = self.scene.build_world()
         [tracy] = world.get_semantic_annotations_by_type(Tracy)
@@ -83,7 +96,14 @@ class MujocoRunner(DemoRunner):
         simulation.start_stepped_simulation()
         try:
             simulation.step_simulation(self.settling_duration)
-            with PhysicallySimulatedRobot(simulation=simulation):
+            segmind = Segmind.create_for_bodies(
+                world,
+                [piece.root for piece in self.scene.holes_of_pieces],
+                [GraspDetector, SupportDetector],
+            )
+            judge = PostConditionJudge(plan=plan, segmind=segmind)
+            self.verdicts = judge.verdicts
+            with segmind, judge, PhysicallySimulatedRobot(simulation=simulation):
                 plan.perform()
         finally:
             simulation.stop_simulation()

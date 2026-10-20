@@ -1,8 +1,13 @@
+import importlib.util
 import os
+import sys
 import threading
 import time
 from copy import deepcopy
 from dataclasses import dataclass, field
+from enum import StrEnum
+from pathlib import Path
+from types import ModuleType
 
 import numpy as np
 import pytest
@@ -603,6 +608,81 @@ def tracy_world():
     world_with_tracy = tracy_parser.parse()
     Tracy.from_world(world_with_tracy)
     return world_with_tracy
+
+
+class TracyMontessoriDemoModule(StrEnum):
+    """
+    The modules of the Tracy Montessori demo, in the order they import one another.
+    """
+
+    BOARD = "montessori_board"
+    """
+    The shape-sorting board.
+    """
+
+    SCENE_AND_PLAN = "demo"
+    """
+    The scene and the plan every run of the demo shares.
+    """
+
+    PHYSICS_RUNNER = "mujoco_demo"
+    """
+    The runner that carries the plan out against MuJoCo physics.
+    """
+
+
+@dataclass
+class TracyMontessoriDemo:
+    """
+    The Tracy Montessori demo, which lives in a folder rather than a package.
+    """
+
+    modules: dict[TracyMontessoriDemoModule, ModuleType]
+    """
+    The demo's modules, loaded from its folder.
+    """
+
+    @property
+    def demo(self) -> ModuleType:
+        """
+        The scene and the plan every run of the demo shares.
+        """
+        return self.modules[TracyMontessoriDemoModule.SCENE_AND_PLAN]
+
+    @property
+    def mujoco_demo(self) -> ModuleType:
+        """
+        The runner that carries the plan out against MuJoCo physics.
+        """
+        return self.modules[TracyMontessoriDemoModule.PHYSICS_RUNNER]
+
+
+@pytest.fixture(scope="session")
+def tracy_montessori_demo() -> TracyMontessoriDemo:
+    """
+    The demo's modules, each loaded under the name it imports the others by, with its
+    folder on the path; none stays importable afterwards.
+    """
+    if not tracy_installed():
+        pytest.skip("Tracy not installed")
+    folder = (
+        Path(__file__).parents[1]
+        / "coraplex"
+        / "demos"
+        / "coraplex_tracy_montessori_demo"
+    )
+    modules = {}
+    with pytest.MonkeyPatch.context() as patch:
+        patch.syspath_prepend(str(folder))
+        for module_name in TracyMontessoriDemoModule:
+            specification = importlib.util.spec_from_file_location(
+                module_name, folder / f"{module_name}.py"
+            )
+            module = importlib.util.module_from_spec(specification)
+            patch.setitem(sys.modules, module_name, module)
+            specification.loader.exec_module(module)
+            modules[module_name] = module
+    return TracyMontessoriDemo(modules)
 
 
 @pytest.fixture(scope="session")
