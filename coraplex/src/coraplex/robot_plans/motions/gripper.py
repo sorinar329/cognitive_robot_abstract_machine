@@ -1,10 +1,14 @@
 from dataclasses import dataclass, field
+from datetime import timedelta
 from typing import Optional, List
 
 from giskardpy.motion_statechart.data_types import DefaultWeights
 from giskardpy.motion_statechart.goals.templates import Parallel, Sequence
 from giskardpy.motion_statechart.graph_node import MotionStatechartNode, Task
 from giskardpy.motion_statechart.binding_policy import GoalBindingPolicy
+from giskardpy.motion_statechart.monitors.payload_monitors import (
+    CountSimulationTimeSeconds,
+)
 from giskardpy.motion_statechart.tasks.align_planes import AlignPlanes
 from giskardpy.motion_statechart.tasks.cartesian_tasks import (
     CartesianPose,
@@ -282,6 +286,67 @@ class MoveToolCenterPointMotion(
         if not accompanying_nodes:
             return task
         return Parallel([task, *accompanying_nodes], name="MoveTCP")
+
+
+@dataclass
+class HoldToolCenterPointMotion(BaseMotion, HasTcpGoalThresholds):
+    """
+    Holds the tool center point at a pose for a duration of simulation time.
+
+    Lets a gripper that closes by contact settle on an object before the arm moves on.
+    """
+
+    pose: Pose
+    """
+    Pose the tool center point is held at.
+    """
+
+    arm: Arms
+    """
+    Arm whose tool center point is held.
+    """
+
+    duration: timedelta
+    """
+    How much simulation time to hold the pose.
+    """
+
+    allow_gripper_collision: Optional[bool] = None
+    """
+    Whether the gripper may keep colliding with what it holds while it settles.
+    """
+
+    def perform(self):
+        return
+
+    @property
+    def _motion_chart(self) -> Task:
+        end_effector = ViewManager().get_end_effector_view(self.arm, self.robot)
+        tip = end_effector.tool_frame
+        root = (
+            self.world.root
+            if isinstance(self.robot, HasMobileBase)
+            and self.robot.mobile_base.full_body_controlled
+            else self.robot.root
+        )
+        hold = CartesianPose(
+            root_link=root,
+            tip_link=tip,
+            goal_pose=self.pose,
+            translation_threshold=self.resolved_position_threshold(),
+            orientation_threshold=self.resolved_orientation_threshold(),
+            name="HoldTCP",
+        )
+        accompanying_nodes: List[MotionStatechartNode] = [
+            CountSimulationTimeSeconds(
+                seconds=self.duration.total_seconds(), name="HoldDuration"
+            )
+        ]
+        if self.allow_gripper_collision:
+            accompanying_nodes.extend(
+                self._only_allow_gripper_collision_rules(self.arm)
+            )
+        return Parallel([hold, *accompanying_nodes], name="HoldTCP")
 
 
 @dataclass

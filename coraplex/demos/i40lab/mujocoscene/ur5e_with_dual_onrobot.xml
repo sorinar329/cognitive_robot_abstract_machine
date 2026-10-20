@@ -17,13 +17,10 @@
     <mesh name="3fg15_left_finger_col_03" file="./onrobot_3fg15/assets/collision/left_finger/left_finger_part_03.stl" scale="0.001 0.001 0.001"/>
     <mesh name="3fg15_left_finger_col_04" file="./onrobot_3fg15/assets/collision/left_finger/left_finger_part_04.stl" scale="0.001 0.001 0.001"/>
     <mesh name="3fg15_left_finger_col_05" file="./onrobot_3fg15/assets/collision/left_finger/left_finger_part_05.stl" scale="0.001 0.001 0.001"/>
-    <mesh name="3fg15_left_finger_col_06" file="./onrobot_3fg15/assets/collision/left_finger/left_finger_part_06.stl" scale="0.001 0.001 0.001"/>
     <mesh name="3fg15_left_finger_col_07" file="./onrobot_3fg15/assets/collision/left_finger/left_finger_part_07.stl" scale="0.001 0.001 0.001"/>
     <mesh name="3fg15_left_finger_col_08" file="./onrobot_3fg15/assets/collision/left_finger/left_finger_part_08.stl" scale="0.001 0.001 0.001"/>
     <mesh name="3fg15_middle_finger_col_00" file="./onrobot_3fg15/assets/collision/middle_finger/middle_finger_part_00.stl" scale="0.001 0.001 0.001"/>
     <mesh name="3fg15_middle_finger_col_01" file="./onrobot_3fg15/assets/collision/middle_finger/middle_finger_part_01.stl" scale="0.001 0.001 0.001"/>
-    <mesh name="3fg15_middle_finger_col_02" file="./onrobot_3fg15/assets/collision/middle_finger/middle_finger_part_02.stl" scale="0.001 0.001 0.001"/>
-    <mesh name="3fg15_middle_finger_col_03" file="./onrobot_3fg15/assets/collision/middle_finger/middle_finger_part_03.stl" scale="0.001 0.001 0.001"/>
     <mesh name="3fg15_middle_finger_col_04" file="./onrobot_3fg15/assets/collision/middle_finger/middle_finger_part_04.stl" scale="0.001 0.001 0.001"/>
     <mesh name="3fg15_middle_finger_col_05" file="./onrobot_3fg15/assets/collision/middle_finger/middle_finger_part_05.stl" scale="0.001 0.001 0.001"/>
     <mesh name="3fg15_middle_finger_col_06" file="./onrobot_3fg15/assets/collision/middle_finger/middle_finger_part_06.stl" scale="0.001 0.001 0.001"/>
@@ -37,13 +34,30 @@
     <mesh name="3fg15_right_finger_col_05" file="./onrobot_3fg15/assets/collision/right_finger/right_finger_part_05.stl" scale="0.001 0.001 0.001"/>
     <mesh name="3fg15_right_finger_col_06" file="./onrobot_3fg15/assets/collision/right_finger/right_finger_part_06.stl" scale="0.001 0.001 0.001"/>
     <mesh name="3fg15_right_finger_col_07" file="./onrobot_3fg15/assets/collision/right_finger/right_finger_part_07.stl" scale="0.001 0.001 0.001"/>
-    <mesh name="3fg15_right_finger_col_08" file="./onrobot_3fg15/assets/collision/right_finger/right_finger_part_08.stl" scale="0.001 0.001 0.001"/>
     <mesh name="2fg7_quick_changer" file="./onrobot_2fg7/assets/visual/Quick_Changer_Robot_side_1.stl" scale="0.001 0.001 0.001"/>
     <mesh name="2fg7_official_base" file="./onrobot_2fg7/assets/visual/official_base_onrobot.stl" scale="0.001 0.001 0.001"/>
     <mesh name="2fg7_left_finger" file="./onrobot_2fg7/assets/visual/official_left_finger.stl" scale="0.001 0.001 0.001"/>
     <mesh name="2fg7_right_finger" file="./onrobot_2fg7/assets/visual/official_right_finger.stl" scale="0.001 0.001 0.001"/>
-    <mesh name="2fg7_left_finger_col" file="./onrobot_2fg7/assets/collision/official_left_finger.stl" scale="0.001 0.001 0.001"/>
-    <mesh name="2fg7_right_finger_col" file="./onrobot_2fg7/assets/collision/official_right_finger.stl" scale="0.001 0.001 0.001"/>
+    <mesh name="2fg7_left_finger_col_00" file="./onrobot_2fg7/assets/collision/left_finger/2fg7_left_finger_part_00.stl" scale="0.001 0.001 0.001"/>
+    <mesh name="2fg7_left_finger_col_01" file="./onrobot_2fg7/assets/collision/left_finger/2fg7_left_finger_part_01.stl" scale="0.001 0.001 0.001"/>
+    <mesh name="2fg7_left_finger_col_02" file="./onrobot_2fg7/assets/collision/left_finger/2fg7_left_finger_part_02.stl" scale="0.001 0.001 0.001"/>
+    <mesh name="2fg7_left_finger_col_03" file="./onrobot_2fg7/assets/collision/left_finger/2fg7_left_finger_part_03.stl" scale="0.001 0.001 0.001"/>
+    <mesh name="2fg7_left_finger_col_04" file="./onrobot_2fg7/assets/collision/left_finger/2fg7_left_finger_part_04.stl" scale="0.001 0.001 0.001"/>
+    <mesh name="2fg7_left_finger_col_05" file="./onrobot_2fg7/assets/collision/left_finger/2fg7_left_finger_part_05.stl" scale="0.001 0.001 0.001"/>
+    <mesh name="2fg7_left_finger_col_06" file="./onrobot_2fg7/assets/collision/left_finger/2fg7_left_finger_part_06.stl" scale="0.001 0.001 0.001"/>
+    <mesh name="2fg7_left_finger_col_07" file="./onrobot_2fg7/assets/collision/left_finger/2fg7_left_finger_part_07.stl" scale="0.001 0.001 0.001"/>
+    <mesh name="2fg7_left_finger_col_08" file="./onrobot_2fg7/assets/collision/left_finger/2fg7_left_finger_part_08.stl" scale="0.001 0.001 0.001"/>
+    <mesh name="2fg7_left_finger_col_09" file="./onrobot_2fg7/assets/collision/left_finger/2fg7_left_finger_part_09.stl" scale="0.001 0.001 0.001"/>
+    <mesh name="2fg7_right_finger_col_00" file="./onrobot_2fg7/assets/collision/right_finger/2fg7_right_finger_part_00.stl" scale="0.001 0.001 0.001"/>
+    <mesh name="2fg7_right_finger_col_01" file="./onrobot_2fg7/assets/collision/right_finger/2fg7_right_finger_part_01.stl" scale="0.001 0.001 0.001"/>
+    <mesh name="2fg7_right_finger_col_02" file="./onrobot_2fg7/assets/collision/right_finger/2fg7_right_finger_part_02.stl" scale="0.001 0.001 0.001"/>
+    <mesh name="2fg7_right_finger_col_03" file="./onrobot_2fg7/assets/collision/right_finger/2fg7_right_finger_part_03.stl" scale="0.001 0.001 0.001"/>
+    <mesh name="2fg7_right_finger_col_04" file="./onrobot_2fg7/assets/collision/right_finger/2fg7_right_finger_part_04.stl" scale="0.001 0.001 0.001"/>
+    <mesh name="2fg7_right_finger_col_05" file="./onrobot_2fg7/assets/collision/right_finger/2fg7_right_finger_part_05.stl" scale="0.001 0.001 0.001"/>
+    <mesh name="2fg7_right_finger_col_06" file="./onrobot_2fg7/assets/collision/right_finger/2fg7_right_finger_part_06.stl" scale="0.001 0.001 0.001"/>
+    <mesh name="2fg7_right_finger_col_07" file="./onrobot_2fg7/assets/collision/right_finger/2fg7_right_finger_part_07.stl" scale="0.001 0.001 0.001"/>
+    <mesh name="2fg7_right_finger_col_08" file="./onrobot_2fg7/assets/collision/right_finger/2fg7_right_finger_part_08.stl" scale="0.001 0.001 0.001"/>
+    <mesh name="2fg7_right_finger_col_09" file="./onrobot_2fg7/assets/collision/right_finger/2fg7_right_finger_part_09.stl" scale="0.001 0.001 0.001"/>
   </asset>
 
   <worldbody>
@@ -112,25 +126,60 @@
                       <geom name="2fg7_base_body" type="mesh" mesh="2fg7_official_base"
                             contype="0" conaffinity="0" rgba="0.82 0.82 0.82 1"
                             pos="-0.05539 -0.14017 -0.28046" quat="0.707107 0.707107 0 0"/>
-                      <geom name="mount_2fg7_collision" type="box" class="collision" pos="-0.006 0 0.056" size="0.052 0.035 0.056"/>
 
                       <body name="2fg7_left_finger" pos="0 0 0">
                         <inertial mass="0.05" pos="0 0 0" diaginertia="0.00005 0.00005 0.00005"/>
-                        <joint name="2fg7_left_finger_joint" type="slide" axis="1 0 0" range="0 0.07" damping="1.0"/>
+                        <joint name="2fg7_left_finger_joint" type="slide" axis="1 0 0" range="-0.015 0.02" damping="1.0"/>
                         <geom name="2fg7_left_finger_vis" type="mesh" mesh="2fg7_left_finger"
                               contype="0" conaffinity="0" rgba="0.82 0.82 0.82 1"
                               pos="-0.05539 -0.14017 -0.28046" quat="0.707107 0.707107 0 0"/>
-                        <geom name="2fg7_left_finger_col" type="mesh" mesh="2fg7_left_finger_col"
+                        <geom name="2fg7_left_finger_col_00" type="mesh" mesh="2fg7_left_finger_col_00"
+                              pos="-0.05539 -0.14017 -0.28046" quat="0.707107 0.707107 0 0"/>
+                        <geom name="2fg7_left_finger_col_01" type="mesh" mesh="2fg7_left_finger_col_01"
+                              pos="-0.05539 -0.14017 -0.28046" quat="0.707107 0.707107 0 0"/>
+                        <geom name="2fg7_left_finger_col_02" type="mesh" mesh="2fg7_left_finger_col_02"
+                              pos="-0.05539 -0.14017 -0.28046" quat="0.707107 0.707107 0 0"/>
+                        <geom name="2fg7_left_finger_col_03" type="mesh" mesh="2fg7_left_finger_col_03"
+                              pos="-0.05539 -0.14017 -0.28046" quat="0.707107 0.707107 0 0"/>
+                        <geom name="2fg7_left_finger_col_04" type="mesh" mesh="2fg7_left_finger_col_04"
+                              pos="-0.05539 -0.14017 -0.28046" quat="0.707107 0.707107 0 0"/>
+                        <geom name="2fg7_left_finger_col_05" type="mesh" mesh="2fg7_left_finger_col_05"
+                              pos="-0.05539 -0.14017 -0.28046" quat="0.707107 0.707107 0 0"/>
+                        <geom name="2fg7_left_finger_col_06" type="mesh" mesh="2fg7_left_finger_col_06"
+                              pos="-0.05539 -0.14017 -0.28046" quat="0.707107 0.707107 0 0"/>
+                        <geom name="2fg7_left_finger_col_07" type="mesh" mesh="2fg7_left_finger_col_07"
+                              pos="-0.05539 -0.14017 -0.28046" quat="0.707107 0.707107 0 0"/>
+                        <geom name="2fg7_left_finger_col_08" type="mesh" mesh="2fg7_left_finger_col_08"
+                              pos="-0.05539 -0.14017 -0.28046" quat="0.707107 0.707107 0 0"/>
+                        <geom name="2fg7_left_finger_col_09" type="mesh" mesh="2fg7_left_finger_col_09"
                               pos="-0.05539 -0.14017 -0.28046" quat="0.707107 0.707107 0 0"/>
                       </body>
 
                       <body name="2fg7_right_finger" pos="0 0 0">
                         <inertial mass="0.05" pos="0 0 0" diaginertia="0.00005 0.00005 0.00005"/>
-                        <joint name="2fg7_right_finger_joint" type="slide" axis="-1 0 0" range="0 0.07" damping="1.0"/>
+                        <joint name="2fg7_right_finger_joint" type="slide" axis="-1 0 0" range="-0.015 0.02" damping="1.0"/>
                         <geom name="2fg7_right_finger_vis" type="mesh" mesh="2fg7_right_finger"
                               contype="0" conaffinity="0" rgba="0.82 0.82 0.82 1"
                               pos="-0.05539 -0.14017 -0.28046" quat="0.707107 0.707107 0 0"/>
-                        <geom name="2fg7_right_finger_col" type="mesh" mesh="2fg7_right_finger_col"
+                        <geom name="2fg7_right_finger_col_00" type="mesh" mesh="2fg7_right_finger_col_00"
+                              pos="-0.05539 -0.14017 -0.28046" quat="0.707107 0.707107 0 0"/>
+                        <geom name="2fg7_right_finger_col_01" type="mesh" mesh="2fg7_right_finger_col_01"
+                              pos="-0.05539 -0.14017 -0.28046" quat="0.707107 0.707107 0 0"/>
+                        <geom name="2fg7_right_finger_col_02" type="mesh" mesh="2fg7_right_finger_col_02"
+                              pos="-0.05539 -0.14017 -0.28046" quat="0.707107 0.707107 0 0"/>
+                        <geom name="2fg7_right_finger_col_03" type="mesh" mesh="2fg7_right_finger_col_03"
+                              pos="-0.05539 -0.14017 -0.28046" quat="0.707107 0.707107 0 0"/>
+                        <geom name="2fg7_right_finger_col_04" type="mesh" mesh="2fg7_right_finger_col_04"
+                              pos="-0.05539 -0.14017 -0.28046" quat="0.707107 0.707107 0 0"/>
+                        <geom name="2fg7_right_finger_col_05" type="mesh" mesh="2fg7_right_finger_col_05"
+                              pos="-0.05539 -0.14017 -0.28046" quat="0.707107 0.707107 0 0"/>
+                        <geom name="2fg7_right_finger_col_06" type="mesh" mesh="2fg7_right_finger_col_06"
+                              pos="-0.05539 -0.14017 -0.28046" quat="0.707107 0.707107 0 0"/>
+                        <geom name="2fg7_right_finger_col_07" type="mesh" mesh="2fg7_right_finger_col_07"
+                              pos="-0.05539 -0.14017 -0.28046" quat="0.707107 0.707107 0 0"/>
+                        <geom name="2fg7_right_finger_col_08" type="mesh" mesh="2fg7_right_finger_col_08"
+                              pos="-0.05539 -0.14017 -0.28046" quat="0.707107 0.707107 0 0"/>
+                        <geom name="2fg7_right_finger_col_09" type="mesh" mesh="2fg7_right_finger_col_09"
                               pos="-0.05539 -0.14017 -0.28046" quat="0.707107 0.707107 0 0"/>
                       </body>
                       <site name="tcp_2fg7" pos="0 0 0.1386" size="0.01" rgba="0 1 0 0.5" group="2" />
@@ -171,9 +220,6 @@
                               pos="0.026 -0.015 0" quat="0.707107 -0.707107 0 0"/>
                         <geom name="3fg15_left_finger_col_05" type="mesh" mesh="3fg15_left_finger_col_05"
                               pos="0.026 -0.015 0" quat="0.707107 -0.707107 0 0"/>
-                        <geom name="3fg15_left_finger_col_06" type="mesh" mesh="3fg15_left_finger_col_06"
-                              pos="0.026 -0.015 0" quat="0.707107 -0.707107 0 0"
-                              contype="0" conaffinity="0"/>
                         <geom name="3fg15_left_finger_col_07" type="mesh" mesh="3fg15_left_finger_col_07"
                               pos="0.026 -0.015 0" quat="0.707107 -0.707107 0 0"/>
                         <geom name="3fg15_left_finger_col_08" type="mesh" mesh="3fg15_left_finger_col_08"
@@ -202,9 +248,6 @@
                               pos="-0.026 -0.015 0" quat="0.707107 -0.707107 0 0"/>
                         <geom name="3fg15_right_finger_col_07" type="mesh" mesh="3fg15_right_finger_col_07"
                               pos="-0.026 -0.015 0" quat="0.707107 -0.707107 0 0"/>
-                        <geom name="3fg15_right_finger_col_08" type="mesh" mesh="3fg15_right_finger_col_08"
-                              pos="-0.026 -0.015 0" quat="0.707107 -0.707107 0 0"
-                              contype="0" conaffinity="0"/>
                       </body>
                       <body name="3fg15_center_finger" pos="0 -0.03 0" quat="0.748499 0 0 0.663135">
                         <inertial mass="0.08" pos="0 0.03 0" quat="0.707107 -0.707107 0 0"
@@ -217,12 +260,6 @@
                               pos="0 0.03 0" quat="0.707107 -0.707107 0 0"/>
                         <geom name="3fg15_center_finger_col_01" type="mesh" mesh="3fg15_middle_finger_col_01"
                               pos="0 0.03 0" quat="0.707107 -0.707107 0 0"/>
-                        <geom name="3fg15_center_finger_col_02" type="mesh" mesh="3fg15_middle_finger_col_02"
-                              pos="0 0.03 0" quat="0.707107 -0.707107 0 0"
-                              contype="0" conaffinity="0"/>
-                        <geom name="3fg15_center_finger_col_03" type="mesh" mesh="3fg15_middle_finger_col_03"
-                              pos="0 0.03 0" quat="0.707107 -0.707107 0 0"
-                              contype="0" conaffinity="0"/>
                         <geom name="3fg15_center_finger_col_04" type="mesh" mesh="3fg15_middle_finger_col_04"
                               pos="0 0.03 0" quat="0.707107 -0.707107 0 0"/>
                         <geom name="3fg15_center_finger_col_05" type="mesh" mesh="3fg15_middle_finger_col_05"
@@ -252,8 +289,8 @@
 
   <actuator>
     <include file="./universal_robots_ur5e/actuator_position.xml"/>
-    <position name="2fg7_left_finger_act" joint="2fg7_left_finger_joint" kp="800" kv="25" forcerange="-40 40" ctrlrange="0 0.0175"/>
-    <position name="2fg7_right_finger_act" joint="2fg7_right_finger_joint" kp="800" kv="25" forcerange="-40 40" ctrlrange="0 0.0175"/>
+    <position name="2fg7_left_finger_act" joint="2fg7_left_finger_joint" kp="3000" kv="25" forcerange="-80 80" ctrlrange="-0.015 0.02"/>
+    <position name="2fg7_right_finger_act" joint="2fg7_right_finger_joint" kp="3000" kv="25" forcerange="-80 80" ctrlrange="-0.015 0.02"/>
     <position name="3fg15_left_finger_act" joint="3fg15_left_finger_joint" kp="120" kv="8" forcerange="-12 12" ctrlrange="-1.45 1.45"/>
     <position name="3fg15_right_finger_act" joint="3fg15_right_finger_joint" kp="120" kv="8" forcerange="-12 12" ctrlrange="-1.45 1.45"/>
     <position name="3fg15_center_finger_act" joint="3fg15_center_finger_joint" kp="120" kv="8" forcerange="-12 12" ctrlrange="-1.45 1.45"/>

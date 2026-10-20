@@ -10,8 +10,26 @@
     <mesh name="2fg7_official_base" file="./onrobot_2fg7/assets/visual/official_base_onrobot.stl" scale="0.001 0.001 0.001"/>
     <mesh name="2fg7_left_finger" file="./onrobot_2fg7/assets/visual/official_left_finger.stl" scale="0.001 0.001 0.001"/>
     <mesh name="2fg7_right_finger" file="./onrobot_2fg7/assets/visual/official_right_finger.stl" scale="0.001 0.001 0.001"/>
-    <mesh name="2fg7_left_finger_col" file="./onrobot_2fg7/assets/collision/official_left_finger.stl" scale="0.001 0.001 0.001"/>
-    <mesh name="2fg7_right_finger_col" file="./onrobot_2fg7/assets/collision/official_right_finger.stl" scale="0.001 0.001 0.001"/>
+    <mesh name="2fg7_left_finger_col_00" file="./onrobot_2fg7/assets/collision/left_finger/2fg7_left_finger_part_00.stl" scale="0.001 0.001 0.001"/>
+    <mesh name="2fg7_left_finger_col_01" file="./onrobot_2fg7/assets/collision/left_finger/2fg7_left_finger_part_01.stl" scale="0.001 0.001 0.001"/>
+    <mesh name="2fg7_left_finger_col_02" file="./onrobot_2fg7/assets/collision/left_finger/2fg7_left_finger_part_02.stl" scale="0.001 0.001 0.001"/>
+    <mesh name="2fg7_left_finger_col_03" file="./onrobot_2fg7/assets/collision/left_finger/2fg7_left_finger_part_03.stl" scale="0.001 0.001 0.001"/>
+    <mesh name="2fg7_left_finger_col_04" file="./onrobot_2fg7/assets/collision/left_finger/2fg7_left_finger_part_04.stl" scale="0.001 0.001 0.001"/>
+    <mesh name="2fg7_left_finger_col_05" file="./onrobot_2fg7/assets/collision/left_finger/2fg7_left_finger_part_05.stl" scale="0.001 0.001 0.001"/>
+    <mesh name="2fg7_left_finger_col_06" file="./onrobot_2fg7/assets/collision/left_finger/2fg7_left_finger_part_06.stl" scale="0.001 0.001 0.001"/>
+    <mesh name="2fg7_left_finger_col_07" file="./onrobot_2fg7/assets/collision/left_finger/2fg7_left_finger_part_07.stl" scale="0.001 0.001 0.001"/>
+    <mesh name="2fg7_left_finger_col_08" file="./onrobot_2fg7/assets/collision/left_finger/2fg7_left_finger_part_08.stl" scale="0.001 0.001 0.001"/>
+    <mesh name="2fg7_left_finger_col_09" file="./onrobot_2fg7/assets/collision/left_finger/2fg7_left_finger_part_09.stl" scale="0.001 0.001 0.001"/>
+    <mesh name="2fg7_right_finger_col_00" file="./onrobot_2fg7/assets/collision/right_finger/2fg7_right_finger_part_00.stl" scale="0.001 0.001 0.001"/>
+    <mesh name="2fg7_right_finger_col_01" file="./onrobot_2fg7/assets/collision/right_finger/2fg7_right_finger_part_01.stl" scale="0.001 0.001 0.001"/>
+    <mesh name="2fg7_right_finger_col_02" file="./onrobot_2fg7/assets/collision/right_finger/2fg7_right_finger_part_02.stl" scale="0.001 0.001 0.001"/>
+    <mesh name="2fg7_right_finger_col_03" file="./onrobot_2fg7/assets/collision/right_finger/2fg7_right_finger_part_03.stl" scale="0.001 0.001 0.001"/>
+    <mesh name="2fg7_right_finger_col_04" file="./onrobot_2fg7/assets/collision/right_finger/2fg7_right_finger_part_04.stl" scale="0.001 0.001 0.001"/>
+    <mesh name="2fg7_right_finger_col_05" file="./onrobot_2fg7/assets/collision/right_finger/2fg7_right_finger_part_05.stl" scale="0.001 0.001 0.001"/>
+    <mesh name="2fg7_right_finger_col_06" file="./onrobot_2fg7/assets/collision/right_finger/2fg7_right_finger_part_06.stl" scale="0.001 0.001 0.001"/>
+    <mesh name="2fg7_right_finger_col_07" file="./onrobot_2fg7/assets/collision/right_finger/2fg7_right_finger_part_07.stl" scale="0.001 0.001 0.001"/>
+    <mesh name="2fg7_right_finger_col_08" file="./onrobot_2fg7/assets/collision/right_finger/2fg7_right_finger_part_08.stl" scale="0.001 0.001 0.001"/>
+    <mesh name="2fg7_right_finger_col_09" file="./onrobot_2fg7/assets/collision/right_finger/2fg7_right_finger_part_09.stl" scale="0.001 0.001 0.001"/>
   </asset>
 
   <worldbody>
@@ -82,7 +100,25 @@
                       <geom name="2fg7_left_finger_vis" type="mesh" mesh="2fg7_left_finger"
                             contype="0" conaffinity="0" rgba="0.82 0.82 0.82 1"
                             pos="-0.05539 -0.14017 -0.28046" quat="0.707107 0.707107 0 0"/>
-                      <geom name="2fg7_left_finger_col" type="mesh" mesh="2fg7_left_finger_col"
+                      <geom name="2fg7_left_finger_col_00" type="mesh" mesh="2fg7_left_finger_col_00"
+                            pos="-0.05539 -0.14017 -0.28046" quat="0.707107 0.707107 0 0"/>
+                      <geom name="2fg7_left_finger_col_01" type="mesh" mesh="2fg7_left_finger_col_01"
+                            pos="-0.05539 -0.14017 -0.28046" quat="0.707107 0.707107 0 0"/>
+                      <geom name="2fg7_left_finger_col_02" type="mesh" mesh="2fg7_left_finger_col_02"
+                            pos="-0.05539 -0.14017 -0.28046" quat="0.707107 0.707107 0 0"/>
+                      <geom name="2fg7_left_finger_col_03" type="mesh" mesh="2fg7_left_finger_col_03"
+                            pos="-0.05539 -0.14017 -0.28046" quat="0.707107 0.707107 0 0"/>
+                      <geom name="2fg7_left_finger_col_04" type="mesh" mesh="2fg7_left_finger_col_04"
+                            pos="-0.05539 -0.14017 -0.28046" quat="0.707107 0.707107 0 0"/>
+                      <geom name="2fg7_left_finger_col_05" type="mesh" mesh="2fg7_left_finger_col_05"
+                            pos="-0.05539 -0.14017 -0.28046" quat="0.707107 0.707107 0 0"/>
+                      <geom name="2fg7_left_finger_col_06" type="mesh" mesh="2fg7_left_finger_col_06"
+                            pos="-0.05539 -0.14017 -0.28046" quat="0.707107 0.707107 0 0"/>
+                      <geom name="2fg7_left_finger_col_07" type="mesh" mesh="2fg7_left_finger_col_07"
+                            pos="-0.05539 -0.14017 -0.28046" quat="0.707107 0.707107 0 0"/>
+                      <geom name="2fg7_left_finger_col_08" type="mesh" mesh="2fg7_left_finger_col_08"
+                            pos="-0.05539 -0.14017 -0.28046" quat="0.707107 0.707107 0 0"/>
+                      <geom name="2fg7_left_finger_col_09" type="mesh" mesh="2fg7_left_finger_col_09"
                             pos="-0.05539 -0.14017 -0.28046" quat="0.707107 0.707107 0 0"/>
                     </body>
                     <!-- Right finger (body at OPEN pose, q=0 -> open, q=0.0175 -> closed) -->
@@ -92,7 +128,25 @@
                       <geom name="2fg7_right_finger_vis" type="mesh" mesh="2fg7_right_finger"
                             contype="0" conaffinity="0" rgba="0.82 0.82 0.82 1"
                             pos="-0.05539 -0.14017 -0.28046" quat="0.707107 0.707107 0 0"/>
-                      <geom name="2fg7_right_finger_col" type="mesh" mesh="2fg7_right_finger_col"
+                      <geom name="2fg7_right_finger_col_00" type="mesh" mesh="2fg7_right_finger_col_00"
+                            pos="-0.05539 -0.14017 -0.28046" quat="0.707107 0.707107 0 0"/>
+                      <geom name="2fg7_right_finger_col_01" type="mesh" mesh="2fg7_right_finger_col_01"
+                            pos="-0.05539 -0.14017 -0.28046" quat="0.707107 0.707107 0 0"/>
+                      <geom name="2fg7_right_finger_col_02" type="mesh" mesh="2fg7_right_finger_col_02"
+                            pos="-0.05539 -0.14017 -0.28046" quat="0.707107 0.707107 0 0"/>
+                      <geom name="2fg7_right_finger_col_03" type="mesh" mesh="2fg7_right_finger_col_03"
+                            pos="-0.05539 -0.14017 -0.28046" quat="0.707107 0.707107 0 0"/>
+                      <geom name="2fg7_right_finger_col_04" type="mesh" mesh="2fg7_right_finger_col_04"
+                            pos="-0.05539 -0.14017 -0.28046" quat="0.707107 0.707107 0 0"/>
+                      <geom name="2fg7_right_finger_col_05" type="mesh" mesh="2fg7_right_finger_col_05"
+                            pos="-0.05539 -0.14017 -0.28046" quat="0.707107 0.707107 0 0"/>
+                      <geom name="2fg7_right_finger_col_06" type="mesh" mesh="2fg7_right_finger_col_06"
+                            pos="-0.05539 -0.14017 -0.28046" quat="0.707107 0.707107 0 0"/>
+                      <geom name="2fg7_right_finger_col_07" type="mesh" mesh="2fg7_right_finger_col_07"
+                            pos="-0.05539 -0.14017 -0.28046" quat="0.707107 0.707107 0 0"/>
+                      <geom name="2fg7_right_finger_col_08" type="mesh" mesh="2fg7_right_finger_col_08"
+                            pos="-0.05539 -0.14017 -0.28046" quat="0.707107 0.707107 0 0"/>
+                      <geom name="2fg7_right_finger_col_09" type="mesh" mesh="2fg7_right_finger_col_09"
                             pos="-0.05539 -0.14017 -0.28046" quat="0.707107 0.707107 0 0"/>
                     </body>
                     <!-- TCP -->
