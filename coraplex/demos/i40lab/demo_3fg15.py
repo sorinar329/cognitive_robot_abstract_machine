@@ -1,13 +1,14 @@
 """
-The i40lab demo with a UR5e + dual gripper in MuJoCo.
+The i40lab demo that grasps the cylinder with the right OnRobot 3FG15.
 
-The scene and the plan are defined here; the backend carries it out.
+The 3FG15 approaches the cylinder's upper wall from above, closes until the fingers
+stall against it, lifts the cylinder clear of the table, carries it across the table,
+and sets it down again.
 """
 
 from __future__ import annotations
 
 from datetime import timedelta
-from enum import StrEnum
 from pathlib import Path
 
 from coraplex.datastructures.dataclasses import Context
@@ -33,29 +34,7 @@ from semantic_digital_twin.spatial_types.spatial_types import Point3, Pose
 from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.contact import ContactParameters
 
-# %% which backend carries the plan out
-
-
-class Backend(StrEnum):
-    """
-    Where the demo runs.
-    """
-
-    MUJOCO = "mujoco"
-    """
-    Physics, in a MuJoCo viewer.
-    """
-
-    RVIZ = "rviz"
-    """
-    The world model alone, drawn in RViz, with the robot moved kinematically.
-    """
-
-
-BACKEND = Backend.MUJOCO
-"""
-The backend this run uses. Edit it to run the demo somewhere else.
-"""
+# %% scene and motion settings
 
 
 SCENE = Path(__file__).parent / "mujocoscene" / "scene.xml"
@@ -69,9 +48,10 @@ CYLINDER_NAME = "cylinder"
 The free body the demo picks up.
 """
 
-PLACE_XY = (1.0, 0.7)
+PLACE_XY = (1.15, 0.95)
 """
-The table position the cylinder is placed at, clear of the other objects.
+The table position the cylinder is placed at, across the table from where it is picked
+up.
 """
 
 TABLE_TOP_Z = 0.74
@@ -84,20 +64,31 @@ CYLINDER_HALF_HEIGHT = 0.1
 Half the height of the cylinder, so its bottom rests on the table top.
 """
 
-TRANSIT_CLEARANCE_Z = 1.15
+PLACE_CLEARANCE = 0.005
 """
-Tool height the transit flies at: above the tallest obstacle (the cylinder top
-at 0.94) with margin for the gripper hardware, and within the arm's 0.85 m
-reach above both the park pose and the cylinder.
+How far above the table the cylinder is released, in metres.
+
+Releasing just above the surface lets the cylinder settle instead of pressing it down
+against the table while the arm still holds the pose.
+"""
+
+PLACE_POSITION_THRESHOLD = 0.002
+"""
+Tool position tolerance for the final descent onto the table, in metres.
+"""
+
+TRANSIT_CLEARANCE = 0.15
+"""
+How far above the place pose the tool crosses the table, in metres.
 """
 
 RAISED_GRASP_OFFSET = 0.040
 """
 How far above the cylinder origin the tool point aims.
 
-The tool frame lies 2.55 cm beyond the fingertips, so aiming it at the rim
-would leave the whole claw above the top face. This offset instead puts the
-pads on the upper wall while keeping the gripper body clear of the top.
+The tool frame lies 2.55 cm beyond the fingertips, so aiming it at the rim would leave
+the whole claw above the top face. This offset instead puts the pads on the upper wall
+while keeping the gripper body clear of the top.
 """
 
 APPROACH_CLEARANCE = 0.10
@@ -110,16 +101,33 @@ LIFT_HEIGHT = 0.08
 How far the grasp is lifted after closing, to show the cylinder is held.
 """
 
-FINAL_HOLD_DURATION = timedelta(seconds=2)
+PLACE_LINEAR_VELOCITY = 0.03
 """
-How long the lifted cylinder is held at the end of the plan, in simulation time.
+Maximum tool linear speed on the final descent onto the table, in metres per second.
+"""
+
+TRANSIT_LINEAR_VELOCITY = 0.1
+"""
+Maximum tool linear speed while carrying the cylinder across the table, in metres per
+second.
+"""
+
+GRASP_SETTLE_DURATION = timedelta(seconds=1)
+"""
+How long the grasped cylinder is held above the pick before it is carried away, in
+simulation time.
+"""
+
+RELEASE_SETTLE_DURATION = timedelta(seconds=1)
+"""
+How long the released cylinder is left to settle before the arm rises away, in
+simulation time.
 """
 
 GRIPPER_FINGER_VELOCITY = 1.0
 """
 Maximum angular velocity of the 3FG15 finger joints, in radians per second.
 """
-
 
 # %% building the world the demo runs in
 
@@ -128,8 +136,8 @@ def set_3fg15_finger_velocity_limits(world: World) -> None:
     """
     Raise the parsed 3FG15 finger velocity limits to the demo's closing speed.
 
-    The MJCF parser gives the finger hinges a default velocity limit that is
-    slower than the closing motion needs.
+    The MJCF parser gives the finger hinges a default velocity limit that is slower than
+    the closing motion needs.
 
     :param world: The world whose finger joints should be updated.
     """
@@ -143,11 +151,11 @@ def build_world() -> tuple[World, UR5eMujocoDualGripper]:
     """
     Parse the i40lab MJCF scene and annotate the UR5e robot.
 
-    The scene already contains the robot (ur5e_with_dual_onrobot.xml include).
-    We locate its root body (ur5e_base) and build the semantic annotation
-    around it, which equips joints with servos, gravity compensation, PARK
-    joint state, velocity caps, and collision rules. Both arm views span the
-    same physical joints; ``LEFT`` carries the 2FG7, ``RIGHT`` the 3FG15.
+    The scene already contains the robot (ur5e_with_dual_onrobot.xml include). We locate
+    its root body (ur5e_base) and build the semantic annotation around it, which equips
+    joints with servos, gravity compensation, PARK joint state, velocity caps, and
+    collision rules. Both arm views span the same physical joints; ``LEFT`` carries the
+    2FG7, ``RIGHT`` the 3FG15.
     """
     world = MJCFParser.from_file(str(SCENE)).parse()
     robot = UR5eMujocoDualGripper.from_branch_in_world(world.root)
@@ -189,8 +197,9 @@ def find_cylinder_annotation(context: Context) -> HasRootBody:
 
 def build_motion_plan(context: Context) -> Plan:
     """
-    Grasp the cylinder with the RIGHT 3FG15: park, reach its upper wall, close until
-    the fingers stall against it, then lift it clear of the table.
+    Grasp the cylinder with the RIGHT 3FG15: park, reach its upper wall, close until the
+    fingers stall against it, lift it clear of the table, carry it across the table, and
+    set it down.
 
     The close motion tolerates the stall when the fingers meet the cylinder: the
     closed target lies beyond the cylinder's width, so the goal alone would never
@@ -204,15 +213,6 @@ def build_motion_plan(context: Context) -> Plan:
         VerticalAlignment.TOP,
         robot.right_arm.end_effector,
         rotate_gripper=True,
-    )
-    place_pose = Pose.from_xyz_rpy(
-        PLACE_XY[0],
-        PLACE_XY[1],
-        TABLE_TOP_Z + CYLINDER_HALF_HEIGHT,
-        0.0,
-        0.0,
-        0.0,
-        reference_frame=context.world.root,
     )
 
     cylinder_position = cylinder.root.global_pose.to_position()
@@ -249,12 +249,44 @@ def build_motion_plan(context: Context) -> Plan:
         reference_frame=context.world.root,
     )
 
-    _transport_pose, _placing_pose, _retract_pose = grasp.pose_sequence(
-        place_pose, cylinder.root, reverse=True
+    place_tcp_height = (
+        TABLE_TOP_Z + CYLINDER_HALF_HEIGHT + RAISED_GRASP_OFFSET + PLACE_CLEARANCE
+    )
+    transit_height = place_tcp_height + TRANSIT_CLEARANCE
+    lift_position = lift_pose.to_position()
+
+    transit_pose = Pose(
+        Point3(
+            float(lift_position.x),
+            float(lift_position.y),
+            transit_height,
+            reference_frame=context.world.root,
+        ),
+        orientation,
+        reference_frame=context.world.root,
+    )
+    over_place_pose = Pose(
+        Point3(
+            PLACE_XY[0],
+            PLACE_XY[1],
+            transit_height,
+            reference_frame=context.world.root,
+        ),
+        orientation,
+        reference_frame=context.world.root,
+    )
+    place_pose = Pose(
+        Point3(
+            PLACE_XY[0],
+            PLACE_XY[1],
+            place_tcp_height,
+            reference_frame=context.world.root,
+        ),
+        orientation,
+        reference_frame=context.world.root,
     )
 
     actions = [
-        ParkArmsAction(arm=Arms.RIGHT),
         MoveGripperMotion(
             motion=GripperState.OPEN,
             gripper=Arms.RIGHT,
@@ -289,27 +321,47 @@ def build_motion_plan(context: Context) -> Plan:
         HoldToolCenterPointMotion(
             pose=lift_pose,
             arm=Arms.RIGHT,
-            duration=FINAL_HOLD_DURATION,
+            duration=GRASP_SETTLE_DURATION,
             allow_gripper_collision=True,
         ),
-        # MoveToolCenterPointMotion(
-        #     target=_transport_pose,
-        #     arm=Arms.RIGHT,
-        # ),
-        # MoveToolCenterPointMotion(
-        #     target=_placing_pose,
-        #     arm=Arms.RIGHT,
-        # ),
-        # MoveGripperMotion(
-        #     motion=GripperState.OPEN,
-        #     gripper=Arms.RIGHT,
-        #     tolerate_stall=True,
-        # ),
-        # MoveToolCenterPointMotion(
-        #     target=_retract_pose,
-        #     arm=Arms.RIGHT,
-        # ),
-        # ParkArmsAction(arm=Arms.RIGHT),
+        MoveToolCenterPointMotion(
+            target=transit_pose,
+            arm=Arms.RIGHT,
+            allow_gripper_collision=True,
+            max_linear_velocity=TRANSIT_LINEAR_VELOCITY,
+        ),
+        MoveToolCenterPointMotion(
+            target=over_place_pose,
+            arm=Arms.RIGHT,
+            allow_gripper_collision=True,
+            max_linear_velocity=TRANSIT_LINEAR_VELOCITY,
+        ),
+        MoveToolCenterPointMotion(
+            target=place_pose,
+            arm=Arms.RIGHT,
+            allow_gripper_collision=True,
+            max_linear_velocity=PLACE_LINEAR_VELOCITY,
+            position_threshold=PLACE_POSITION_THRESHOLD,
+        ),
+        MoveGripperMotion(
+            motion=GripperState.OPEN,
+            gripper=Arms.RIGHT,
+            allow_gripper_collision=True,
+            finger_velocity=GRIPPER_FINGER_VELOCITY,
+        ),
+        HoldToolCenterPointMotion(
+            pose=place_pose,
+            arm=Arms.RIGHT,
+            duration=RELEASE_SETTLE_DURATION,
+            allow_gripper_collision=True,
+        ),
+        MoveToolCenterPointMotion(
+            target=over_place_pose,
+            arm=Arms.RIGHT,
+            allow_gripper_collision=True,
+            max_linear_velocity=TRANSIT_LINEAR_VELOCITY,
+        ),
+        ParkArmsAction(arm=Arms.RIGHT),
     ]
 
     return sequential(actions, context=context).plan
@@ -320,22 +372,11 @@ def build_motion_plan(context: Context) -> Plan:
 
 def main() -> None:
     """
-    Run the demo on the backend :data:`BACKEND` names.
-
-    Each backend is imported only once it is chosen, so a run needs nothing
-    installed for the backends it does not use.
+    Run the cylinder demo against MuJoCo physics.
     """
-    if BACKEND is Backend.MUJOCO:
-        import mujoco_demo
+    import mujoco_demo
 
-        mujoco_demo.run(build_world, build_motion_plan)
-        return
-
-    if BACKEND is Backend.RVIZ:
-        # Not implemented for i40lab yet
-        raise NotImplementedError("RViz backend not implemented for i40lab")
-
-    raise ValueError(f"Unknown backend: {BACKEND}")
+    mujoco_demo.run(build_world, build_motion_plan)
 
 
 if __name__ == "__main__":

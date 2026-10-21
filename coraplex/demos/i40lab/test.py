@@ -106,7 +106,7 @@ def check_rigid_contact_tuning() -> list[str]:
     """
     sys.path.insert(0, str(Path(__file__).parent))
     try:
-        import demo as i40lab_demo
+        import demo_3fg15 as i40lab_demo
         import mujoco_demo
     except ImportError:
         print("  SKIP contact tuning check (mujoco_demo unavailable)")
@@ -181,7 +181,7 @@ def check_raised_grasp() -> list[str]:
     """
     sys.path.insert(0, str(Path(__file__).parent))
     try:
-        import demo as i40lab_demo
+        import demo_3fg15 as i40lab_demo
         from coraplex.datastructures.dataclasses import Context
         from coraplex.plans.plan_node import ActionNode
         from coraplex.robot_plans.actions.core.pick_up import ReachAction

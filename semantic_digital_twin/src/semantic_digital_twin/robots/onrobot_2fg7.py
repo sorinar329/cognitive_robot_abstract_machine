@@ -87,12 +87,25 @@ class OnRobot2FG7Gripper(
 ):
     """
     The OnRobot 2FG7 two-finger parallel gripper: both fingers share the mount origin
-    and slide apart symmetrically, so open is the widest travel and close is the
-    narrowest; the stall monitor ends a close early on contact.
+    and slide apart symmetrically, so positive joint values open the pads and negative
+    values close them, with the pads meeting before the travel ends; the stall monitor
+    ends a close early on contact.
 
     The tool frame sits at the TCP between the pads, so grasp goals address the
     pinch point rather than the mount: sending the mount there instead would bury
     the fingers in the table.
+    """
+
+    OPEN_FINGER_POSITION = 0.0175
+    """
+    Finger position with the pads 60 mm apart, a margin short of the travel limit.
+    """
+
+    CLOSED_FINGER_POSITION = -0.0126
+    """
+    Finger position at which the pad faces meet, leaving no gap between them.
+
+    The travel continues to -0.015, where the pads would press into each other.
     """
 
     def setup_hardware_interfaces(self):
@@ -106,13 +119,17 @@ class OnRobot2FG7Gripper(
 
         gripper_open = JointState.from_mapping(
             name=PrefixedName(f"{self.name.name}_open", prefix=self.name.name),
-            mapping=dict(zip(gripper_joints, [0.0175, 0.0175], strict=True)),
+            mapping=dict(
+                zip(gripper_joints, [self.OPEN_FINGER_POSITION] * 2, strict=True)
+            ),
             state_type=GripperState.OPEN,
         )
 
         gripper_close = JointState.from_mapping(
             name=PrefixedName(f"{self.name.name}_close", prefix=self.name.name),
-            mapping=dict(zip(gripper_joints, [0.0, 0.0], strict=True)),
+            mapping=dict(
+                zip(gripper_joints, [self.CLOSED_FINGER_POSITION] * 2, strict=True)
+            ),
             state_type=GripperState.CLOSE,
         )
 

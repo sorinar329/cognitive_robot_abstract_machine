@@ -27,10 +27,11 @@
             contype="0" conaffinity="0" rgba="0.82 0.82 0.82 1"
             pos="-0.05539 -0.14017 -0.28046" quat="0.707107 0.707107 0 0"/>
 
-      <!-- Left finger (body at OPEN pose, q=0 -> open, q=0.0175 -> closed) -->
-      <body name="left_finger" pos="-0.0477 0 0">
+      <!-- Fingers slide symmetrically: q=0 leaves the pads 25 mm apart,
+           q=-0.0126 closes them, positive q opens them -->
+      <body name="left_finger" pos="0 0 0">
         <inertial mass="0.05" pos="0 0 0" diaginertia="0.00005 0.00005 0.00005"/>
-        <joint name="left_finger_joint" type="slide" axis="1 0 0" range="0 0.0175"/>
+        <joint name="left_finger_joint" type="slide" axis="1 0 0" range="-0.015 0.02"/>
         <geom name="2fg7_left_finger_vis" type="mesh" mesh="left_finger"
               contype="0" conaffinity="0" rgba="0.82 0.82 0.82 1"
               pos="-0.05539 -0.14017 -0.28046" quat="0.707107 0.707107 0 0"/>
@@ -38,10 +39,9 @@
               pos="-0.05539 -0.14017 -0.28046" quat="0.707107 0.707107 0 0"/>
       </body>
 
-      <!-- Right finger (body at OPEN pose, q=0 -> open, q=0.0175 -> closed) -->
-      <body name="right_finger" pos="0.0477 0 0">
+      <body name="right_finger" pos="0 0 0">
         <inertial mass="0.05" pos="0 0 0" diaginertia="0.00005 0.00005 0.00005"/>
-        <joint name="right_finger_joint" type="slide" axis="-1 0 0" range="0 0.0175"/>
+        <joint name="right_finger_joint" type="slide" axis="-1 0 0" range="-0.015 0.02"/>
         <geom name="2fg7_right_finger_vis" type="mesh" mesh="right_finger"
               contype="0" conaffinity="0" rgba="0.82 0.82 0.82 1"
               pos="-0.05539 -0.14017 -0.28046" quat="0.707107 0.707107 0 0"/>
@@ -57,8 +57,8 @@
   </worldbody>
 
   <actuator>
-    <position name="left_finger_act" joint="left_finger_joint" class="2fg7" forcerange="-40 40" ctrlrange="0 0.0175"/>
-    <position name="right_finger_act" joint="right_finger_joint" class="2fg7" forcerange="-40 40" ctrlrange="0 0.0175"/>
+    <position name="left_finger_act" joint="left_finger_joint" class="2fg7" forcerange="-40 40" ctrlrange="-0.015 0.02"/>
+    <position name="right_finger_act" joint="right_finger_joint" class="2fg7" forcerange="-40 40" ctrlrange="-0.015 0.02"/>
   </actuator>
 
 </mujoco>

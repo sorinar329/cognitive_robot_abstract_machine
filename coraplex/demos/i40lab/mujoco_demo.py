@@ -18,7 +18,6 @@ from __future__ import annotations
 import os
 from datetime import timedelta
 from enum import StrEnum
-from pathlib import Path
 from typing import TYPE_CHECKING, Callable
 
 import mujoco
@@ -31,9 +30,7 @@ from coraplex.plans.plan import Plan
 from coraplex.visualization import WorldVisualization
 from giskardpy.executor import SteppedSimulationPacer
 from semantic_digital_twin.adapters.controlled_simulation import ControlledSimulation
-from semantic_digital_twin.adapters.mjcf import MJCFParser
 from semantic_digital_twin.adapters.multi_sim import MujocoSim
-from semantic_digital_twin.datastructures.definitions import StaticJointState
 from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.contact import (
     ContactFriction,
@@ -200,7 +197,7 @@ def _load_world() -> tuple[World, UR5eMujocoDualGripper]:
     """
     Internal helper for visualize-only fallback (no plan).
     """
-    import demo as i40lab_demo
+    import demo_3fg15 as i40lab_demo
 
     return i40lab_demo.build_world()
 
@@ -233,7 +230,7 @@ def run_visualize_only() -> None:
 
 
 if __name__ == "__main__":
-    # cramera-live puts this directory on sys.path, so demo resolves here
-    import demo as i40lab_demo
+    # cramera-live puts this directory on sys.path, so demo_3fg15 resolves here
+    import demo_3fg15 as i40lab_demo
 
     i40lab_demo.main()
