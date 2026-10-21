@@ -26,6 +26,7 @@ from semantic_digital_twin.world_description.geometry import (
     Shape,
     Box,
     Sphere,
+    Capsule,
     Cylinder,
     Scale,
     Mesh,
@@ -74,6 +75,12 @@ def _geometry_cache_key(geometry: Shape) -> Any:
             return ("sphere", round(geometry.radius * 2, 6))
         case Cylinder():
             return ("cylinder", round(geometry.width, 6), round(geometry.height, 6))
+        case Capsule():
+            return (
+                "capsule",
+                round(geometry.radius, 6),
+                round(geometry.height, 6),
+            )
         case Mesh():
             return (
                 "mesh",
@@ -165,6 +172,35 @@ def create_sphere_shape(diameter: float) -> bullet.SphereShape:
     return out
 
 
+def create_capsule_shape(
+    diameter: float, cylinder_length: float
+) -> bullet.CompoundShape:
+    """
+    Creates a bullet capsule shape along the local z-axis, centered on the origin.
+
+    A cylinder of ``cylinder_length`` capped with a hemisphere on each end,
+    reusing the cylinder and sphere primitives so the result matches the
+    :class:`Capsule` visual mesh.
+
+    :param diameter: the diameter of the cylindrical section and the hemispheres.
+    :param cylinder_length: the length of the cylindrical section between the hemispheres.
+    :return: the bullet capsule shape.
+    """
+    out = bullet.CompoundShape()
+    out.add_child(
+        bullet.Transform.identity(),
+        create_cylinder_shape(diameter=diameter, height=cylinder_length),
+    )
+    for offset in (-cylinder_length / 2.0, cylinder_length / 2.0):
+        placement = np.eye(4)
+        placement[:3, 3] = [0.0, 0.0, offset]
+        out.add_child(
+            bullet.Transform.from_np(placement),
+            create_sphere_shape(diameter=diameter),
+        )
+    return out
+
+
 def create_shape_from_geometry(
     geometry: Shape,
     mesh_decomposer: Optional[MeshDecomposer] = None,
@@ -193,6 +229,12 @@ def create_shape_from_geometry(
         case Cylinder():
             shape = create_cylinder_shape(
                 diameter=geometry.width, height=geometry.height
+            )
+
+        case Capsule():
+            shape = create_capsule_shape(
+                diameter=geometry.radius * 2,
+                cylinder_length=geometry.cylinder_length,
             )
 
         case Mesh():

@@ -1,0 +1,63 @@
+# dual_gripper.mtl - UR5e-style colors for the dual gripper
+newmtl dual_gripper_part_01
+Kd 0.82 0.82 0.82
+Ka 0.82 0.82 0.82
+Ks 0.2 0.2 0.2
+Ns 32.0
+illum 2
+
+newmtl dual_gripper_part_02
+Kd 0.82 0.82 0.82
+Ka 0.82 0.82 0.82
+Ks 0.2 0.2 0.2
+Ns 32.0
+illum 2
+
+newmtl dual_gripper_part_03
+Kd 0.82 0.82 0.82
+Ka 0.82 0.82 0.82
+Ks 0.2 0.2 0.2
+Ns 32.0
+illum 2
+
+newmtl dual_gripper_part_04
+Kd 0.82 0.82 0.82
+Ka 0.82 0.82 0.82
+Ks 0.2 0.2 0.2
+Ns 32.0
+illum 2
+
+newmtl dual_gripper_part_05
+Kd 0.82 0.82 0.82
+Ka 0.82 0.82 0.82
+Ks 0.2 0.2 0.2
+Ns 32.0
+illum 2
+
+newmtl dual_gripper_part_06
+Kd 0.82 0.82 0.82
+Ka 0.82 0.82 0.82
+Ks 0.2 0.2 0.2
+Ns 32.0
+illum 2
+
+newmtl dual_gripper_part_07
+Kd 0.82 0.82 0.82
+Ka 0.82 0.82 0.82
+Ks 0.2 0.2 0.2
+Ns 32.0
+illum 2
+
+newmtl dual_gripper_part_08
+Kd 0.82 0.82 0.82
+Ka 0.82 0.82 0.82
+Ks 0.2 0.2 0.2
+Ns 32.0
+illum 2
+
+newmtl dual_gripper_part_09
+Kd 0.82 0.82 0.82
+Ka 0.82 0.82 0.82
+Ks 0.2 0.2 0.2
+Ns 32.0
+illum 2
