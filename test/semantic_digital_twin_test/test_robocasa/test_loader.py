@@ -138,3 +138,60 @@ def test_load_task_unknown_name_raises(robocasa_loader):
             layout_id=LayoutType.LAYOUT001,
             style_id=StyleType.STYLE001,
         )
+
+
+def _object_positions(task) -> dict[str, list[float]]:
+    """
+    :return: Where each manipulated object of ``task`` stands, by its name.
+    """
+    return {
+        body.name.name: task.world.compute_forward_kinematics_np(task.world.root, body)[
+            :3, 3
+        ].tolist()
+        for body in task.manipulated_objects
+    }
+
+
+def test_a_task_composed_with_the_same_seed_places_its_objects_the_same(
+    robocasa_loader,
+):
+    from robocasa.models.scenes.scene_registry import LayoutType, StyleType
+
+    first, second = (
+        robocasa_loader.load_task(
+            "BreadAndCheese",
+            layout_id=LayoutType.LAYOUT001,
+            style_id=StyleType.STYLE001,
+            seed=6,
+        )
+        for _ in range(2)
+    )
+
+    assert _object_positions(first) == _object_positions(second)
+
+
+def test_a_task_world_weighs_its_objects_as_robocasa_simulates_them(robocasa_loader):
+    """
+    Weighed from its geoms alone, an object would also weigh the geoms RoboCasa only
+    draws or marks regions with.
+    """
+    from robocasa.models.scenes.scene_registry import LayoutType, StyleType
+
+    environment = robocasa_loader.build_task_environment(
+        "BreadAndCheese",
+        layout_id=LayoutType.LAYOUT001,
+        style_id=StyleType.STYLE001,
+        seed=6,
+    )
+    model = environment.sim.model
+
+    task = robocasa_loader.load_task_from_environment(environment)
+
+    assert {
+        body.name.name: body.inertial.mass for body in task.manipulated_objects
+    } == pytest.approx(
+        {
+            body.name.name: float(model.body_mass[model.body_name2id(body.name.name)])
+            for body in task.manipulated_objects
+        }
+    )

@@ -306,6 +306,8 @@ class RoboCasaDatasetLoader:
         task_name: str,
         layout_id: LayoutType,
         style_id: StyleType,
+        seed: int | None = None,
+        fixture_updates: dict[str, dict[str, Any]] | None = None,
     ) -> RoboCasaTask:
         """
         Compose a RoboCasa task scene and return it bound to its parsed World.
@@ -319,11 +321,17 @@ class RoboCasaDatasetLoader:
             ``"TurnOnMicrowave"``).
         :param layout_id: A member of ``robocasa.models.scenes.scene_registry.LayoutType``.
         :param style_id: A member of ``robocasa.models.scenes.scene_registry.StyleType``.
+        :param seed: The seed RoboCasa samples the task's objects and their places with;
+            ``None`` samples a different scene every time.
+        :param fixture_updates: Changes to the layout's fixtures, by fixture name: the
+            entries given for a fixture replace those the layout file states for it.
         :return: The task bound to the world it is defined over.
         :raises RoboCasaTaskNotFoundError: if ``task_name`` is not a registered RoboCasa kitchen
             task.
         """
-        environment = self.build_task_environment(task_name, layout_id, style_id)
+        environment = self.build_task_environment(
+            task_name, layout_id, style_id, seed, fixture_updates
+        )
         return self.load_task_from_environment(environment)
 
     def build_task_environment(
@@ -331,6 +339,8 @@ class RoboCasaDatasetLoader:
         task_name: str,
         layout_id: LayoutType,
         style_id: StyleType,
+        seed: int | None = None,
+        fixture_updates: dict[str, dict[str, Any]] | None = None,
     ) -> Any:
         """
         Build and reset the RoboCasa/robosuite environment a task's scene is composed
@@ -347,6 +357,10 @@ class RoboCasaDatasetLoader:
             (for example ``"TurnOnMicrowave"``).
         :param layout_id: A member of ``robocasa.models.scenes.scene_registry.LayoutType``.
         :param style_id: A member of ``robocasa.models.scenes.scene_registry.StyleType``.
+        :param seed: The seed RoboCasa samples the task's objects and their places with;
+            ``None`` samples a different scene every time.
+        :param fixture_updates: Changes to the layout's fixtures, by fixture name: the
+            entries given for a fixture replace those the layout file states for it.
         :return: The reset environment.
         :raises RoboCasaTaskNotFoundError: if ``task_name`` is not a registered RoboCasa kitchen
             task.
@@ -364,6 +378,8 @@ class RoboCasaDatasetLoader:
             use_camera_obs=False,
             control_freq=20,
             ignore_done=True,
+            seed=seed,
+            update_fxtr_cfg_dict=fixture_updates,
         )
         environment.reset()
         return environment
@@ -382,8 +398,11 @@ class RoboCasaDatasetLoader:
         stripped_document = self._strip_robot_and_bake_object_poses(
             environment.sim.model.get_xml(), object_world_poses
         )
+        weighed_document = self._bake_inertials(
+            stripped_document, environment.sim.model
+        )
 
-        world = _parse_robosuite_mjcf(MJCFParser.from_xml_string(stripped_document))
+        world = _parse_robosuite_mjcf(MJCFParser.from_xml_string(weighed_document))
         self._apply_kitchen_appliance_semantics(world, environment.fixtures)
         manipulated_objects = self._apply_task_object_semantics(
             world, environment.object_cfgs, environment.objects
@@ -477,6 +496,38 @@ class RoboCasaDatasetLoader:
             body.set("pos", cls._format_vector(position))
             body.set("quat", cls._format_vector(orientation))
 
+        return ET.tostring(root, encoding="unicode")
+
+    @classmethod
+    def _bake_inertials(cls, mjcf_document: str, model: Any) -> str:
+        """
+        Give every body of a task's MJCF document that RoboCasa simulates with a mass
+        the mass, centre of mass and inertia RoboCasa simulates it with.
+
+        :param mjcf_document: The task's MJCF document.
+        :param model: The MuJoCo model of RoboCasa's simulation of the task.
+        :return: The document with those bodies' inertials written in.
+        """
+        root = ET.fromstring(mjcf_document)
+        for body in root.find("worldbody").iter("body"):
+            name = body.get("name")
+            if name not in model.body_names:
+                continue
+            index = model.body_name2id(name)
+            if model.body_mass[index] <= 0.0:
+                continue
+            for inertial in body.findall("inertial"):
+                body.remove(inertial)
+            body.insert(
+                0,
+                ET.Element(
+                    "inertial",
+                    pos=cls._format_vector(model.body_ipos[index]),
+                    quat=cls._format_vector(model.body_iquat[index]),
+                    mass=cls._format_vector([model.body_mass[index]]),
+                    diaginertia=cls._format_vector(model.body_inertia[index]),
+                ),
+            )
         return ET.tostring(root, encoding="unicode")
 
     @staticmethod
