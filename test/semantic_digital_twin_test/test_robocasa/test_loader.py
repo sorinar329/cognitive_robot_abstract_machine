@@ -16,7 +16,10 @@ from semantic_digital_twin.adapters.robocasa_dataset.semantics import (
 from semantic_digital_twin.semantic_annotations.natural_language import (
     NaturalLanguageWithTypeDescription,
 )
-from semantic_digital_twin.semantic_annotations.semantic_annotations import Dishwasher
+from semantic_digital_twin.semantic_annotations.semantic_annotations import (
+    Dishwasher,
+    Floor,
+)
 
 
 @pytest.fixture(scope="session")
@@ -195,3 +198,32 @@ def test_a_task_world_weighs_its_objects_as_robocasa_simulates_them(robocasa_loa
             for body in task.manipulated_objects
         }
     )
+
+
+def test_a_task_world_marks_the_kitchen_floor_as_a_floor(robocasa_loader):
+    """
+    A robot drives on the floor rather than around it, so only a floor annotated as one
+    leaves room to stand on.
+    """
+    from robocasa.models.fixtures.others import Floor as RoboCasaFloor
+    from robocasa.models.scenes.scene_registry import LayoutType, StyleType
+
+    environment = robocasa_loader.build_task_environment(
+        "BreadAndCheese",
+        layout_id=LayoutType.LAYOUT001,
+        style_id=StyleType.STYLE001,
+        seed=6,
+    )
+    floor_names = {
+        fixture.root_body
+        for fixture in environment.fixtures.values()
+        if isinstance(fixture, RoboCasaFloor)
+    }
+
+    task = robocasa_loader.load_task_from_environment(environment)
+
+    assert floor_names
+    assert {
+        annotation.root.name.name
+        for annotation in task.world.get_semantic_annotations_by_type(Floor)
+    } == floor_names
