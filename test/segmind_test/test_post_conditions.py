@@ -1,9 +1,12 @@
 """
 Tests for SegMind judging, action by action, whether a plan achieved what its actions
-are for, on Tracy sorting the Montessori pieces against MuJoCo physics.
+are for, on Tracy sorting the Montessori pieces and on the HSR carrying the milk, both
+against MuJoCo physics.
 """
 
 from __future__ import annotations
+
+from dataclasses import dataclass
 
 from typing_extensions import Any
 
@@ -15,8 +18,17 @@ from coraplex.plans.factories import sequential
 from coraplex.robot_plans.actions.base import ActionDescription
 from coraplex.robot_plans.actions.core.pick_up import PickUpAction
 from coraplex.robot_plans.actions.core.placing import PlaceAction
-from coraplex.robot_plans.actions.core.robot_body import ParkArmsAction
-from segmind.datastructures.events import GraspEvent, LossOfSupportEvent
+from coraplex.robot_plans.actions.core.navigation import NavigateAction
+from coraplex.robot_plans.actions.core.robot_body import (
+    MoveTorsoAction,
+    ParkArmsAction,
+)
+from segmind.datastructures.events import (
+    GraspEvent,
+    LossOfGraspEvent,
+    LossOfSupportEvent,
+    SupportEvent,
+)
 from segmind.detectors.agent_event_detector_nodes import GraspDetector
 from segmind.detectors.spatial_relation_detector_nodes import SupportDetector
 from segmind.event_segmentation import Segmind
@@ -25,7 +37,10 @@ from segmind.post_conditions.judge import (
     PostConditionJudge,
     PostConditionVerdict,
 )
+from semantic_digital_twin.robots.hsrb import HSRB
 from semantic_digital_twin.robots.tracy import Tracy
+from semantic_digital_twin.semantic_annotations.semantic_annotations import Milk
+from semantic_digital_twin.world import World
 
 # %% Tracy sorting the pieces
 
@@ -136,3 +151,99 @@ def test_an_action_on_a_piece_segmind_does_not_watch_is_judged_on_the_world(
 
 def test_no_action_of_a_run_that_succeeded_is_marked_failed(sorting_run):
     assert {verdict.action_failed for verdict in sorting_run.verdicts} == {False}
+
+
+# %% the HSR carrying the milk
+
+
+@dataclass
+class MilkTransportRun:
+    """
+    The HSR MuJoCo demo carried out once, with SegMind watching the milk.
+    """
+
+    world: World
+    """
+    The world the milk was carried in.
+    """
+
+    verdicts: list[PostConditionVerdict]
+    """
+    The verdicts on the actions of the run, in the order the actions started.
+    """
+
+
+@pytest.fixture(scope="module")
+def milk_transport_run(hsr_mujoco_demo) -> MilkTransportRun:
+    """
+    The demo carried out once against MuJoCo physics, without a viewer, judged as it
+    runs.
+    """
+    demonstration = hsr_mujoco_demo.MilkTransportDemonstration(headless=True)
+    try:
+        world = demonstration.acquire_world()
+        demonstration.start_simulation(world)
+        plan = demonstration.build_plan(demonstration.build_context(world))
+        [milk] = world.get_semantic_annotations_by_type(Milk)
+        segmind = Segmind.create_for_bodies(
+            world, [milk.root], [GraspDetector, SupportDetector]
+        )
+        judge = PostConditionJudge(plan=plan, segmind=segmind)
+        with segmind, judge, demonstration.execution_environment():
+            plan.perform()
+    finally:
+        demonstration.tear_down()
+    return MilkTransportRun(world=world, verdicts=judge.verdicts)
+
+
+def test_the_hsrs_pick_up_holds_when_segmind_sees_the_milk_taken_hold_of_and_lifted(
+    milk_transport_run,
+):
+    pick_ups = verdicts_on(milk_transport_run.verdicts, PickUpAction)
+
+    assert [
+        (verdict.holds, verdict.judged_by, {type(event) for event in verdict.evidence})
+        for verdict in pick_ups
+    ] == [(True, JudgedBy.SEGMIND, {GraspEvent, LossOfSupportEvent})]
+
+
+def test_the_hsrs_placing_holds_when_segmind_sees_the_milk_let_go_of_onto_the_table(
+    milk_transport_run, hsr_mujoco_demo
+):
+    world = milk_transport_run.world
+    [hsrb] = world.get_semantic_annotations_by_type(HSRB)
+    [arm] = hsrb.all_arms
+    placings = verdicts_on(milk_transport_run.verdicts, PlaceAction)
+
+    assert [
+        (
+            verdict.holds,
+            verdict.judged_by,
+            [(type(event), event.with_object) for event in verdict.evidence],
+        )
+        for verdict in placings
+    ] == [
+        (
+            True,
+            JudgedBy.SEGMIND,
+            [
+                (LossOfGraspEvent, arm.end_effector.tool_frame),
+                (
+                    SupportEvent,
+                    world.get_body_by_name(hsr_mujoco_demo.SceneBody.TABLE),
+                ),
+            ],
+        )
+    ]
+
+
+def test_the_hsrs_driving_and_posing_are_judged_on_the_world(milk_transport_run):
+    moves = [
+        verdict
+        for action_type in (MoveTorsoAction, ParkArmsAction, NavigateAction)
+        for verdict in verdicts_on(milk_transport_run.verdicts, action_type)
+    ]
+
+    assert {(verdict.holds, verdict.judged_by) for verdict in moves} == {
+        (True, JudgedBy.WORLD)
+    }

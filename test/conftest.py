@@ -3,6 +3,7 @@ import os
 import sys
 import threading
 import time
+from contextlib import contextmanager
 from copy import deepcopy
 from dataclasses import dataclass, field
 from enum import StrEnum
@@ -12,6 +13,7 @@ from types import ModuleType
 import numpy as np
 import pytest
 
+from krrood.patterns.path_enumeration import PathEnumeration
 from semantic_digital_twin.specifications.connections import (
     ConnectionSpecification,
     ActiveConnection1DOFSpecification,
@@ -610,6 +612,59 @@ def tracy_world():
     return world_with_tracy
 
 
+class DemoFolder(PathEnumeration):
+    """
+    The folders of the coraplex demos that live in a folder rather than a package.
+    """
+
+    TRACY_MONTESSORI = (
+        Path(__file__).parents[1]
+        / "coraplex"
+        / "demos"
+        / "coraplex_tracy_montessori_demo"
+    )
+    """
+    Tracy sorting the pieces of a Montessori shape-sorting board.
+    """
+
+    HSR_MUJOCO = (
+        Path(__file__).parents[1] / "coraplex" / "demos" / "coraplex_hsr_mujoco_demo"
+    )
+    """
+    The HSR carrying a milk carton from a counter to a table in MuJoCo.
+    """
+
+
+ModuleOfDemo = TypeVar("ModuleOfDemo", bound=StrEnum)
+
+
+@contextmanager
+def importable_demo_modules(
+    folder: DemoFolder, module_names: type[ModuleOfDemo]
+) -> Iterator[dict[ModuleOfDemo, ModuleType]]:
+    """
+    Load the modules of a demo in ``folder``, each under the name it imports the others
+    by, and keep them importable by that name, with ``folder`` on the path, while the
+    context lasts.
+
+    :param folder: The demo's folder.
+    :param module_names: The demo's modules, in the order they import one another.
+    :return: Every module of ``module_names``, loaded.
+    """
+    modules = {}
+    with pytest.MonkeyPatch.context() as patch:
+        patch.syspath_prepend(str(folder))
+        for module_name in module_names:
+            specification = importlib.util.spec_from_file_location(
+                module_name, folder / f"{module_name}.py"
+            )
+            module = importlib.util.module_from_spec(specification)
+            patch.setitem(sys.modules, module_name, module)
+            specification.loader.exec_module(module)
+            modules[module_name] = module
+        yield modules
+
+
 class TracyMontessoriDemoModule(StrEnum):
     """
     The modules of the Tracy Montessori demo, in the order they import one another.
@@ -660,29 +715,36 @@ class TracyMontessoriDemo:
 @pytest.fixture(scope="session")
 def tracy_montessori_demo() -> TracyMontessoriDemo:
     """
-    The demo's modules, each loaded under the name it imports the others by, with its
-    folder on the path; none stays importable afterwards.
+    The Tracy Montessori demo, loaded from its folder.
     """
     if not tracy_installed():
         pytest.skip("Tracy not installed")
-    folder = (
-        Path(__file__).parents[1]
-        / "coraplex"
-        / "demos"
-        / "coraplex_tracy_montessori_demo"
-    )
-    modules = {}
-    with pytest.MonkeyPatch.context() as patch:
-        patch.syspath_prepend(str(folder))
-        for module_name in TracyMontessoriDemoModule:
-            specification = importlib.util.spec_from_file_location(
-                module_name, folder / f"{module_name}.py"
-            )
-            module = importlib.util.module_from_spec(specification)
-            patch.setitem(sys.modules, module_name, module)
-            specification.loader.exec_module(module)
-            modules[module_name] = module
-    return TracyMontessoriDemo(modules)
+    with importable_demo_modules(
+        DemoFolder.TRACY_MONTESSORI, TracyMontessoriDemoModule
+    ) as modules:
+        return TracyMontessoriDemo(modules)
+
+
+class HSRMujocoDemoModule(StrEnum):
+    """
+    The modules of the HSR MuJoCo demo.
+    """
+
+    DEMONSTRATION = "demo"
+    """
+    The demonstration of the HSR carrying the milk from the counter to the table.
+    """
+
+
+@pytest.fixture(scope="module")
+def hsr_mujoco_demo() -> Iterator[ModuleType]:
+    """
+    The HSR MuJoCo demo's module, loaded from its folder and importable while the tests
+    of a module use it, since the world it builds records the demo's own types, such as
+    the names of its bodies.
+    """
+    with importable_demo_modules(DemoFolder.HSR_MUJOCO, HSRMujocoDemoModule) as modules:
+        yield modules[HSRMujocoDemoModule.DEMONSTRATION]
 
 
 @pytest.fixture(scope="session")
