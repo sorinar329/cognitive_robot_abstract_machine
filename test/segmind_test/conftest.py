@@ -4,11 +4,23 @@ The world SegMind's tests watch.
 
 from __future__ import annotations
 
+# %% ORM interfaces
+
+# Built before the imports below, which read a mapped datastructure, as in the coraplex
+# tests' conftest.
+from ..orm_interface_build import regenerate_orm_interfaces
+
+regenerate_orm_interfaces()
+
 from dataclasses import dataclass, field
 
 import numpy as np
 import pytest
+from sqlalchemy.orm import Session, sessionmaker
+from typing_extensions import Iterator
 
+from krrood.ormatic.utils import create_engine, drop_database
+from segmind.orm.ormatic_interface import Base
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.semantic_annotations.semantic_annotations import Milk
 from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
@@ -236,3 +248,20 @@ def milk_annotated_in_the_apartment(milk_in_the_apartment):
     yield world, annotation, box
     with world.modify_world():
         world.remove_semantic_annotation(annotation)
+
+
+# %% database session
+
+
+@pytest.fixture
+def segmind_testing_session() -> Iterator[Session]:
+    """
+    A session on an empty database in memory that holds every mapped table.
+    """
+    engine = create_engine("sqlite:///:memory:")
+    session = sessionmaker(engine)()
+    Base.metadata.create_all(bind=session.bind)
+    yield session
+    drop_database(session.bind)
+    session.close()
+    engine.dispose()

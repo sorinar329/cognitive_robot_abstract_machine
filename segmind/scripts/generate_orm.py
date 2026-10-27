@@ -18,20 +18,38 @@ import segmind
 # imported for its alternative mappings, which are collected through a global subclass
 # scan: without it segmind's spatial fields degrade to JSON columns
 import semantic_digital_twin.orm.model
+import coraplex.orm.model
+import coraplex.orm.ormatic_interface
 from krrood.ormatic.custom_types import NumpyType
 from krrood.adapters.json_serializer import SubclassJSONSerializer
 from krrood.ormatic.ormatic import ORMatic
+from krrood.ormatic.utils import classes_of_module
 
+import segmind.episode_player
+import segmind.players.csv_player
+import segmind.players.data_player
+import segmind.players.json_player
+from segmind.episode_annotation import EpisodeAnnotator
 from segmind.event_segmentation import Segmind
-from segmind.exceptions import NoSemanticAnnotationToWatch
+from segmind.exceptions import EpisodeWithoutFrames, NoSemanticAnnotationToWatch
 
 ignored_classes = {
     SubclassJSONSerializer,
     Segmind,
     NoSemanticAnnotationToWatch,
+    EpisodeAnnotator,
+    EpisodeWithoutFrames,
 }
+# the players are threads that replay recorded files, not data
+for player_module in (
+    segmind.episode_player,
+    segmind.players.data_player,
+    segmind.players.csv_player,
+    segmind.players.json_player,
+):
+    ignored_classes |= set(classes_of_module(player_module))
 
-dependencies = []
+dependencies = [coraplex.orm.ormatic_interface]
 
 type_mappings = {np.ndarray: NumpyType}
 
