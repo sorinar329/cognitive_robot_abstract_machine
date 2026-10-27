@@ -16,6 +16,8 @@ from coraplex.plans.plan_callbacks import PlanCallback
 from coraplex.plans.plan_node import PlanNode
 from semantic_digital_twin.callbacks.callback import StateChangeCallback
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
+from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
+from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.connections import Connection6DoF
 
 # %% episodes
@@ -110,6 +112,28 @@ class Episode:
                 ),
             )
         )
+
+    def show_frame(self, frame: EpisodeFrame, world: World) -> None:
+        """
+        Put ``world`` where ``frame`` shows it: every degree of freedom it has a position
+        of, then every free body at its pose.
+
+        :param frame: A frame of this episode.
+        :param world: A world holding the bodies and degrees of freedom of the world the
+            plan started in.
+        """
+        positions = dict(zip(self.degree_of_freedom_names, frame.joint_positions))
+        with world._world_lock:
+            for degree_of_freedom in world.degrees_of_freedom:
+                if degree_of_freedom.name in positions:
+                    world.state[degree_of_freedom.id].position = positions[
+                        degree_of_freedom.name
+                    ]
+            world.notify_state_change()
+            for name, pose in zip(self.free_body_names, frame.free_body_poses):
+                world.get_body_by_name(name).parent_connection.origin = (
+                    HomogeneousTransformationMatrix(pose, reference_frame=world.root)
+                )
 
 
 # %% recording

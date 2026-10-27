@@ -21,6 +21,7 @@ from coraplex.robot_plans.actions.core.navigation import NavigateAction
 from coraplex.robot_plans.actions.core.robot_body import MoveTorsoAction
 from krrood.ormatic.data_access_objects.helper import to_dao
 from semantic_digital_twin.datastructures.definitions import TorsoState
+from semantic_digital_twin.robots.pr2 import PR2
 from semantic_digital_twin.spatial_types.spatial_types import Pose
 from semantic_digital_twin.world import World
 
@@ -106,6 +107,31 @@ def test_a_free_body_is_recorded_where_it_is_carried_to(raised_milk):
         episode.frames[-1].free_body_poses[milk_index][2, 3]
         > episode.frames[0].free_body_poses[milk_index][2, 3]
     )
+
+
+# %% replaying
+
+
+def test_a_frame_shown_in_the_world_the_plan_started_in_puts_it_where_the_frame_was(
+    raised_milk,
+):
+    world, episode = raised_milk
+    replayed = episode.plan.initial_world
+    milk = world.get_body_by_name("milk.stl")
+
+    episode.show_frame(episode.frames[-1], replayed)
+
+    np.testing.assert_allclose(
+        replayed.get_body_by_name(milk.name).global_pose.to_np(),
+        milk.global_pose.to_np(),
+        atol=1e-9,
+    )
+    [robot] = world.get_semantic_annotations_by_type(PR2)
+    raised = robot.get_torso().get_joint_state_by_type(TorsoState.HIGH)
+    assert [
+        replayed.get_connection_by_name(connection.name).position
+        for connection in raised.connections
+    ] == pytest.approx([connection.position for connection in raised.connections])
 
 
 # %% the database
