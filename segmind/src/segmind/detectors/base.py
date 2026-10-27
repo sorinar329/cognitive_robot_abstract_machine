@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from abc import abstractmethod, ABC
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Optional, Dict, Set, List, Any, Sequence, Tuple, Type
 
 from typing_extensions import TypeVar
@@ -113,7 +114,13 @@ class SegmindContext(ContextExtension):
 
     tracker_registry: ObjectTrackerFactory = field(default_factory=ObjectTrackerFactory)
     """
-    The object tracker registry.    
+    The object tracker registry.
+    """
+
+    observed_at: datetime = field(default_factory=datetime.now)
+    """
+    The moment the tick in progress observes the world at, which the events it detects
+    carry.
     """
 
 

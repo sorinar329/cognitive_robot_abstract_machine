@@ -70,12 +70,20 @@ class ContactDetector(AbstractDetector):
             self.end_effector_bodies(context.world) if self.exclude_robot else set()
         )
         return [
-            ContactEvent(tracked_object=body, with_object=other)
+            ContactEvent(
+                tracked_object=body,
+                with_object=other,
+                timestamp=segmind_context.observed_at,
+            )
             for body, others in new_contacts.items()
             for other in others
             if other not in unreported
         ] + [
-            LossOfContactEvent(tracked_object=body, with_object=other)
+            LossOfContactEvent(
+                tracked_object=body,
+                with_object=other,
+                timestamp=segmind_context.observed_at,
+            )
             for body, others in lost_contacts.items()
             for other in others
             if other not in unreported
@@ -226,6 +234,7 @@ class TranslationDetector(MotionDetector):
             context.latest_motion_events.pop(tracked_object)
             return StopTranslationEvent(
                 tracked_object=tracked_object,
+                timestamp=context.observed_at,
                 world_T_start_pose=latest_motion_event.world_T_start_pose,
                 world_T_current_pose=poses[-1],
             )
@@ -235,6 +244,7 @@ class TranslationDetector(MotionDetector):
 
         new_event = TranslationEvent(
             tracked_object=tracked_object,
+            timestamp=context.observed_at,
             world_T_start_pose=poses[0],
             world_T_current_pose=poses[-1],
         )
@@ -274,6 +284,7 @@ class RotationDetector(MotionDetector):
             context.latest_rotation_events.pop(tracked_object)
             return StopRotationEvent(
                 tracked_object=tracked_object,
+                timestamp=context.observed_at,
                 world_T_start_pose=latest_rotation_event.world_T_start_pose,
                 world_T_current_pose=poses[-1],
             )
@@ -283,6 +294,7 @@ class RotationDetector(MotionDetector):
 
         new_event = RotationEvent(
             tracked_object=tracked_object,
+            timestamp=context.observed_at,
             world_T_start_pose=poses[0],
             world_T_current_pose=poses[-1],
         )

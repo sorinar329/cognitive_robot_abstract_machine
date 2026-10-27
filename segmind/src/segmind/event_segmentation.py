@@ -8,6 +8,7 @@ import logging
 import threading
 import time
 from dataclasses import dataclass, field
+from datetime import datetime
 
 from giskardpy.motion_statechart.context import MotionStatechartContext
 from typing_extensions import List, Optional, Self, Sequence, Type
@@ -200,12 +201,15 @@ class Segmind:
         """
         return self.thread is not None and self.thread.is_alive()
 
-    def tick(self) -> None:
+    def tick(self, at: datetime | None = None) -> None:
         """
         Tick the detectors once, while no other thread changes the world.
+
+        :param at: The moment the world is observed at, which the events detected carry;
+            now, when not given.
         """
         with self.world._world_lock:
-            self.executor.tick()
+            self.executor.tick(at)
 
     def start(self) -> None:
         """

@@ -74,11 +74,19 @@ class SupportDetector(AbstractDetector):
             latest_supports, supports_now, objects_to_check
         )
         return [
-            SupportEvent(tracked_object=body, with_object=supporter)
+            SupportEvent(
+                tracked_object=body,
+                with_object=supporter,
+                timestamp=segmind_context.observed_at,
+            )
             for body, supporters in new_supports.items()
             for supporter in supporters
         ] + [
-            LossOfSupportEvent(tracked_object=body, with_object=supporter)
+            LossOfSupportEvent(
+                tracked_object=body,
+                with_object=supporter,
+                timestamp=segmind_context.observed_at,
+            )
             for body, supporters in lost_supports.items()
             for supporter in supporters
         ]
@@ -229,11 +237,19 @@ class ContainmentDetector(AbstractDetector):
             latest_containments, containments_now, checked
         )
         return [
-            ContainmentEvent(tracked_object=body, with_object=container)
+            ContainmentEvent(
+                tracked_object=body,
+                with_object=container,
+                timestamp=segmind_context.observed_at,
+            )
             for body, containers in new_containments.items()
             for container in containers
         ] + [
-            LossOfContainmentEvent(tracked_object=body, with_object=container)
+            LossOfContainmentEvent(
+                tracked_object=body,
+                with_object=container,
+                timestamp=segmind_context.observed_at,
+            )
             for body, containers in lost_containments.items()
             for container in containers
         ]
@@ -322,6 +338,7 @@ class InsertionDetector(EventCombiningDetector):
                         tracked_object=contact_event.tracked_object,
                         with_object=contact_event.with_object,
                         inserted_into_objects=[containment_event.with_object],
+                        timestamp=segmind_context.observed_at,
                     )
                 )
                 break

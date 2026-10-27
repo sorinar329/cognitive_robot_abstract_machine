@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import threading
 import time
+from datetime import datetime, timedelta
 from collections import Counter
 from dataclasses import dataclass, field
 
@@ -19,6 +20,7 @@ from typing_extensions import List
 from segmind.datastructures.events import (
     DetectionEvent,
     StopTranslationEvent,
+    SupportEvent,
     TranslationEvent,
 )
 from segmind.detector_selection import DetectorSelection
@@ -29,6 +31,7 @@ from segmind.detectors.base import (
     SegmindContext,
 )
 from segmind.detectors.coarse_event_detector_nodes import PickUpDetector
+from segmind.detectors.spatial_relation_detector_nodes import SupportDetector
 from segmind.event_segmentation import Segmind
 from segmind.exceptions import NoSemanticAnnotationToWatch
 from semantic_digital_twin.semantic_annotations.semantic_annotations import Food, Milk
@@ -511,3 +514,46 @@ def test_watching_for_what_is_asked_watches_each_body_with_what_that_is_read_fro
             (PickUpDetector, None): 1,
         }
     )
+
+
+# %% the moment a tick observes
+
+
+def test_the_events_of_a_tick_carry_the_moment_it_observes(milk_in_the_apartment):
+    """
+    A replayed run ticks at the moments it recorded, long past.
+    """
+    world, milk, _ = milk_in_the_apartment
+    _stand_the_milk_on_the_table(milk)
+    segmentation = Segmind.create_for_bodies(world, [milk], [SupportDetector])
+    observed = datetime(2020, 1, 1, 12)
+
+    segmentation.tick(at=observed)
+
+    assert [
+        (type(event), event.timestamp)
+        for event in segmentation.event_logger.get_events()
+    ] == [(SupportEvent, observed)]
+
+
+def test_a_motion_seen_over_ticks_carries_the_moment_of_the_tick_that_saw_it(
+    milk_in_the_apartment,
+):
+    world, milk, _ = milk_in_the_apartment
+    _stand_the_milk_on_the_table(milk)
+    segmentation = Segmind.create_for_bodies(world, [milk], [TranslationDetector])
+    moments = [datetime(2020, 1, 1, 12) + timedelta(seconds=tick) for tick in range(8)]
+
+    for moment in moments:
+        milk.parent_connection.origin = milk.parent_connection.origin @ (
+            HomogeneousTransformationMatrix.from_xyz_rpy(z=0.05)
+        )
+        segmentation.tick(at=moment)
+
+    translations = [
+        event
+        for event in segmentation.event_logger.get_events()
+        if isinstance(event, TranslationEvent)
+    ]
+    assert len(translations) == 1
+    assert translations[0].timestamp in moments

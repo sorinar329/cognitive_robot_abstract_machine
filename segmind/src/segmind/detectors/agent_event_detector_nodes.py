@@ -110,11 +110,19 @@ class GraspDetector(AbstractDetector):
         taken_hold_of = self.remember_new_relations(latest_grasps, holding)
         let_go_of = self.forget_lost_relations(latest_grasps, holding, tracked_objects)
         return [
-            GraspEvent(tracked_object=body, with_object=tool_frame)
+            GraspEvent(
+                tracked_object=body,
+                with_object=tool_frame,
+                timestamp=segmind_context.observed_at,
+            )
             for body, tool_frames in taken_hold_of.items()
             for tool_frame in tool_frames
         ] + [
-            LossOfGraspEvent(tracked_object=body, with_object=tool_frame)
+            LossOfGraspEvent(
+                tracked_object=body,
+                with_object=tool_frame,
+                timestamp=segmind_context.observed_at,
+            )
             for body, tool_frames in let_go_of.items()
             for tool_frame in tool_frames
         ]

@@ -201,9 +201,11 @@ class DetectorOfAPlacingFollowingALossOfSupport(AbstractInteractionDetector):
     def secondary_event_type(self):
         return LossOfSupportEvent
 
-    def make_event(self, primary, secondary):
+    def make_event(self, primary, secondary, observed_at):
         return PlacingEvent(
-            tracked_object=primary.tracked_object, with_object=secondary.with_object
+            tracked_object=primary.tracked_object,
+            with_object=secondary.with_object,
+            timestamp=observed_at,
         )
 
     def interaction_key(self, primary, secondary):

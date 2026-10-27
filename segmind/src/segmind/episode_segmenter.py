@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import os
 from dataclasses import field, dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Optional, List
 from giskardpy.executor import Executor
@@ -67,6 +68,18 @@ class EpisodeSegmenterExecutor(Executor):
         """
         if self.player:
             self.player.start()
+
+    def tick(self, at: datetime | None = None) -> None:
+        """
+        Tick the detectors once.
+
+        :param at: The moment the world is observed at, which the events detected carry;
+            now, when not given.
+        """
+        self.context.require_extension(SegmindContext).observed_at = (
+            at or datetime.now()
+        )
+        super().tick()
 
     def compile(self, motion_statechart: DetectorStateChart):
         """

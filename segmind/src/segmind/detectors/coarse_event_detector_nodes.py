@@ -3,7 +3,7 @@ from __future__ import annotations
 from abc import abstractmethod
 from collections import defaultdict
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import List, Tuple, Type
 
 from typing_extensions import Hashable
@@ -91,10 +91,15 @@ class AbstractInteractionDetector(EventCombiningDetector):
 
     @abstractmethod
     def make_event(
-        self, primary: EventWithTrackedObjects, secondary: EventWithTrackedObjects
+        self,
+        primary: EventWithTrackedObjects,
+        secondary: EventWithTrackedObjects,
+        observed_at: datetime,
     ) -> DetectionEvent:
         """
         The interaction concluded from ``primary`` and ``secondary``.
+
+        :param observed_at: The moment the interaction is concluded at.
         """
 
     def update_context_and_events(
@@ -162,7 +167,9 @@ class AbstractInteractionDetector(EventCombiningDetector):
 
                 segmind_context.placing_pairs.add(key)
                 spent.add((type(self), secondary))
-                events.append(self.make_event(primary, secondary))
+                events.append(
+                    self.make_event(primary, secondary, segmind_context.observed_at)
+                )
                 break
 
         return events
@@ -212,10 +219,15 @@ class PlacingDetector(AbstractInteractionDetector):
         return SupportEvent
 
     def make_event(
-        self, primary: EventWithTrackedObjects, secondary: EventWithTrackedObjects
+        self,
+        primary: EventWithTrackedObjects,
+        secondary: EventWithTrackedObjects,
+        observed_at: datetime,
     ) -> DetectionEvent:
         return PlacingEvent(
-            tracked_object=primary.tracked_object, with_object=secondary.with_object
+            tracked_object=primary.tracked_object,
+            with_object=secondary.with_object,
+            timestamp=observed_at,
         )
 
 
@@ -261,6 +273,9 @@ class PickUpDetector(AbstractInteractionDetector):
         return LossOfSupportEvent
 
     def make_event(
-        self, primary: EventWithTrackedObjects, secondary: EventWithTrackedObjects
+        self,
+        primary: EventWithTrackedObjects,
+        secondary: EventWithTrackedObjects,
+        observed_at: datetime,
     ) -> DetectionEvent:
-        return PickUpEvent(tracked_object=primary.tracked_object)
+        return PickUpEvent(tracked_object=primary.tracked_object, timestamp=observed_at)
