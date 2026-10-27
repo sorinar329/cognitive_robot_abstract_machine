@@ -5,9 +5,9 @@ SegMind judging, action by action, whether a plan achieved what its actions are 
 from __future__ import annotations
 
 import logging
+from abc import ABC
 from dataclasses import dataclass, field
 from datetime import datetime
-from enum import StrEnum
 
 from typing_extensions import Self
 
@@ -31,31 +31,8 @@ logger = logging.getLogger(__name__)
 # %% verdicts
 
 
-class JudgedBy(StrEnum):
-    """
-    What a verdict on an action's post-condition was read from.
-    """
-
-    SEGMIND = "segmind"
-    """
-    The events SegMind detected while the action ran.
-    """
-
-    WORLD = "world"
-    """
-    The action's own post-condition, evaluated on the world once the action ended,
-    since SegMind expects nothing of an action of its type.
-    """
-
-    NOT_WATCHED = "not watched"
-    """
-    The action's own post-condition, evaluated on the world once the action ended,
-    since SegMind does not watch a body it would have to watch to judge the action.
-    """
-
-
 @dataclass
-class PostConditionVerdict:
+class PostConditionVerdict(ABC):
     """
     Whether one action of a plan achieved what it is for.
     """
@@ -68,16 +45,6 @@ class PostConditionVerdict:
     holds: bool
     """
     Whether the action's post-condition holds.
-    """
-
-    judged_by: JudgedBy
-    """
-    What the verdict was read from.
-    """
-
-    evidence: list[DetectionEvent]
-    """
-    The events that decided the verdict; none when it was not judged by SegMind.
     """
 
     action_failed: bool
@@ -93,10 +60,29 @@ class PostConditionVerdict:
     def __str__(self) -> str:
         return (
             f"{type(self.action_node.action).__name__} "
-            f"{'holds' if self.holds else 'does not hold'} "
-            f"(judged by {self.judged_by}"
-            f"{', the action failed' if self.action_failed else ''})"
+            f"{'holds' if self.holds else 'does not hold'}"
+            f"{' (the action failed)' if self.action_failed else ''}"
         )
+
+
+@dataclass
+class SegmindVerdict(PostConditionVerdict):
+    """
+    A verdict read from the events SegMind detected while the action ran.
+    """
+
+    evidence: list[DetectionEvent]
+    """
+    The events that decided the verdict.
+    """
+
+
+@dataclass
+class WorldVerdict(PostConditionVerdict):
+    """
+    A verdict read from the action's own post-condition, evaluated on the world once
+    the action ended.
+    """
 
 
 # %% the judge
@@ -190,7 +176,7 @@ class PostConditionJudge(PlanCallback):
         for action_node in action_nodes:
             expectation = self._expectation_of(action_node)
             if expectation is None:
-                self._judge_on_the_world(action_node, JudgedBy.WORLD)
+                self._judge_on_the_world(action_node)
             elif not set(expectation.watched_bodies(action_node.action)) <= set(
                 self.segmind.watched_bodies
             ):
@@ -199,7 +185,7 @@ class PostConditionJudge(PlanCallback):
                     "world.",
                     type(action_node.action).__name__,
                 )
-                self._judge_on_the_world(action_node, JudgedBy.NOT_WATCHED)
+                self._judge_on_the_world(action_node)
             else:
                 judged_by_segmind.append((action_node, expectation))
         if not judged_by_segmind:
@@ -229,17 +215,16 @@ class PostConditionJudge(PlanCallback):
         ]
         evidence = expectation.evidence(action_node.action, events)
         self._record(
-            PostConditionVerdict(
+            SegmindVerdict(
                 action_node=action_node,
                 holds=expectation.holds(action_node.action, evidence),
-                judged_by=JudgedBy.SEGMIND,
                 evidence=evidence,
                 action_failed=self._has_failed(action_node),
                 started=started,
             )
         )
 
-    def _judge_on_the_world(self, action_node: ActionNode, judged_by: JudgedBy) -> None:
+    def _judge_on_the_world(self, action_node: ActionNode) -> None:
         """
         Judge ``action_node`` by evaluating its own post-condition on the world as it
         is now.
@@ -250,11 +235,9 @@ class PostConditionJudge(PlanCallback):
             if isinstance(child, ConditionNode) and not child.pre_condition
         ]
         self._record(
-            PostConditionVerdict(
+            WorldVerdict(
                 action_node=action_node,
                 holds=evaluate_condition(post_condition.condition),
-                judged_by=judged_by,
-                evidence=[],
                 action_failed=self._has_failed(action_node),
                 started=min(
                     step.start_time for step in self._steps_that_ran(action_node)

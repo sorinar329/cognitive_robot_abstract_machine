@@ -33,9 +33,10 @@ from segmind.detectors.agent_event_detector_nodes import GraspDetector
 from segmind.detectors.spatial_relation_detector_nodes import SupportDetector
 from segmind.event_segmentation import Segmind
 from segmind.post_conditions.judge import (
-    JudgedBy,
     PostConditionJudge,
     PostConditionVerdict,
+    SegmindVerdict,
+    WorldVerdict,
 )
 from semantic_digital_twin.robots.hsrb import HSRB
 from semantic_digital_twin.robots.tracy import Tracy
@@ -81,9 +82,9 @@ def test_a_pick_up_holds_when_segmind_sees_the_piece_taken_hold_of_and_lifted(
     pick_ups = verdicts_on(sorting_run.verdicts, PickUpAction)
 
     assert [
-        (verdict.holds, verdict.judged_by, {type(event) for event in verdict.evidence})
+        (type(verdict), verdict.holds, {type(event) for event in verdict.evidence})
         for verdict in pick_ups
-    ] == [(True, JudgedBy.SEGMIND, {GraspEvent, LossOfSupportEvent})] * len(
+    ] == [(SegmindVerdict, True, {GraspEvent, LossOfSupportEvent})] * len(
         sorting_run.scene.holes_of_pieces
     )
 
@@ -100,8 +101,8 @@ def test_a_placing_holds_when_the_piece_comes_to_rest_in_the_board(sorting_run):
     )
     placings = verdicts_on(sorting_run.verdicts, PlaceAction)
 
-    assert [(verdict.holds, verdict.judged_by) for verdict in placings] == [
-        (bool(piece.root.global_pose.to_np()[2, 3] < lid_top), JudgedBy.SEGMIND)
+    assert [(type(verdict), verdict.holds) for verdict in placings] == [
+        (SegmindVerdict, bool(piece.root.global_pose.to_np()[2, 3] < lid_top))
         for piece in scene.holes_of_pieces
     ]
 
@@ -112,8 +113,8 @@ def test_a_placing_holds_when_the_piece_comes_to_rest_in_the_board(sorting_run):
 def test_an_action_segmind_has_no_expectation_of_is_judged_on_the_world(sorting_run):
     parkings = verdicts_on(sorting_run.verdicts, ParkArmsAction)
 
-    assert {(verdict.holds, verdict.judged_by) for verdict in parkings} == {
-        (True, JudgedBy.WORLD)
+    assert {(type(verdict), verdict.holds) for verdict in parkings} == {
+        (WorldVerdict, True)
     }
 
 
@@ -141,9 +142,9 @@ def test_an_action_on_a_piece_segmind_does_not_watch_is_judged_on_the_world(
     with segmind, judge, kinematically_simulated_robot:
         plan.perform()
 
-    assert [
-        verdict.judged_by for verdict in verdicts_on(judge.verdicts, PickUpAction)
-    ] == [JudgedBy.NOT_WATCHED]
+    assert [type(verdict) for verdict in verdicts_on(judge.verdicts, PickUpAction)] == [
+        WorldVerdict
+    ]
 
 
 # %% failures
@@ -202,9 +203,9 @@ def test_the_hsrs_pick_up_holds_when_segmind_sees_the_milk_taken_hold_of_and_lif
     pick_ups = verdicts_on(milk_transport_run.verdicts, PickUpAction)
 
     assert [
-        (verdict.holds, verdict.judged_by, {type(event) for event in verdict.evidence})
+        (type(verdict), verdict.holds, {type(event) for event in verdict.evidence})
         for verdict in pick_ups
-    ] == [(True, JudgedBy.SEGMIND, {GraspEvent, LossOfSupportEvent})]
+    ] == [(SegmindVerdict, True, {GraspEvent, LossOfSupportEvent})]
 
 
 def test_the_hsrs_placing_holds_when_segmind_sees_the_milk_let_go_of_onto_the_table(
@@ -217,15 +218,15 @@ def test_the_hsrs_placing_holds_when_segmind_sees_the_milk_let_go_of_onto_the_ta
 
     assert [
         (
+            type(verdict),
             verdict.holds,
-            verdict.judged_by,
             [(type(event), event.with_object) for event in verdict.evidence],
         )
         for verdict in placings
     ] == [
         (
+            SegmindVerdict,
             True,
-            JudgedBy.SEGMIND,
             [
                 (LossOfGraspEvent, arm.end_effector.tool_frame),
                 (
@@ -244,6 +245,6 @@ def test_the_hsrs_driving_and_posing_are_judged_on_the_world(milk_transport_run)
         for verdict in verdicts_on(milk_transport_run.verdicts, action_type)
     ]
 
-    assert {(verdict.holds, verdict.judged_by) for verdict in moves} == {
-        (True, JudgedBy.WORLD)
+    assert {(type(verdict), verdict.holds) for verdict in moves} == {
+        (WorldVerdict, True)
     }
