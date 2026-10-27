@@ -36,7 +36,12 @@ try:
     )
 except ModuleNotFoundError:
     pass
+from semantic_digital_twin.adapters.multi_sim import MujocoSim
+from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
+from semantic_digital_twin.robots.hsrb import HSRB
 from semantic_digital_twin.robots.pr2 import PR2
+from semantic_digital_twin.specifications.robots import RobotSpecification
+from semantic_digital_twin.world_description.world_entity import Body
 from semantic_digital_twin.robots.stretch import Stretch
 from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
 from semantic_digital_twin.world_description.geometry import VolumetricBoundingBox
@@ -168,3 +173,21 @@ def whole_scene_region(pr2_apartment_context) -> VolumetricBoundingBox:
         max_y=10,
         max_z=10,
     )
+
+
+# %% a robot in a physical simulation
+
+
+@pytest.fixture
+def simulated_hsrb() -> tuple[HSRB, MujocoSim]:
+    """
+    An HSR on a floor in MuJoCo, stepped by the simulation as a plan commands it.
+    """
+    world = World()
+    with world.modify_world():
+        world.add_kinematic_structure_entity(Body(name=PrefixedName("floor")))
+    hsrb = RobotSpecification(HSRB).spawn(world)
+    simulation = MujocoSim(world=world, headless=True)
+    simulation.start_stepped_simulation()
+    yield hsrb, simulation
+    simulation.stop_simulation()

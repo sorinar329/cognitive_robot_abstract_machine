@@ -17,26 +17,8 @@ from coraplex.robot_plans.actions.core.robot_body import (
     MoveTorsoAction,
     ParkArmsAction,
 )
-from semantic_digital_twin.adapters.multi_sim import MujocoSim
 from semantic_digital_twin.datastructures.definitions import TorsoState
-from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
-from semantic_digital_twin.robots.hsrb import HSRB
 from semantic_digital_twin.spatial_types.spatial_types import Pose
-from semantic_digital_twin.specifications.robots import RobotSpecification
-from semantic_digital_twin.world import World
-from semantic_digital_twin.world_description.world_entity import Body
-
-
-@pytest.fixture
-def simulated_hsrb() -> tuple[HSRB, MujocoSim]:
-    world = World()
-    with world.modify_world():
-        world.add_kinematic_structure_entity(Body(name=PrefixedName("floor")))
-    hsrb = RobotSpecification(HSRB).spawn(world)
-    simulation = MujocoSim(world=world, headless=True)
-    simulation.start_stepped_simulation()
-    yield hsrb, simulation
-    simulation.stop_simulation()
 
 
 @pytest.mark.skipif(
