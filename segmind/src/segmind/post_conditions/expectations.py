@@ -8,9 +8,9 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
-from typing_extensions import Generic, TypeVar
+from typing_extensions import Generic
 
-from coraplex.robot_plans.actions.base import ActionDescription
+from coraplex.robot_plans.actions.base import ActionType
 from coraplex.robot_plans.actions.core.pick_up import GraspingAction, PickUpAction
 from coraplex.robot_plans.actions.core.placing import PlaceAction
 from krrood.patterns.subclass_safe_generic import SubClassSafeGeneric
@@ -24,14 +24,11 @@ from segmind.datastructures.events import (
 )
 from semantic_digital_twin.world_description.world_entity import Body
 
-ExpectedAction = TypeVar("ExpectedAction", bound=ActionDescription)
-
-
 # %% expectations
 
 
 @dataclass
-class ActionExpectation(Generic[ExpectedAction], SubClassSafeGeneric, ABC):
+class ActionExpectation(Generic[ActionType], SubClassSafeGeneric, ABC):
     """
     The events that show an action of the bound type achieved what it is for.
 
@@ -40,14 +37,14 @@ class ActionExpectation(Generic[ExpectedAction], SubClassSafeGeneric, ABC):
     """
 
     @property
-    def expected_action_type(self) -> type[ExpectedAction]:
+    def expected_action_type(self) -> type[ActionType]:
         """
         :return: The type of action this expectation is of.
         """
-        return type(self).get_type_of_generic_parameter(ExpectedAction)
+        return type(self).get_type_of_generic_parameter(ActionType)
 
     @abstractmethod
-    def watched_bodies(self, action: ExpectedAction) -> list[Body]:
+    def watched_bodies(self, action: ActionType) -> list[Body]:
         """
         :param action: The action judged.
         :return: The bodies SegMind has to watch to detect what ``action`` achieved.
@@ -55,7 +52,7 @@ class ActionExpectation(Generic[ExpectedAction], SubClassSafeGeneric, ABC):
 
     @abstractmethod
     def evidence(
-        self, action: ExpectedAction, events: list[EventWithTrackedObjects]
+        self, action: ActionType, events: list[EventWithTrackedObjects]
     ) -> list[DetectionEvent]:
         """
         :param action: The action judged.
@@ -65,7 +62,7 @@ class ActionExpectation(Generic[ExpectedAction], SubClassSafeGeneric, ABC):
         """
 
     @abstractmethod
-    def holds(self, action: ExpectedAction, evidence: list[DetectionEvent]) -> bool:
+    def holds(self, action: ActionType, evidence: list[DetectionEvent]) -> bool:
         """
         :param action: The action judged.
         :param evidence: What :meth:`evidence` chose.
