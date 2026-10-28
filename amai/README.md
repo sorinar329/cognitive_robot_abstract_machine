@@ -6,6 +6,7 @@ They run in the browser on BinderHub; nothing to install.
 | Worksheet | Notebook | Open |
 |---|---|---|
 | 2 · Knowledge Representation, Task 3, Track B | `02_pizza_dataclasses.ipynb` – the Pizza ontology as KRROOD dataclasses | [![Binder](https://binder.intel4coro.de/badge_logo.svg)](https://binder.intel4coro.de/v2/gh/sorinar329/cognitive_robot_abstract_machine/amai-exercises?urlpath=lab%2Ftree%2Famai%2F02_pizza_dataclasses.ipynb) |
+| 2 · Knowledge Representation, Task 3, Track B, solution | `02_pizza_dataclasses_solution.ipynb` | [![Binder](https://binder.intel4coro.de/badge_logo.svg)](https://binder.intel4coro.de/v2/gh/sorinar329/cognitive_robot_abstract_machine/amai-exercises?urlpath=lab%2Ftree%2Famai%2F02_pizza_dataclasses_solution.ipynb) |
 
 The environment is defined in `binder/` (krrood from PyPI).
 To run a notebook locally instead: `pip install krrood==26.7.0 casadi scipy jupyterlab`.
