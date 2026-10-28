@@ -1,0 +1,4 @@
+krrood==26.7.0
+# krrood 26.7.0 does not declare these two, but needs them as soon as a Symbol is created
+casadi
+scipy
