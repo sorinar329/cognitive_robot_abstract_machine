@@ -24,6 +24,9 @@ dependencies = [
 package-dir = {"" = "src"}
 include-package-data = true
 
+[tool.setuptools.package-data]
+experiments = ["wind_turbine/resources/*.json"]
+
 [tool.setuptools.dynamic]
 version = {attr = "experiments._version.__version__"}
 

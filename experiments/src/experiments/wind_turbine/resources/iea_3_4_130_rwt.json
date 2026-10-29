@@ -1,0 +1,29 @@
+{
+  "__json_type__": "experiments.wind_turbine.turbine.WindTurbine",
+  "name": "IEA-3.4-130-RWT",
+  "ratings": {
+    "__json_type__": "experiments.wind_turbine.turbine.TurbineRatings",
+    "rated_power": 3370000.0,
+    "rated_rotor_speed": 1.2183031958762887,
+    "cut_in_wind_speed": 3.0,
+    "rated_wind_speed": 9.812675420388173,
+    "cut_out_wind_speed": 25.0
+  },
+  "geometry": {
+    "__json_type__": "experiments.wind_turbine.turbine.TurbineGeometry",
+    "hub_height": 110.0,
+    "rotor_diameter": 129.82183952,
+    "number_of_blades": 3,
+    "gearbox_ratio": 97.0
+  },
+  "controller_limits": {
+    "__json_type__": "experiments.wind_turbine.turbine.ControllerLimits",
+    "minimum_rotor_speed": 0.3705619587628866,
+    "maximum_rotor_speed": 1.4619638350515465,
+    "fine_pitch": 0.0,
+    "feathered_pitch": 1.57,
+    "maximum_pitch_rate": 0.12217000000000001,
+    "yaw_rate": 0.0087,
+    "yaw_error_deadband": 0.06981317007977318
+  }
+}
