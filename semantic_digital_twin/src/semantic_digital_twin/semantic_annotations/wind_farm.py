@@ -5,7 +5,9 @@ from dataclasses import dataclass, field
 import numpy as np
 from typing_extensions import TYPE_CHECKING, List, Self
 
-from semantic_digital_twin.api import BodySpecification
+from semantic_digital_twin.specifications.kinematic_structure_entities import (
+    BodySpecification,
+)
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.semantic_annotations.mixins import HasRootBody
 from semantic_digital_twin.semantic_annotations.wind_turbine import (

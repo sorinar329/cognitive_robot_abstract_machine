@@ -6,9 +6,11 @@ from enum import Enum, auto
 import numpy as np
 from typing_extensions import TYPE_CHECKING, List, Optional, Self
 
-from semantic_digital_twin.api import (
-    BodySpecification,
+from semantic_digital_twin.specifications.connections import (
     RevoluteConnectionSpecification,
+)
+from semantic_digital_twin.specifications.kinematic_structure_entities import (
+    BodySpecification,
 )
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.semantic_annotations.mixins import HasRootBody
