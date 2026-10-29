@@ -383,7 +383,10 @@ def test_move_gripper_multi(multiple_robot_apartment_context):
     end_effector = left_or_only_arm(view).end_effector
 
     for state in (GripperState.OPEN, GripperState.CLOSE):
-        run_plan(SetGripperAction(gripper=end_effector, motion=state), extensions)
+        run_plan(
+            SetGripperAction(configuration=end_effector.default_configuration(state)),
+            extensions,
+        )
 
         if isinstance(end_effector, HasTwoFingers):
             assert end_effector.fingertips.separation == pytest.approx(
@@ -896,7 +899,8 @@ def test_gcs_navigation_plans_on_the_floor_the_robot_stands_on(
     ).bounding_box()
     assert floor_box.min_x <= float(base_pose.x) <= floor_box.max_x
     assert floor_box.min_y <= float(base_pose.y) <= floor_box.max_y
-    assert floor_box.max_z == pytest.approx(float(base_pose.z))
+    # Mesh files store positions as 32-bit floats.
+    assert floor_box.max_z == pytest.approx(float(base_pose.z), abs=1e-6)
 
     waypoints = action._waypoints()
     assert [waypoint.reference_frame for waypoint in waypoints] == [floor.root] * len(
@@ -1238,7 +1242,9 @@ def test_set_gripper_drives_the_gripper_it_names(multiple_robot_apartment_contex
     """
     _, robot, extensions = multiple_robot_apartment_context
     end_effector = left_or_only_arm(robot).end_effector
-    action = SetGripperAction(gripper=end_effector, motion=GripperState.OPEN)
+    action = SetGripperAction(
+        configuration=end_effector.default_configuration(GripperState.OPEN)
+    )
 
     expand(action, extensions)
 
@@ -1311,6 +1317,26 @@ def test_look_at_points_the_default_camera(multiple_robot_apartment_context):
 
     [pointing] = nodes_of_type(action, Pointing)
     assert pointing.tip_link == robot.get_default_camera().root
+
+
+def test_look_at_points_along_the_optical_viewing_direction(
+    multiple_robot_apartment_context,
+):
+    """
+    Looking somewhere aims the camera's optical viewing direction, expressed in the
+    camera's optical root.
+    """
+    _, robot, extensions = multiple_robot_apartment_context
+    camera = robot.get_default_camera()
+    action = LookAtAction(target=Pose())
+
+    expand(action, extensions)
+
+    [pointing] = nodes_of_type(action, Pointing)
+    assert np.array_equal(
+        pointing.pointing_axis.to_np(), camera.viewing_direction.to_np()
+    )
+    assert pointing.pointing_axis.reference_frame is camera.root
 
 
 def test_following_a_path_runs_one_goal_per_waypoint(
