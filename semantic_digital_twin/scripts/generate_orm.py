@@ -37,6 +37,12 @@ from semantic_digital_twin.world import (
     WorldStateBatchContextManager,
 )
 from semantic_digital_twin.world_description.mesh_file_storage import MeshFileStorage
+from semantic_digital_twin.episodic_memory import (
+    Clock,
+    ModelChangeLog,
+    NEEMRecorder,
+    StateSampler,
+)
 
 # remove classes that should not be mapped
 ignore_classes = {
@@ -48,6 +54,12 @@ ignore_classes = {
     ForwardKinematicsManager,
     RayTracer,
     MeshFileStorage,
+    # A recorder and its clocks act while a NEEM is recorded; only the NEEM is stored.
+    NEEMRecorder,
+    StateSampler,
+    ModelChangeLog,
+    *recursive_subclasses(Clock),
+    Clock,
     semantic_digital_twin.adapters.procthor.procthor_resolver.ProcthorResolver,
     SemanticDirection,
     SubclassJSONSerializer,

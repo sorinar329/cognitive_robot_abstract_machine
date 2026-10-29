@@ -19,6 +19,7 @@ from semantic_digital_twin.exceptions import (
     MismatchingCommandLengthError,
     WrongWorldModelVersion,
     NonMonotonicTimeError,
+    NoFrameRecordedAt,
 )
 from semantic_digital_twin.spatial_types.derivatives import Derivatives
 
@@ -591,6 +592,30 @@ class WorldStateTrajectory:
                     return np.zeros((0, 4, len(self._ids)), dtype=float)
                 self._data_cache = np.stack(self._data, axis=0)
             return self._data_cache
+
+    @property
+    def ids(self) -> list[UUID]:
+        """
+        :return: The ids of the degrees of freedom, in the order of the data's columns.
+        """
+        return self._ids
+
+    def state_at(self, time: float) -> WorldState:
+        """
+        :param time: A time from the first frame on.
+        :return: A copy of the state of the last frame taken at or before ``time``.
+        :raises NoFrameRecordedAt: If ``time`` lies before the first frame.
+        """
+        with self.world_lock():
+            frame = int(np.searchsorted(self.times, time, side="right")) - 1
+            if frame < 0:
+                raise NoFrameRecordedAt(time=time, first_time=float(self.times[0]))
+            return WorldState(
+                _world=self.world,
+                _data=self._data[frame].copy(),
+                _ids=list(self._ids),
+                _index=dict(self._index),
+            )
 
     @classmethod
     def from_world_state(cls, state: WorldState, time: float):

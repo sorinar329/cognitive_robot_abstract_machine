@@ -34,7 +34,10 @@ from semantic_digital_twin.world_description.world_entity import (
 from semantic_digital_twin.world_description.world_modification import (
     WorldModelModificationBlock,
 )
-from semantic_digital_twin.world_description.world_state import WorldState
+from semantic_digital_twin.world_description.world_state import (
+    WorldState,
+    WorldStateTrajectory,
+)
 
 
 @dataclass(eq=False)
@@ -95,6 +98,46 @@ class WorldStateMapping(AlternativeMapping[WorldState]):
             _data=np.array(self.data, dtype=np.float64).reshape((4, len(self.ids))),
             _ids=self.ids,
             _index={name: idx for idx, name in enumerate(self.ids)},
+        )
+
+
+@dataclass(eq=False)
+class WorldStateTrajectoryMapping(AlternativeMapping[WorldStateTrajectory]):
+    """
+    A trajectory of world states, its frames kept as arrays.
+    """
+
+    world: World
+    """
+    The world the states are of.
+    """
+
+    ids: list[UUID]
+    """
+    The ids of the degrees of freedom, in the order of the data's columns.
+    """
+
+    times: np.ndarray
+    """
+    The time of every frame.
+    """
+
+    data: np.ndarray
+    """
+    The state of every frame, indexed by frame, derivative and degree of freedom.
+    """
+
+    @classmethod
+    def from_domain_object(cls, obj: WorldStateTrajectory):
+        return cls(world=obj.world, ids=obj.ids, times=obj.times, data=obj.data)
+
+    def to_domain_object(self) -> WorldStateTrajectory:
+        return WorldStateTrajectory(
+            world=self.world,
+            _ids=list(self.ids),
+            _index={dof_id: column for column, dof_id in enumerate(self.ids)},
+            _times=self.times.tolist(),
+            _data=list(self.data),
         )
 
 

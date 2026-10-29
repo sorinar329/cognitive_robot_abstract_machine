@@ -251,6 +251,33 @@ class NonMonotonicTimeError(LogicalError):
 
 
 @dataclass
+class NoFrameRecordedAt(LogicalError):
+    """
+    Raised when the state at a time is asked of a recording that has no frame from that
+    time or earlier.
+    """
+
+    time: float
+    """
+    The time the state was asked for.
+    """
+
+    first_time: float
+    """
+    The time of the recording's first frame.
+    """
+
+    def error_message(self) -> str:
+        return (
+            f"Nothing was recorded at or before {self.time}; the first frame is from "
+            f"{self.first_time}."
+        )
+
+    def suggest_correction(self) -> str:
+        return f"Ask for a time from {self.first_time} on."
+
+
+@dataclass
 class MismatchingCommandLengthError(DataclassException, ValueError):
     """
     An exception raised when the length of a command does not match the expected length.
