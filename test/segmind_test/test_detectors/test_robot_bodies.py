@@ -6,6 +6,8 @@ never what an object rests on.
 
 from __future__ import annotations
 
+from copy import deepcopy
+
 from cramph.context import StatechartContext
 from cramph.executor import StatechartExecutor
 from typing_extensions import List
@@ -154,6 +156,30 @@ def test_an_object_on_a_gripper_is_not_supported_by_the_gripper(pr2_world_copy):
     assert gripper_bodies.isdisjoint(
         _supporters_detected_for(pr2_world_copy, box, exclude_robot=False)
     )
+
+
+def test_an_object_resting_on_a_part_of_the_robot_nothing_moves_is_supported_by_it(
+    tracy_world,
+):
+    """
+    A robot bolted to a table carries the table among its own bodies, but nothing the
+    robot drives moves the table, so it is part of the scene.
+    """
+    world = deepcopy(tracy_world)
+    table = world.get_body_by_name("table")
+    box = _box_resting_on(world, table)
+    table_top = max(
+        table.collision.as_bounding_box_collection_in_frame(world.root).bounding_boxes,
+        key=lambda part: part.depth * part.width,
+    )
+    box.parent_connection.origin = HomogeneousTransformationMatrix.from_xyz_rpy(
+        table_top.center.x,
+        table_top.center.y,
+        table_top.max_z + BOX_SIZE / 2 - SUNK_INTO_WHAT_IT_RESTS_ON,
+        reference_frame=world.root,
+    )
+
+    assert _supporters_detected_for(world, box) == [table]
 
 
 # %% the robot is not part of the scene a detector reads

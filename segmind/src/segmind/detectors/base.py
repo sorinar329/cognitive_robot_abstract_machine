@@ -117,11 +117,13 @@ class AbstractDetector(EndedByOwner, StatechartNode, ABC):
 
     exclude_robot: bool = True
     """
-    Whether every body of every robot is left out of what a tracked object is checked
+    Whether every body a robot moves is left out of what a tracked object is checked
     against.
 
     A run reads what happens in the scene, and a robot carrying an object touches it
-    throughout; what the robot does with it is read from the grasp instead.
+    throughout; what the robot does with it is read from the grasp instead. A body of
+    the robot that nothing it drives moves, such as a table it is bolted to, is part of
+    the scene.
     """
 
     @classproperty
@@ -260,10 +262,16 @@ class AbstractDetector(EndedByOwner, StatechartNode, ABC):
 
     def bodies_left_out(self, world: World) -> set[Body]:
         """
-        The bodies of ``world`` a tracked object is never checked against: every body of
-        every robot, unless :attr:`exclude_robot` says otherwise.
+        The bodies of ``world`` a tracked object is never checked against: every body a
+        robot moves, unless :attr:`exclude_robot` says otherwise.
         """
-        return set(world.robot_bodies_with_collision) if self.exclude_robot else set()
+        if not self.exclude_robot:
+            return set()
+        return {
+            body
+            for body in world.robot_bodies_with_collision
+            if world.is_body_controlled(body)
+        }
 
     def get_relation(
         self,

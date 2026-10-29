@@ -37,7 +37,7 @@ class ContactDetector(AbstractDetector):
 
     def bodies_left_out(self, world: World) -> set[Body]:
         """
-        Every body of every robot apart from its end effectors, unless
+        Every body a robot moves apart from its end effectors, unless
         :attr:`exclude_robot` says otherwise.
         """
         return super().bodies_left_out(world) - self.end_effector_bodies(world)
