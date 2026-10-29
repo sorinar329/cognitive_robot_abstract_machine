@@ -22,6 +22,16 @@ class DemoFolder(PathEnumeration):
     The folder of a coraplex demo that lives outside any package.
     """
 
+    TRACY_MONTESSORI = (
+        Path(__file__).parents[1]
+        / "coraplex"
+        / "demos"
+        / "coraplex_tracy_montessori_demo"
+    )
+    """
+    Tracy sorting the pieces of a Montessori shape-sorting board.
+    """
+
     HSR_MUJOCO = (
         Path(__file__).parents[1] / "coraplex" / "demos" / "coraplex_hsr_mujoco_demo"
     )

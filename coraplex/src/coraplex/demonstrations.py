@@ -29,6 +29,7 @@ from coraplex.plans.executors import (
 )
 from cramph.visualization import RvizVisualization, WorldVisualization
 from cramph.context import ContextExtension, StatechartContext
+from cramph.executor import ExecutorExtension
 from cramph.statechart import Statechart
 from semantic_digital_twin.adapters.multi_sim import MujocoSim
 from semantic_digital_twin.adapters.ros.world_fetcher import fetch_world_from_service
@@ -384,12 +385,20 @@ class RobotDemonstration(ABC):
         self.simulation.start_stepped_simulation()
         self.simulation.step_simulation(self.settling_duration)
 
+    def executor_extensions(self, world: World) -> list[ExecutorExtension]:
+        """
+        :param world: The world the plan is performed in.
+        :return: The extensions the executor of a run adds behaviour with: the
+            :attr:`visualization`, if the run has one.
+        """
+        return [] if self.visualization is None else [self.visualization]
+
     def create_executor(self, world: World) -> PlanExecutor:
         """
         :param world: The world the plan is performed in.
         :return: An executor of :attr:`executor_type`, set up the way this demonstration
-            performs its plan in :attr:`simulation`, if there is one, showing its runs
-            with :attr:`visualization`.
+            performs its plan in :attr:`simulation`, if there is one, with the
+            :meth:`executor_extensions`.
         """
         executor_type = self.executor_type
         if self.simulation is not None:
@@ -401,7 +410,7 @@ class RobotDemonstration(ABC):
             ros_node=self.ros_node,
             collision_avoidance=self.collision_avoidance,
             debug=self.debug,
-            extensions=[] if self.visualization is None else [self.visualization],
+            extensions=self.executor_extensions(world),
         )
         if self.simulation_time_per_action is not None and isinstance(
             executor, SimulatedPlanExecutor

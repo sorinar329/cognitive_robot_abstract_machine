@@ -24,14 +24,23 @@ from krrood.ormatic.ormatic import ORMatic
 
 from krrood.utils import recursive_subclasses
 from segmind.action_effects import ActionEffects, EffectsOfActions, ExpectedEvent
-from segmind.event_segmentation import Segmind
-from segmind.exceptions import NoEffectsOfAction, NoSemanticAnnotationToWatch
+from segmind.action_judge import ActionJudge, ActionVerdict
+from segmind.event_segmentation import Segmind, Tick
+from segmind.exceptions import (
+    NoEffectsOfAction,
+    NoSemanticAnnotationToWatch,
+    SegmindIsNotWatching,
+)
 
 ignored_classes = {
     SubclassJSONSerializer,
     Segmind,
+    Tick,
     NoSemanticAnnotationToWatch,
     NoEffectsOfAction,
+    SegmindIsNotWatching,
+    ActionJudge,
+    ActionVerdict,
     ExpectedEvent,
     EffectsOfActions,
     ActionEffects,

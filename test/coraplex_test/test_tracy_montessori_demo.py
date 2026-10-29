@@ -5,9 +5,6 @@ loaded from its folder.
 
 from __future__ import annotations
 
-import importlib.util
-import sys
-from pathlib import Path
 from types import ModuleType
 
 import pytest
@@ -18,29 +15,17 @@ from semantic_digital_twin.semantic_annotations.semantic_annotations import (
     ShapeSortingPiece,
 )
 
+from ..demo_folders import DemoFolder
+
 # %% the demo, loaded from its folder
 
 
 @pytest.fixture(scope="module")
 def demo() -> ModuleType:
     """
-    The demo's ``demo`` module, its folder put on the path for the modules it imports.
+    The demo's ``demo`` module.
     """
-    folder = (
-        Path(__file__).parents[2]
-        / "coraplex"
-        / "demos"
-        / "coraplex_tracy_montessori_demo"
-    )
-    with pytest.MonkeyPatch.context() as patch:
-        patch.syspath_prepend(str(folder))
-        specification = importlib.util.spec_from_file_location(
-            "tracy_montessori_demo", folder / "demo.py"
-        )
-        module = importlib.util.module_from_spec(specification)
-        patch.setitem(sys.modules, specification.name, module)
-        specification.loader.exec_module(module)
-    return module
+    return DemoFolder.TRACY_MONTESSORI.load_module("demo")
 
 
 # %% gripping a piece
