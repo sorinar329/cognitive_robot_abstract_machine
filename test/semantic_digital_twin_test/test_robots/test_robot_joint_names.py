@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import pytest
 
-from semantic_digital_twin.adapters.urdf import URDFParser
 from semantic_digital_twin.datastructures.definitions import JointName
 from semantic_digital_twin.robots.armar7 import Armar7, Armar7Joint
 from semantic_digital_twin.robots.daisy import DAiSy, DAiSyJoint
@@ -11,6 +10,7 @@ from semantic_digital_twin.robots.hsrb import HSRB, HSRBJoint, HSRBSpringJoint
 from semantic_digital_twin.robots.icub3 import ICub3, ICub3Joint
 from semantic_digital_twin.robots.justin import Justin, JustinJoint
 from semantic_digital_twin.robots.mmp_dresden import MMPDresden, MMPDresdenJoint
+from semantic_digital_twin.robots.panda import Panda, PandaJoint
 from semantic_digital_twin.robots.pr2 import PR2, PR2Joint
 from semantic_digital_twin.robots.robot_parts import AbstractRobot
 from semantic_digital_twin.robots.stretch import Stretch, StretchJoint
@@ -34,6 +34,7 @@ ROBOTS_WITH_JOINT_ENUM: list[tuple[type[AbstractRobot], type[JointName]]] = [
     (Justin, JustinJoint),
     (UnitreeG1, UnitreeG1Joint),
     (MMPDresden, MMPDresdenJoint),
+    (Panda, PandaJoint),
 ]
 """
 Every robot whose description can be resolved, together with the enum naming its joints.
@@ -55,7 +56,7 @@ def robot_world(request: pytest.FixtureRequest) -> World:
     module's tests of that robot and released once they have run.
     """
     robot_type: type[AbstractRobot] = request.param
-    return URDFParser.from_file(robot_type.get_ros_file_path()).parse()
+    return robot_type.from_description()._world
 
 
 # %% joint-name enums against the parsed description
