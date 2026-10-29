@@ -25,5 +25,128 @@
     "maximum_pitch_rate": 0.12217000000000001,
     "yaw_rate": 0.0087,
     "yaw_error_deadband": 0.06981317007977318
+  },
+  "control_strategy": {
+    "__json_type__": "experiments.wind_turbine.turbine.ControlStrategy",
+    "region_goals": {
+      "__collection_type__": "builtins.list",
+      "__items__": [
+        {
+          "__json_type__": "experiments.wind_turbine.turbine.RegionGoal",
+          "region": {
+            "__json_type__": "experiments.wind_turbine.turbine.WindRegion",
+            "name": "BELOW_CUT_IN"
+          },
+          "goal": {
+            "__json_type__": "experiments.wind_turbine.turbine.ControlGoal",
+            "name": "WAIT_FOR_WIND"
+          }
+        },
+        {
+          "__json_type__": "experiments.wind_turbine.turbine.RegionGoal",
+          "region": {
+            "__json_type__": "experiments.wind_turbine.turbine.WindRegion",
+            "name": "BELOW_RATED"
+          },
+          "goal": {
+            "__json_type__": "experiments.wind_turbine.turbine.ControlGoal",
+            "name": "MAXIMIZE_POWER"
+          }
+        },
+        {
+          "__json_type__": "experiments.wind_turbine.turbine.RegionGoal",
+          "region": {
+            "__json_type__": "experiments.wind_turbine.turbine.WindRegion",
+            "name": "BELOW_RATED"
+          },
+          "goal": {
+            "__json_type__": "experiments.wind_turbine.turbine.ControlGoal",
+            "name": "ALIGN_WITH_WIND"
+          }
+        },
+        {
+          "__json_type__": "experiments.wind_turbine.turbine.RegionGoal",
+          "region": {
+            "__json_type__": "experiments.wind_turbine.turbine.WindRegion",
+            "name": "ABOVE_RATED"
+          },
+          "goal": {
+            "__json_type__": "experiments.wind_turbine.turbine.ControlGoal",
+            "name": "LIMIT_TO_RATED_POWER"
+          }
+        },
+        {
+          "__json_type__": "experiments.wind_turbine.turbine.RegionGoal",
+          "region": {
+            "__json_type__": "experiments.wind_turbine.turbine.WindRegion",
+            "name": "ABOVE_RATED"
+          },
+          "goal": {
+            "__json_type__": "experiments.wind_turbine.turbine.ControlGoal",
+            "name": "ALIGN_WITH_WIND"
+          }
+        },
+        {
+          "__json_type__": "experiments.wind_turbine.turbine.RegionGoal",
+          "region": {
+            "__json_type__": "experiments.wind_turbine.turbine.WindRegion",
+            "name": "ABOVE_CUT_OUT"
+          },
+          "goal": {
+            "__json_type__": "experiments.wind_turbine.turbine.ControlGoal",
+            "name": "STOP_ROTOR"
+          }
+        }
+      ]
+    },
+    "goal_actuators": {
+      "__collection_type__": "builtins.list",
+      "__items__": [
+        {
+          "__json_type__": "experiments.wind_turbine.turbine.GoalActuator",
+          "goal": {
+            "__json_type__": "experiments.wind_turbine.turbine.ControlGoal",
+            "name": "MAXIMIZE_POWER"
+          },
+          "actuator": {
+            "__json_type__": "experiments.wind_turbine.turbine.Actuator",
+            "name": "GENERATOR_TORQUE"
+          }
+        },
+        {
+          "__json_type__": "experiments.wind_turbine.turbine.GoalActuator",
+          "goal": {
+            "__json_type__": "experiments.wind_turbine.turbine.ControlGoal",
+            "name": "LIMIT_TO_RATED_POWER"
+          },
+          "actuator": {
+            "__json_type__": "experiments.wind_turbine.turbine.Actuator",
+            "name": "BLADE_PITCH"
+          }
+        },
+        {
+          "__json_type__": "experiments.wind_turbine.turbine.GoalActuator",
+          "goal": {
+            "__json_type__": "experiments.wind_turbine.turbine.ControlGoal",
+            "name": "ALIGN_WITH_WIND"
+          },
+          "actuator": {
+            "__json_type__": "experiments.wind_turbine.turbine.Actuator",
+            "name": "YAW_DRIVE"
+          }
+        },
+        {
+          "__json_type__": "experiments.wind_turbine.turbine.GoalActuator",
+          "goal": {
+            "__json_type__": "experiments.wind_turbine.turbine.ControlGoal",
+            "name": "STOP_ROTOR"
+          },
+          "actuator": {
+            "__json_type__": "experiments.wind_turbine.turbine.Actuator",
+            "name": "BLADE_PITCH"
+          }
+        }
+      ]
+    }
   }
 }

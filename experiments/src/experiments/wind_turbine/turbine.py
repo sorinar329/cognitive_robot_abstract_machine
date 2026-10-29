@@ -17,7 +17,9 @@ from pathlib import Path
 from typing_extensions import Self
 
 from krrood.adapters.json_serializer import from_json
+from krrood.entity_query_language.factories import entity, variable
 from krrood.patterns.path_enumeration import PathEnumeration
+from krrood.symbol_graph.symbol_graph import Symbol
 
 from experiments.wind_turbine.exceptions import WindSpeedThresholdsOutOfOrderError
 
@@ -76,21 +78,6 @@ class ControlGoal(StrEnum):
     Bring the rotor to a standstill to protect the turbine.
     """
 
-    @property
-    def actuator(self) -> Actuator | None:
-        """
-        The actuator the controller uses to pursue this goal, if any.
-        """
-        match self:
-            case ControlGoal.MAXIMIZE_POWER:
-                return Actuator.GENERATOR_TORQUE
-            case ControlGoal.LIMIT_TO_RATED_POWER | ControlGoal.STOP_ROTOR:
-                return Actuator.BLADE_PITCH
-            case ControlGoal.ALIGN_WITH_WIND:
-                return Actuator.YAW_DRIVE
-            case ControlGoal.WAIT_FOR_WIND:
-                return None
-
 
 class WindRegion(StrEnum):
     """
@@ -118,20 +105,79 @@ class WindRegion(StrEnum):
     From cut-out wind speed upwards: the turbine must shut down.
     """
 
-    @property
-    def control_goals(self) -> tuple[ControlGoal, ...]:
+
+# %% control strategy
+
+
+@dataclass
+class RegionGoal(Symbol):
+    """
+    The fact that the controller pursues a goal while the wind is in a region.
+    """
+
+    region: WindRegion
+    """
+    The band of wind speed in which the goal is pursued.
+    """
+
+    goal: ControlGoal
+    """
+    The goal pursued in that band.
+    """
+
+
+@dataclass
+class GoalActuator(Symbol):
+    """
+    The fact that the controller pursues a goal by moving an actuator.
+    """
+
+    goal: ControlGoal
+    """
+    The goal that is pursued.
+    """
+
+    actuator: Actuator
+    """
+    The actuator moved to pursue it.
+    """
+
+
+@dataclass(frozen=True)
+class ControlStrategy:
+    """
+    Which goals a turbine controller pursues in each wind region, and with which
+    actuators.
+    """
+
+    region_goals: list[RegionGoal]
+    """
+    The goals pursued in each wind region.
+    """
+
+    goal_actuators: list[GoalActuator]
+    """
+    The actuator behind each goal. A goal without an entry is pursued by moving
+    nothing.
+    """
+
+    def goals_in(self, region: WindRegion) -> list[ControlGoal]:
         """
-        The goals the controller pursues while the wind is in this region.
+        :param region: A band of wind speed.
+        :return: The goals pursued while the wind is in that band.
         """
-        match self:
-            case WindRegion.BELOW_CUT_IN:
-                return (ControlGoal.WAIT_FOR_WIND,)
-            case WindRegion.BELOW_RATED:
-                return ControlGoal.MAXIMIZE_POWER, ControlGoal.ALIGN_WITH_WIND
-            case WindRegion.ABOVE_RATED:
-                return ControlGoal.LIMIT_TO_RATED_POWER, ControlGoal.ALIGN_WITH_WIND
-            case WindRegion.ABOVE_CUT_OUT:
-                return (ControlGoal.STOP_ROTOR,)
+        region_goal = variable(RegionGoal, domain=self.region_goals)
+        query = entity(region_goal.goal).where(region_goal.region == region)
+        return list(query.evaluate())
+
+    def actuator_for(self, goal: ControlGoal) -> Actuator | None:
+        """
+        :param goal: A goal of the controller.
+        :return: The actuator moved to pursue it, or ``None`` if it moves none.
+        """
+        goal_actuator = variable(GoalActuator, domain=self.goal_actuators)
+        query = entity(goal_actuator.actuator).where(goal_actuator.goal == goal)
+        return next(iter(query.evaluate()), None)
 
 
 # %% turbine description
@@ -266,8 +312,8 @@ class ControllerLimits:
 @dataclass(frozen=True)
 class WindTurbine:
     """
-    A horizontal-axis wind turbine: its ratings, its geometry and the limits of its
-    controller.
+    A horizontal-axis wind turbine: its ratings, its geometry, and the limits and
+    strategy of its controller.
     """
 
     name: str
@@ -288,6 +334,11 @@ class WindTurbine:
     controller_limits: ControllerLimits
     """
     The bounds within which the controller moves the actuators.
+    """
+
+    control_strategy: ControlStrategy
+    """
+    The goals the controller pursues in each wind region, and the actuators behind them.
     """
 
     @classmethod

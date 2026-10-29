@@ -1,5 +1,5 @@
 """
-Tests for the wind turbine knowledge model: wind regions, control goals and the
+Tests for the wind turbine knowledge model: wind regions, the control strategy and the
 reference turbine file.
 """
 
@@ -17,7 +17,10 @@ from experiments.wind_turbine.exceptions import WindSpeedThresholdsOutOfOrderErr
 from experiments.wind_turbine.turbine import (
     Actuator,
     ControlGoal,
+    ControlStrategy,
+    GoalActuator,
     ReferenceTurbineFile,
+    RegionGoal,
     TurbineRatings,
     WindRegion,
     WindTurbine,
@@ -91,38 +94,51 @@ def test_wind_speed_thresholds_out_of_order_are_rejected(
         dataclasses.replace(ratings, rated_wind_speed=ratings.cut_out_wind_speed)
 
 
-# %% control goals
+def test_turbine_ratings_reject_equal_cut_in_and_rated_wind_speed():
+    with pytest.raises(WindSpeedThresholdsOutOfOrderError):
+        TurbineRatings(
+            rated_power=1.0,
+            rated_rotor_speed=1.0,
+            cut_in_wind_speed=5.0,
+            rated_wind_speed=5.0,
+            cut_out_wind_speed=25.0,
+        )
+
+
+# %% control strategy of the reference turbine
 
 
 @pytest.mark.parametrize(
     "region, goals",
     [
-        (WindRegion.BELOW_CUT_IN, (ControlGoal.WAIT_FOR_WIND,)),
+        (WindRegion.BELOW_CUT_IN, [ControlGoal.WAIT_FOR_WIND]),
         (
             WindRegion.BELOW_RATED,
-            (ControlGoal.MAXIMIZE_POWER, ControlGoal.ALIGN_WITH_WIND),
+            [ControlGoal.MAXIMIZE_POWER, ControlGoal.ALIGN_WITH_WIND],
         ),
         (
             WindRegion.ABOVE_RATED,
-            (ControlGoal.LIMIT_TO_RATED_POWER, ControlGoal.ALIGN_WITH_WIND),
+            [ControlGoal.LIMIT_TO_RATED_POWER, ControlGoal.ALIGN_WITH_WIND],
         ),
-        (WindRegion.ABOVE_CUT_OUT, (ControlGoal.STOP_ROTOR,)),
+        (WindRegion.ABOVE_CUT_OUT, [ControlGoal.STOP_ROTOR]),
     ],
 )
-def test_control_goals_per_wind_region(
-    region: WindRegion, goals: tuple[ControlGoal, ...]
+def test_reference_goals_per_wind_region(
+    reference_turbine: WindTurbine, region: WindRegion, goals: list[ControlGoal]
 ):
-    assert region.control_goals == goals
+    assert reference_turbine.control_strategy.goals_in(region) == goals
 
 
-def test_yawing_is_only_a_goal_while_producing_power():
-    producing = {WindRegion.BELOW_RATED, WindRegion.ABOVE_RATED}
+def test_reference_turbine_yaws_only_while_producing_power(
+    reference_turbine: WindTurbine,
+):
+    strategy = reference_turbine.control_strategy
     regions_that_align = {
         region
         for region in WindRegion
-        if ControlGoal.ALIGN_WITH_WIND in region.control_goals
+        if ControlGoal.ALIGN_WITH_WIND in strategy.goals_in(region)
     }
-    assert regions_that_align == producing
+    assert regions_that_align == {WindRegion.BELOW_RATED, WindRegion.ABOVE_RATED}
 
 
 @pytest.mark.parametrize(
@@ -135,18 +151,41 @@ def test_yawing_is_only_a_goal_while_producing_power():
         (ControlGoal.STOP_ROTOR, Actuator.BLADE_PITCH),
     ],
 )
-def test_each_goal_is_pursued_by_its_actuator(
-    goal: ControlGoal, actuator: Actuator | None
+def test_reference_actuator_per_goal(
+    reference_turbine: WindTurbine, goal: ControlGoal, actuator: Actuator | None
 ):
-    assert goal.actuator == actuator
+    assert reference_turbine.control_strategy.actuator_for(goal) == actuator
 
 
-def test_turbine_ratings_reject_equal_cut_in_and_rated_wind_speed():
-    with pytest.raises(WindSpeedThresholdsOutOfOrderError):
-        TurbineRatings(
-            rated_power=1.0,
-            rated_rotor_speed=1.0,
-            cut_in_wind_speed=5.0,
-            rated_wind_speed=5.0,
-            cut_out_wind_speed=25.0,
-        )
+# %% control strategy as data
+
+
+def test_goals_follow_the_strategy_facts():
+    keep_yawing_when_stopped = ControlStrategy(
+        region_goals=[
+            RegionGoal(WindRegion.ABOVE_CUT_OUT, ControlGoal.STOP_ROTOR),
+            RegionGoal(WindRegion.ABOVE_CUT_OUT, ControlGoal.ALIGN_WITH_WIND),
+        ],
+        goal_actuators=[],
+    )
+    assert keep_yawing_when_stopped.goals_in(WindRegion.ABOVE_CUT_OUT) == [
+        ControlGoal.STOP_ROTOR,
+        ControlGoal.ALIGN_WITH_WIND,
+    ]
+
+
+def test_region_without_facts_has_no_goals():
+    strategy = ControlStrategy(region_goals=[], goal_actuators=[])
+    assert strategy.goals_in(WindRegion.ABOVE_RATED) == []
+
+
+def test_actuator_follows_the_strategy_facts():
+    stop_by_torque = ControlStrategy(
+        region_goals=[],
+        goal_actuators=[
+            GoalActuator(ControlGoal.STOP_ROTOR, Actuator.GENERATOR_TORQUE)
+        ],
+    )
+    assert (
+        stop_by_torque.actuator_for(ControlGoal.STOP_ROTOR) == Actuator.GENERATOR_TORQUE
+    )
