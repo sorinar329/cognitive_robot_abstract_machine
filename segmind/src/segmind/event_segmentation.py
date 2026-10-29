@@ -8,6 +8,7 @@ import logging
 import threading
 import time
 from dataclasses import dataclass, field
+from datetime import datetime
 
 from cramph.context import StatechartContext
 from cramph.executor import StatechartExecutor
@@ -18,7 +19,7 @@ from segmind.detectors.atomic_event_detectors_nodes import MotionDetector
 from segmind.detectors.base import AbstractDetector, SegmindContext
 from segmind.episode_segmenter import EpisodeSegmentation
 from segmind.event_logger import EventLogger
-from segmind.exceptions import NoSemanticAnnotationToWatch
+from segmind.exceptions import NoSemanticAnnotationToWatch, SegmindIsNotWatching
 from segmind.statecharts.segmind_statechart import DetectorStatechartBuilder
 from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.world_entity import (
@@ -27,6 +28,30 @@ from semantic_digital_twin.world_description.world_entity import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+# %% ticks
+
+
+@dataclass(frozen=True)
+class Tick:
+    """
+    One tick of the detectors: the span of time they read the world in.
+    """
+
+    started: datetime
+    """
+    When the detectors started reading the world, which no other thread changed from
+    then on until :attr:`ended`.
+    """
+
+    ended: datetime
+    """
+    When the detectors were done reading the world.
+    """
+
+
+# %% watching
 
 
 @dataclass(eq=False)
@@ -81,6 +106,16 @@ class Segmind:
     thread: threading.Thread | None = field(init=False, default=None)
     """
     The thread the detectors are ticked on, once started.
+    """
+
+    ticks: list[Tick] = field(init=False, default_factory=list)
+    """
+    Every tick of the detectors so far, in order.
+    """
+
+    ticked: threading.Condition = field(init=False, default_factory=threading.Condition)
+    """
+    Notified after every tick, once :attr:`ticks` holds it.
     """
 
     def __post_init__(self) -> None:
@@ -209,7 +244,31 @@ class Segmind:
         Tick the detectors once, while no other thread changes the world.
         """
         with self.world._world_lock:
+            started = datetime.now()
             self.executor.tick()
+            ended = datetime.now()
+        with self.ticked:
+            self.ticks.append(Tick(started=started, ended=ended))
+            self.ticked.notify_all()
+
+    def seen_at_rest_after(self, moment: datetime) -> datetime:
+        """
+        Wait until the detectors have read the world as often after ``moment`` as they
+        need to conclude what it came to rest in, see
+        :attr:`ticks_to_see_the_world_at_rest`.
+
+        :param moment: The moment from which on the world is to be read.
+        :return: When the last of those ticks ended.
+        :raises SegmindIsNotWatching: When the detectors are not being ticked.
+        """
+        with self.ticked:
+            while True:
+                ticks_after = [tick for tick in self.ticks if tick.started >= moment]
+                if len(ticks_after) >= self.ticks_to_see_the_world_at_rest:
+                    return ticks_after[self.ticks_to_see_the_world_at_rest - 1].ended
+                if not self.is_watching:
+                    raise SegmindIsNotWatching()
+                self.ticked.wait(self.pause_between_ticks)
 
     def start(self) -> None:
         """

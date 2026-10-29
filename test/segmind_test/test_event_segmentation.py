@@ -10,6 +10,7 @@ import threading
 import time
 from collections import Counter
 from dataclasses import dataclass, field
+from datetime import datetime
 
 import pytest
 from cramph.executor import StatechartExecutor
@@ -29,7 +30,7 @@ from segmind.detectors.base import (
 )
 from segmind.detectors.coarse_event_detector_nodes import PickUpDetector
 from segmind.event_segmentation import Segmind
-from segmind.exceptions import NoSemanticAnnotationToWatch
+from segmind.exceptions import NoSemanticAnnotationToWatch, SegmindIsNotWatching
 from semantic_digital_twin.semantic_annotations.semantic_annotations import Food, Milk
 from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
 from semantic_digital_twin.world_description.world_entity import Body
@@ -430,6 +431,47 @@ def test_stopping_ends_the_watching_thread(milk_in_the_apartment):
         detector.ticked.wait(TICK_TIMEOUT)
 
     assert not segmentation.is_watching
+
+
+# %% seeing the world at rest
+
+
+def test_the_world_is_seen_at_rest_once_enough_ticks_began_after_a_moment(
+    milk_in_the_apartment,
+):
+    """
+    Concluding what the world came to rest in takes as many ticks of it as the longest
+    motion window, all of them begun after the moment asked about.
+    """
+    world, milk, _ = milk_in_the_apartment
+    segmentation = Segmind(
+        world=world,
+        detectors=[TranslationDetector(tracked_object=milk)],
+        tick_period=TICK_PERIOD,
+    )
+
+    with segmentation:
+        moment = datetime.now()
+        seen_at_rest = segmentation.seen_at_rest_after(moment)
+
+    ticks_seen = [
+        tick
+        for tick in segmentation.ticks
+        if tick.started >= moment and tick.ended <= seen_at_rest
+    ]
+    assert len(ticks_seen) == segmentation.ticks_to_see_the_world_at_rest
+
+
+def test_the_world_cannot_be_seen_at_rest_while_segmind_is_not_watching(
+    milk_in_the_apartment,
+):
+    world, milk, _ = milk_in_the_apartment
+    segmentation = Segmind(
+        world=world, detectors=[TranslationDetector(tracked_object=milk)]
+    )
+
+    with pytest.raises(SegmindIsNotWatching):
+        segmentation.seen_at_rest_after(datetime.now())
 
 
 # %% watching the objects a plan handles

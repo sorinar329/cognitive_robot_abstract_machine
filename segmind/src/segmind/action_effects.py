@@ -102,6 +102,58 @@ class ExpectedEvent:
     The other body the event is about; any other body, if None.
     """
 
+    @classproperty
+    def opposite_event_types(
+        cls,
+    ) -> dict[type[EventWithTrackedObjects], type[EventWithTrackedObjects]]:
+        """
+        :return: The events that undo one another, each by the event that undoes it: a
+            hand takes hold and lets go, an object is supported and loses its support.
+        """
+        return {
+            GraspEvent: LossOfGraspEvent,
+            LossOfGraspEvent: GraspEvent,
+            SupportEvent: LossOfSupportEvent,
+            LossOfSupportEvent: SupportEvent,
+        }
+
+    def evidence_among(
+        self, events: list[EventWithTrackedObjects]
+    ) -> list[EventWithTrackedObjects]:
+        """
+        :param events: Detected events, in the order they were detected.
+        :return: The events showing this expected event happened, which is none if it
+            did not. An event that something undoes shows it only if nothing undid it
+            again: the last of it and its undoing is the expected one. Any other event
+            shows it by having happened at all.
+        """
+        if self.event_type not in self.opposite_event_types:
+            return [event for event in events if self._is_about(event, self.event_type)]
+        either = [
+            event
+            for event in events
+            if self._is_about(event, self.event_type)
+            or self._is_about(event, self.opposite_event_types[self.event_type])
+        ]
+        if not either or not isinstance(either[-1], self.event_type):
+            return []
+        return [either[-1]]
+
+    def _is_about(
+        self,
+        event: EventWithTrackedObjects,
+        event_type: type[EventWithTrackedObjects],
+    ) -> bool:
+        """
+        :return: Whether ``event`` is of ``event_type`` and about the bodies this
+            expected event names.
+        """
+        return (
+            isinstance(event, event_type)
+            and event.tracked_object is self.tracked_object
+            and (self.with_object is None or event.with_object is self.with_object)
+        )
+
 
 # %% effects of one kind of action
 

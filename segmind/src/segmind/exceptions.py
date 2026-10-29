@@ -50,3 +50,17 @@ class NoEffectsOfAction(DataclassException):
             "Add the effects of this type of action to "
             "segmind.action_effects.EffectsOfActions."
         )
+
+
+@dataclass
+class SegmindIsNotWatching(DataclassException):
+    """
+    Raised when SegMind is asked to have seen the world while its detectors are not, or
+    no longer, being ticked.
+    """
+
+    def error_message(self) -> str:
+        return "SegMind is not watching the world, so it cannot see it come to rest."
+
+    def suggest_correction(self) -> str:
+        return "Ask while SegMind is entered, before the run that it watches ends."
