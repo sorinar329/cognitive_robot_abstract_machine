@@ -14,6 +14,7 @@ motion of a plan do.
 
 from __future__ import annotations
 
+from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass
 from datetime import timedelta
 
@@ -22,9 +23,11 @@ import mujoco
 from coraplex.plans.context_extensions import RobotAccess
 from coraplex.plans.executors import PhysicallySimulatedPlanExecutor
 from cramph.context import StatechartContext
+from cramph.executor import ExecutorExtension
 from demo import DemoRunner, ShapeSortingPlan
 from semantic_digital_twin.adapters.multi_sim import MujocoSim
 from semantic_digital_twin.robots.tracy import Tracy
+from semantic_digital_twin.world import World
 
 
 @dataclass
@@ -69,6 +72,24 @@ class MujocoRunner(DemoRunner):
     for them.
     """
 
+    def executor_extensions(self, world: World) -> list[ExecutorExtension]:
+        """
+        :param world: The world the pieces are sorted in.
+        :return: The extensions the executor adds behaviour with; none unless a runner
+            names some.
+        """
+        return []
+
+    def segment_events(self, world: World) -> AbstractContextManager:
+        """
+        Segment what happens in ``world`` into events while the plan is performed.
+
+        :param world: The world the pieces are sorted in.
+        :return: A context manager that segments the events while it is entered; one
+            that segments nothing unless a runner says what it wants detected.
+        """
+        return nullcontext()
+
     def run(self) -> None:
         world = self.scene.build_world()
         [tracy] = world.get_semantic_annotations_by_type(Tracy)
@@ -86,9 +107,13 @@ class MujocoRunner(DemoRunner):
             executor = PhysicallySimulatedPlanExecutor(
                 StatechartContext.with_extensions(world, [RobotAccess(tracy)]),
                 simulation=simulation,
+                extensions=self.executor_extensions(world),
             )
-            executor.compile(ShapeSortingPlan(scene=self.scene).build(executor.context))
-            executor.execute()
+            with self.segment_events(world):
+                executor.compile(
+                    ShapeSortingPlan(scene=self.scene).build(executor.context)
+                )
+                executor.execute()
             executor.close()
         finally:
             simulation.stop_simulation()

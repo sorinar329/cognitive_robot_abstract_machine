@@ -27,6 +27,7 @@ from cramph.threaded_nodes import FunctionCall
 
 from ..plan_running import robot_extensions
 from cramph.context import ContextExtension, StatechartContext
+from cramph.executor import ExecutorExtension
 from coraplex.plans.executors import (
     KinematicallySimulatedPlanExecutor,
     PhysicallySimulatedPlanExecutor,
@@ -120,6 +121,11 @@ class RecordingDemonstration(RobotDemonstration):
     Whether :attr:`simulation` was running while the plan ran.
     """
 
+    added_extensions: list[ExecutorExtension] = field(default_factory=list)
+    """
+    The extensions the executor is handed besides those every demonstration hands it.
+    """
+
     def scene_specification(self) -> WorldSpecification:
         return WorldSpecification()
 
@@ -163,6 +169,9 @@ class RecordingDemonstration(RobotDemonstration):
         self.simulation_running_during_the_plan = (
             self.simulation is not None and self.simulation.is_running()
         )
+
+    def executor_extensions(self, world: World) -> list[ExecutorExtension]:
+        return [*super().executor_extensions(world), *self.added_extensions]
 
     def create_executor(self, world: World) -> PlanExecutor:
         """
@@ -350,6 +359,24 @@ def test_the_physics_of_a_run_stops_when_its_plan_fails(cylinder_bot_world) -> N
         demonstration.run()
 
     assert demonstration.simulation is None
+
+
+# %% executor extensions
+
+
+def test_the_executor_is_handed_the_extensions_a_demonstration_names(
+    cylinder_bot_world,
+):
+    extension = ExecutorExtension()
+    demonstration = RecordingDemonstration(
+        world=cylinder_bot_world,
+        used_robot=MinimalRobot,
+        added_extensions=[extension],
+    )
+
+    demonstration.run()
+
+    assert extension in demonstration.observed_executor.extensions
 
 
 # %% event segmentation

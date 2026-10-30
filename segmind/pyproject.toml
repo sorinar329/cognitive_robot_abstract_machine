@@ -8,6 +8,7 @@ build-backend = "setuptools.build_meta"
 name = "segmind"
 dynamic = ["version"]
 dependencies = [
+    "coraplex",
     "cramph",
     "krrood",
     "random_events",
