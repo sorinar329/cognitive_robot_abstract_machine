@@ -606,12 +606,22 @@ class MJCFParser(WorldModelParser):
             parent_body_to_joint_transform = (
                 parent_body_to_child_body_transform @ child_body_to_joint_transform
             )
+            joint_dynamics = JointDynamics(
+                armature=mujoco_joint.armature,
+                dry_friction=mujoco_joint.frictionloss,
+                damping=(
+                    mujoco_joint.damping
+                    if mujoco.mj_version() < 3007000
+                    else mujoco_joint.damping[0]
+                ),
+            )
             if mujoco_joint.type == mujoco.mjtJoint.mjJNT_FREE:
                 connection = Connection6DoF.create_with_dofs(
                     world=self.world,
                     parent=parent_body,
                     child=child_body,
                     parent_T_connection_expression=parent_body_to_joint_transform,
+                    dynamics=joint_dynamics,
                 )
             else:
                 joint_to_child_body_transform = child_body_to_joint_transform.inverse()
@@ -622,15 +632,6 @@ class MJCFParser(WorldModelParser):
                     reference_frame=parent_body,
                 )
                 dof = self.parse_dof(mujoco_joint=mujoco_joint)
-                joint_dynamics = JointDynamics(
-                    armature=mujoco_joint.armature,
-                    dry_friction=mujoco_joint.frictionloss,
-                    damping=(
-                        mujoco_joint.damping
-                        if mujoco.mj_version() < 3007000
-                        else mujoco_joint.damping[0]
-                    ),
-                )
                 if mujoco_joint.type == mujoco.mjtJoint.mjJNT_HINGE:
                     connection = RevoluteConnection(
                         name=PrefixedName(mujoco_joint.name),

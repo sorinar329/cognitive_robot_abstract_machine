@@ -6,7 +6,7 @@ import hashlib
 import os
 import tempfile
 from pathlib import Path
-from typing_extensions import Generic, Any, ClassVar, Iterator, TypeVar
+from typing_extensions import TYPE_CHECKING, Generic, Any, ClassVar, Iterator, TypeVar
 
 import time
 from datetime import timedelta
@@ -99,6 +99,11 @@ from semantic_digital_twin.world_description.world_modification import (
     AddActuatorModification,
     AddConnectionModification,
 )
+
+if TYPE_CHECKING:
+    from semantic_digital_twin.world_description.connection_properties import (
+        JointDynamics,
+    )
 
 logger = logging.getLogger(__name__)
 
@@ -594,6 +599,21 @@ class ConnectionConverter(EntityConverter, ABC):
     The type of the entity to convert.
     """
 
+    armature_str: str = "armature"
+    """
+    The key for the joint armature property in the output dictionary.
+    """
+
+    dry_friction_str: str = "dry_friction"
+    """
+    The key for the joint dry friction property in the output dictionary.
+    """
+
+    damping_str: str = "damping"
+    """
+    The key for the joint damping property in the output dictionary.
+    """
+
     def _convert(self, entity: Connection, **kwargs) -> dict[str, Any]:
         """
         Converts a Connection object to a dictionary of joint properties for Multiverse simulator.
@@ -602,6 +622,17 @@ class ConnectionConverter(EntityConverter, ABC):
         :return: A dictionary of joint properties.
         """
         return EntityConverter._convert(self, entity)
+
+    def _dynamics_properties(self, dynamics: JointDynamics) -> dict[str, float]:
+        """
+        :return: The armature, dry friction and damping properties of a joint with
+            ``dynamics``.
+        """
+        return {
+            self.armature_str: dynamics.armature,
+            self.dry_friction_str: dynamics.dry_friction,
+            self.damping_str: dynamics.damping,
+        }
 
 
 @dataclass
@@ -635,21 +666,6 @@ class Connection1DOFConverter(ConnectionConverter, ABC):
     The key for the joint quaternion property in the output dictionary.
     """
 
-    armature_str: str = "armature"
-    """
-    The key for the joint armature property in the output dictionary.
-    """
-
-    dry_friction_str: str = "dry_friction"
-    """
-    The key for the joint dry friction property in the output dictionary.
-    """
-
-    damping_str: str = "damping"
-    """
-    The key for the joint damping property in the output dictionary.
-    """
-
     def _convert(self, entity: ActiveConnection1DOF, **kwargs) -> dict[str, Any]:
         """
         Converts an ActiveConnection1DOF object to a dictionary of joint properties for Multiverse simulator.
@@ -678,9 +694,7 @@ class Connection1DOFConverter(ConnectionConverter, ABC):
                 self.quat_str: joint_quat,
                 self.axis_str: entity.axis.to_np().tolist()[:3],
                 self.range_str: joint_range,
-                self.armature_str: entity.dynamics.armature,
-                self.dry_friction_str: entity.dynamics.dry_friction,
-                self.damping_str: entity.dynamics.damping,
+                **self._dynamics_properties(entity.dynamics),
             }
         )
         if dof.name.name != joint_props["name"] and dof.name.name != "dof":
@@ -731,10 +745,12 @@ class Connection6DOFConverter(ConnectionConverter, ABC):
         Converts a Connection6DoF object to a dictionary of joint properties for Multiverse simulator.
 
         :param entity: The Connection6DoF object to convert.
-        :return: A dictionary of joint properties.
+        :return: A dictionary of joint properties, including armature, dry friction and
+            damping properties.
         """
         joint_props = ConnectionConverter._convert(self, entity)
         assert len(entity.dofs) == 7, "Connection6DoF must have exactly six DOFs."
+        joint_props.update(self._dynamics_properties(entity.dynamics))
         return joint_props
 
 

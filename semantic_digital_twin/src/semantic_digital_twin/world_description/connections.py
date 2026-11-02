@@ -523,6 +523,11 @@ class Connection6DoF(Connection):
     KinematicStructureEntity represented as a quaternion.
     """
 
+    dynamics: JointDynamics = field(default_factory=JointDynamics, kw_only=True)
+    """
+    Dynamic properties of the joint, the same along each of its degrees of freedom.
+    """
+
     def add_to_world(self, world: World):
         super().add_to_world(world)
         parent_P_child = Point3(
@@ -552,6 +557,7 @@ class Connection6DoF(Connection):
         name: PrefixedName | None = None,
         parent_T_connection_expression: HomogeneousTransformationMatrix | None = None,
         connection_T_child_expression: HomogeneousTransformationMatrix | None = None,
+        dynamics: JointDynamics | None = None,
     ) -> Self:
         """
         Creates an instance of the class with automatically generated degrees of freedom
@@ -573,6 +579,8 @@ class Connection6DoF(Connection):
         :param connection_T_child_expression: Optional transformation matrix specifying
                                               the connection relationship between the connection
                                               and its child entities
+        :param dynamics: The dynamic properties of the joint. Frictionless and undamped
+            if None.
         :return: A new instance of the class representing the parent-child connection with
                  automatically defined degrees of freedom.
         """
@@ -608,6 +616,7 @@ class Connection6DoF(Connection):
             qy=qy,
             qz=qz,
             qw=qw,
+            dynamics=dynamics or JointDynamics(),
         )
 
     @property
@@ -687,6 +696,7 @@ class Connection6DoF(Connection):
             qy=world.get_degree_of_freedom_by_id(self.qy.id),
             qz=world.get_degree_of_freedom_by_id(self.qz.id),
             qw=world.get_degree_of_freedom_by_id(self.qw.id),
+            dynamics=self.dynamics,
         )
 
     def copy_with_new_parent(
@@ -707,6 +717,7 @@ class Connection6DoF(Connection):
             qy=self.qy,
             qz=self.qz,
             qw=self.qw,
+            dynamics=self.dynamics,
         )
 
 

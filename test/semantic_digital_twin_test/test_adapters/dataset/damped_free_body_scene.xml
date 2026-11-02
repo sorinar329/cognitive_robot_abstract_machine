@@ -1,0 +1,8 @@
+<mujoco>
+  <worldbody>
+    <body name="marshmallow" pos="0 0 0.1">
+      <joint name="marshmallow_free" type="free" damping="0.0005" armature="0.002" frictionloss="0.01"/>
+      <geom type="cylinder" size="0.015 0.028" mass="0.0036"/>
+    </body>
+  </worldbody>
+</mujoco>
