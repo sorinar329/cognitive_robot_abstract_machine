@@ -41,7 +41,7 @@ from semantic_digital_twin.semantic_annotations.semantic_annotations import (
     Drawer,
     Handle,
 )
-from krrood_spatial_math.spatial_types import HomogeneousTransformationMatrix
+from krrood_spatial_math.spatial_types import HomogeneousTransformationMatrix, Point3
 from semantic_digital_twin.utils import camel_case_split
 from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.connections import ActiveConnection1DOF
@@ -114,11 +114,64 @@ class RoboCasaTask:
     for spawning the ``semantic_digital_twin``-owned robot.
     """
 
+    environment: Any
+    """
+    The reset RoboCasa environment the task was composed in, whose simulation RoboCasa's
+    own success check reads.
+    """
+
     referenced_fixtures: dict[str, Body] = field(default_factory=dict)
     """
     The fixtures the task refers to, such as the drawer to open or the sink to place
     into, as their bodies in :attr:`world`, by the name the task refers to them by.
     """
+
+    def __post_init__(self):
+        """
+        Set the joints of :attr:`world` to where the environment's simulation holds
+        them, such as a door the task opened to set itself up.
+        """
+        for connection, address in self._joint_addresses().items():
+            connection.position = float(self.environment.sim.data.qpos[address])
+
+    def succeeds(self, gripper_position: Point3) -> bool:
+        """
+        :param gripper_position: Where the gripper of the robot performing the task is,
+            standing in for RoboCasa's robot's gripper.
+        :return: Whether RoboCasa's own success check of the task holds with the objects
+            and the fixtures' joints as they stand in :attr:`world`.
+        """
+        simulation = self.environment.sim
+        for robocasa_object in self.environment.objects.values():
+            world_T_object = self.world.compute_forward_kinematics(
+                self.world.root, self.world.get_body_by_name(robocasa_object.root_body)
+            )
+            x, y, z, w = world_T_object.quaternion.to_np()
+            simulation.data.set_joint_qpos(
+                robocasa_object.joints[0],
+                [*world_T_object.position.to_np()[:3], w, x, y, z],
+            )
+        for connection, address in self._joint_addresses().items():
+            simulation.data.qpos[address] = connection.position
+        simulation.forward()
+        simulation.data.site_xpos[self.environment.robots[0].eef_site_id["right"]] = (
+            self.world.transform(gripper_position, self.world.root).to_np()[:3]
+        )
+        return bool(self.environment._check_success())
+
+    def _joint_addresses(self) -> dict[ActiveConnection1DOF, int]:
+        """
+        :return: The joints of :attr:`world` that the environment's simulation also
+            has, each with the index of its position in the simulation's state.
+        """
+        model = self.environment.sim.model
+        joints = {model.joint_id2name(joint): joint for joint in range(model.njnt)}
+        return {
+            connection: int(model.jnt_qposadr[joints[connection.name.name]])
+            for connection in self.world.connections
+            if isinstance(connection, ActiveConnection1DOF)
+            and connection.name.name in joints
+        }
 
 
 def _mjcf_document_from_element_copy(element: ET.Element) -> str:
@@ -408,7 +461,6 @@ class RoboCasaDatasetLoader:
         )
 
         world = _parse_robosuite_mjcf(MJCFParser.from_xml_string(weighed_document))
-        self._apply_joint_positions(world, environment)
         self._apply_kitchen_appliance_semantics(world, environment.fixtures)
         manipulated_objects = self._apply_task_object_semantics(
             world, environment.object_cfgs, environment.objects
@@ -421,7 +473,9 @@ class RoboCasaDatasetLoader:
             robot_base_pose=HomogeneousTransformationMatrix.from_xyz_rpy(
                 *episode_metadata["init_robot_base_pos"],
                 *episode_metadata["init_robot_base_ori"],
+                reference_frame=world.root,
             ),
+            environment=environment,
             referenced_fixtures=self._referenced_fixtures(world, environment),
         )
 
@@ -439,25 +493,6 @@ class RoboCasaDatasetLoader:
             if body is not None:
                 bodies[reference] = body
         return bodies
-
-    @staticmethod
-    def _apply_joint_positions(world: World, environment: Any) -> None:
-        """
-        Set every joint of ``world`` that the environment's simulation also has to the
-        position the simulation holds it at, such as that of a drawer the task opened.
-
-        :param world: The world the task scene was parsed into.
-        :param environment: The reset environment the scene was composed in.
-        """
-        model, data = environment.sim.model, environment.sim.data
-        joint_ids = {model.joint_id2name(joint): joint for joint in range(model.njnt)}
-        for connection in world.connections:
-            if not isinstance(connection, ActiveConnection1DOF):
-                continue
-            joint = joint_ids.get(connection.name.name)
-            if joint is None:
-                continue
-            connection.position = float(data.qpos[model.jnt_qposadr[joint]])
 
     @staticmethod
     def _available_task_names() -> list[str]:

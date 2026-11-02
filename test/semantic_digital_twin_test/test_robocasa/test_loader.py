@@ -1,3 +1,5 @@
+from enum import StrEnum
+
 import pytest
 
 pytest.importorskip("robocasa", reason="robocasa is not installed")
@@ -20,6 +22,7 @@ from semantic_digital_twin.semantic_annotations.semantic_annotations import (
     Dishwasher,
     Floor,
 )
+from krrood_spatial_math.spatial_types import Point3
 
 
 @pytest.fixture(scope="session")
@@ -274,4 +277,79 @@ def test_load_task_keeps_the_joints_where_robocasa_set_them(robocasa_loader):
 
     assert task.world.get_connection_by_name(drawer_joint).position == pytest.approx(
         opened_to
+    )
+
+
+# %% RoboCasa's own success check
+
+
+class CounterToSinkBody(StrEnum):
+    """
+    Bodies RoboCasa places for ``PickPlaceCounterToSink``, by the names it gives them.
+    """
+
+    OBJECT = "obj_main"
+    """
+    The object to put into the sink.
+    """
+
+    IN_THE_SINK = "distr_sink_main"
+    """
+    The distractor RoboCasa places inside the sink.
+    """
+
+
+@pytest.fixture
+def counter_to_sink(robocasa_loader):
+    from robocasa.models.scenes.scene_registry import LayoutType, StyleType
+
+    return robocasa_loader.load_task(
+        "PickPlaceCounterToSink",
+        layout_id=LayoutType.LAYOUT001,
+        style_id=StyleType.STYLE001,
+        seed=0,
+    )
+
+
+def put_the_object_into_the_sink(task) -> None:
+    """
+    Move the task's object to where RoboCasa placed the distractor inside the sink.
+    """
+    world = task.world
+    world.get_body_by_name(
+        CounterToSinkBody.OBJECT
+    ).parent_connection.origin = world.compute_forward_kinematics(
+        world.root, world.get_body_by_name(CounterToSinkBody.IN_THE_SINK)
+    )
+
+
+def far_from_the_objects(task) -> Point3:
+    """
+    :return: Where RoboCasa places its robot's base on the floor, far from every object.
+    """
+    return task.robot_base_pose.position
+
+
+def test_robocasa_does_not_count_the_object_left_on_the_counter_as_success(
+    counter_to_sink,
+):
+    assert not counter_to_sink.succeeds(far_from_the_objects(counter_to_sink))
+
+
+def test_robocasa_counts_the_object_in_the_sink_and_let_go_as_success(
+    counter_to_sink,
+):
+    put_the_object_into_the_sink(counter_to_sink)
+
+    assert counter_to_sink.succeeds(far_from_the_objects(counter_to_sink))
+
+
+def test_robocasa_does_not_count_the_object_in_the_sink_still_held_as_success(
+    counter_to_sink,
+):
+    put_the_object_into_the_sink(counter_to_sink)
+    world = counter_to_sink.world
+
+    assert not counter_to_sink.succeeds(
+        world.get_body_by_name(CounterToSinkBody.OBJECT).global_pose.position
     )
