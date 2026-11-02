@@ -6,6 +6,7 @@ stands for its hand to reach a pose, and the task performed in MuJoCo.
 
 from __future__ import annotations
 
+import logging
 import math
 from abc import ABC, abstractmethod
 from copy import deepcopy
@@ -56,6 +57,9 @@ from experiments.hsr_robocasa.arm_plane import HSRBArmPlane
 
 with robocasa_version_assertions_relaxed():
     from robocasa.models.scenes.scene_registry import LayoutType, StyleType
+
+
+logger = logging.getLogger(__name__)
 
 # %% where the HSR stands
 
@@ -243,6 +247,30 @@ class HSRRoboCasaTask(RobotDemonstration, ABC):
             impratio=self.impedance_ratio,
             noslip_iterations=self.no_slip_iterations,
         )
+
+    # %% RoboCasa's verdict
+
+    def run(self) -> World:
+        """
+        Performs the task, and logs RoboCasa's own verdict on it, see :meth:`succeeds`,
+        also when the plan fails.
+        """
+        try:
+            return super().run()
+        finally:
+            logger.info(
+                "RoboCasa's success check of %s: %s",
+                self.task_name,
+                "passed" if self.succeeds() else "failed",
+            )
+
+    def succeeds(self) -> bool:
+        """
+        :return: Whether RoboCasa's own success check of the task holds for the kitchen
+            as it stands, the HSR's tool frame standing in for RoboCasa's gripper.
+        """
+        tool_frame = self.robot_in(self.task.world).all_arms[0].end_effector.tool_frame
+        return self.task.succeeds(tool_frame.global_pose.position)
 
     # %% reading the scene
 

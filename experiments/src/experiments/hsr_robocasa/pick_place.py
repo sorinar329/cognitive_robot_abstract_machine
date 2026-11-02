@@ -27,6 +27,7 @@ from cramph.composites import Sequence
 from cramph.context import StatechartContext
 from cramph.statechart import Statechart
 from semantic_digital_twin.datastructures.definitions import TorsoState
+from semantic_digital_twin.robots.hsrb import HSRBJoint
 from semantic_digital_twin.grasping.grasp_candidates import GraspCandidate
 from semantic_digital_twin.semantic_annotations.mixins import HasGraspCandidates
 from semantic_digital_twin.spatial_types import Point2, Point3
@@ -59,6 +60,11 @@ class TaskObject(StrEnum):
     OBJECT = "obj_main"
     """
     The object to pick up and set down.
+    """
+
+    CONTAINER = "container_main"
+    """
+    The container, such as a plate, a task places the object on or in.
     """
 
 
@@ -174,10 +180,15 @@ class HSRPickPlaceTask(HSRRoboCasaTask, ABC):
         """
         The object to pick up and set down.
         """
+        return self.task_object(TaskObject.OBJECT)
+
+    def task_object(self, name: str) -> Body:
+        """
+        :param name: The name RoboCasa gives one of the objects it places for the task.
+        :return: That object's root body.
+        """
         return next(
-            body
-            for body in self.task.manipulated_objects
-            if body.name.name == TaskObject.OBJECT
+            body for body in self.task.manipulated_objects if body.name.name == name
         )
 
     @property
@@ -257,6 +268,20 @@ class HSRPickPlaceTask(HSRRoboCasaTask, ABC):
             world.transform(world_T_grasp.pose, self.moved_object),
         )
 
+    def hand_length(self, world: World) -> float:
+        """
+        :return: How far the tool frame stands from the HSR's wrist flex joint, in
+            metres: the stretch the wrist trails behind the tool frame along an
+            approach.
+        """
+        wrist = world.get_connection_by_name(HSRBJoint.WRIST_FLEX).child
+        tool_frame = self.robot_in(world).all_arms[0].end_effector.tool_frame
+        return float(
+            np.linalg.norm(
+                world.compute_forward_kinematics_np(wrist, tool_frame)[:3, 3]
+            )
+        )
+
     def hand_half_width(self, world: World) -> float:
         """
         :return: How far, at most, the hand reaches out to a side of its approach, in
@@ -284,19 +309,24 @@ class HSRPickPlaceTask(HSRRoboCasaTask, ABC):
         return float(np.linalg.norm(across, axis=1).max())
 
     def reach_space(
-        self, world: World, approach_clearance: float, hand_half_width: float
+        self,
+        world: World,
+        approach_clearance: float,
+        hand_half_width: float,
+        hand_length: float,
     ) -> VolumetricGraphOfBoundingBoxes:
         """
         :return: The free space around the object that the middle of the hand can pass
             through: everything but the object kept ``hand_half_width`` clear of, as
-            far around the object as an approach starts and up to :attr:`lift` above
-            it.
+            far around the object as an approach starts, and the wrist trailing
+            ``hand_length`` behind it, and up to :attr:`lift` above it.
         """
         extent = self.extent(self.moved_object)
         center = extent.center.to_np()[:3]
         around = (
             np.linalg.norm([extent.width, extent.depth, extent.height]) / 2
             + approach_clearance
+            + hand_length
             + hand_half_width
         )
         search_space = BoundingBoxCollection(
@@ -328,13 +358,15 @@ class HSRPickPlaceTask(HSRRoboCasaTask, ABC):
         picking: GraspPoseSequence,
         reach_space: VolumetricGraphOfBoundingBoxes,
         hand_half_width: float,
+        hand_length: float,
     ) -> bool:
         """
         :return: Whether the hand comes in along a straight line through
-            ``reach_space`` from where its approach starts to ``hand_half_width`` short
-            of the object, and the space from that far above the object's top up to
-            :attr:`lift` above it is free; the last stretch to the object, where the
-            fingers may touch what it rests on, is not checked.
+            ``reach_space`` from where its approach starts, its wrist trailing
+            ``hand_length`` behind it, to ``hand_half_width`` short of the object, and
+            the space from that far above the object's top up to :attr:`lift` above it
+            is free; the last stretch to the object, where the fingers may touch what it
+            rests on, is not checked.
         """
         extent = self.extent(self.moved_object)
         center = extent.center.to_np()[:3]
@@ -349,7 +381,8 @@ class HSRPickPlaceTask(HSRRoboCasaTask, ABC):
         top = center + half_sizes[2] * up
         segments = [
             (
-                self.in_kitchen_frame(world, [picking.pre_grasp])[0][:3, 3],
+                self.in_kitchen_frame(world, [picking.pre_grasp])[0][:3, 3]
+                - hand_length * approach,
                 center - (to_the_surface + hand_half_width) * approach,
             ),
             (top + hand_half_width * up, top + self.lift * up),
@@ -520,6 +553,7 @@ class HSRPickPlaceTask(HSRRoboCasaTask, ABC):
         arm = robot.all_arms[0]
         approaches = self.approaches(world)
         hand_half_width = self.hand_half_width(world)
+        hand_length = self.hand_length(world)
         pick_ups = [
             PickUpAction(
                 grasp=self.grasp(world, approach), arm=arm, retreat_distance=self.lift
@@ -527,7 +561,7 @@ class HSRPickPlaceTask(HSRRoboCasaTask, ABC):
             for approach in approaches
         ]
         reach_space = self.reach_space(
-            world, pick_ups[0].approach_clearance, hand_half_width
+            world, pick_ups[0].approach_clearance, hand_half_width, hand_length
         )
         blocked = None
         for pick_up in pick_ups:
@@ -545,7 +579,12 @@ class HSRPickPlaceTask(HSRRoboCasaTask, ABC):
             if picking_pose is None:
                 continue
             if self.hand_path_is_free(
-                world, pick_up.grasp, picking, reach_space, hand_half_width
+                world,
+                pick_up.grasp,
+                picking,
+                reach_space,
+                hand_half_width,
+                hand_length,
             ):
                 return Picking(pick_up=pick_up, standing_pose=picking_pose)
             blocked = blocked or Picking(pick_up=pick_up, standing_pose=picking_pose)
