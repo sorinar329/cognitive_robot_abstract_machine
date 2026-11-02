@@ -1,4 +1,5 @@
 import inspect
+from copy import deepcopy
 import math
 
 import numpy as np
@@ -597,6 +598,49 @@ def test_joint_dynamics_custom_values():
     assert_allclose(joint_prop_dict["damping"], damping)
 
 
+@pytest.fixture
+def damped_free_connection(world_with_two_bodies) -> Connection6DoF:
+    """
+    A free connection between the two bodies, with dynamics other than the default
+    ones.
+    """
+    world, parent, child = world_with_two_bodies
+    with world.modify_world():
+        connection = Connection6DoF.create_with_dofs(
+            world,
+            parent,
+            child,
+            dynamics=JointDynamics(armature=0.002, dry_friction=0.01, damping=0.0005),
+        )
+        world.add_connection(connection)
+    return connection
+
+
+def test_a_free_connection_keeps_its_dynamics_when_its_body_moves_to_another_parent(
+    world_with_two_bodies, damped_free_connection
+):
+    world, parent, child = world_with_two_bodies
+    with world.modify_world():
+        new_parent = Body(name=PrefixedName("new_parent"))
+        world.add_kinematic_structure_entity(new_parent)
+        world.add_connection(FixedConnection(parent=parent, child=new_parent))
+
+    world.move_branch(child, new_parent)
+
+    assert child.parent_connection.dynamics == damped_free_connection.dynamics
+
+
+def test_a_free_connection_keeps_its_dynamics_in_a_copy_of_its_world(
+    world_with_two_bodies, damped_free_connection
+):
+    world, parent, child = world_with_two_bodies
+
+    copied_world = deepcopy(world)
+
+    copied_child = copied_world.get_kinematic_structure_entity_by_id(child.id)
+    assert copied_child.parent_connection.dynamics == damped_free_connection.dynamics
+
+
 # %% json round trips
 
 
@@ -605,6 +649,14 @@ def test_joint_dynamics_custom_values():
     [
         (FixedConnection, {}),
         (Connection6DoF, {}),
+        (
+            Connection6DoF,
+            {
+                "dynamics": JointDynamics(
+                    armature=0.002, dry_friction=0.01, damping=0.0005
+                )
+            },
+        ),
         (OmniDrive, {}),
         (DifferentialDrive, {}),
         (PrismaticConnection, {"axis": Vector3.Y(), "multiplier": 2.0, "offset": 0.5}),

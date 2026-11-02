@@ -24,6 +24,7 @@ from krrood_spatial_math.spatial_types import (
     Pose,
 )
 from semantic_digital_twin.world import World
+from semantic_digital_twin.world_description.connection_properties import JointDynamics
 from semantic_digital_twin.world_description.connections import (
     Connection6DoF,
     FixedConnection,
@@ -1886,3 +1887,36 @@ def test_a_stepped_simulation_advances_exactly_the_requested_time(falling_box_wo
 
     fallen = 0.5 * 9.81 * duration.total_seconds() ** 2
     assert height == pytest.approx(1.0 - fallen, abs=0.01)
+
+
+# %% free joints
+
+
+def test_a_free_joint_is_built_with_the_dynamics_of_its_connection(tmp_path):
+    dynamics = JointDynamics(armature=0.002, dry_friction=0.01, damping=0.0005)
+    world = World()
+    with world.modify_world():
+        root = Body(name=PrefixedName("root"))
+        world.add_body(root)
+        free_body = Body(
+            name=PrefixedName("free_body"),
+            collision=ShapeCollection([Box(scale=Scale(0.03, 0.03, 0.03))]),
+        )
+        world.add_kinematic_structure_entity(free_body)
+        world.add_connection(
+            Connection6DoF.create_with_dofs(
+                world=world, parent=root, child=free_body, dynamics=dynamics
+            )
+        )
+    builder = MujocoBuilder()
+    builder.build_world(world=world, file_path=str(tmp_path / "scene.xml"))
+
+    model = builder.spec.compile()
+
+    first_degree_of_freedom = model.body_dofadr[model.body("free_body").id]
+    degrees_of_freedom = slice(first_degree_of_freedom, first_degree_of_freedom + 6)
+    assert list(model.dof_armature[degrees_of_freedom]) == [dynamics.armature] * 6
+    assert (
+        list(model.dof_frictionloss[degrees_of_freedom]) == [dynamics.dry_friction] * 6
+    )
+    assert list(model.dof_damping[degrees_of_freedom]) == [dynamics.damping] * 6

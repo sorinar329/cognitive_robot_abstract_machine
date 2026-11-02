@@ -7,6 +7,7 @@ import pytest
 
 from semantic_digital_twin.adapters.mjcf import MJCFParser
 from semantic_digital_twin.adapters.multi_sim import MujocoLight, MujocoTendon
+from semantic_digital_twin.world_description.connection_properties import JointDynamics
 from semantic_digital_twin.world_description.connections import FixedConnection
 
 MJCF_DIR = os.path.join(
@@ -449,3 +450,21 @@ def test_parsing_a_scene_without_tendons_does_not_compile_it(monkeypatch):
     world = MJCFParser(file_path).create_world()
 
     assert world.root.name.name == root_name
+
+
+# %% free joints
+
+
+def test_a_free_joint_keeps_the_dynamics_mujoco_reads():
+    file_path = os.path.join(DATASET_DIR, "damped_free_body_scene.xml")
+    model = mujoco.MjModel.from_xml_path(file_path)
+    first_degree_of_freedom = model.jnt_dofadr[model.joint("marshmallow_free").id]
+
+    world = MJCFParser(file_path).create_world()
+
+    connection = world.get_body_by_name("marshmallow").parent_connection
+    assert connection.dynamics == JointDynamics(
+        armature=float(model.dof_armature[first_degree_of_freedom]),
+        dry_friction=float(model.dof_frictionloss[first_degree_of_freedom]),
+        damping=float(model.dof_damping[first_degree_of_freedom]),
+    )
