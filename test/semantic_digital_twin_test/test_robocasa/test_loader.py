@@ -129,6 +129,27 @@ def test_load_task_manipulated_objects_are_in_world(robocasa_loader):
         assert manipulated_object in task.world.bodies
 
 
+def test_load_task_names_the_fixtures_the_task_refers_to(robocasa_loader):
+    """
+    The fixtures a task refers to, such as the drawer to open, are given by the name
+    the task refers to them by, as their bodies in the loaded world.
+    """
+    from robocasa.models.scenes.scene_registry import LayoutType, StyleType
+
+    environment = robocasa_loader.build_task_environment(
+        "OpenDrawer",
+        layout_id=LayoutType.LAYOUT001,
+        style_id=StyleType.STYLE001,
+        seed=0,
+    )
+
+    task = robocasa_loader.load_task_from_environment(environment)
+
+    assert task.referenced_fixtures["drawer"].name.name.startswith(
+        environment.drawer.name
+    )
+
+
 def test_load_task_unknown_name_raises(robocasa_loader):
     """
     Requesting a task that is not registered raises a descriptive error.
