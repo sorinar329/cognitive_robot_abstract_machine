@@ -45,7 +45,6 @@ from semantic_digital_twin.spatial_types.spatial_types import (
 from semantic_digital_twin.specifications.robots import RobotSpecification
 from semantic_digital_twin.specifications.worlds import WorldSpecification
 from semantic_digital_twin.world import World
-from semantic_digital_twin.world_description.connections import FixedConnection
 from semantic_digital_twin.world_description.geometry import VolumetricBoundingBox
 from semantic_digital_twin.world_description.graph_of_convex_sets.boxes import (
     PlanarGraphOfBoundingBoxes,
@@ -142,7 +141,7 @@ class HSRRoboCasaTask(RobotDemonstration, ABC):
 
     task: RoboCasaTask = field(init=False)
     """
-    The task as RoboCasa composed it, loaded by :meth:`populate_scene`.
+    The task as RoboCasa composed it, loaded by :meth:`build_scene`.
     """
 
     @classproperty
@@ -161,22 +160,11 @@ class HSRRoboCasaTask(RobotDemonstration, ABC):
 
     # %% the kitchen and the HSR in it
 
-    def scene_specification(self) -> WorldSpecification:
+    def build_scene(self) -> World:
         """
-        An empty map: RoboCasa composes the kitchen, see :meth:`populate_scene`.
-        """
-        return WorldSpecification()
-
-    def robot_specification(self) -> RobotSpecification:
-        return RobotSpecification(self.used_robot)
-
-    def is_scene_populated(self, world: World) -> bool:
-        return bool(world.get_semantic_annotations_by_type(Floor))
-
-    def populate_scene(self, world: World) -> None:
-        """
-        Compose the RoboCasa task, its kitchen at :attr:`counter_height`, and put it
-        into ``world``.
+        The kitchen RoboCasa composes for the task, at :attr:`counter_height`, with the
+        task's objects: RoboCasa's own world, so that the objects' free joints stay at
+        the top level of the scene, where MuJoCo needs them.
         """
         self.task = RoboCasaDatasetLoader().load_task(
             self.task_name,
@@ -191,11 +179,25 @@ class HSRRoboCasaTask(RobotDemonstration, ABC):
                 ).fixture_updates_for_counter_height(self.counter_height)
             ),
         )
-        kitchen = self.task.world
-        world.merge_world(
-            kitchen,
-            root_connection=FixedConnection(parent=world.root, child=kitchen.root),
-        )
+        return self.task.world
+
+    def scene_specification(self) -> WorldSpecification:
+        """
+        Not read: :meth:`build_scene` takes RoboCasa's world as the scene.
+        """
+        return WorldSpecification()
+
+    def robot_specification(self) -> RobotSpecification:
+        return RobotSpecification(self.used_robot)
+
+    def is_scene_populated(self, world: World) -> bool:
+        return bool(world.get_semantic_annotations_by_type(Floor))
+
+    def populate_scene(self, world: World) -> None:
+        """
+        Nothing to add: RoboCasa places the task's objects itself, see
+        :meth:`build_scene`.
+        """
 
     def build_simulated_world(self) -> World:
         """

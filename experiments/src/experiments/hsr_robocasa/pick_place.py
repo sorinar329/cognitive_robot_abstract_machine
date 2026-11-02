@@ -35,12 +35,12 @@ from semantic_digital_twin.spatial_types.spatial_types import (
     Pose,
 )
 from semantic_digital_twin.world import World
-from semantic_digital_twin.world_description.geometry import (
-    BoundingBoxCollection,
-    VolumetricBoundingBox,
-)
+from semantic_digital_twin.world_description.geometry import VolumetricBoundingBox
 from semantic_digital_twin.world_description.graph_of_convex_sets.boxes import (
     VolumetricGraphOfBoundingBoxes,
+)
+from semantic_digital_twin.world_description.shape_collection import (
+    BoundingBoxCollection,
 )
 from semantic_digital_twin.world_description.world_entity import Body
 
@@ -77,6 +77,23 @@ class Approach:
     tilt: float
     """
     How steeply the hand comes down, in radians below the horizontal.
+    """
+
+
+@dataclass
+class Picking:
+    """
+    How the HSR picks the object up: the pick-up, and where it stands for it.
+    """
+
+    pick_up: PickUpAction
+    """
+    The pick-up.
+    """
+
+    standing_pose: Pose
+    """
+    Where the HSR stands to pick the object up.
     """
 
 
@@ -368,7 +385,8 @@ class HSRPickPlaceTask(HSRRoboCasaTask, ABC):
     def receptacle_floor(self) -> VolumetricBoundingBox:
         """
         The floor of the receptacle, in the kitchen's frame: the widest of the convex
-        pieces RoboCasa builds its collision geometry from.
+        pieces RoboCasa builds its collision geometry from, the lowest of them where
+        several are as wide, as a cabinet's bottom and top are.
         """
         pieces = [
             piece
@@ -377,7 +395,15 @@ class HSRPickPlaceTask(HSRRoboCasaTask, ABC):
                 body._world.root
             ).bounding_boxes
         ]
-        return max(pieces, key=lambda piece: piece.width * piece.depth)
+        widest = max(piece.width * piece.depth for piece in pieces)
+        return min(
+            (
+                piece
+                for piece in pieces
+                if math.isclose(piece.width * piece.depth, widest, rel_tol=1e-3)
+            ),
+            key=lambda piece: piece.max_z,
+        )
 
     @property
     def release_height(self) -> float:
@@ -451,9 +477,45 @@ class HSRPickPlaceTask(HSRRoboCasaTask, ABC):
         """
         :return: The object taken by the first of the :meth:`approaches` whose hand
             path is free, see :meth:`hand_path_is_free`, and that the HSR has somewhere
-            to stand for picking, set down from where the HSR reaches the receptacle,
-            or, where it stands nowhere to reach it, tried from the floor nearest it.
-        :raises NoApproachError: If no approach is left.
+            to stand for, or, where no hand path is free, tried by the first approach
+            the HSR has somewhere to stand for; set down from where the HSR reaches the
+            receptacle, or, where it stands nowhere to reach it, tried from the floor
+            nearest it.
+        :raises NoApproachError: If the HSR has nowhere to stand for any approach.
+        """
+        robot = self.robot_in(world)
+        arm = robot.all_arms[0]
+        search = self.stance_search(world)
+        picking = self.picking(world, search)
+        place = PlaceAction(
+            object_designator=self.graspable(world),
+            target_location=self.goal(world),
+        )
+        placing = place.grasp_pose_sequence(
+            picking.pick_up.grasp.moved_to(place.target_location),
+            arm.end_effector,
+            picking.pick_up.grasp,
+        )
+        placing_goals = self.in_kitchen_frame(
+            world, [placing.grasp, placing.retreat, placing.pre_grasp]
+        )
+        placing_pose = self.standing_pose(
+            world, placing_goals, picking.standing_pose, search
+        ) or self.attempting_pose(world, placing_goals[0], search)
+        return PickingAndPlacing(
+            pick_up=picking.pick_up,
+            picking_pose=picking.standing_pose,
+            place=place,
+            placing_pose=placing_pose,
+        )
+
+    def picking(self, world: World, search: StanceSearch) -> Picking:
+        """
+        :return: The pick-up by the first of the :meth:`approaches` whose hand path is
+            free and that the HSR has somewhere to stand for, with where it stands; or,
+            where no hand path is free, by the first approach the HSR has somewhere to
+            stand for.
+        :raises NoApproachError: If the HSR has nowhere to stand for any approach.
         """
         robot = self.robot_in(world)
         arm = robot.all_arms[0]
@@ -468,17 +530,13 @@ class HSRPickPlaceTask(HSRRoboCasaTask, ABC):
             ).approach_clearance,
             hand_half_width,
         )
-        search = self.stance_search(world)
+        blocked = None
         for approach in approaches:
             grasp = self.grasp(world, approach)
             pick_up = PickUpAction(grasp=grasp, arm=arm, retreat_distance=self.lift)
             picking = pick_up.grasp_pose_sequence(
                 grasp.world_T_grasp, arm.end_effector, grasp
             )
-            if not self.hand_path_is_free(
-                world, grasp, picking, reach_space, hand_half_width
-            ):
-                continue
             picking_pose = self.standing_pose(
                 world,
                 self.in_kitchen_frame(
@@ -489,26 +547,19 @@ class HSRPickPlaceTask(HSRRoboCasaTask, ABC):
             )
             if picking_pose is None:
                 continue
-            place = PlaceAction(
-                object_designator=self.graspable(world),
-                target_location=self.goal(world),
-            )
-            placing = place.grasp_pose_sequence(
-                grasp.moved_to(place.target_location), arm.end_effector, grasp
-            )
-            placing_goals = self.in_kitchen_frame(
-                world, [placing.grasp, placing.retreat, placing.pre_grasp]
-            )
-            placing_pose = self.standing_pose(
-                world, placing_goals, picking_pose, search
-            ) or self.attempting_pose(world, placing_goals[0], search)
-            return PickingAndPlacing(
-                pick_up=pick_up,
-                picking_pose=picking_pose,
-                place=place,
-                placing_pose=placing_pose,
-            )
-        raise NoApproachError(self.moved_object)
+            if self.hand_path_is_free(
+                world, grasp, picking, reach_space, hand_half_width
+            ):
+                return Picking(pick_up=pick_up, standing_pose=picking_pose)
+            blocked = blocked or Picking(pick_up=pick_up, standing_pose=picking_pose)
+        if blocked is None:
+            raise NoApproachError(self.moved_object)
+        logger.warning(
+            "No hand path to %s is free; the HSR tries the first approach it has "
+            "somewhere to stand for.",
+            self.moved_object.name.name,
+        )
+        return blocked
 
     def attempting_pose(
         self, world: World, tool_frame_goal: np.ndarray, search: StanceSearch
