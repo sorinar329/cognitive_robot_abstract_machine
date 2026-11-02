@@ -65,3 +65,12 @@ def test_the_arm_is_brought_in_joint_space_to_where_the_pick_up_begins(
         np.linalg.norm(tool_frame[:3, 3] - pre_grasp[:3, 3])
         <= HSRBArmPlane().reach_resolution
     )
+
+
+def test_the_pick_up_and_the_placing_accept_the_tool_frame_within_the_tasks_tolerance(
+    task: PickPlaceCounterToMicrowave, task_world: World
+):
+    steps = task.picking_and_placing(task_world)
+
+    assert steps.pick_up.position_threshold == task.tool_frame_tolerance
+    assert steps.place.position_threshold == task.tool_frame_tolerance

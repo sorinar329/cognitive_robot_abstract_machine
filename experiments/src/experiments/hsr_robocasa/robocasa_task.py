@@ -144,6 +144,13 @@ class HSRRoboCasaTask(RobotDemonstration, ABC):
     fingers hold it.
     """
 
+    tool_frame_tolerance: float = 0.015
+    """
+    How far, in metres, the tool frame may stop from a goal of the task's motions: the
+    base stops within about a centimetre of where it is sent, and the arm, swinging in
+    its plane, cannot make up for that sideways.
+    """
+
     task: RoboCasaTask = field(init=False)
     """
     The task as RoboCasa composed it, loaded by :meth:`build_scene`.

@@ -538,6 +538,7 @@ class HSRPickPlaceTask(HSRRoboCasaTask, ABC):
         place = PlaceAction(
             object_designator=self.graspable(world),
             target_location=self.goal(world),
+            position_threshold=self.tool_frame_tolerance,
         )
         placing = place.grasp_pose_sequence(
             picking.pick_up.grasp.moved_to(place.target_location),
@@ -574,7 +575,10 @@ class HSRPickPlaceTask(HSRRoboCasaTask, ABC):
         hand_length = self.hand_length(world)
         pick_ups = [
             PickUpAction(
-                grasp=self.grasp(world, approach), arm=arm, retreat_distance=self.lift
+                grasp=self.grasp(world, approach),
+                arm=arm,
+                retreat_distance=self.lift,
+                position_threshold=self.tool_frame_tolerance,
             )
             for approach in approaches
         ]
