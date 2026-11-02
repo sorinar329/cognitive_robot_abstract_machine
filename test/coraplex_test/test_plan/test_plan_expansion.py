@@ -430,14 +430,16 @@ def test_pick_up_motions_follow_the_object_moved_after_expansion(
     captured the object's pose in world coordinates could never act on a pose corrected
     in between (for example by a detection).
 
-    Keeping the motion targets in the object's own frame is what lets them follow it.
+    Keeping the targets of the motions up to the grasp in the object's own frame is what
+    lets them follow it; the lift starts from wherever the hand closed, so it follows
+    too.
     """
     world, view, extensions = pr2_apartment_context
     milk = world.get_semantic_annotations_by_type(Milk)[0]
     milk_body = milk.root
 
     plan = PickUpAction(grasp=milk.grasp_candidates()[0], arm=view.right_arm)
-    targets = [
+    *targets, _lift = [
         node.goal_pose
         for node in motion_nodes_of(plan, extensions)
         if isinstance(node, CartesianPose)

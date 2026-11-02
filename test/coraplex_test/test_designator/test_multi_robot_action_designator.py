@@ -2041,6 +2041,11 @@ class CupForEachArm:
     the right arm.
     """
 
+    places_before_pick_up: list[HomogeneousTransformationMatrix]
+    """
+    Where each cup stands before it is picked up, in the order of :attr:`pick_ups`.
+    """
+
     def extensions_parking_first(self) -> list[ContextExtension]:
         """
         :return: The context extensions of the plans of the robot, parking its arms
@@ -2053,22 +2058,21 @@ class CupForEachArm:
 
     def places(self) -> list[PlaceAction]:
         """
-        :return: The actions that set each cup down to the side of where it is now, the
-            first far away and the second close by, so that one gripper opens while the
-            other arm is still on its way.
+        :return: The actions that set each cup down to the side of where it stood
+            before it was picked up, the first far away and the second close by, so
+            that one gripper opens while the other arm is still on its way.
         """
         return [
             PlaceAction(
                 object_designator=pick_up.grasp.graspable,
-                target_location=self.world.transform(
-                    Pose.from_xyz_rpy(
-                        y=sideways_distance,
-                        reference_frame=pick_up.grasp.graspable.root,
-                    ),
-                    self.world.root,
-                ),
+                target_location=(
+                    place_before_pick_up
+                    @ HomogeneousTransformationMatrix.from_xyz_rpy(y=sideways_distance)
+                ).pose,
             )
-            for pick_up, sideways_distance in zip(self.pick_ups, [0.3, -0.02])
+            for pick_up, place_before_pick_up, sideways_distance in zip(
+                self.pick_ups, self.places_before_pick_up, [0.3, -0.02]
+            )
         ]
 
 
@@ -2086,20 +2090,14 @@ def cup_for_each_arm(multiple_robot_apartment_context) -> CupForEachArm:
     world.notify_state_change()
     # The cups are out of reach and at different distances, so the base has to move
     # and one arm is done before the other.
-    near_cup = add_cup(
-        world,
-        "near_cup",
-        HomogeneousTransformationMatrix.from_xyz_rpy(
-            x=1.2, y=-1.8, z=0.8, reference_frame=world.root
-        ),
+    world_T_near_cup = HomogeneousTransformationMatrix.from_xyz_rpy(
+        x=1.2, y=-1.8, z=0.8, reference_frame=world.root
     )
-    far_cup = add_cup(
-        world,
-        "far_cup",
-        HomogeneousTransformationMatrix.from_xyz_rpy(
-            x=1.5, y=-2.2, z=0.8, reference_frame=world.root
-        ),
+    world_T_far_cup = HomogeneousTransformationMatrix.from_xyz_rpy(
+        x=1.5, y=-2.2, z=0.8, reference_frame=world.root
     )
+    near_cup = add_cup(world, "near_cup", world_T_near_cup)
+    far_cup = add_cup(world, "far_cup", world_T_far_cup)
     return CupForEachArm(
         world=world,
         context_extensions=extensions,
@@ -2107,6 +2105,7 @@ def cup_for_each_arm(multiple_robot_apartment_context) -> CupForEachArm:
             PickUpAction.from_above(near_cup, left_arm),
             PickUpAction.from_above(far_cup, right_arm),
         ],
+        places_before_pick_up=[world_T_near_cup, world_T_far_cup],
     )
 
 

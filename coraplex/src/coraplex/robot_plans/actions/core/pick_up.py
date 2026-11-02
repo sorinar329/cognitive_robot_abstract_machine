@@ -203,17 +203,33 @@ class PickUpAction(
         return [AllowCollisionForEndEffector(end_effector=self.arm.end_effector)]
 
     def create_steps(self) -> list[StatechartNode]:
-        lift_to_pose = self.grasp_pose_sequence(
+        tool_goal_at_grasp = self.grasp_pose_sequence(
             self.grasp.grasp_pose, self.arm.end_effector, self.grasp
-        ).retreat
+        ).grasp
         return [
             *self._grasp_steps(),
             self.tool_center_point_goal(
-                lift_to_pose,
+                self._lift_from_the_hand(tool_goal_at_grasp),
                 self.arm,
                 max_linear_velocity=self.lift_linear_velocity,
             ),
         ]
+
+    def _lift_from_the_hand(self, tool_goal_at_grasp: Pose) -> Pose:
+        """
+        :param tool_goal_at_grasp: The tool frame goal at the grasp, whose orientation
+            tells which way is up from the hand.
+        :return: The tool frame goal :attr:`retreat_distance` straight up from where the
+            tool frame stands once the fingers closed, keeping its orientation, so an
+            object that turned between the fingers as they closed does not turn the
+            hand.
+        """
+        world = self.world
+        world_R_tool = world.transform(tool_goal_at_grasp, world.root).to_np()[:3, :3]
+        tool_P_lift = world_R_tool.T @ np.array([0.0, 0.0, self.retreat_distance])
+        return Pose.from_xyz_rpy(
+            *tool_P_lift, reference_frame=self.arm.end_effector.tool_frame
+        )
 
 
 @dataclass(eq=False, repr=False, kw_only=True)
