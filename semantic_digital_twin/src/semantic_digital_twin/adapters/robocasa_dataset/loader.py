@@ -115,6 +115,12 @@ class RoboCasaTask:
     for spawning the ``semantic_digital_twin``-owned robot.
     """
 
+    referenced_fixtures: dict[str, Body] = field(default_factory=dict)
+    """
+    The fixtures the task refers to, such as the drawer to open or the sink to place
+    into, as their bodies in :attr:`world`, by the name the task refers to them by.
+    """
+
 
 def _mjcf_document_from_element_copy(element: ET.Element) -> str:
     """
@@ -416,7 +422,23 @@ class RoboCasaDatasetLoader:
                 *episode_metadata["init_robot_base_pos"],
                 *episode_metadata["init_robot_base_ori"],
             ),
+            referenced_fixtures=self._referenced_fixtures(world, environment),
         )
+
+    def _referenced_fixtures(self, world: World, environment: Any) -> dict[str, Body]:
+        """
+        :param world: The world the task scene was parsed into.
+        :param environment: The reset environment the scene was composed in.
+        :return: The bodies of the fixtures the task refers to, by the name it refers
+            to them by.
+        """
+        bodies = {}
+        for reference, value in environment.fixture_refs.items():
+            fixture = value[0] if isinstance(value, tuple) else value
+            body = self._find_body(world, fixture.name)
+            if body is not None:
+                bodies[reference] = body
+        return bodies
 
     @staticmethod
     def _available_task_names() -> list[str]:
