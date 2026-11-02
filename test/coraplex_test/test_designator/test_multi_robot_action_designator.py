@@ -130,6 +130,7 @@ from semantic_digital_twin.semantic_annotations.semantic_annotations import (
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.spatial_types import (
     HomogeneousTransformationMatrix,
+    Point2,
     Point3,
     Quaternion,
     Vector3,
@@ -928,6 +929,74 @@ def test_gcs_navigation_takes_a_waypoints_height_from_that_waypoints_frame(
             robot.root.global_transform, pose.reference_frame
         )
         assert float(pose.z) == pytest.approx(float(base_in_pose_frame.z))
+
+
+def test_gcs_navigation_plans_on_the_floor_a_robot_has_sunk_into(
+    multiple_robot_apartment_context,
+):
+    """
+    A simulated base settles a little into the floor it stands on, which leaves it
+    standing on that floor rather than on what lies below it. The mat spans the
+    apartment, so that the path to the target is laid out on it too.
+    """
+    world, robot, extensions = multiple_robot_apartment_context
+    standing = robot.root.global_pose.to_np()
+    thickness = 0.01
+    sunk_into = 0.001
+    span = 20.0
+    with world.modify_world():
+        mat = Floor.create_with_new_body_in_world(
+            name="mat",
+            world=world,
+            world_root_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(
+                standing[0, 3],
+                standing[1, 3],
+                standing[2, 3] + sunk_into - thickness / 2,
+                reference_frame=world.root,
+            ),
+            scale=Scale(span, span, thickness),
+        )
+
+    action = PathPlanningNavigateAction(
+        target=Pose.from_xyz_rpy(5, 1, 0, reference_frame=world.root)
+    )
+    attach_to_statechart(action, extensions)
+
+    assert action._floor is mat
+
+
+def test_gcs_navigation_leaves_from_the_free_point_nearest_a_robot_within_a_margin(
+    multiple_robot_apartment_context,
+):
+    """
+    A robot that stopped a little closer to furniture than its base radius still drives
+    off, from the free point nearest where it stands.
+    """
+    world, robot, extensions = multiple_robot_apartment_context
+    action = PathPlanningNavigateAction(
+        target=Pose.from_xyz_rpy(5, 1, 0, reference_frame=world.root)
+    )
+    attach_to_statechart(action, extensions)
+    navigable_space = action._floor.navigable_space(
+        robot,
+        world.collision_manager.external_collision_rule(
+            robot.mobile_base.root
+        ).violated_distance,
+    )
+    table = Point2.from_pose(world.get_body_by_name("table_area_main").global_pose)
+    edge = world.transform(navigable_space.nearest_free_point(table), world.root)
+    towards_the_table = table.to_np()[:2] - edge.to_np()[:2]
+    within_the_margin = edge.to_np()[:2] + 0.01 * towards_the_table / np.linalg.norm(
+        towards_the_table
+    )
+    robot.root.parent_connection.origin = HomogeneousTransformationMatrix.from_xyz_rpy(
+        *within_the_margin, 0, reference_frame=world.root
+    )
+    world.notify_state_change()
+
+    first_waypoint = world.transform(action._waypoints()[0], world.root)
+
+    assert first_waypoint.to_np()[:2] == pytest.approx(edge.to_np()[:2], abs=1e-6)
 
 
 def test_gcs_navigation_needs_a_floor_below_the_robot(
