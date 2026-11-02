@@ -57,7 +57,7 @@ from semantic_digital_twin.collision_checking.collision_rules import (
 from semantic_digital_twin.datastructures.definitions import TorsoState
 from semantic_digital_twin.robots.robot_parts import EndEffector
 from semantic_digital_twin.semantic_annotations.semantic_annotations import Milk
-from krrood_spatial_math.spatial_types import Pose
+from krrood_spatial_math.spatial_types import HomogeneousTransformationMatrix, Pose
 from ..conftest import nodes_of_type
 from ..test_designator.test_multi_robot_action_designator import _handle_annotation
 from ...plan_running import (
@@ -758,6 +758,29 @@ def test_a_pick_up_grasps_reattaches_and_lifts_as_its_own_steps(
     assert type(reattaching) is MoveBranch
     assert reattaching.new_parent is robot.left_arm.end_effector.tool_frame
     assert type(_goal_moving_the_tool(lifting)) is CartesianPose
+
+
+def test_a_pick_up_lifts_from_where_the_hand_closed_however_the_object_turned_in_it(
+    pr2_apartment_context,
+) -> None:
+    world, robot, extensions = pr2_apartment_context
+    milk = world.get_semantic_annotations_by_type(Milk)[0]
+    pick_up = PickUpAction(grasp=milk.grasp_candidates()[0], arm=robot.left_arm)
+    _expanded(pick_up, extensions)
+    *_, lifting = pick_up.nodes
+    lift_goal = _goal_moving_the_tool(lifting).goal_pose
+    world_T_lift_goal = world.transform(lift_goal, world.root).to_np()
+
+    milk_connection = milk.root.parent_connection
+    milk_connection.origin = HomogeneousTransformationMatrix(
+        milk_connection.origin.to_np()
+        @ HomogeneousTransformationMatrix.from_xyz_rpy(yaw=0.3).to_np(),
+        reference_frame=milk_connection.parent,
+    )
+
+    assert world.transform(lift_goal, world.root).to_np() == pytest.approx(
+        world_T_lift_goal
+    )
 
 
 def test_a_place_reattaches_and_retracts_as_its_own_steps(
