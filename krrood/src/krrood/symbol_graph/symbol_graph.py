@@ -164,6 +164,12 @@ class WrappedInstance(Generic[TSymbol], SubClassSafeGeneric):
     Rather is instance was inferred or constructed.
     """
 
+    instance_id: int = field(init=False, default=None)
+    """
+    The id of the instance, which keys this wrapper in the symbol graph's index, also
+    after the instance died.
+    """
+
     instance_type: type[Symbol] = field(init=False, default=None)
     """
     The type of the instance.
@@ -172,6 +178,7 @@ class WrappedInstance(Generic[TSymbol], SubClassSafeGeneric):
 
     def __post_init__(self, instance: TSymbol):
         self.instance_reference = weakref.ref(instance)
+        self.instance_id = id(instance)
         self.instance_type = type(instance)
 
     @property
@@ -303,16 +310,39 @@ class SymbolGraph(metaclass=SingletonMeta):
 
         :param wrapped_instance: The instance to remove.
         """
-        self._instance_index.pop(id(wrapped_instance.instance), None)
-        self._class_to_wrapped_instances[wrapped_instance.instance_type].remove(
-            wrapped_instance
-        )
-        self._instance_graph.remove_node(wrapped_instance.index)
+        self._remove_nodes([wrapped_instance])
 
     def remove_dead_instances(self):
-        for node in self._instance_graph.nodes():
-            if node.instance is None:
-                self.remove_node(node)
+        """
+        Remove the wrapped instances whose instance has died from the cache.
+        """
+        self._remove_nodes(
+            [node for node in self._instance_graph.nodes() if node.instance is None]
+        )
+
+    def _remove_nodes(self, wrapped_instances: list[WrappedInstance]):
+        """
+        Remove wrapped instances from the cache, going through each type's instances
+        once however many of them are removed.
+
+        :param wrapped_instances: The instances to remove.
+        """
+        removed = {id(wrapped_instance) for wrapped_instance in wrapped_instances}
+        for wrapped_instance in wrapped_instances:
+            if (
+                self._instance_index.get(wrapped_instance.instance_id)
+                is wrapped_instance
+            ):
+                del self._instance_index[wrapped_instance.instance_id]
+            self._instance_graph.remove_node(wrapped_instance.index)
+        for instance_type in {
+            wrapped_instance.instance_type for wrapped_instance in wrapped_instances
+        }:
+            self._class_to_wrapped_instances[instance_type] = [
+                wrapped_instance
+                for wrapped_instance in self._class_to_wrapped_instances[instance_type]
+                if id(wrapped_instance) not in removed
+            ]
 
     def get_instances_of_type(self, type_: type) -> Iterable:
         """
