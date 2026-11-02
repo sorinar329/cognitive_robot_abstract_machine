@@ -44,7 +44,6 @@ from semantic_digital_twin.world_description.shape_collection import (
 )
 from semantic_digital_twin.world_description.world_entity import Body
 
-from experiments.hsr_robocasa.exceptions import NoApproachError
 from experiments.hsr_robocasa.robocasa_task import HSRRoboCasaTask, StanceSearch
 
 logger = logging.getLogger(__name__)
@@ -478,10 +477,10 @@ class HSRPickPlaceTask(HSRRoboCasaTask, ABC):
         :return: The object taken by the first of the :meth:`approaches` whose hand
             path is free, see :meth:`hand_path_is_free`, and that the HSR has somewhere
             to stand for, or, where no hand path is free, tried by the first approach
-            the HSR has somewhere to stand for; set down from where the HSR reaches the
-            receptacle, or, where it stands nowhere to reach it, tried from the floor
-            nearest it.
-        :raises NoApproachError: If the HSR has nowhere to stand for any approach.
+            the HSR has somewhere to stand for, or, where it stands nowhere for any,
+            tried by the first approach from the floor nearest the object; set down
+            from where the HSR reaches the receptacle, or, where it stands nowhere to
+            reach it, tried from the floor nearest it.
         """
         robot = self.robot_in(world)
         arm = robot.all_arms[0]
@@ -514,28 +513,26 @@ class HSRPickPlaceTask(HSRRoboCasaTask, ABC):
         :return: The pick-up by the first of the :meth:`approaches` whose hand path is
             free and that the HSR has somewhere to stand for, with where it stands; or,
             where no hand path is free, by the first approach the HSR has somewhere to
-            stand for.
-        :raises NoApproachError: If the HSR has nowhere to stand for any approach.
+            stand for; or, where it has nowhere to stand for any, by the first approach,
+            tried from the floor nearest the object.
         """
         robot = self.robot_in(world)
         arm = robot.all_arms[0]
         approaches = self.approaches(world)
         hand_half_width = self.hand_half_width(world)
-        reach_space = self.reach_space(
-            world,
+        pick_ups = [
             PickUpAction(
-                grasp=self.grasp(world, approaches[0]),
-                arm=arm,
-                retreat_distance=self.lift,
-            ).approach_clearance,
-            hand_half_width,
+                grasp=self.grasp(world, approach), arm=arm, retreat_distance=self.lift
+            )
+            for approach in approaches
+        ]
+        reach_space = self.reach_space(
+            world, pick_ups[0].approach_clearance, hand_half_width
         )
         blocked = None
-        for approach in approaches:
-            grasp = self.grasp(world, approach)
-            pick_up = PickUpAction(grasp=grasp, arm=arm, retreat_distance=self.lift)
+        for pick_up in pick_ups:
             picking = pick_up.grasp_pose_sequence(
-                grasp.world_T_grasp, arm.end_effector, grasp
+                pick_up.grasp.world_T_grasp, arm.end_effector, pick_up.grasp
             )
             picking_pose = self.standing_pose(
                 world,
@@ -548,18 +545,22 @@ class HSRPickPlaceTask(HSRRoboCasaTask, ABC):
             if picking_pose is None:
                 continue
             if self.hand_path_is_free(
-                world, grasp, picking, reach_space, hand_half_width
+                world, pick_up.grasp, picking, reach_space, hand_half_width
             ):
                 return Picking(pick_up=pick_up, standing_pose=picking_pose)
             blocked = blocked or Picking(pick_up=pick_up, standing_pose=picking_pose)
-        if blocked is None:
-            raise NoApproachError(self.moved_object)
-        logger.warning(
-            "No hand path to %s is free; the HSR tries the first approach it has "
-            "somewhere to stand for.",
-            self.moved_object.name.name,
+        if blocked is not None:
+            logger.warning(
+                "No hand path to %s is free; the HSR tries the first approach it has "
+                "somewhere to stand for.",
+                self.moved_object.name.name,
+            )
+            return blocked
+        [grasp_goal] = self.in_kitchen_frame(world, [pick_ups[0].grasp.world_T_grasp])
+        return Picking(
+            pick_up=pick_ups[0],
+            standing_pose=self.attempting_pose(world, grasp_goal, search),
         )
-        return blocked
 
     def attempting_pose(
         self, world: World, tool_frame_goal: np.ndarray, search: StanceSearch

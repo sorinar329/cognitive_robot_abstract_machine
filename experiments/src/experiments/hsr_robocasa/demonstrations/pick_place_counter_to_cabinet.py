@@ -11,7 +11,6 @@ import sys
 from dataclasses import dataclass
 from enum import StrEnum
 
-from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.world_entity import Body
 
 from experiments.hsr_robocasa.pick_place import HSRPickPlaceTask
@@ -43,20 +42,5 @@ class PickPlaceCounterToCabinet(HSRPickPlaceTask):
 
 # %% running it
 
-
-def main(headless: bool = False, counter_height: float | None = None) -> World:
-    """
-    Perform the task.
-
-    :param headless: Whether the physics runs without a viewer.
-    :param counter_height: How high the kitchen's counters stand, in metres; ``None``
-        keeps RoboCasa's kitchen as built.
-    :return: The world the task was performed in.
-    """
-    return PickPlaceCounterToCabinet(
-        headless=headless, counter_height=counter_height
-    ).run()
-
-
 if __name__ == "__main__":
-    main(counter_height=float(sys.argv[1]) if len(sys.argv) > 1 else None)
+    PickPlaceCounterToCabinet.from_command_line(sys.argv[1:]).run()

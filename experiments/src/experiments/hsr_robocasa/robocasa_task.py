@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 import mujoco
 import numpy as np
 from scipy.spatial.transform import Rotation
+from typing_extensions import Self
 
 from coraplex.demonstrations import RobotDemonstration
 from coraplex.plans.context_extensions import RobotAccess
@@ -151,6 +152,16 @@ class HSRRoboCasaTask(RobotDemonstration, ABC):
         """
         return cls.__name__
 
+    @classmethod
+    def from_command_line(cls, arguments: list[str]) -> Self:
+        """
+        :param arguments: The command line's arguments: none, or the counter height in
+            metres.
+        :return: The task with a viewer, in RoboCasa's kitchen as built, or lowered to
+            the counter height given.
+        """
+        return cls(counter_height=float(arguments[0]) if arguments else None)
+
     @property
     @abstractmethod
     def handled_bodies(self) -> list[Body]:
@@ -249,11 +260,11 @@ class HSRRoboCasaTask(RobotDemonstration, ABC):
         """
         return max(
             world.get_semantic_annotations_by_type(Floor),
-            key=lambda floor: floor.root.collision.as_bounding_box_collection_in_frame(
-                world.root
-            )
-            .bounding_box()
-            .max_z,
+            key=lambda floor: (
+                floor.root.collision.as_bounding_box_collection_in_frame(world.root)
+                .bounding_box()
+                .max_z
+            ),
         )
 
     @staticmethod
