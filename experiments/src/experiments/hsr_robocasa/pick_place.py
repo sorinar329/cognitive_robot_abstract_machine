@@ -45,6 +45,7 @@ from semantic_digital_twin.world_description.shape_collection import (
 )
 from semantic_digital_twin.world_description.world_entity import Body
 
+from experiments.hsr_robocasa.arm_motion import MoveArmJointsAction
 from experiments.hsr_robocasa.robocasa_task import HSRRoboCasaTask, StanceSearch
 
 logger = logging.getLogger(__name__)
@@ -88,7 +89,8 @@ class Approach:
 @dataclass
 class Picking:
     """
-    How the HSR picks the object up: the pick-up, and where it stands for it.
+    How the HSR picks the object up: the pick-up, where it stands for it, and how its
+    arm gets to where the pick-up begins.
     """
 
     pick_up: PickUpAction
@@ -99,6 +101,12 @@ class Picking:
     standing_pose: Pose
     """
     Where the HSR stands to pick the object up.
+    """
+
+    reaching: MoveArmJointsAction | None
+    """
+    The motion bringing the arm to where the pick-up begins, from where the HSR stands;
+    ``None`` where the HSR has nowhere to stand to reach the object.
     """
 
 
@@ -117,6 +125,13 @@ class PickingAndPlacing:
     picking_pose: Pose
     """
     Where the HSR stands to pick the object up.
+    """
+
+    reaching: MoveArmJointsAction | None
+    """
+    The motion bringing the arm to where the pick-up begins, from
+    :attr:`picking_pose`; ``None`` where the HSR has nowhere to stand to reach the
+    object.
     """
 
     place: PlaceAction
@@ -482,8 +497,8 @@ class HSRPickPlaceTask(HSRRoboCasaTask, ABC):
 
     def build_statechart(self, context: StatechartContext) -> Statechart:
         """
-        Raise the torso, park the arm, drive to where the arm reaches the object, pick
-        it up, drive to where the arm reaches the receptacle, set the object down, and
+        Raise the torso, park the arm, drive to where the arm reaches the object, bring
+        the arm to where the pick-up begins, pick it up, drive to where the arm reaches the receptacle, set the object down, and
         park the arm again.
         """
         world = context.world
@@ -496,6 +511,7 @@ class HSRPickPlaceTask(HSRRoboCasaTask, ABC):
                     MoveTorsoAction(torso_state=TorsoState.HIGH),
                     ParkArmsAction(arms=robot.all_arms),
                     PathPlanningNavigateAction(target=steps.picking_pose),
+                    *([steps.reaching] if steps.reaching is not None else []),
                     steps.pick_up,
                     PathPlanningNavigateAction(target=steps.placing_pose),
                     steps.place,
@@ -537,6 +553,7 @@ class HSRPickPlaceTask(HSRRoboCasaTask, ABC):
         return PickingAndPlacing(
             pick_up=picking.pick_up,
             picking_pose=picking.standing_pose,
+            reaching=picking.reaching,
             place=place,
             placing_pose=placing_pose,
         )
@@ -544,7 +561,8 @@ class HSRPickPlaceTask(HSRRoboCasaTask, ABC):
     def picking(self, world: World, search: StanceSearch) -> Picking:
         """
         :return: The pick-up by the first of the :meth:`approaches` whose hand path is
-            free and that the HSR has somewhere to stand for, with where it stands; or,
+            free and that the HSR has somewhere to stand for, with where it stands and
+            how its arm gets to where the pick-up begins; or,
             where no hand path is free, by the first approach the HSR has somewhere to
             stand for; or, where it has nowhere to stand for any, by the first approach,
             tried from the floor nearest the object.
@@ -568,16 +586,19 @@ class HSRPickPlaceTask(HSRRoboCasaTask, ABC):
             picking = pick_up.grasp_pose_sequence(
                 pick_up.grasp.world_T_grasp, arm.end_effector, pick_up.grasp
             )
+            tool_frame_goals = self.in_kitchen_frame(
+                world, [picking.pre_grasp, picking.grasp, picking.retreat]
+            )
             picking_pose = self.standing_pose(
-                world,
-                self.in_kitchen_frame(
-                    world, [picking.pre_grasp, picking.grasp, picking.retreat]
-                ),
-                robot.root.global_pose,
-                search,
+                world, tool_frame_goals, robot.root.global_pose, search
             )
             if picking_pose is None:
                 continue
+            reaching = MoveArmJointsAction(
+                positions=search.arm_plane.joint_positions_for(
+                    np.linalg.inv(picking_pose.to_np()) @ tool_frame_goals[0]
+                )
+            )
             if self.hand_path_is_free(
                 world,
                 pick_up.grasp,
@@ -586,8 +607,12 @@ class HSRPickPlaceTask(HSRRoboCasaTask, ABC):
                 hand_half_width,
                 hand_length,
             ):
-                return Picking(pick_up=pick_up, standing_pose=picking_pose)
-            blocked = blocked or Picking(pick_up=pick_up, standing_pose=picking_pose)
+                return Picking(
+                    pick_up=pick_up, standing_pose=picking_pose, reaching=reaching
+                )
+            blocked = blocked or Picking(
+                pick_up=pick_up, standing_pose=picking_pose, reaching=reaching
+            )
         if blocked is not None:
             logger.warning(
                 "No hand path to %s is free; the HSR tries the first approach it has "
@@ -599,6 +624,7 @@ class HSRPickPlaceTask(HSRRoboCasaTask, ABC):
         return Picking(
             pick_up=pick_ups[0],
             standing_pose=self.attempting_pose(world, grasp_goal, search),
+            reaching=None,
         )
 
     def attempting_pose(

@@ -217,10 +217,13 @@ class HSRRoboCasaTask(RobotDemonstration, ABC):
     def build_simulated_world(self) -> World:
         """
         As :meth:`RobotDemonstration.build_simulated_world`, with the HSR allowed to
-        touch the floor, standing at its :meth:`start_pose` with its arm parked.
+        touch the floor, standing at its :meth:`start_pose` with its arm parked, and
+        keeping its base where it stands while it moves its arm, as
+        :meth:`standing_pose` expects.
         """
         world = super().build_simulated_world()
         robot = world.get_semantic_annotations_by_type(HSRB)[0]
+        robot.mobile_base.full_body_controlled = False
         with world.modify_world():
             world.collision_manager.add_ignore_collision_rule(
                 AllowCollisionBetweenGroups(
