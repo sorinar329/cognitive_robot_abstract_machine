@@ -44,6 +44,7 @@ from semantic_digital_twin.semantic_annotations.semantic_annotations import (
 from krrood_spatial_math.spatial_types import HomogeneousTransformationMatrix
 from semantic_digital_twin.utils import camel_case_split
 from semantic_digital_twin.world import World
+from semantic_digital_twin.world_description.connections import ActiveConnection1DOF
 from semantic_digital_twin.world_description.world_entity import (
     Body,
     SemanticAnnotation,
@@ -401,6 +402,7 @@ class RoboCasaDatasetLoader:
         )
 
         world = _parse_robosuite_mjcf(MJCFParser.from_xml_string(weighed_document))
+        self._apply_joint_positions(world, environment)
         self._apply_kitchen_appliance_semantics(world, environment.fixtures)
         manipulated_objects = self._apply_task_object_semantics(
             world, environment.object_cfgs, environment.objects
@@ -415,6 +417,25 @@ class RoboCasaDatasetLoader:
                 *episode_metadata["init_robot_base_ori"],
             ),
         )
+
+    @staticmethod
+    def _apply_joint_positions(world: World, environment: Any) -> None:
+        """
+        Set every joint of ``world`` that the environment's simulation also has to the
+        position the simulation holds it at, such as that of a drawer the task opened.
+
+        :param world: The world the task scene was parsed into.
+        :param environment: The reset environment the scene was composed in.
+        """
+        model, data = environment.sim.model, environment.sim.data
+        joint_ids = {model.joint_id2name(joint): joint for joint in range(model.njnt)}
+        for connection in world.connections:
+            if not isinstance(connection, ActiveConnection1DOF):
+                continue
+            joint = joint_ids.get(connection.name.name)
+            if joint is None:
+                continue
+            connection.position = float(data.qpos[model.jnt_qposadr[joint]])
 
     @staticmethod
     def _available_task_names() -> list[str]:
