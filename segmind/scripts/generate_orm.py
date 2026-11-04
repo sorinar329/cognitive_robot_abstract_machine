@@ -1,3 +1,7 @@
+"""
+Generates the ORM interface of segmind.
+"""
+
 # ----------------------------------------------------------------------------------------------------------------------
 # This script generates the ORM classes for the semantic_digital_twin package.
 # Dataclasses can be mapped automatically to the ORM model
@@ -22,13 +26,48 @@ from krrood.ormatic.custom_types import NumpyType
 from krrood.adapters.json_serializer import SubclassJSONSerializer
 from krrood.ormatic.ormatic import ORMatic
 
-from segmind.event_segmentation import Segmind
-from segmind.exceptions import NoSemanticAnnotationToWatch
+from segmind.detectors.atomic_event_detectors_nodes import ObservedPose
+from segmind.event_segmentation import RunSegmentation, Segmind
+from segmind.exceptions import (
+    NoSemanticAnnotationToWatch,
+    SegmindProcessDidNotStart,
+    SegmindProcessFailed,
+)
+from segmind.observation_clock import (
+    ClockAdvancingEachTick,
+    ObservationClock,
+    TimeOfTick,
+)
+from segmind.segmind_process import (
+    MirroredWorld,
+    MirroringSegmind,
+    ModelChange,
+    PublishedState,
+    SegmindProcess,
+    WatchRequest,
+    WorldStatePublisher,
+)
+from segmind.shared_world_state import SharedWorldState
 
 ignored_classes = {
     SubclassJSONSerializer,
+    RunSegmentation,
     Segmind,
+    MirroringSegmind,
+    SegmindProcess,
+    MirroredWorld,
+    ModelChange,
+    PublishedState,
+    WatchRequest,
+    WorldStatePublisher,
+    SharedWorldState,
+    ObservationClock,
+    TimeOfTick,
+    ClockAdvancingEachTick,
+    ObservedPose,
     NoSemanticAnnotationToWatch,
+    SegmindProcessFailed,
+    SegmindProcessDidNotStart,
 }
 
 dependencies = []

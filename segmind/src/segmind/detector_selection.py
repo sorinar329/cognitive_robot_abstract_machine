@@ -11,7 +11,7 @@ import inspect
 from dataclasses import dataclass
 
 from krrood.utils import recursive_subclasses
-from typing_extensions import Self
+from typing_extensions import Self, Sequence
 
 from segmind.detectors import (  # noqa: F401
     agent_event_detector_nodes,
@@ -20,6 +20,7 @@ from segmind.detectors import (  # noqa: F401
     spatial_relation_detector_nodes,
 )
 from segmind.detectors.base import AbstractDetector
+from semantic_digital_twin.world_description.world_entity import Body
 
 
 @dataclass(frozen=True)
@@ -68,6 +69,29 @@ class DetectorSelection:
         for detector_type in asked_for:
             cls._choose(detector_type, chosen)
         return cls(detector_types=tuple(chosen))
+
+    @classmethod
+    def for_run(cls, asked_for: Sequence[type[AbstractDetector]]) -> Self:
+        """
+        :param asked_for: The kinds of detector a run is asked to use.
+        :return: Those kinds and everything they need, or every kind when none is asked
+            for.
+        """
+        return cls.of(*asked_for) if asked_for else cls.of_every_kind()
+
+    def detectors_for(self, watched_bodies: Sequence[Body]) -> list[AbstractDetector]:
+        """
+        :param watched_bodies: The bodies a run watches.
+        :return: The detectors of every kind chosen that the run ticks, in the order of
+            :attr:`detector_types`.
+        """
+        return [
+            detector
+            for detector_type in self.detector_types
+            for detector in detector_type.create_for_run(
+                watched_bodies, self.detector_types
+            )
+        ]
 
     @classmethod
     def _choose(

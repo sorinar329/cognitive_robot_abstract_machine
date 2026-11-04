@@ -48,7 +48,7 @@ from segmind.detectors.coarse_event_detector_nodes import (
     PlacingDetector,
 )
 from segmind.detectors.spatial_relation_detector_nodes import ContainmentDetector
-from segmind.event_segmentation import Segmind
+from segmind.segmind_process import SegmindProcess
 from semantic_digital_twin.datastructures.definitions import TorsoState
 from semantic_digital_twin.reasoning.world_reasoner import WorldReasoner
 from semantic_digital_twin.robots.pr2 import PR2
@@ -315,7 +315,7 @@ class BulletWorldDemonstration(RobotDemonstration):
         """
         Detect the place setting being grasped, picked up, placed and contained.
         """
-        return Segmind.create_for_semantic_annotation_types(
+        return SegmindProcess.create_for_semantic_annotation_types(
             world,
             tuple(
                 placed_object.semantic_annotation_type

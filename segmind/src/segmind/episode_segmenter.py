@@ -1,3 +1,8 @@
+"""
+Segmenting an episode into events while its world is stepped, and loading the scene of a
+recorded episode.
+"""
+
 from __future__ import annotations
 
 import logging
@@ -19,6 +24,7 @@ from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.world_entity import Body
 from .detectors.base import SegmindContext
 from .episode_player import EpisodePlayer
+from segmind.observation_clock import ClockAdvancingEachTick, ObservationClock
 
 logger = logging.getLogger(__name__)
 
@@ -37,8 +43,22 @@ class EpisodeSegmentation(TickingExecutorExtension):
     by someone else.
     """
 
+    clock: ObservationClock = field(default_factory=ClockAdvancingEachTick)
+    """
+    Tells when the state of the world each tick reads was observed.
+    """
+
     def extend_context(self, context: StatechartContext) -> None:
         context.ensure_extension(SegmindContext())
+
+    def before_tick(self, executor: StatechartExecutor) -> None:
+        """
+        Like :meth:`~cramph.executor.TickingExecutorExtension.before_tick`, stamping the
+        tick with when the state it reads was observed.
+        """
+        executor.context.require_extension(
+            SegmindContext
+        ).observed_at = self.clock.observe()
 
     def after_compile(self, executor: StatechartExecutor) -> None:
         self.detect_holes(executor.context)

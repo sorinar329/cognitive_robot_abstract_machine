@@ -1,3 +1,8 @@
+"""
+What every detector shares: the context they read and log to, and how a detector is
+ticked and created for a run.
+"""
+
 from __future__ import annotations
 
 from abc import abstractmethod, ABC
@@ -99,7 +104,13 @@ class SegmindContext(ContextExtension):
 
     tracker_registry: ObjectTrackerFactory = field(default_factory=ObjectTrackerFactory)
     """
-    The object tracker registry.    
+    The object tracker registry.
+    """
+
+    observed_at: float = 0.0
+    """
+    When the state of the world being ticked was observed, in seconds on a clock that
+    never goes backwards.
     """
 
 
