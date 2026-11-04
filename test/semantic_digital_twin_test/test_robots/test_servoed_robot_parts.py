@@ -12,6 +12,7 @@ from semantic_digital_twin.adapters.mjcf import MJCFParser
 from semantic_digital_twin.adapters.urdf import URDFParser
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.robots.hsrb import HSRB
+from semantic_digital_twin.robots.panda import Panda
 from semantic_digital_twin.robots.pr2 import PR2
 from semantic_digital_twin.robots.robot_parts import AbstractRobot, ServoedRobotPart
 from semantic_digital_twin.robots.tiago import TiagoMujoco
@@ -101,6 +102,14 @@ def _parse_mjcf(robot_type: type[AbstractRobot]) -> World:
             marks=pytest.mark.skipif(
                 not TiagoMujoco.is_description_installed(),
                 reason="The MuJoCo model of the Tiago is not installed",
+            ),
+        ),
+        pytest.param(
+            Panda,
+            _parse_mjcf,
+            marks=pytest.mark.skipif(
+                not Panda.is_description_installed(),
+                reason="The description of the Panda is not installed",
             ),
         ),
     ],
