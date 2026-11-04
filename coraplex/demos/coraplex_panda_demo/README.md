@@ -23,22 +23,23 @@ python inference3b.py --iterations 3
 | `--iterations` | How often the tower is built from the cubes standing in a row (default 20) |
 | `--seed` | Seed of the first attempts' parameters (default 42) |
 | `--headless` | Step the physics without the MuJoCo window |
-| `--live-port` | Port the run is published on for cramera (default 8765); `0` publishes nothing |
+| `--live-port` | Port the run is published on for cramera (default 0: publishes nothing) |
 
 Every iteration's attempts and diagnoses are appended to `inference_report.md`.
 
 ## Watching it in cramera
 
-The run is published live through cramera's bridge (`~/cramera`, packages `bridge`,
-`protocol` and `viewer` on the Python path). Start the viewer and open the run:
+Cramera is optional. Without it the run prints what went wrong (`[failure]`), what
+segmind observed during the failed attempt (`[segmind]`), the causal diagnosis
+(`[causal]`) and the recovery (`[recovery]`). To publish the run live through
+cramera's bridge (`~/cramera`, packages `bridge`, `protocol` and `viewer` on the Python
+path), give it a port, start the viewer and open the run:
 
 ```bash
+python inference3b.py --live-port 8765
 cramera --no-browser          # serves http://127.0.0.1:8711
 # open http://127.0.0.1:8711/?live=http://127.0.0.1:8765
 ```
-
-When another program already holds port 8765, start the demo with another
-`--live-port` and name that port in the `live=` address.
 
 ## What happens in one step
 

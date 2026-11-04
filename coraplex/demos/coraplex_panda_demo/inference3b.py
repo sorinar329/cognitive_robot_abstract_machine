@@ -1,7 +1,6 @@
-"""
-The IJCAI expo demo: the Franka Emika Panda stacks four cubes into a tower in MuJoCo,
-diagnoses every failed attempt against the trees fitted on successful attempts, and
-recovers with the perfect parameters.
+"""The IJCAI expo demo: the Franka Emika Panda stacks four cubes into a tower
+in MuJoCo, diagnoses every failed attempt against the trees fitted on
+successful attempts, and recovers with the perfect parameters.
 
 Each cube's first attempt samples its pick-up and place parameters from a range wider
 than the successful attempts used, with a friction too low for the fingers to hold the
@@ -20,8 +19,9 @@ and open the viewer with ``cramera`` (from ``~/cramera``), which follows the liv
 from __future__ import annotations
 
 import argparse
-from dataclasses import dataclass, field
-from datetime import timedelta
+import re
+from dataclasses import dataclass, field, replace
+from datetime import datetime, timedelta
 from enum import Enum, StrEnum
 from pathlib import Path
 from time import perf_counter
@@ -38,7 +38,14 @@ from coraplex.robot_plans.actions.core.pick_up import PickUpAction
 from coraplex.robot_plans.actions.core.placing import PlaceAction
 from coraplex.robot_plans.actions.core.robot_body import ParkArmsAction
 from cramera_bridge.coraplex_backend import CrameraVisualization
+from cramera_bridge.live.world_state import MeasuredJointPositions
 from cramera_bridge.visualization import LiveVisualization
+from cramera_protocol.diagnoses import (
+    DiagnosedStep,
+    DiagnosisStatus,
+    ParameterCorrection,
+    ParameterVerdict,
+)
 from cramph.composites import Sequence
 from cramph.context import ContextExtension, StatechartContext
 from cramph.statechart import Statechart
@@ -49,6 +56,8 @@ from krrood_spatial_math.spatial_types import (
     RotationMatrix,
     Vector3,
 )
+from physics_simulators.base_simulator import SimulatorCallbackResult
+from segmind.event_segmentation import Segmind
 from semantic_digital_twin.adapters.multi_sim import MujocoSim
 from semantic_digital_twin.datastructures.definitions import (
     GripperState,
@@ -70,8 +79,10 @@ from semantic_digital_twin.specifications.semantic_annotations import (
 )
 from semantic_digital_twin.specifications.worlds import WorldSpecification
 from semantic_digital_twin.world import World
+from semantic_digital_twin.world_description.connections import ActiveConnection1DOF
 from semantic_digital_twin.world_description.contact import ContactParameters
 from semantic_digital_twin.world_description.geometry import Color, Scale
+from semantic_digital_twin.world_description.shape_collection import ShapeCollection
 from semantic_digital_twin.world_description.inertial_properties import (
     Inertial,
     InertiaTensor,
@@ -84,9 +95,8 @@ from causal_diagnosis import ActionCausalDiagnoser, ActionDiagnosis, DiagnosedAc
 
 
 class CubeName(StrEnum):
-    """
-    The cubes, in the order they are stacked: each onto the one before it.
-    """
+    """The cubes, in the order they are stacked: each onto the one before
+    it."""
 
     CUBE_0 = "cube0"
     CUBE_1 = "cube1"
@@ -96,29 +106,20 @@ class CubeName(StrEnum):
 
 @dataclass
 class CubeSpawn:
-    """
-    Where a cube stands on the floor before it is stacked, and its colour.
-    """
+    """Where a cube stands on the floor before it is stacked, and its
+    colour."""
 
     name: CubeName
-    """
-    The cube.
-    """
+    """The cube."""
 
     x: float
-    """
-    How far in front of the robot it stands.
-    """
+    """How far in front of the robot it stands."""
 
     y: float
-    """
-    Where it stands sideways.
-    """
+    """Where it stands sideways."""
 
     color: Color
-    """
-    The colour it is drawn in.
-    """
+    """The colour it is drawn in."""
 
 
 # %% the parameters
@@ -126,29 +127,20 @@ class CubeSpawn:
 
 @dataclass
 class ParameterPrior:
-    """
-    A normal distribution of one parameter, truncated to the range it is sampled in.
-    """
+    """A normal distribution of one parameter, truncated to the range it is
+    sampled in."""
 
     mean: float
-    """
-    The mean of the distribution.
-    """
+    """The mean of the distribution."""
 
     standard_deviation: float
-    """
-    The spread of the distribution.
-    """
+    """The spread of the distribution."""
 
     lowest: float
-    """
-    The smallest value sampled.
-    """
+    """The smallest value sampled."""
 
     highest: float
-    """
-    The largest value sampled.
-    """
+    """The largest value sampled."""
 
     def sample(self, generator: np.random.Generator) -> float:
         """
@@ -161,9 +153,8 @@ class ParameterPrior:
 
 
 class ActionField(Enum):
-    """
-    The trees' names of the parameters whose action field is named differently.
-    """
+    """The trees' names of the parameters whose action field is named
+    differently."""
 
     FINAL_APPROACH = ("grasp_linear_velocity", "final_approach_linear_velocity")
     STALL_TIME = ("grasp_stall_min_time", "grasp_stall_minimum_time")
@@ -182,26 +173,18 @@ class ActionField(Enum):
 
 @dataclass
 class StackingParameters:
-    """
-    The parameters of one attempt's pick-up and place, by their names among the trees'
-    variables.
-    """
+    """The parameters of one attempt's pick-up and place, by their names among
+    the trees' variables."""
 
     pick_up: dict[str, float]
-    """
-    The pick-up's parameters, the cube's friction among them.
-    """
+    """The pick-up's parameters, the cube's friction among them."""
 
     place: dict[str, float]
-    """
-    The place's parameters.
-    """
+    """The place's parameters."""
 
     @property
     def friction(self) -> float:
-        """
-        The sliding friction the picked cube is given.
-        """
+        """The sliding friction the picked cube is given."""
         return self.pick_up["object_friction"]
 
     def pick_up_fields(self) -> dict[str, float]:
@@ -266,72 +249,48 @@ def wide_place_priors() -> dict[str, ParameterPrior]:
 
 @dataclass
 class AttemptRecord:
-    """
-    One attempt at stacking a cube: the parameters it used, whether it stacked the cube
-    and, after a failure, the diagnosis of both actions.
-    """
+    """One attempt at stacking a cube: the parameters it used, whether it
+    stacked the cube and, after a failure, the diagnosis of both actions."""
 
     parameters: StackingParameters
-    """
-    The parameters the attempt used.
-    """
+    """The parameters the attempt used."""
 
     stacked: bool
-    """
-    Whether the cube ended up resting on the one it was stacked onto.
-    """
+    """Whether the cube ended up resting on the one it was stacked onto."""
 
     failure: str | None = None
-    """
-    Why the plan itself failed, if it did.
-    """
+    """Why the plan itself failed, if it did."""
 
     diagnoses: list[ActionDiagnosis] = field(default_factory=list)
-    """
-    The diagnosis of the pick-up and the place, after a failed attempt.
-    """
+    """The diagnosis of the pick-up and the place, after a failed attempt."""
 
 
 @dataclass
 class StepRecord:
-    """
-    Stacking one cube onto another, with every attempt it took.
-    """
+    """Stacking one cube onto another, with every attempt it took."""
 
     cube: CubeName
-    """
-    The cube stacked.
-    """
+    """The cube stacked."""
 
     support: CubeName
-    """
-    The cube it was stacked onto.
-    """
+    """The cube it was stacked onto."""
 
     attempts: list[AttemptRecord] = field(default_factory=list)
-    """
-    The attempts, in order.
-    """
+    """The attempts, in order."""
 
     @property
     def label(self) -> str:
-        """
-        The step, for the log.
-        """
+        """The step, for the log."""
         return f"{self.cube} onto {self.support}"
 
     @property
     def succeeded(self) -> bool:
-        """
-        Whether the last attempt stacked the cube.
-        """
+        """Whether the last attempt stacked the cube."""
         return bool(self.attempts) and self.attempts[-1].stacked
 
     @property
     def recovered(self) -> bool:
-        """
-        Whether the step succeeded only after its first attempt failed.
-        """
+        """Whether the step succeeded only after its first attempt failed."""
         return self.succeeded and len(self.attempts) > 1
 
 
@@ -339,11 +298,58 @@ class StepRecord:
 
 
 @dataclass
+class SimulatedJointPositions(MeasuredJointPositions):
+    """
+    The positions MuJoCo simulates for a robot's actuated joints, whose world positions
+    are the set points they are commanded to: fingers closed on a cube stop at its
+    faces.
+    """
+
+    simulation: MujocoSim
+    """
+    The running simulation.
+    """
+
+    simulated_names: dict[str, str]
+    """
+    The name of the simulated joint of each actuated joint, by the joint's full name.
+    """
+
+    @classmethod
+    def of_robot(
+        cls, simulation: MujocoSim, robot: AbstractRobot
+    ) -> SimulatedJointPositions:
+        """
+        :return: The simulated positions of every joint of ``robot`` with one degree of
+            freedom that the simulation models.
+        """
+        simulator = simulation.simulator
+        simulated_names = {}
+        for connection in robot.connections:
+            if not isinstance(connection, ActiveConnection1DOF):
+                continue
+            name = simulation.synchronizer.element_names.of(connection)
+            if (
+                simulator.get_joint(name).type
+                == SimulatorCallbackResult.ResultType.SUCCESS_WITHOUT_EXECUTION
+            ):
+                simulated_names[str(connection.name)] = name
+        return cls(simulation=simulation, simulated_names=simulated_names)
+
+    def positions(self) -> dict[str, float]:
+        values = self.simulation.simulator.get_joints_values(
+            list(self.simulated_names.values())
+        ).result
+        return {
+            name: float(values[simulated])
+            for name, simulated in self.simulated_names.items()
+        }
+
+
+@dataclass
 class DiagnosedStackingDemonstration(RobotDemonstration):
-    """
-    The Panda stacks every cube onto the one before it, diagnosing each failed attempt
-    and retrying it with the perfect parameters.
-    """
+    """The Panda stacks every cube onto the one before it, diagnosing each
+    failed attempt and retrying it with the perfect parameters."""
 
     used_robot: type[AbstractRobot] = Panda
 
@@ -354,131 +360,124 @@ class DiagnosedStackingDemonstration(RobotDemonstration):
     event_segmentation: bool = False
 
     iterations: int = 20
-    """
-    How often the tower is built, from the cubes standing in a row.
-    """
+    """How often the tower is built, from the cubes standing in a row."""
 
     attempts_per_cube: int = 4
-    """
-    How many attempts stacking one cube takes at most, the first one included.
-    """
+    """How many attempts stacking one cube takes at most, the first one
+    included."""
 
     seed: int = 42
-    """
-    The seed of the first attempts' parameters.
-    """
+    """The seed of the first attempts' parameters."""
 
-    live_port: int = 8765
-    """
-    The port the cramera viewer follows the live run on; ``0`` shows nothing in cramera.
-    """
+    live_port: int = 0
+    """The port the cramera viewer follows the live run on; ``0`` shows nothing
+    in cramera."""
+
+    apartment: Path | None = (
+        Path(__file__).parents[2] / "resources" / "worlds" / "apartment.urdf"
+    )
+    """The apartment cramera draws around the robot, which nothing simulates;
+    ``None`` draws none and keeps the floor visible."""
+
+    apartment_origin: HomogeneousTransformationMatrix = field(
+        default_factory=lambda: HomogeneousTransformationMatrix.from_xyz_rpy(
+            -2.45, -2.7, -0.947
+        )
+    )
+    """Where the apartment's root lies relative to the robot: the robot stands
+    on the kitchen island, 16 cm from its edge, and the island's top is the
+    floor."""
 
     report: Path = Path(__file__).parent / "inference_report.md"
-    """
-    The file every iteration's attempts and diagnoses are appended to.
-    """
+    """The file every iteration's attempts and diagnoses are appended to."""
 
     cube_edge_length: float = 0.05
-    """
-    Edge length of every cube.
-    """
+    """Edge length of every cube."""
 
     cube_mass: float = 0.01875
-    """
-    Mass of every cube: a 5 cm cube of density 150 kg/m^3.
-    """
+    """Mass of every cube: a 5 cm cube of density 150 kg/m^3."""
 
     cubes: list[CubeSpawn] = field(
         default_factory=lambda: [
-            CubeSpawn(CubeName.CUBE_0, 0.40, 0.10, Color(0.9, 0.315, 0.315)),
-            CubeSpawn(CubeName.CUBE_1, 0.40, -0.04, Color(0.315, 0.9, 0.315)),
-            CubeSpawn(CubeName.CUBE_2, 0.40, -0.14, Color(0.315, 0.9, 0.315)),
-            CubeSpawn(CubeName.CUBE_3, 0.40, -0.24, Color(0.315, 0.9, 0.315)),
+            CubeSpawn(CubeName.CUBE_0, 0.40, 0.10, Color.from_rgba(0.9, 0.315, 0.315)),
+            CubeSpawn(CubeName.CUBE_1, 0.40, -0.04, Color.from_rgba(0.315, 0.9, 0.315)),
+            CubeSpawn(CubeName.CUBE_2, 0.40, -0.14, Color.from_rgba(0.315, 0.9, 0.315)),
+            CubeSpawn(CubeName.CUBE_3, 0.40, -0.24, Color.from_rgba(0.315, 0.9, 0.315)),
         ]
     )
-    """
-    The cubes in stacking order; the first is the bottom of the tower and stays put.
-    """
+    """The cubes in stacking order; the first is the bottom of the tower and
+    stays put."""
 
     grasp_height: float = 0.005
-    """
-    How far above its centre a cube is gripped, which keeps the fingertips clear of the
-    cube below when it is let go of on the tower.
-    """
+    """How far above its centre a cube is gripped, which keeps the fingertips
+    clear of the cube below when it is let go of on the tower."""
 
     release_height: float = 0.003
-    """
-    How far above the cube below it a cube is let go of.
-    """
+    """How far above the cube below it a cube is let go of."""
 
-    carrying_joint_velocity: float = 0.1
-    """
-    Joint velocity of the park between pick-up and place, made with the cube held by
-    friction alone; the default park is fast enough to jerk it out of the fingers.
-    """
+    carrying_joint_velocity: float = 0.5
+    """Joint velocity of the park between pick-up and place, made with the cube
+    held by friction alone; the default park is fast enough to jerk it out of
+    the fingers."""
 
     stack_horizontal_tolerance: float = 0.02
-    """
-    Greatest horizontal distance between a cube and the one below it that counts as
-    stacked.
-    """
+    """Greatest horizontal distance between a cube and the one below it that
+    counts as stacked."""
 
     stack_height_tolerance: float = 0.012
-    """
-    Greatest deviation from one edge length above the cube below that counts as
-    stacked.
-    """
+    """Greatest deviation from one edge length above the cube below that counts
+    as stacked."""
 
     settling_after_attempt: timedelta = timedelta(seconds=1.5)
-    """
-    Simulated time a cube is given to come to rest before an attempt is judged.
-    """
+    """Simulated time a cube is given to come to rest before an attempt is
+    judged."""
 
     friction_cone: mujoco.mjtCone = mujoco.mjtCone.mjCONE_ELLIPTIC
-    """
-    The friction cone of the contacts: the exact elliptic one, where the default pyramid
-    lets a squeezed cube creep between the fingers.
-    """
+    """The friction cone of the contacts: the exact elliptic one, where the
+    default pyramid lets a squeezed cube creep between the fingers."""
 
     impedance_ratio: float = 10.0
-    """
-    How much harder sliding is than pressing in, MuJoCo's guidance for grasping with an
-    elliptic cone.
-    """
+    """How much harder sliding is than pressing in, MuJoCo's guidance for
+    grasping with an elliptic cone."""
 
     integrator: mujoco.mjtIntegrator = mujoco.mjtIntegrator.mjINT_IMPLICITFAST
-    """
-    The numerical integrator of the physics: implicit in the velocity-dependent forces
-    but without their Coriolis terms, a quarter of the dynamics evaluations per step of
-    the simulator's default fourth-order Runge-Kutta.
-    """
+    """The numerical integrator of the physics: implicit in the velocity-
+    dependent forces but without their Coriolis terms, a quarter of the
+    dynamics evaluations per step of the simulator's default fourth-order
+    Runge-Kutta."""
 
     pick_up_diagnoser: ActionCausalDiagnoser = field(
         default_factory=lambda: ActionCausalDiagnoser(DiagnosedAction.PICK_UP)
     )
-    """
-    Diagnoses the pick-up of a failed attempt.
-    """
+    """Diagnoses the pick-up of a failed attempt."""
 
     place_diagnoser: ActionCausalDiagnoser = field(
         default_factory=lambda: ActionCausalDiagnoser(DiagnosedAction.PLACE)
     )
-    """
-    Diagnoses the place of a failed attempt.
-    """
+    """Diagnoses the place of a failed attempt."""
 
     generator: np.random.Generator = field(init=False)
+    """Samples the first attempts' parameters."""
+
+    segmentation: Segmind | None = field(default=None, init=False)
     """
-    Samples the first attempts' parameters.
+    Segments what happens to the cubes into events while the run lasts.
     """
+
+    live: LiveVisualization | None = field(default=None, init=False)
+    """Serves the run to the cramera viewer, once the world is acquired."""
+
+    tower: int = field(default=0, init=False)
+    """The number of the tower being built."""
+
+    diagnosed_steps: int = field(default=0, init=False)
+    """How many steps were diagnosed so far."""
 
     planned: tuple[CubeName, CubeName, StackingParameters] | None = field(
         default=None, init=False
     )
-    """
-    The cube, the cube it is stacked onto and the parameters of the attempt
-    :meth:`build_statechart` builds next.
-    """
+    """The cube, the cube it is stacked onto and the parameters of the attempt
+    :meth:`build_statechart` builds next."""
 
     def __post_init__(self) -> None:
         self.generator = np.random.default_rng(self.seed)
@@ -503,9 +502,7 @@ class DiagnosedStackingDemonstration(RobotDemonstration):
         return world.is_kinematic_structure_entity_in_world_by_name(CubeName.CUBE_0)
 
     def populate_scene(self, world: World) -> None:
-        """
-        Stand every cube in its place on the floor, free to be picked up.
-        """
+        """Stand every cube in its place on the floor, free to be picked up."""
         inertia = self.cube_mass * 2 * self.cube_edge_length**2 / 12
         for spawn in self.cubes:
             annotation = SemanticAnnotationWithRootSpecification(
@@ -530,6 +527,10 @@ class DiagnosedStackingDemonstration(RobotDemonstration):
                 inertia=InertiaTensor.from_values(inertia, inertia, inertia, 0, 0, 0),
             )
             annotation.root.parent_connection.origin = self._spawn_pose(spawn, world)
+        if self.apartment is not None:
+            floor = world.get_body_by_name("floor")
+            with world.modify_world():
+                floor.update_shapes(ShapeCollection(), floor.collision)
 
     def build_context_extensions(self, world: World) -> list[ContextExtension]:
         return [RobotAccess(world.get_semantic_annotations_by_type(Panda)[0])]
@@ -544,23 +545,49 @@ class DiagnosedStackingDemonstration(RobotDemonstration):
         )
 
     def acquire_world(self) -> World:
-        """
-        Extends :meth:`RobotDemonstration.acquire_world` by serving the world to the
-        cramera viewer, unless :attr:`live_port` is ``0``.
-        """
+        """Extends :meth:`RobotDemonstration.acquire_world` by serving the
+        world to the cramera viewer with :meth:`build_backdrop` around it,
+        unless :attr:`live_port` is ``0``."""
         world = super().acquire_world()
         if self.live_port:
-            live = LiveVisualization(world=world, port=self.live_port).start()
-            self.visualization = CrameraVisualization(live=live)
+            self.live = LiveVisualization(
+                world=world,
+                port=self.live_port,
+                backdrop=self.build_backdrop(),
+            ).start()
+            self.visualization = CrameraVisualization(live=self.live)
         return world
+
+    def start_simulation(self, world: World) -> None:
+        """
+        Extends :meth:`RobotDemonstration.start_simulation` by showing in cramera where
+        the robot's joints are in the simulation rather than their set points.
+        """
+        super().start_simulation(world)
+        if self.live is not None and self.simulation is not None:
+            self.live.publisher.state.measured = SimulatedJointPositions.of_robot(
+                self.simulation, world.get_semantic_annotations_by_type(Panda)[0]
+            )
+
+    def build_backdrop(self) -> World | None:
+        """
+        :return: The apartment at :attr:`apartment_origin`, or ``None`` without
+            :attr:`apartment`.
+        """
+        if self.apartment is None:
+            return None
+        backdrop = WorldSpecification().create_world()
+        backdrop.merge_world_at_pose(
+            WorldSpecification.from_urdf(str(self.apartment)).create_world(),
+            self.apartment_origin,
+        )
+        return backdrop
 
     # %% one attempt
 
     def build_statechart(self, context: StatechartContext) -> Statechart:
-        """
-        Park, pick up the cube of :attr:`planned`, park slowly while holding it, set it
-        down on the cube below and park again.
-        """
+        """Park, pick up the cube of :attr:`planned`, park slowly while holding
+        it, set it down on the cube below and park again."""
         cube_name, support_name, parameters = self.planned
         world = context.world
         panda = context.require_extension(RobotAccess).robot
@@ -598,10 +625,8 @@ class DiagnosedStackingDemonstration(RobotDemonstration):
         support: CubeName,
         parameters: StackingParameters,
     ) -> AttemptRecord:
-        """
-        Perform one attempt at stacking ``cube`` onto ``support`` with ``parameters``,
-        and judge it once the cube came to rest.
-        """
+        """Perform one attempt at stacking ``cube`` onto ``support`` with
+        ``parameters``, and judge it once the cube came to rest."""
         self._set_friction(world.get_body_by_name(cube), parameters.friction)
         self.planned = (cube, support, parameters)
         executor = self.create_executor(world)
@@ -623,10 +648,8 @@ class DiagnosedStackingDemonstration(RobotDemonstration):
         )
 
     def diagnose(self, cube: CubeName, attempt: AttemptRecord) -> None:
-        """
-        Diagnose the pick-up and the place of a failed attempt, against the final height
-        of the cube it stacked.
-        """
+        """Diagnose the pick-up and the place of a failed attempt, against the
+        final height of the cube it stacked."""
         attempt.diagnoses = [
             self.pick_up_diagnoser.diagnose(attempt.parameters.pick_up, cube),
             self.place_diagnoser.diagnose(attempt.parameters.place, cube),
@@ -639,25 +662,31 @@ class DiagnosedStackingDemonstration(RobotDemonstration):
         support: CubeName,
         first_parameters: StackingParameters,
     ) -> StepRecord:
-        """
-        Stack ``cube`` onto ``support``: first with ``first_parameters``, and after a
-        failure, which is diagnosed, with the perfect parameters until it stands or
-        :attr:`attempts_per_cube` attempts were made.
-        """
+        """Stack ``cube`` onto ``support``: first with ``first_parameters``,
+        and after a failure, which is diagnosed, with the perfect parameters
+        until it stands or :attr:`attempts_per_cube` attempts were made."""
         step = StepRecord(cube=cube, support=support)
         parameters = first_parameters
+        diagnosed: DiagnosedStep | None = None
         while len(step.attempts) < self.attempts_per_cube:
+            started = datetime.now()
             attempt = self.attempt(world, cube, support, parameters)
             step.attempts.append(attempt)
             self._log_attempt(step, attempt)
-            if attempt.stacked:
-                return step
-            if len(step.attempts) == 1:
+            if diagnosed is None and not attempt.stacked:
                 self.diagnose(cube, attempt)
                 for diagnosis in attempt.diagnoses:
                     print(
                         f"[causal] {step.label} ({diagnosis.action.name.lower()}): {diagnosis.explanation()}"
                     )
+                diagnosed = self._diagnosed_step(world, step, started)
+                print(f"[failure] {step.label}: {diagnosed.failure}")
+                for observation in diagnosed.observations:
+                    print(f"[segmind] {step.label}: {observation}")
+            if diagnosed is not None:
+                self._publish_recovery(diagnosed, step)
+            if attempt.stacked:
+                return step
             parameters = self.perfect_parameters(step.attempts[0])
         return step
 
@@ -689,17 +718,20 @@ class DiagnosedStackingDemonstration(RobotDemonstration):
     # %% the run
 
     def run(self) -> World:
-        """
-        Build the tower :attr:`iterations` times, from the cubes standing in a row,
-        and report how every step went.
-        """
+        """Build the tower :attr:`iterations` times, from the cubes standing in
+        a row, and report how every step went."""
         try:
             world = self.acquire_world()
             self.start_simulation(world)
+            self.segmentation = Segmind.create_for_bodies(
+                world, [world.get_body_by_name(cube.name) for cube in self.cubes]
+            )
+            self.segmentation.start()
             built = 0
             for iteration in range(1, self.iterations + 1):
                 started = perf_counter()
                 print(f"=== iteration {iteration}/{self.iterations} ===")
+                self.tower = iteration
                 self._reset_scene(world)
                 steps = self._build_tower(world)
                 standing = self._tower_stands(world)
@@ -711,14 +743,14 @@ class DiagnosedStackingDemonstration(RobotDemonstration):
                 )
             print(f"[summary] {built}/{self.iterations} towers built")
         finally:
+            if self.segmentation is not None:
+                self.segmentation.stop()
             self.tear_down()
         return world
 
     def _build_tower(self, world: World) -> list[StepRecord]:
-        """
-        Stack every cube onto the one before it, re-stacking a lower cube an attempt
-        knocked off, and stop at the first cube that does not stand.
-        """
+        """Stack every cube onto the one before it, re-stacking a lower cube an
+        attempt knocked off, and stop at the first cube that does not stand."""
         steps = []
         stacked: list[tuple[CubeName, CubeName]] = []
         for support, cube in zip(self.cubes, self.cubes[1:]):
@@ -759,10 +791,8 @@ class DiagnosedStackingDemonstration(RobotDemonstration):
     # %% resetting the scene
 
     def _reset_scene(self, world: World) -> None:
-        """
-        Stand every cube back in its place, bring the arm to its park position with the
-        hand open, and let the scene come to rest.
-        """
+        """Stand every cube back in its place, bring the arm to its park
+        position with the hand open, and let the scene come to rest."""
         for spawn in self.cubes:
             world.get_body_by_name(
                 spawn.name
@@ -771,8 +801,9 @@ class DiagnosedStackingDemonstration(RobotDemonstration):
         self._park_and_open(world)
 
     def _park_and_open(self, world: World) -> None:
-        """
-        Put the arm in its park position with the hand open, at rest, without a plan:
+        """Put the arm in its park position with the hand open, at rest,
+        without a plan:
+
         the joints and their servos' set points jump there.
         """
         panda = world.get_semantic_annotations_by_type(Panda)[0]
@@ -891,9 +922,8 @@ class DiagnosedStackingDemonstration(RobotDemonstration):
         )
 
     def _set_friction(self, cube: Body, friction: float) -> None:
-        """
-        Give every geom of ``cube`` the sliding friction ``friction`` in the physics.
-        """
+        """Give every geom of ``cube`` the sliding friction ``friction`` in the
+        physics."""
         model = self.simulation.simulator._mj_model
         body_id = mujoco.mj_name2id(
             model,
@@ -908,10 +938,8 @@ class DiagnosedStackingDemonstration(RobotDemonstration):
     # %% reporting
 
     def _log_pose(self, cube: Body) -> None:
-        """
-        Print where ``cube`` lies: its position, the yaw of its faces and how far it
-        is tilted off any face, in degrees.
-        """
+        """Print where ``cube`` lies: its position, the yaw of its faces and
+        how far it is tilted off any face, in degrees."""
         position = cube.global_pose.position.to_np()[:3]
         rotation = cube.global_pose.rotation_matrix.to_np()[:3, :3]
         tilt = np.degrees(np.arccos(np.clip(np.max(np.abs(rotation[2, :3])), -1, 1)))
@@ -921,10 +949,113 @@ class DiagnosedStackingDemonstration(RobotDemonstration):
             f"tilt {tilt:.0f}"
         )
 
+    # %% the diagnoses shown in cramera
+
+    def _diagnosed_step(
+        self, world: World, step: StepRecord, started: datetime
+    ) -> DiagnosedStep:
+        """
+        :param started: When the diagnosed first attempt of ``step`` began.
+        :return: What went wrong in that attempt, what segmind observed during it and
+            every parameter its diagnoses judged.
+        """
+        self.diagnosed_steps += 1
+        attempt = step.attempts[0]
+        return DiagnosedStep(
+            identifier=str(self.diagnosed_steps),
+            title=f"Tower {self.tower}: {step.label}",
+            failure=self._failure_of(world, step, attempt),
+            observations=self._observations(world, step.cube, started),
+            corrections=[
+                ParameterCorrection(
+                    action=diagnosis.action.name.lower().replace("_", " "),
+                    parameter=judgement.parameter_name,
+                    failed_value=judgement.observed_value,
+                    failed_support=judgement.observed_support,
+                    corrected_value=judgement.perfect_value,
+                    corrected_support=judgement.perfect_support,
+                    verdict=(
+                        ParameterVerdict.PRIMARY_CAUSE
+                        if judgement is diagnosis.anomalous[0]
+                        else (
+                            ParameterVerdict.ANOMALOUS
+                            if judgement in diagnosis.anomalous
+                            else ParameterVerdict.PLAUSIBLE
+                        )
+                    ),
+                )
+                for diagnosis in attempt.diagnoses
+                for judgement in diagnosis.judgements
+            ],
+        )
+
+    def _failure_of(
+        self, world: World, step: StepRecord, attempt: AttemptRecord
+    ) -> str:
+        """
+        :return: Where the cube of ``step`` came to rest after ``attempt``, as a
+            sentence.
+        """
+        position = world.get_body_by_name(step.cube).global_pose.position.to_np()[:3]
+        if position[2] >= self.cube_edge_length:
+            sentence = f"{step.cube} did not come to rest on {step.support}"
+        else:
+            [spawn] = [spawn for spawn in self.cubes if spawn.name == step.cube]
+            moved = np.linalg.norm(position[:2] - np.array([spawn.x, spawn.y]))
+            sentence = (
+                f"{step.cube} slid out of the fingers and stayed where it stood"
+                if moved <= self.stack_horizontal_tolerance
+                else f"{step.cube} slipped out of the fingers and fell"
+            )
+        if attempt.failure:
+            sentence += f"; the plan failed with {attempt.failure}"
+        return sentence + "."
+
+    def _observations(
+        self, world: World, cube: CubeName, started: datetime
+    ) -> list[str]:
+        """
+        :return: Every event segmind detected about ``cube`` since ``started``, each as
+            its time since then and its words.
+        """
+        if self.segmentation is None:
+            return []
+        body = world.get_body_by_name(cube)
+        observations = []
+        for event in self.segmentation.event_logger.get_events():
+            if event.timestamp < started or body not in event.tracked_objects:
+                continue
+            words = re.sub(
+                r"(?<=[a-z0-9])(?=[A-Z])",
+                " ",
+                type(event).__name__.removesuffix("Event"),
+            ).capitalize()
+            subject = f"{words}: {event.tracked_object.name.name}"
+            if event.with_object is not None:
+                subject += f" with {event.with_object.name.name}"
+            elapsed = (event.timestamp - started).total_seconds()
+            observations.append(f"+{elapsed:.1f} s  {subject}")
+        return observations
+
+    def _publish_recovery(self, diagnosed: DiagnosedStep, step: StepRecord) -> None:
+        """Report how far the recovery of ``step`` has come, on the console and
+        in cramera."""
+        diagnosed.retries = len(step.attempts) - 1
+        if step.succeeded:
+            diagnosed.status = DiagnosisStatus.RECOVERED
+            retries = "retry" if diagnosed.retries == 1 else "retries"
+            print(
+                f"[recovery] {step.label} recovered after {diagnosed.retries} {retries}"
+                " with the corrected parameters"
+            )
+        elif len(step.attempts) >= self.attempts_per_cube:
+            diagnosed.status = DiagnosisStatus.NOT_RECOVERED
+            print(f"[recovery] {step.label} not recovered")
+        if self.live is not None:
+            self.live.publisher.diagnoses.publish(replace(diagnosed))
+
     def _log_attempt(self, step: StepRecord, attempt: AttemptRecord) -> None:
-        """
-        Print one attempt: its parameters and how it went.
-        """
+        """Print one attempt: its parameters and how it went."""
         number = len(step.attempts)
         kind = (
             "first attempt" if number == 1 else f"attempt {number} (perfect parameters)"
@@ -938,10 +1069,8 @@ class DiagnosedStackingDemonstration(RobotDemonstration):
     def _append_report(
         self, iteration: int, steps: list[StepRecord], standing: bool
     ) -> None:
-        """
-        Append how every step of ``iteration`` went, with its diagnoses, to
-        :attr:`report`.
-        """
+        """Append how every step of ``iteration`` went, with its diagnoses, to
+        :attr:`report`."""
         lines = [f"\n## Iteration {iteration}\n", f"Tower built: **{standing}**\n"]
         for step in steps:
             lines.append(f"\n### {step.label}\n")
@@ -963,14 +1092,12 @@ class DiagnosedStackingDemonstration(RobotDemonstration):
 
 
 def main() -> None:
-    """
-    Run the demonstration from the command line.
-    """
+    """Run the demonstration from the command line."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[1])
     parser.add_argument("--iterations", type=int, default=20)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--headless", action="store_true")
-    parser.add_argument("--live-port", type=int, default=8765)
+    parser.add_argument("--live-port", type=int, default=0)
     arguments = parser.parse_args()
     DiagnosedStackingDemonstration(
         iterations=arguments.iterations,
