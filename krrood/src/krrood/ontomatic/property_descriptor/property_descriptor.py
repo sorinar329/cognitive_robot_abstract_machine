@@ -182,6 +182,17 @@ class PropertyDescriptor(Symbol):
     """
 
     @classmethod
+    def super_classes(cls) -> tuple[type[PropertyDescriptor], ...]:
+        """
+        :return: The descriptor classes this descriptor class directly inherits from, its superproperties.
+        """
+        return tuple(
+            base
+            for base in cls.__bases__
+            if base is not PropertyDescriptor and issubclass(base, PropertyDescriptor)
+        )
+
+    @classmethod
     def attribute_name(cls) -> str:
         """
         :return: The name of the attribute a field managed by a descriptor of this class has by convention.
