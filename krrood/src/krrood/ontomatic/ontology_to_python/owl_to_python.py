@@ -67,6 +67,10 @@ from krrood.symbol_graph.symbol_graph import Symbol
 
 
 class SubsumptionType(Enum):
+    """
+    How a generated class relates to a class it specialises.
+    """
+
     SUBTYPE = "subtype"
     """
     It is a subtype of the given class (e.g. Math is a subtype of Course). This is the equivalent to OOP 
@@ -88,7 +92,13 @@ class RoleTakerInfo:
     """
 
     class_name: str
+    """
+    The name of the role-taker class.
+    """
     field_name: str
+    """
+    The name of the field holding the role taker.
+    """
 
 
 @dataclass
@@ -117,21 +127,69 @@ class ClassInfo:
     """
 
     name: str
+    """
+    The name of the generated class.
+    """
     uri: str
+    """
+    The IRI of the OWL class.
+    """
     superclasses: List[str] = field(default_factory=list)
+    """
+    The names of the classes the class is declared a subclass of.
+    """
     base_classes: List[str] = field(default_factory=list)
+    """
+    The names of the classes the generated class inherits from.
+    """
     all_base_classes: List[str] = field(default_factory=list)
+    """
+    The names of all classes the class inherits from, directly or not.
+    """
     all_base_classes_including_role_takers: List[str] = field(default_factory=list)
+    """
+    The names of all classes the class inherits from or is a role of, directly or not.
+    """
     base_classes_for_topological_sort: List[str] = field(default_factory=list)
+    """
+    The names of the classes that must be generated before the class.
+    """
     disjoint_with: List[str] = field(default_factory=list)
+    """
+    The names of the classes declared disjoint with the class.
+    """
     equivalent_classes: List[str] = field(default_factory=list)
+    """
+    The names of the named classes declared equivalent to the class.
+    """
     is_description_for: Optional[str] = None
+    """
+    The name of the named class this anonymous class expression describes, if it describes one.
+    """
     has_descriptions: List[str] = field(default_factory=list)
+    """
+    The names of the anonymous class expressions describing the class.
+    """
     label: Optional[str] = None
+    """
+    The label of the class, rendered into its docstring.
+    """
     comment: Optional[str] = None
+    """
+    The comment of the class, rendered into its docstring.
+    """
     add_role_taker: bool = True
+    """
+    Whether the generated class is a role and gets its role-taker type as a generic parameter.
+    """
     role_taker: Optional[RoleTakerInfo] = None
+    """
+    The class the class is a role of, if it is a role.
+    """
     declared_properties: List[str] = field(default_factory=list)
+    """
+    The names of the properties whose fields the generated class declares.
+    """
     axioms: List[str] = field(default_factory=list)
     """
     EQL conditions of the sufficient conditions (owl:equivalentClass definitions and general class axioms with the
@@ -142,6 +200,9 @@ class ClassInfo:
     Python conditions of the sufficient conditions, see :attr:`axioms`.
     """
     axioms_setup: List[str] = field(default_factory=list)
+    """
+    The statements declaring the variables the entity-query-language conditions of :attr:`axioms` quantify over.
+    """
     necessary_axioms_python: List[str] = field(default_factory=list)
     """
     Python conditions of the necessary conditions (restrictions in superclass position, i.e. rdfs:subClassOf of the
@@ -149,8 +210,14 @@ class ClassInfo:
     classification.
     """
     onto: Optional[OntologyInfo] = field(default=None, repr=False)
+    """
+    The ontology the class belongs to.
+    """
 
     def __deepcopy__(self, memo):
+        """
+        Copy everything but the ontology the class belongs to.
+        """
         # Custom deepcopy to avoid copying the ontology reference
         cls = self.__class__
         result = cls.__new__(cls)
@@ -163,6 +230,9 @@ class ClassInfo:
         return result
 
     def __hash__(self):
+        """
+        Class information is hashed by identity.
+        """
         return hash(id(self))
 
 
@@ -174,30 +244,105 @@ class PropertyInfo:
     """
 
     name: str
+    """
+    The name of the property in the ontology.
+    """
     uri: str
+    """
+    The IRI of the property.
+    """
     type: PropertyType
+    """
+    Whether the property relates individuals to individuals or to literals.
+    """
     domains: List[str] = field(default_factory=list)
+    """
+    The names of the classes whose individuals the property relates.
+    """
     ranges: List[str] = field(default_factory=list)
+    """
+    The names of the classes, or of the Python types of the literals, the property relates individuals to.
+    """
     range_uris: List[Any] = field(default_factory=list)
+    """
+    The IRIs of the ranges.
+    """
     label: Optional[str] = None
+    """
+    The label of the property, rendered as a comment of its fields.
+    """
     comment: Optional[str] = None
+    """
+    The comment of the property, rendered as a comment of its fields.
+    """
     field_name: str = ""
+    """
+    The name of the field holding the values of the property.
+    """
     descriptor_name: str = ""
+    """
+    The name of the descriptor class of the property.
+    """
     equivalent_properties: List[str] = field(default_factory=list)
+    """
+    The names of the properties declared equivalent to the property.
+    """
     disjoint_properties: List[str] = field(default_factory=list)
+    """
+    The names of the properties declared disjoint with the property.
+    """
     is_symmetric: bool = False
+    """
+    Whether the property is symmetric.
+    """
     is_reflexive: bool = False
+    """
+    Whether the property is reflexive.
+    """
     is_asymmetric: bool = False
+    """
+    Whether the property is asymmetric.
+    """
     is_irreflexive: bool = False
+    """
+    Whether the property is irreflexive.
+    """
     superproperties: List[str] = field(default_factory=list)
+    """
+    The names of the properties the property is declared a subproperty of.
+    """
     all_superproperties: List[str] = field(default_factory=list)
+    """
+    The names of all superproperties of the property, directly or not.
+    """
     inverses: List[str] = field(default_factory=list)
+    """
+    The names of the properties declared inverse to the property.
+    """
     inverse_of: Optional[str] = None
+    """
+    The name of the property the property is the inverse of, if any.
+    """
     inverse_target_is_prior: bool = False
+    """
+    Whether the descriptor class of the inverse is rendered before the descriptor class of the property.
+    """
     is_transitive: bool = False
+    """
+    Whether the property is transitive.
+    """
     is_functional: bool = False
+    """
+    Whether the property is functional, so that its field holds one value.
+    """
     is_specialized: bool = False
+    """
+    Whether the property is narrowed for one class, with a range of its own.
+    """
     declared_domains: List[str] = field(default_factory=list)
+    """
+    The names of the classes that declare a field for the property.
+    """
     rdfs_domains: List[str] = field(default_factory=list)
     """
     Names of the named classes declared with rdfs:domain for this property in the ontology.
@@ -207,16 +352,49 @@ class PropertyInfo:
     Names of the named classes declared with rdfs:range for this property in the ontology.
     """
     _overrides_for: List[str] = field(default_factory=list)
+    """
+    The names of the classes whose field type of the property is predefined.
+    """
     _predefined_data_type: bool = False
+    """
+    Whether the type of the property's values is predefined instead of inferred.
+    """
     data_type_hint_inner: Optional[str] = None
+    """
+    The Python type of a value of a data property.
+    """
     object_range_hint: Optional[str] = None
+    """
+    The Python type annotation of a value of an object property.
+    """
     base_descriptors: List[str] = field(default_factory=list)
+    """
+    The names of the classes the descriptor class of the property inherits from.
+    """
     equivalent_properties_descriptor_names: List[str] = field(default_factory=list)
+    """
+    The names of the descriptor classes of the equivalent properties.
+    """
     disjoint_properties_descriptor_names: List[str] = field(default_factory=list)
+    """
+    The names of the descriptor classes of the disjoint properties.
+    """
     chain_axioms: List[List[str]] = field(default_factory=list)
+    """
+    The names of the descriptor classes of every property chain implying the property.
+    """
     onto: Optional[OntologyInfo] = field(default=None, repr=False)
+    """
+    The ontology the property belongs to.
+    """
     _sorted_superproperties: List[str] = field(default_factory=list, init=False)
+    """
+    The superproperties in topological order, computed once.
+    """
     _all_superproperties: List[str] = field(default_factory=list, init=False)
+    """
+    The superproperties, directly or not, computed once.
+    """
 
     @property
     def sorted_superproperties(self):
@@ -256,6 +434,9 @@ class PropertyInfo:
         return self._all_superproperties
 
     def __deepcopy__(self, memo):
+        """
+        Copy everything but the ontology the property belongs to.
+        """
         # Custom deepcopy to avoid copying the ontology reference
         cls = self.__class__
         result = cls.__new__(cls)
@@ -268,6 +449,9 @@ class PropertyInfo:
         return result
 
     def __hash__(self):
+        """
+        Property information is hashed by identity.
+        """
         return hash(id(self))
 
 
@@ -276,22 +460,55 @@ class OntologyInfo:
     """Information about the ontology."""
 
     graph: rdflib.Graph
+    """
+    The RDF graph of the ontology.
+    """
     classes: Dict[str, ClassInfo] = field(default_factory=dict)
+    """
+    The classes to generate, by name.
+    """
     class_descriptions: Dict[str, ClassInfo] = field(default_factory=dict)
+    """
+    The anonymous class expressions describing a named class, by the name of that class.
+    """
     original_properties: Dict[str, PropertyInfo] = field(default_factory=dict)
+    """
+    The properties as the ontology declares them, by name.
+    """
     predefined_data_types: Optional[Dict[str, Dict[str, str]]] = None
+    """
+    The predefined Python types of the fields of classes, by class name and field name.
+    """
     ontology_label: str = "Thing"
+    """
+    The label of the ontology, naming its base class.
+    """
     role_cls_name: str = Role.__name__
+    """
+    The name of the role class generated classes take roles from.
+    """
     _properties: Optional[Dict[str, PropertyInfo]] = None
+    """
+    The properties as inferred, computed once from :attr:`original_properties`.
+    """
     property_restrictions: Dict[str, Dict[str, set]] = field(default_factory=dict)
+    """
+    The classes each property is restricted to, by the name of the restricted class and of the property.
+    """
 
     def __post_init__(self):
+        """
+        Link the classes and properties to the ontology.
+        """
         for prop_info in self.original_properties.values():
             prop_info.onto = self
         for cls_info in self.classes.values():
             cls_info.onto = self
 
     def description_for(self, description_name: str) -> Optional[str]:
+        """
+        :return: The name of the named class the anonymous class expression of this name describes, if any.
+        """
         for cls_name, cls_info in self.class_descriptions.items():
             if cls_info.name == description_name:
                 return cls_name
@@ -299,6 +516,9 @@ class OntologyInfo:
 
     @property
     def properties(self):
+        """
+        The properties as inferred, copies of :attr:`original_properties` the inference completes.
+        """
         if not self._properties:
             self._properties = {
                 n: deepcopy(info) for n, info in self.original_properties.items()
@@ -307,6 +527,9 @@ class OntologyInfo:
 
     @cached_property
     def base_cls_name(self):
+        """
+        The name of the base class every generated class inherits from.
+        """
         base_cls_name = NamingRegistry.to_pascal_case(
             re.sub(r"\W+", " ", self.ontology_label).strip()
         )
@@ -414,6 +637,9 @@ class OntologyInfo:
             )
 
     def __hash__(self):
+        """
+        Ontology information is hashed by identity.
+        """
         return hash(id(self))
 
 
@@ -804,7 +1030,13 @@ class InferenceEngine:
     """Engine for performing ontological inference and computing class/property relationships."""
 
     onto: OntologyInfo
+    """
+    The ontology whose classes and properties are inferred.
+    """
     property_maps: PropertyMaps = field(init=False)
+    """
+    The domains and ranges of the properties while they are inferred.
+    """
     XSD_TO_PYTHON_TYPES: ClassVar[Dict[rdflib.term.URIRef, str]] = {
         XSD.string: "str",
         XSD.normalizedString: "str",
@@ -832,8 +1064,14 @@ class InferenceEngine:
         XSD.time: "str",
         XSD.anyURI: "str",
     }
+    """
+    The Python types of the XML Schema datatypes.
+    """
 
     def __post_init__(self):
+        """
+        Start from the declared domains and ranges of the properties.
+        """
         self.property_maps = PropertyMaps.from_properties(self.onto.properties)
 
     @staticmethod
@@ -841,6 +1079,9 @@ class InferenceEngine:
         """Return a topological order based on dependency names in dep_key; if cycles, append remaining alphabetically."""
 
         def get_deps(item):
+            """
+            :return: The names of the items the item depends on.
+            """
             if hasattr(item, dep_key):
                 return getattr(item, dep_key, [])
             return item.get(dep_key, [])
@@ -1036,11 +1277,9 @@ class InferenceEngine:
 
     def _is_sufficient_class_expression(self, class_node: rdflib.term.Node) -> bool:
         """
-        Whether the class expression ``class_node`` (an intersection) is a sufficient condition of the class it
-        describes: a named class defined by the intersection, a general class axiom ``expression rdfs:subClassOf
-        Class``, an ``owl:equivalentClass`` definition, or an anonymous intersection that describes no named class and
-        so is a class of its own. An expression that only appears as a superclass of a named class
-        (``Class rdfs:subClassOf expression``) is a necessary condition.
+        Whether an intersection is a sufficient condition of the class it describes: a named class, a general class
+        axiom, an ``owl:equivalentClass`` definition, or an anonymous intersection that is a class of its own. One
+        appearing only as a superclass of a named class is a necessary condition.
 
         :param class_node: The class node.
         :return: True if the expression is a sufficient condition.
@@ -1924,6 +2163,9 @@ class InferenceEngine:
         ]
 
     def __hash__(self):
+        """
+        Inference engines are hashed by identity.
+        """
         return hash(id(self))
 
 
@@ -1959,8 +2201,17 @@ class CodeGenerator:
     """Orchestrates the generation of Python code from extracted ontology information."""
 
     onto: OntologyInfo
+    """
+    The ontology the code is generated from.
+    """
     engine: InferenceEngine = field(init=False)
+    """
+    The engine inferring the classes and properties of the ontology.
+    """
     renderer: JinjaRenderer = field(init=False)
+    """
+    The renderer of the templates of the generated modules.
+    """
 
     def __post_init__(self):
         """
@@ -2044,6 +2295,10 @@ class CodeGenerator:
         )
 
     def _update_base_classes(self):
+        """
+        Make every class inherit from its superclasses, or from the base class; a role inherits from the role class
+        and :class:`~krrood.symbol_graph.symbol_graph.Symbol` only.
+        """
         for n, info in self.onto.classes.items():
             if n == self.onto.base_cls_name:
                 continue
@@ -2058,6 +2313,9 @@ class CodeGenerator:
                 info.base_classes.append(Symbol.__name__)
 
     def _ensure_ontology_base_class_in_classes(self):
+        """
+        Add the base class of the ontology to the classes when the ontology does not declare it.
+        """
         if self.onto.base_cls_name in self.onto.classes:
             return
         self.onto.classes[self.onto.base_cls_name] = ClassInfo(
@@ -2471,10 +2729,8 @@ class OwlToPythonConverter:
         all_class_subjects = set(self.graph.subjects(RDF.type, OWL.Class))
 
         for cls_uri in all_class_subjects:
-            # Skip BNodes that are not intersections or unions, and unions that only appear inside another
-            # expression, such as the filler of a restriction: they are checked against their members instead.
-            # An anonymous intersection is a class of its own, classified by its conjuncts, unless it has the members
-            # of a named class's definition: then it stands for that class.
+            # Anonymous unions inside other expressions are checked against their members, and anonymous intersections
+            # with the members of a named class's definition stand for that class; neither is a class of its own.
             if isinstance(cls_uri, rdflib.BNode):
                 if not (
                     list(self.graph.objects(cls_uri, OWL.intersectionOf))

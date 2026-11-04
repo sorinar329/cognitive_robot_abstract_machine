@@ -1,3 +1,8 @@
+"""
+Loading the individuals of an OWL file into the classes generated from its ontology, and inferring their classes and
+facts by the OWL 2 RL rules.
+"""
+
 from __future__ import annotations
 
 import logging
@@ -136,6 +141,9 @@ class OwlInstancesRegistry:
     """
 
     def __init__(self, symbol_graph: Optional[SymbolGraph] = None) -> None:
+        """
+        :param symbol_graph: The symbol graph the objects of the individuals are added to.
+        """
         self._by_uri: Dict[URIRef, List[Any]] = defaultdict(list)
         self.type_explanations: Dict[URIRef, Dict[Type, TypeExplanation]] = defaultdict(
             dict
@@ -192,6 +200,10 @@ class OwlInstancesRegistry:
     def get_or_create_for(
         self, uri: URIRef, factory: Type, symbol_graph, *args, **kwargs
     ) -> Any:
+        """
+        :return: The object of the class for the individual: the existing one, or a new one, built on its role taker
+        when the class is a role.
+        """
         instances = self.resolve(uri)
 
         if instances and any(isinstance(inst, factory) for inst in instances):
@@ -215,25 +227,12 @@ class OwlInstancesRegistry:
         return inst
 
     def resolve(self, uri: URIRef) -> Optional[Any]:
+        """
+        :return: The objects of the individual, or None for an unknown individual.
+        """
         if isinstance(uri, str):
             uri = URIRef(uri)
         return self._by_uri.get(uri)
-
-
-@lru_cache(maxsize=None)
-def to_pascal(name: str) -> str:
-    parts = []
-    cur = []
-    for ch in name:
-        if ch == "_":
-            if cur:
-                parts.append("".join(cur))
-                cur = []
-        else:
-            cur.append(ch)
-    if cur:
-        parts.append("".join(cur))
-    return "".join(p.capitalize() for p in parts)
 
 
 class ModelMetadata:
@@ -316,15 +315,11 @@ class ModelMetadata:
     def get_descriptor_base(
         self, pred_local: str
     ) -> Optional[Type[PropertyDescriptor]]:
-        """Finds the PropertyDescriptor base class for a given predicate local name.
-
-        Args:
-            pred_local: The local name of the RDF predicate.
-
-        Returns:
-            The PropertyDescriptor subclass if found, otherwise None.
         """
-        return self.descriptor_by_name.get(to_pascal(pred_local))
+        :param pred_local: The field name of a property.
+        :return: The descriptor class of the property, or None if the modules define none.
+        """
+        return self.descriptor_by_name.get(NamingRegistry.to_pascal_case(pred_local))
 
 
 @dataclass(unsafe_hash=True)
@@ -343,9 +338,15 @@ class URIType:
     """
 
     def __str__(self):
+        """
+        The IRI and the class.
+        """
         return f"URIType(uri={self.uri}, type={self.type.__name__})"
 
     def __repr__(self):
+        """
+        The IRI and the class.
+        """
         return self.__str__()
 
 
@@ -354,17 +355,41 @@ class OwlLoader:
     """Loader for OWL/RDF instances into Python model instances."""
 
     owl_path: str
+    """
+    The path of the OWL file holding the individuals.
+    """
     model_modules: Union[ModuleType, Iterable[ModuleType]]
+    """
+    The generated modules: the base class, the classes and the property descriptors.
+    """
     symbol_graph: SymbolGraph
+    """
+    The symbol graph the objects of the individuals are added to.
+    """
     registry: OwlInstancesRegistry
+    """
+    The registry of the objects of every individual.
+    """
     graph: rdflib.Graph = field(default_factory=rdflib.Graph)
+    """
+    The graph of the OWL file.
+    """
     anonymous_instances: Dict[URIRef, AnonymousClass] = field(default_factory=dict)
+    """
+    Every individual while its classes are inferred, by its IRI.
+    """
     literals: Dict[URIRef, Dict[str, Literal]] = field(
         default_factory=lambda: defaultdict(dict)
     )
+    """
+    The literal values of every individual, by its IRI and the field name of the data property.
+    """
     _triples_by_subject: Dict[URIRef, List[Tuple[URIRef, Any]]] = field(
         default_factory=lambda: defaultdict(list)
     )
+    """
+    The predicates and objects of every subject of the graph.
+    """
     terminology: Optional[Owl2RlTerminology] = field(init=False, default=None)
     """
     The superclass expressions and constraint axioms of the ontology, read when loading.
@@ -383,6 +408,9 @@ class OwlLoader:
     """
 
     def __post_init__(self):
+        """
+        Read the classes and descriptors of the generated modules.
+        """
         self.metadata = ModelMetadata(self.model_modules, self.symbol_graph)
 
     def index_triples(self):
@@ -439,25 +467,10 @@ class OwlLoader:
 
     def infer_all_types_for_the_anonymous_instances(self):
         """
-        Infer the types of every individual from the properties it has. Only OWL 2 RL entailed types are added:
-
-        * the declared domain of every property of the individual (rule prp-dom), and its declared range for the
-          values (rule prp-rng);
-        * every class that declares a sufficient condition (an owl:equivalentClass definition or a general class axiom
-          with the class as superclass, rendered as its own ``axiom_python``) that the individual satisfies.
-
-        * the classes and values that the superclass expressions of the individual's classes require (rules cax-sco,
-          cls-int2, cls-hv1 and cls-avf, see :meth:`apply_superclass_expressions_to_anonymous_instances`).
-
-        Necessary conditions (restrictions in superclass position) are not used for classification, since they are
-        not entailed in the direction from the property to the class, and neither are the range specialisations of
-        subclasses.
-
-        Inferred types are also added to ``instance.types`` so that the type checks of the axioms (e.g. the
-        ``Student`` conjunct of ``Student and (hasMajor some Science) SubClassOf ScienceStudent``) see them. The
-        property values used for typing include those implied through transitivity and property chains (see
-        :meth:`close_type_relevant_properties_of_anonymous_instances`). The inference is repeated until neither a type
-        nor a property value is added (fixpoint).
+        Infer the OWL 2 RL entailed classes of every individual until nothing changes: the domains and ranges of its
+        properties (prp-dom, prp-rng), the classes whose sufficient conditions (``axiom_python``) it satisfies, and what the
+        superclass expressions of its classes require (see :meth:`apply_superclass_expressions_to_anonymous_instances`).
+        Necessary conditions do not classify.
         """
         declared_domains: Dict[Type[PropertyDescriptor], Tuple[Type, ...]] = {}
         sufficient_domains: Dict[Type[PropertyDescriptor], Tuple[Type, ...]] = {}
@@ -539,12 +552,10 @@ class OwlLoader:
 
     def apply_superclass_expressions_to_anonymous_instances(self) -> None:
         """
-        Apply the superclass expressions (necessary conditions) of the classes of every anonymous instance: an
-        individual of a class is an individual of the named classes the class is a subclass of through an
-        intersection (OWL 2 RL rules cax-sco, cls-int2), has the value of a ``hasValue`` restriction (cls-hv1), and the
-        values of its ``allValuesFrom`` restrictions are individuals of the filler (cls-avf). Complements and maximum
-        cardinalities derive no type or value; :class:`~krrood.ontomatic.ontology_to_python.owl2rl_check.Owl2RlCheck`
-        checks them.
+        Apply the superclass expressions of the classes of every anonymous instance: the named classes of intersections
+        (cax-sco, cls-int2), the values of ``hasValue`` restrictions (cls-hv1) and the classes of the values of
+        ``allValuesFrom`` restrictions (cls-avf). :class:`~krrood.ontomatic.ontology_to_python.owl2rl_check.Owl2RlCheck`
+        checks complements and maximum cardinalities.
         """
         for instance in list(self.anonymous_instances.values()):
             for (
@@ -624,14 +635,8 @@ class OwlLoader:
         self,
     ) -> Tuple[Type[PropertyDescriptor], ...]:
         """
-        The transitive properties whose closure can add a type. A fact derived by transitivity relates a subject that
-        already has a fact of the property to a value that already is a value of the property, so the domains and
-        ranges of the property and of the properties it implies add no new type. Its facts can only add a type
-        through a class expression on the property or on a property it implies (a ``someValuesFrom`` or ``hasValue``
-        condition, or an ``allValuesFrom`` restriction), or through a property chain that uses it.
-
-        :return: The transitive properties that occur, directly or through the properties they imply, in a
-         restriction of the ontology or in a property chain.
+        The transitive properties whose closure can add a class: those occurring, directly or through the properties they
+        imply, in a restriction of the ontology or in a property chain.
         """
         restricted = {
             NamingRegistry.to_snake_case(NamingRegistry.local_name(property_node))
@@ -805,6 +810,9 @@ class OwlLoader:
         return self._number_of_inferred_types(), self.number_of_anonymous_facts
 
     def _number_of_inferred_types(self) -> int:
+        """
+        :return: The number of classes inferred for all anonymous instances together.
+        """
         return sum(len(i.final_sorted_types) for i in self.anonymous_instances.values())
 
     def _add_inferred_type(self, instance: AnonymousClass, cls: Type) -> None:
@@ -860,6 +868,9 @@ class OwlLoader:
         return "rdfs_domains" in vars(desc)
 
     def _resolve_class_names(self, names: Iterable[str]) -> Tuple[Type, ...]:
+        """
+        :return: The generated classes with the names, leaving out names the modules do not define.
+        """
         return tuple(
             self.metadata.class_by_name[name]
             for name in names
@@ -940,6 +951,9 @@ class OwlLoader:
     def keep_most_specific_types_and_sort_from_least_to_most_specific(
         self,
     ) -> None:
+        """
+        Keep only the most specific inferred classes of every individual, from the least to the most specific.
+        """
         for instance in self.anonymous_instances.values():
             result = RoleAwareClassHierarchy.most_specific(
                 tuple(instance.final_sorted_types)
@@ -959,6 +973,9 @@ class OwlLoader:
     def sort_explicit_types_from_most_to_least_specific(
         self,
     ) -> None:
+        """
+        Order the objects of every individual from the most to the least specific class.
+        """
         for uri, instances in self.registry._by_uri.items():
             if len(instances) <= 1:
                 continue
@@ -988,6 +1005,9 @@ class OwlLoader:
     def get_descriptors_of_instance(
         self, instance: AnonymousClass
     ) -> List[Type[PropertyDescriptor]]:
+        """
+        :return: The descriptor classes of the properties the anonymous instance has values of.
+        """
         non_class_fields = instance.property_attribute_names()
         descriptors = [self.metadata.get_descriptor_base(f) for f in non_class_fields]
         return [d for d in descriptors if d is not None]
@@ -1000,6 +1020,10 @@ class OwlLoader:
         range_: Optional[Type] = None,
         range_inst: Optional[AnonymousClass] = None,
     ):
+        """
+        Add the domain of a property to the classes of the instance, and its range to those of the value, recording
+        why each was inferred.
+        """
         values = getattr(instance, desc.attribute_name(), None) or [None]
         if not any(IsSubClassOrRole.holds(t, dom) for t in instance.final_sorted_types):
             self._add_inferred_type(instance, dom)
@@ -1037,16 +1061,10 @@ class OwlLoader:
 
     def add_inferences_from_transitive_symmetric_relations(self):
         """
-        Close every property that is both symmetric and transitive: all individuals in a weakly connected component of
-        the relation graph of such a property are related to each other (and to themselves, unless the property is
-        irreflexive).
-
-        If the property implies other properties (see :meth:`implies_other_properties`), each entailed fact is added
-        as a relation of the symbol graph with the explanation SYMMETRIC_TRANSITIVE_COMPONENT, so the super-property,
-        inverse, chain and equivalence rules are applied to it. Otherwise, these rules derive nothing from the facts,
-        so the facts are only stored in the attributes of the members and the component is registered once as their
-        explanation (see :class:`SymmetricTransitiveComponent`). Transitive chaining is not repeated for these facts,
-        the component already closes them.
+        Close every symmetric and transitive property: it relates all members of a weakly connected component of its
+        relation graph. The facts become relations of the symbol graph when the property implies other properties
+        (:meth:`implies_other_properties`); otherwise they are stored only in the fields of the members, and the component
+        explains them (:class:`SymmetricTransitiveComponent`).
         """
         PropertyDescriptorRelation.symmetric_transitive_components.clear()
         transitive_symmetric_descriptor_types = [
@@ -1182,12 +1200,9 @@ class OwlLoader:
 
     def add_implied_property_values_to_anonymous_instances(self):
         """
-        Before the types are inferred, add to every individual the values of the properties implied by its asserted
-        object property values through super-properties (OWL 2 RL rule prp-spo1), equivalent properties (prp-eqp1/2),
-        inverse properties (prp-inv1/2) and symmetry (prp-symp). The domains of these properties and the sufficient
-        conditions that use them are then taken into account when the types are inferred (e.g.
-        ``isCrazyAbout SubPropertyOf loves`` makes ``Person and (loves some Sports) SubClassOf SportsLover``
-        applicable, and ``hasResearchProject SubPropertyOf hasWork`` with ``hasWork`` having the domain Employee).
+        Before the classes are inferred, add the values of the properties implied by the asserted object property values
+        of every individual through superproperties (prp-spo1), equivalent properties (prp-eqp1/2), inverses (prp-inv1/2) and
+        symmetry (prp-symp), so that their domains and the sufficient conditions using them classify too.
         """
         for subject, instance in self.anonymous_instances.items():
             for predicate, value in self._triples_by_subject[subject]:
@@ -1267,16 +1282,6 @@ class OwlLoader:
             existing_roles = self.registry.resolve(s)
             existing_roles = existing_roles or []
             role_types = list(map(type, existing_roles)) + [py_cls]
-            # if any(
-            #     "Woman" == t.__name__
-            #     for t in self.anonymous_instances[URIRef(s)].final_sorted_types
-            # ) and any(
-            #     r.__class__.__name__ in ["Chair", "Professor", "FullProfessor"]
-            #     for r in self.anonymous_instances[URIRef(s)].final_sorted_types
-            # ):
-            #     import pdbpp
-            #
-            #     pdbpp.set_trace()
             kwargs = self._get_common_role_taker_kwargs(existing_roles, py_cls)
             self.registry.get_or_create_for(s, py_cls, self.symbol_graph, **kwargs)
 
@@ -1727,10 +1732,19 @@ class OwlLoader:
         return combined_registry
 
     def __hash__(self):
+        """
+        Loaders are hashed by identity.
+        """
         return hash(id(self))
 
     def __str__(self):
+        """
+        The path of the OWL file.
+        """
         return f"OwlLoader(owl_path={self.owl_path})"
 
     def __repr__(self):
+        """
+        The path of the OWL file.
+        """
         return self.__str__()

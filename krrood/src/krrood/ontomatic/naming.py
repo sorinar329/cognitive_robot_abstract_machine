@@ -102,6 +102,9 @@ class NamingRegistry:
 
     @staticmethod
     def _get_node_name(graph, node):
+        """
+        :return: The Python name of a named class, of an anonymous class expression, or of a literal.
+        """
         if isinstance(node, rdflib.URIRef):
             return NamingRegistry.uri_to_python_name(node)
         if isinstance(node, rdflib.BNode):
@@ -110,6 +113,9 @@ class NamingRegistry:
 
     @staticmethod
     def _get_rdf_list(graph, head):
+        """
+        :return: The members of the RDF list starting at the head.
+        """
         items = []
         while head != rdflib.RDF.nil:
             items.append(graph.value(head, rdflib.RDF.first))

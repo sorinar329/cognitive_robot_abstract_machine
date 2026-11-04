@@ -1,17 +1,8 @@
 """
-Only sufficient conditions of a class may become classification axioms
-(``axiom_python``) in the generated code.
-
-The ontology (``dataset/ontologies/classification_axioms.ttl``) is a reduced version of the OWL2Bench OWL 2 RL
-ontology:
-
-* ``LeisureStudent SubClassOf (Student and takesCourse max 1 Course)`` and
-  ``WomanCollege SubClassOf (College and hasStudent only (not Man))`` are necessary conditions.
-* ``T20CricketFan EquivalentTo isCrazyAbout value T20Cricket`` is a definition (sufficient).
-* ``Student and (hasMajor some Science) SubClassOf ScienceStudent`` is a general class axiom (sufficient), whose named
-  conjunct ``Student`` must be kept.
-* ``Person and (worksFor some Organization) SubClassOf Employee`` with ``hasEmployee`` the inverse of ``worksFor`` does
-  not entail ``hasEmployee some Employee SubClassOf Organization``.
+Only sufficient conditions of a class, such as definitions and general class axioms,
+become classification axioms (``axiom_python``); necessary conditions and the inverses
+of general class axioms do not (``dataset/ontologies/classification_axioms.ttl``, a
+reduced OWL2Bench OWL 2 RL ontology).
 """
 
 from __future__ import annotations

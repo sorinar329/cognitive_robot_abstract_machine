@@ -1,12 +1,7 @@
 """
-The parts of an OWL 2 RL terminology that the generated Python model does not encode, read from the ontology's RDF
-graph: the class expressions in superclass position (necessary conditions) and the axioms that constrain individuals
-(functional and inverse-functional properties, keys, disjointness, irreflexive and asymmetric properties, negative
-property assertions, equality and inequality of individuals).
-
-The loader uses the superclass expressions to derive types and facts (OWL 2 RL/RDF rules cax-sco, cls-int2, cls-hv1 and
-cls-avf), and :mod:`krrood.ontomatic.ontology_to_python.owl2rl_check` uses the rest to check the rules that derive
-equality between individuals or inconsistency.
+The parts of an OWL 2 RL terminology the generated Python model does not encode, read from the ontology's RDF graph:
+the class expressions in superclass position, which the loader applies, and the axioms constraining individuals, which
+:mod:`krrood.ontomatic.ontology_to_python.owl2rl_check` checks.
 """
 
 from __future__ import annotations
@@ -245,6 +240,9 @@ class Owl2RlTerminology:
     """
 
     def __post_init__(self):
+        """
+        Read the superclass expressions and the constraints on individuals from the graph.
+        """
         self._read_superclass_expressions()
         self._read_property_characteristics()
         self._read_disjointness()
@@ -360,6 +358,9 @@ class Owl2RlTerminology:
                 )
 
     def _properties_of_type(self, property_type: URIRef) -> List[str]:
+        """
+        :return: The field names of the properties of the type, such as ``owl:FunctionalProperty``.
+        """
         return [
             self.field_name(node)
             for node in self.graph.subjects(RDF.type, property_type)
@@ -367,6 +368,9 @@ class Owl2RlTerminology:
         ]
 
     def _read_property_characteristics(self):
+        """
+        Read the functional, inverse-functional, irreflexive and asymmetric properties.
+        """
         self.functional_properties = self._properties_of_type(OWL.FunctionalProperty)
         self.inverse_functional_properties = self._properties_of_type(
             OWL.InverseFunctionalProperty
@@ -376,6 +380,9 @@ class Owl2RlTerminology:
         self.data_properties = self._properties_of_type(OWL.DatatypeProperty)
 
     def _read_disjointness(self):
+        """
+        Read the disjoint properties and the groups of disjoint classes.
+        """
         for first, second in self.graph.subject_objects(OWL.propertyDisjointWith):
             self.disjoint_property_groups.append(
                 (self.field_name(first), self.field_name(second))
@@ -406,6 +413,9 @@ class Owl2RlTerminology:
                 self.disjoint_class_groups.append(classes)
 
     def _read_keys(self):
+        """
+        Read the keys (``owl:hasKey``) of the classes.
+        """
         for class_node, key_list in self.graph.subject_objects(OWL.hasKey):
             python_class = self.python_class(class_node)
             if python_class is not None:
@@ -417,6 +427,9 @@ class Owl2RlTerminology:
                 )
 
     def _read_negative_property_assertions(self):
+        """
+        Read the negative property assertions.
+        """
         for assertion in self.graph.subjects(RDF.type, OWL.NegativePropertyAssertion):
             target = self.graph.value(assertion, OWL.targetIndividual)
             if target is None:
@@ -430,6 +443,9 @@ class Owl2RlTerminology:
             )
 
     def _read_equality_and_inequality(self):
+        """
+        Read the individuals asserted to be the same (``owl:sameAs``) and the groups of different individuals.
+        """
         self.same_individuals = [
             (first, second)
             for first, second in self.graph.subject_objects(OWL.sameAs)
@@ -444,6 +460,10 @@ class Owl2RlTerminology:
             self.different_individual_groups.append(tuple(self.members(members)))
 
     def _read_data_property_implications_and_domains(self):
+        """
+        Read, for every data property, the data properties it implies through subproperties and equivalent properties,
+        and the domains of all of them.
+        """
         data_properties = set(self.data_properties)
         neighbours: Dict[str, set] = {name: set() for name in data_properties}
         for first, second in self.graph.subject_objects(RDFS.subPropertyOf):
@@ -483,6 +503,9 @@ class Owl2RlTerminology:
         found = []
 
         def collect(python_class: Type, expression: ClassExpression):
+            """
+            Add the expression, and every operand of an intersection, that OWL 2 RL does not allow.
+            """
             if isinstance(expression, OutsideOwl2Rl):
                 found.append((python_class, expression))
             elif isinstance(expression, IntersectionOf):

@@ -1,3 +1,7 @@
+"""
+Predicates about roles and the entities they are roles of.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -113,4 +117,8 @@ class IsSubClassOrRole(Predicate):
 
     @classmethod
     def _example_operand_values_(cls) -> dict[str, Any]:
+        """
+        A class stands for :attr:`super_class`, see :meth:`~krrood.entity_query_language
+        .predicate.SymbolicCallable._example_operand_values_`.
+        """
         return {"super_class": object}

@@ -1,11 +1,7 @@
 """
-The conditions OWL class expressions put on the individuals of a class, rendered as the
-Python source of the classification axioms of the generated classes.
-
-Each condition is rendered twice: as an entity-query-language expression over
-``candidate_var`` (the ``axiom`` of a generated class), and as a plain Python expression
-over ``candidate`` (its ``axiom_python``). Variables an expression quantifies over are
-declared by setup statements that come before it.
+The conditions OWL class expressions put on the individuals of a class, rendered as the classification axioms of the
+generated classes: an entity-query-language form over ``candidate_var`` (``axiom``), after the setup statements
+declaring its variables, and a Python form over ``candidate`` (``axiom_python``).
 """
 
 from __future__ import annotations
@@ -83,6 +79,9 @@ class SubClassAxiomInfo(AxiomInfo):
         return f"candidate_types_for_{self.variable_name_part(self.sub_class)}"
 
     def setup_statements(self) -> list[str]:
+        """
+        Declares the variable over the classes of the individual, see :meth:`AxiomInfo.setup_statements`.
+        """
         return [f"{self.types_variable} = variable_from(candidate_var.types)"]
 
     def conditions_eql(self) -> list[str]:
@@ -172,6 +171,10 @@ class ValuesOfClassAxiomInfo(PropertyAxiomInfo, QualifiedAxiomInfoMixin, ABC):
         return f"{self.values_variable}_types"
 
     def setup_statements(self) -> list[str]:
+        """
+        Declares the variables over the values of the property and over their classes, see
+        :meth:`AxiomInfo.setup_statements`.
+        """
         return [
             f"{self.values_variable} = variable_from(candidate_var.{self.snake_property_name})",
             f"{self.value_types_variable} = variable_from({self.values_variable}.types)",
@@ -227,11 +230,17 @@ class QuantifiedAxiomInfo(PropertyAxiomInfo, ABC):
         return f"len(candidate.{self.snake_property_name})"
 
     def conditions_eql(self) -> list[str]:
+        """
+        Adds the comparison of the count of values to :meth:`PropertyAxiomInfo.conditions_eql`.
+        """
         return super().conditions_eql() + [
             f"{self.counted_values_eql} {self.comparison_operator} {self.quantity}"
         ]
 
     def conditions_python(self) -> list[str]:
+        """
+        Adds the comparison of the count of values to :meth:`PropertyAxiomInfo.conditions_python`.
+        """
         return super().conditions_python() + [
             f"({self.counted_values_python} {self.comparison_operator} {self.quantity})"
         ]
@@ -244,6 +253,9 @@ class CardinalityAxiomInfo(QuantifiedAxiomInfo):
     """
 
     comparison_operator: ClassVar[str] = "=="
+    """
+    Exactly the quantity.
+    """
 
 
 @dataclass
@@ -253,6 +265,9 @@ class MaxCardinalityAxiomInfo(QuantifiedAxiomInfo):
     """
 
     comparison_operator: ClassVar[str] = "<="
+    """
+    At most the quantity.
+    """
 
 
 @dataclass
@@ -262,6 +277,9 @@ class MinCardinalityAxiomInfo(QuantifiedAxiomInfo):
     """
 
     comparison_operator: ClassVar[str] = ">="
+    """
+    At least the quantity.
+    """
 
 
 @dataclass
@@ -272,10 +290,16 @@ class QuantifiedQualifiedAxiomInfo(QuantifiedAxiomInfo, QualifiedAxiomInfoMixin,
 
     @property
     def counted_values_eql(self) -> str:
+        """
+        Counts only the values belonging to the class, see :attr:`QuantifiedAxiomInfo.counted_values_eql`.
+        """
         return f"NumberOfValuesOfClass(candidate_var.{self.snake_property_name}, {self.on_class})"
 
     @property
     def counted_values_python(self) -> str:
+        """
+        Counts only the values belonging to the class, see :attr:`QuantifiedAxiomInfo.counted_values_python`.
+        """
         return f"NumberOfValuesOfClass.count(candidate.{self.snake_property_name}, {self.on_class})"
 
 
@@ -286,6 +310,9 @@ class QualifiedCardinalityAxiomInfo(QuantifiedQualifiedAxiomInfo):
     """
 
     comparison_operator: ClassVar[str] = "=="
+    """
+    Exactly the quantity.
+    """
 
 
 @dataclass
@@ -295,6 +322,9 @@ class MaxQualifiedCardinalityAxiomInfo(QuantifiedQualifiedAxiomInfo):
     """
 
     comparison_operator: ClassVar[str] = "<="
+    """
+    At most the quantity.
+    """
 
 
 @dataclass
@@ -304,6 +334,9 @@ class MinQualifiedCardinalityAxiomInfo(QuantifiedQualifiedAxiomInfo):
     """
 
     comparison_operator: ClassVar[str] = ">="
+    """
+    At least the quantity.
+    """
 
 
 @dataclass
@@ -346,6 +379,10 @@ class HasValueAxiomInfo(PropertyAxiomInfo):
         return f"{self.snake_property_name}_values"
 
     def setup_statements(self) -> list[str]:
+        """
+        Declares the variable over the values of the property when an individual is among several values, see
+        :meth:`AxiomInfo.setup_statements`.
+        """
         if not (isinstance(self.value, URIRef) and self.has_several_values):
             return []
         return [
@@ -353,6 +390,9 @@ class HasValueAxiomInfo(PropertyAxiomInfo):
         ]
 
     def conditions_eql(self) -> list[str]:
+        """
+        Adds the comparison of the values of the property to the value to :meth:`PropertyAxiomInfo.conditions_eql`.
+        """
         attribute = f"candidate_var.{self.snake_property_name}"
         if isinstance(self.value, URIRef):
             if self.has_several_values:
@@ -366,6 +406,10 @@ class HasValueAxiomInfo(PropertyAxiomInfo):
         return super().conditions_eql() + [condition]
 
     def conditions_python(self) -> list[str]:
+        """
+        Adds the comparison of the values of the property to the value to
+        :meth:`PropertyAxiomInfo.conditions_python`.
+        """
         attribute = f"candidate.{self.snake_property_name}"
         if isinstance(self.value, URIRef):
             if self.has_several_values:
@@ -386,11 +430,17 @@ class SomeValuesFromAxiomInfo(ValuesOfClassAxiomInfo):
     """
 
     def conditions_eql(self) -> list[str]:
+        """
+        Adds that a value belongs to the class to :meth:`PropertyAxiomInfo.conditions_eql`.
+        """
         return super().conditions_eql() + [
             f"exists({self.values_variable}, {self.value_is_of_class_eql})"
         ]
 
     def conditions_python(self) -> list[str]:
+        """
+        Adds that a value belongs to the class to :meth:`PropertyAxiomInfo.conditions_python`.
+        """
         return super().conditions_python() + [
             f"any({self.value_is_of_class_python} for value in candidate.{self.snake_property_name})"
         ]
@@ -404,11 +454,17 @@ class AllValuesFromAxiomInfo(ValuesOfClassAxiomInfo):
     """
 
     def conditions_eql(self) -> list[str]:
+        """
+        Adds that every value belongs to the class to :meth:`PropertyAxiomInfo.conditions_eql`.
+        """
         return super().conditions_eql() + [
             f"for_all({self.values_variable}, {self.value_is_of_class_eql})"
         ]
 
     def conditions_python(self) -> list[str]:
+        """
+        Adds that every value belongs to the class to :meth:`PropertyAxiomInfo.conditions_python`.
+        """
         return super().conditions_python() + [
             f"all({self.value_is_of_class_python} for value in candidate.{self.snake_property_name})"
         ]
@@ -426,6 +482,9 @@ class ComplementAxiomInfo(AxiomInfo):
     """
 
     def setup_statements(self) -> list[str]:
+        """
+        The statements of the complemented condition, see :meth:`AxiomInfo.setup_statements`.
+        """
         return self.complemented.setup_statements()
 
     def conditions_eql(self) -> list[str]:

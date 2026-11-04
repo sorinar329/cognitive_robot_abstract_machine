@@ -1,3 +1,7 @@
+"""
+The graph of the symbols created in the process, of the classes they belong to and of the relations between them.
+"""
+
 from __future__ import annotations
 
 import os

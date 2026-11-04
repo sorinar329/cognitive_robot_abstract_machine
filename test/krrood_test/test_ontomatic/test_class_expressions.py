@@ -1,17 +1,7 @@
 """
-Every OWL class expression of the pizza ontology (owlcs/pizza-ontology) is translated into the generated code, not
-only those attached to a named class through ``rdfs:subClassOf`` (``dataset/ontologies/class_expressions.ttl``):
-
-* ``CheesyPizza EquivalentTo Pizza and (hasTopping some CheeseTopping)`` is a definition whose named conjunct is a
-  superclass.
-* ``Margherita SubClassOf hasTopping only (MozzarellaTopping or TomatoTopping)`` is a closure axiom over a union.
-* ``VegetarianPizza EquivalentTo Pizza and not (hasTopping some MeatTopping)`` and
-  ``NonVegetarianPizza EquivalentTo Pizza and not VegetarianPizza`` define classes by complements.
-* ``Country EquivalentTo {America, Italy} and DomainConcept`` is an enumeration.
-* ``InterestingPizza EquivalentTo Pizza and (hasTopping min 3)`` is an unqualified cardinality.
-* ``HotCheesePizza`` restricts to an anonymous intersection, ``SpicyPizza`` to one that is the definition of
-  ``SpicyTopping``.
-* ``American`` names an individual that is also typed ``owl:Thing``, and restricts one property to several classes.
+Every OWL class expression of the pizza ontology (owlcs/pizza-ontology) is translated into the generated code:
+definitions, unions as fillers, complements, enumerations, unqualified cardinalities, anonymous intersections as
+fillers and values typed by their class (``dataset/ontologies/class_expressions.ttl``).
 """
 
 from __future__ import annotations

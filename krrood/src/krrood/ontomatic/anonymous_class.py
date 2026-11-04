@@ -68,9 +68,15 @@ class AnonymousClass:
         return variable(AnonymousClass, [candidate])
 
     def __hash__(self):
+        """
+        Individuals are hashed by their IRI.
+        """
         return hash(self.uri)
 
     def __eq__(self, other):
+        """
+        Individuals are equal when they have the same IRI.
+        """
         return hash(self) == hash(other)
 
 
@@ -113,4 +119,8 @@ class NumberOfValuesOfClass(SymbolicFunction):
 
     @classmethod
     def _example_operand_values_(cls) -> dict[str, Any]:
+        """
+        A class stands for :attr:`value_class`, see :meth:`~krrood.entity_query_language
+        .predicate.SymbolicCallable._example_operand_values_`.
+        """
         return {"value_class": object}

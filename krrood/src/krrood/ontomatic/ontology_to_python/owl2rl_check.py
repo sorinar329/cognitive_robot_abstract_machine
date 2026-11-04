@@ -1,13 +1,7 @@
 """
-Check a loaded knowledge base against the OWL 2 RL/RDF rules that Ontomatic does not apply while loading: the rules that
-derive the equality of two individuals (prp-fp, prp-ifp, prp-key, cls-maxc2, cls-maxqc3, cls-maxqc4, and asserted
-``owl:sameAs``) and the rules that derive an inconsistency (eq-diff1-3, prp-irp, prp-asyp, prp-pdw, prp-adp,
-prp-npa1/2, cls-com, cls-maxc1, cls-maxqc1/2, cax-dw, cax-adc, and dt-diff for functional data properties).
-
-Ontomatic assumes that different IRIs denote different individuals. If no equality rule fires, the OWL 2 RL/RDF closure
-of the ontology relates no two different individuals by ``owl:sameAs``, so the equality rules (eq-*) derive nothing
-either, and the unique-name assumption is entailed rather than assumed. If no inconsistency rule fires, the ontology is
-consistent under these rules.
+Check a loaded knowledge base against the OWL 2 RL/RDF rules ontomatic does not apply while loading: those deriving
+the equality of two individuals and those deriving an inconsistency. When no equality rule fires, the unique-name
+assumption ontomatic makes is entailed; when no inconsistency rule fires, the ontology is consistent under these rules.
 """
 
 from __future__ import annotations
@@ -136,10 +130,22 @@ class Owl2RlCheck:
     The objects of every individual, as in ``OwlInstancesRegistry._by_uri``.
     """
     report: Owl2RlReport = field(default_factory=Owl2RlReport)
+    """
+    The findings of the rules checked so far.
+    """
     _values: Dict[Tuple[URIRef, str], Set[str]] = field(default_factory=dict)
+    """
+    The IRIs of the object values of every individual and field, collected over all objects of the individual.
+    """
     _data_values: Dict[Tuple[URIRef, str], Set[Any]] = field(init=False)
+    """
+    The data values every individual is asserted to have for every field.
+    """
 
     def __post_init__(self):
+        """
+        Collect the asserted data values.
+        """
         self._data_values = self._asserted_data_values()
 
     def run(self) -> Owl2RlReport:
@@ -164,6 +170,9 @@ class Owl2RlCheck:
         return self.report
 
     def individuals(self) -> Iterable[URIRef]:
+        """
+        :return: The IRIs of the checked individuals.
+        """
         return self.objects_by_uri.keys()
 
     def is_member(self, uri: URIRef, python_class: Type) -> bool:
@@ -233,20 +242,33 @@ class Owl2RlCheck:
         return values
 
     def _equality(self, rule: Owl2RlRule, individuals: Iterable[Any], detail: str):
+        """
+        Report that the rule makes the individuals equal.
+        """
         self.report.equalities.append(
             Owl2RlFinding(rule, tuple(sorted(map(str, individuals))), detail)
         )
 
     def _inconsistency(self, rule: Owl2RlRule, individuals: Iterable[Any], detail: str):
+        """
+        Report that the individuals violate the rule.
+        """
         self.report.inconsistencies.append(
             Owl2RlFinding(rule, tuple(sorted(map(str, individuals))), detail)
         )
 
     def _check_same_as(self):
+        """
+        Report the individuals asserted to be the same (``owl:sameAs``).
+        """
         for first, second in self.terminology.same_individuals:
             self._equality(Owl2RlRule.SAME_AS, (first, second), "asserted")
 
     def _check_functional_properties(self):
+        """
+        Report the values of a functional property that the rule prp-fp makes equal, and the different data values
+        of a functional data property (dt-diff).
+        """
         data_properties = set(self.terminology.data_properties)
         for field_name in self.terminology.functional_properties:
             for uri in self.individuals():
@@ -266,6 +288,9 @@ class Owl2RlCheck:
                     )
 
     def _check_inverse_functional_properties(self):
+        """
+        Report the subjects of an inverse-functional property that the rule prp-ifp makes equal.
+        """
         for field_name in self.terminology.inverse_functional_properties:
             subjects_by_value: Dict[str, Set[str]] = defaultdict(set)
             for uri in self.individuals():
@@ -280,11 +305,17 @@ class Owl2RlCheck:
                     )
 
     def _key_values(self, uri: URIRef, field_name: str) -> Set[Any]:
+        """
+        :return: The values of an individual for a key field: its data values or the IRIs of its object values.
+        """
         if field_name in self.terminology.data_properties:
             return self._data_values.get((uri, field_name), set())
         return self.values(uri, field_name)
 
     def _check_keys(self):
+        """
+        Report the members of a class with the same values for its key that the rule prp-key makes equal.
+        """
         for key in self.terminology.keys:
             members = [
                 uri
@@ -313,6 +344,10 @@ class Owl2RlCheck:
                         )
 
     def _check_superclass_expressions(self):
+        """
+        Report the violations of the superclass expressions of the classes of every individual (cls-com, cls-maxc,
+        cls-maxqc) and the missing conclusions of the expressions the loader applies.
+        """
         for (
             python_class,
             expressions,
@@ -385,6 +420,9 @@ class Owl2RlCheck:
                 self._equality(Owl2RlRule.CLS_MAXC, values, detail)
 
     def _check_disjoint_classes(self):
+        """
+        Report the individuals belonging to disjoint classes (cax-dw, cax-adc).
+        """
         for group in self.terminology.disjoint_class_groups:
             for uri in self.individuals():
                 classes = [
@@ -400,6 +438,10 @@ class Owl2RlCheck:
                     )
 
     def _check_property_characteristics(self):
+        """
+        Report the violations of irreflexive (prp-irp), asymmetric (prp-asyp) and disjoint (prp-pdw, prp-adp)
+        properties.
+        """
         for field_name in self.terminology.irreflexive_properties:
             for uri in self.individuals():
                 if str(uri) in self.values(uri, field_name):
@@ -430,6 +472,9 @@ class Owl2RlCheck:
                         )
 
     def _check_negative_property_assertions(self):
+        """
+        Report the facts that negative property assertions deny (prp-npa1/2).
+        """
         for assertion in self.terminology.negative_property_assertions:
             if isinstance(assertion.target, Literal):
                 violated = assertion.target.toPython() in self._data_values.get(
@@ -447,6 +492,9 @@ class Owl2RlCheck:
                 )
 
     def _check_different_individuals(self):
+        """
+        Report the individuals asserted to be different that an equality rule makes equal (eq-diff1-3).
+        """
         equal_pairs = {
             frozenset(pair)
             for finding in self.report.equalities

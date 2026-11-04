@@ -1,12 +1,8 @@
 """
-Subclass and role relations of the generated classes must only come from the ontology
-(rdfs:subClassOf, owl:equivalentClass and roleFor restrictions), never from properties
-that two classes happen to share.
-
-In the OWL2Bench RL ontology (``dataset/ontologies/no_implicit_subsumption.ttl``), ``SportsLover`` and
-``PeopleWithHobby`` are both roles of ``Person`` and unrelated otherwise; ``loves`` is a sub-property of ``likes``.
-Ontomatic used to make ``SportsLover`` a subclass of ``PeopleWithHobby`` because of the shared (super-)property, which
-OWL 2 RL does not entail.
+Subclass and role relations of the generated classes come only from the ontology, never
+from properties two classes share: ``SportsLover`` and ``PeopleWithHobby`` stay
+unrelated roles of ``Person`` although ``loves`` is a subproperty of ``likes``
+(``dataset/ontologies/no_implicit_subsumption.ttl``).
 """
 
 from __future__ import annotations

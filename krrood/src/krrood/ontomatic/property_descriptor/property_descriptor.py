@@ -535,4 +535,8 @@ class HasProperty(Predicate):
 
     @classmethod
     def _example_operand_values_(cls) -> dict[str, Any]:
+        """
+        A descriptor class stands for :attr:`property_descriptor_type`, see
+        :meth:`~krrood.entity_query_language.predicate.SymbolicCallable._example_operand_values_`.
+        """
         return {"property_descriptor_type": PropertyDescriptor}
