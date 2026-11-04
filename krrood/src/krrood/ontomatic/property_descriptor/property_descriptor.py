@@ -8,7 +8,9 @@ from collections import defaultdict
 from dataclasses import dataclass, field, fields
 from functools import cached_property, lru_cache
 
-from typing_extensions import ClassVar, Any, Iterable, Dict, List
+from types import ModuleType
+
+from typing_extensions import ClassVar, Any, Iterable, Iterator, Dict, List
 
 from krrood.ontomatic.property_descriptor.mixins import HasChainAxioms
 from krrood.ontomatic.property_descriptor.monitored_container import (
@@ -18,14 +20,31 @@ from krrood.ontomatic.property_descriptor.monitored_container import (
 from krrood.ontomatic.property_descriptor.property_descriptor_relation import (
     PropertyDescriptorRelation,
 )
-from krrood.ontomatic.failures import UnMonitoredContainerTypeForDescriptor
+from krrood.ontomatic.failures import (
+    DescriptorNotDeclaredForDomain,
+    UnMonitoredContainerTypeForDescriptor,
+)
 from krrood.class_diagrams.class_diagram import (
     WrappedClass,
     Association,
     AssociationThroughRoleTaker,
 )
+from krrood.class_diagrams.utils import classes_of_module
 from krrood.class_diagrams.wrapped_field import WrappedField
-from krrood.entity_query_language.predicate import Symbol
+from krrood.entity_query_language.core.variable import InstantiatedVariable
+from krrood.entity_query_language.factories import and_, variable
+from krrood.entity_query_language.predicate import Predicate, RenderedFields, Symbol
+from krrood.entity_query_language.verbalization.fragments.base import (
+    VerbalizationFragment,
+)
+from krrood.entity_query_language.verbalization.vocabulary.parts_of_speech import (
+    clause,
+    Noun,
+    Verb,
+)
+from krrood.ontomatic.anonymous_class import AnonymousClass
+from krrood.ontomatic.naming import NamingRegistry
+from krrood.patterns.role import Role
 from krrood.symbol_graph.symbol_graph import (
     SymbolGraph,
 )
@@ -149,12 +168,25 @@ class PropertyDescriptor(Symbol):
     """
     A set of all range types for this descriptor class.
     """
+    descriptor_instances_by_domain_type: ClassVar[
+        defaultdict[type[PropertyDescriptor], dict[SymbolType, PropertyDescriptor]]
+    ] = defaultdict(dict)
+    """
+    For each descriptor class, the descriptor instance managing the field of each of its domain types.
+    """
     chains_with_descriptor: ClassVar[
         defaultdict[type[PropertyDescriptor], set[ChainPosition]]
     ] = defaultdict(set)
     """
     For each descriptor class, the positions it takes in the property chains that imply other descriptor classes.
     """
+
+    @classmethod
+    def attribute_name(cls) -> str:
+        """
+        :return: The name of the attribute a field managed by a descriptor of this class has by convention.
+        """
+        return NamingRegistry.to_snake_case(cls.__name__)
 
     def __post_init__(self):
         """
@@ -211,16 +243,68 @@ class PropertyDescriptor(Symbol):
         """
         Update the domain and range sets and the domain-range map for this descriptor type.
         """
+        self._register_for_domain(self.domain)
+
+    def _register_for_domain(self, domain: SymbolType):
+        """
+        Register this descriptor instance as the one managing the field for instances of the domain, and the domain
+        as a domain of this descriptor type and its super descriptor types.
+        """
         range_type = self.wrapped_field.type_endpoint
         assert issubclass(range_type, Symbol)
-        self.domain_range_map[self.__class__][self.domain] = range_type
+        self.domain_range_map[self.__class__][domain] = range_type
+        self.descriptor_instances_by_domain_type[self.__class__][domain] = self
         for super_class in self.__class__.__mro__:
             if (super_class is PropertyDescriptor) or not issubclass(
                 super_class, PropertyDescriptor
             ):
                 continue
-            self.all_domains[super_class].add(self.domain)
+            self.all_domains[super_class].add(domain)
             self.all_ranges[super_class].add(range_type)
+
+    @classmethod
+    def get_descriptor_instance_for_domain_type(
+        cls, domain_type: SymbolType
+    ) -> PropertyDescriptor:
+        """
+        :param domain_type: A class whose instances have the field this descriptor type manages.
+        :return: The descriptor instance declared for the class, or else for the nearest class it inherits the field
+            from, its role takers' classes included.
+        :raises DescriptorNotDeclaredForDomain: If neither the class nor a class it inherits from declares it.
+        """
+        descriptors = cls.descriptor_instances_by_domain_type[cls]
+        for inherited_type in cls._types_a_domain_inherits_fields_from(domain_type):
+            if inherited_type in descriptors:
+                return descriptors[inherited_type]
+        raise DescriptorNotDeclaredForDomain(cls, domain_type)
+
+    @staticmethod
+    def _types_a_domain_inherits_fields_from(domain_type: type) -> Iterator[type]:
+        """
+        :return: The classes of the method resolution order of the domain type, followed by those of the role-taker
+            type when the domain type is a role.
+        """
+        yield from domain_type.__mro__
+        if issubclass(domain_type, Role) and domain_type is not Role:
+            yield from PropertyDescriptor._types_a_domain_inherits_fields_from(
+                domain_type.get_role_taker_type()
+            )
+
+    @classmethod
+    def update_domains_that_are_axiomatized_on_properties(cls, module: ModuleType):
+        """
+        Register every class of the module whose classification axiom mentions a property as a domain of the
+        property's descriptor type.
+        """
+        for domain_type in classes_of_module(module):
+            if "axiom" not in vars(domain_type):
+                continue
+            for descriptor_type in HasProperty.descriptor_types_in_axiom_of(
+                domain_type
+            ):
+                descriptor_type.get_descriptor_instance_for_domain_type(
+                    domain_type
+                )._register_for_domain(domain_type)
 
     @cached_property
     def range(self) -> SymbolType:
@@ -388,3 +472,56 @@ class PropertyDescriptor(Symbol):
             domain_type, association_condition
         )
         return tuple(associations_generator)
+
+
+@dataclass(eq=False)
+class HasProperty(Predicate):
+    """
+    Predicate asserting that an instance has an attribute for the property of a
+    descriptor class.
+    """
+
+    instance: Any
+    """
+    The instance that is checked.
+    """
+
+    property_descriptor_type: type[PropertyDescriptor]
+    """
+    The descriptor class of the property.
+    """
+
+    def __call__(self) -> bool:
+        return hasattr(self.instance, self.property_descriptor_type.attribute_name())
+
+    @staticmethod
+    @lru_cache(maxsize=None)
+    def descriptor_types_in_axiom_of(
+        cls: type,
+    ) -> tuple[type[PropertyDescriptor], ...]:
+        """
+        :param cls: A class with a classification axiom.
+        :return: The descriptor types of the properties the axiom requires an individual to have.
+        """
+        axiom = and_(*cls.axiom(variable(AnonymousClass, None)))
+        return tuple(
+            dict.fromkeys(
+                expression._kwargs_["property_descriptor_type"]
+                for expression in axiom._descendants_
+                if isinstance(expression, InstantiatedVariable)
+                and issubclass(expression._type_, HasProperty)
+            )
+        )
+
+    @classmethod
+    def _verbalization_fragment_(cls, fields: RenderedFields) -> VerbalizationFragment:
+        """:return: the clause *"<instance> has <property_descriptor_type>"*."""
+        return clause(
+            Noun(fields["instance"]),
+            Verb("have"),
+            Noun(fields["property_descriptor_type"]),
+        )
+
+    @classmethod
+    def _example_operand_values_(cls) -> dict[str, Any]:
+        return {"property_descriptor_type": PropertyDescriptor}
