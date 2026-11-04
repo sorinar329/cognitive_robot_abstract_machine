@@ -8,6 +8,7 @@ from krrood.entity_query_language.entity import (
     exists_on,
 )
 from krrood.entity_query_language.entity_result_processors import an, the
+from krrood.entity_query_language.symbolic import Exists, ForAll
 from ..dataset.example_classes import VectorsWithProperty
 from ..dataset.semantic_world_like_classes import View, Drawer, Container, Cabinet
 
@@ -122,3 +123,16 @@ def test_property_selection():
     """
     v = variable(VectorsWithProperty, None)
     q = an(entity(v).where(v.vectors[0].x == 1))
+
+
+def test_negating_a_quantifier_quantifies_the_negated_condition_over_the_same_variables():
+    numbers = variable(int, [1, 2, 3])
+    existential = exists_on(numbers, numbers > 2)
+
+    universal = not_(existential)
+    assert isinstance(universal, ForAll)
+    assert universal.variables is existential.variables
+    assert universal.condition is not existential.condition
+
+    assert isinstance(not_(universal), Exists)
+    assert not_(universal).variables is existential.variables

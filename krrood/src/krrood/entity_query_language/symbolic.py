@@ -2094,7 +2094,7 @@ class ForAll(QuantifiedConditional):
         return False
 
     def _invert_(self):
-        return Exists(self.variables, self.condition._invert_())
+        return Exists(_child_=self.condition._invert_(), variables=self.variables)
 
 
 @dataclass(eq=False, repr=False)
@@ -2130,7 +2130,7 @@ class Exists(QuantifiedConditional):
         return False
 
     def _invert_(self):
-        return ForAll(self.variables, self.condition._invert_())
+        return ForAll(_child_=self.condition._invert_(), variables=self.variables)
 
 
 OperatorOptimizer = Callable[[SymbolicExpression, SymbolicExpression], LogicalOperator]

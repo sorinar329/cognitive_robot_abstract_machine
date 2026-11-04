@@ -15,15 +15,23 @@ from enum import Enum
 from functools import cached_property, lru_cache
 
 from .axioms import (
+    AxiomInfo,
     SubClassAxiomInfo,
     QualifiedAxiomInfoMixin,
     QualifiedCardinalityAxiomInfo,
     MaxQualifiedCardinalityAxiomInfo,
     MinQualifiedCardinalityAxiomInfo,
+    CardinalityAxiomInfo,
+    MaxCardinalityAxiomInfo,
+    MinCardinalityAxiomInfo,
     HasValueAxiomInfo,
     SomeValuesFromAxiomInfo,
     AllValuesFromAxiomInfo,
+    ComplementAxiomInfo,
+    OneOfAxiomInfo,
+    PropertyAxiomInfo,
 )
+from ..failures import UnionOfAnonymousClassesAsFiller, UntranslatedComplement
 
 from ...entity_query_language.entity import Symbol
 from typing_extensions import Dict, List, Optional, Any, Set, ClassVar
@@ -79,6 +87,24 @@ class RoleTakerInfo:
 
     class_name: str
     field_name: str
+
+
+@dataclass
+class RestrictionCondition:
+    """
+    A restriction translated into the condition it puts on a class.
+    """
+
+    axiom: PropertyAxiomInfo
+    """
+    The condition.
+    """
+
+    value_class: Optional[str]
+    """
+    The named class the restriction restricts the values of the property to, or None when it names no single class,
+    so that the range of the property is taken from its declaration.
+    """
 
 
 @dataclass
@@ -447,6 +473,8 @@ class ClassExtractor:
                     has_descriptions.append(
                         NamingRegistry.uri_to_python_name(superclass, self.graph)
                     )
+        if not is_b_node:
+            superclasses.extend(self.named_conjuncts_of_definitions(class_uri))
 
         # De-duplicate while preserving order
         seen = set()
@@ -483,7 +511,12 @@ class ClassExtractor:
                 raise NotImplemented(
                     f"BNode class {class_name} has multiple subclasses: {subclasses}"
                 )
-            is_description_for = NamingRegistry.uri_to_python_name(subclasses[0])
+            if subclasses:
+                is_description_for = NamingRegistry.uri_to_python_name(subclasses[0])
+            else:
+                is_description_for = self.defined_class(class_uri)
+            if is_description_for is None:
+                unique_superclasses = self.named_conjuncts_of(class_uri)
 
         return ClassInfo(
             name=class_name,
@@ -497,6 +530,75 @@ class ClassExtractor:
             comment=self.metadata_extractor.get_comment(class_uri),
             add_role_taker=True,
         )
+
+    def defined_class(self, class_expression: rdflib.BNode) -> Optional[str]:
+        """
+        :param class_expression: An anonymous class expression.
+        :return: The name of the named class the expression is the ``owl:equivalentClass`` of, or None when it is
+            the definition of no named class.
+        """
+        for defined in [
+            *self.graph.subjects(OWL.equivalentClass, class_expression),
+            *self.graph.objects(class_expression, OWL.equivalentClass),
+        ]:
+            if isinstance(defined, rdflib.URIRef):
+                return NamingRegistry.uri_to_python_name(defined)
+        return None
+
+    def is_attached_to_a_named_class(self, class_expression: rdflib.BNode) -> bool:
+        """
+        :param class_expression: An anonymous class expression.
+        :return: Whether the expression describes a named class: as its superclass, its subclass or its definition.
+            An expression that only appears inside another one, such as the filler of a restriction, describes none.
+        """
+        return (
+            any(self.graph.objects(class_expression, RDFS.subClassOf))
+            or any(self.graph.subjects(RDFS.subClassOf, class_expression))
+            or self.defined_class(class_expression) is not None
+        )
+
+    def named_class_defined_alike(
+        self, class_expression: rdflib.BNode
+    ) -> Optional[str]:
+        """
+        :param class_expression: An anonymous intersection.
+        :return: The name of the named class defined by another intersection of the same members, which the expression
+            therefore stands for, or None.
+        """
+        name = NamingRegistry.uri_to_python_name(class_expression, self.graph)
+        for definition in self.graph.subjects(OWL.intersectionOf, None):
+            if (
+                definition != class_expression
+                and NamingRegistry.uri_to_python_name(definition, self.graph) == name
+            ):
+                defined_class = self.defined_class(definition)
+                if defined_class is not None:
+                    return defined_class
+        return None
+
+    def named_conjuncts_of(self, class_expression: rdflib.BNode) -> List[str]:
+        """
+        :param class_expression: An anonymous intersection.
+        :return: The names of the named classes among its members.
+        """
+        return [
+            NamingRegistry.uri_to_python_name(member)
+            for intersection in self.graph.objects(class_expression, OWL.intersectionOf)
+            for member in NamingRegistry._get_rdf_list(self.graph, intersection)
+            if isinstance(member, rdflib.URIRef)
+        ]
+
+    def named_conjuncts_of_definitions(self, class_uri: rdflib.URIRef) -> List[str]:
+        """
+        :param class_uri: A named class.
+        :return: The named classes of every intersection the class is defined by (``owl:equivalentClass``), each of
+            which is a superclass of the class.
+        """
+        return [
+            conjunct
+            for definition in self.graph.objects(class_uri, OWL.equivalentClass)
+            for conjunct in self.named_conjuncts_of(definition)
+        ]
 
 
 class PropertyExtractor:
@@ -867,6 +969,13 @@ class InferenceEngine:
             #     continue
             cls_name = NamingRegistry.uri_to_python_name(cls_uri, self.onto.graph)
             for_class = self.onto.description_for(cls_name) or cls_name
+            if not self._is_extracted(cls_uri, cls_name):
+                # Its conditions are those of the intersection it duplicates.
+                for coll in self.onto.graph.objects(cls_uri, OWL.intersectionOf):
+                    covered_restrictions.update(
+                        NamingRegistry._get_rdf_list(self.onto.graph, coll)
+                    )
+                continue
 
             # direct subclass restrictions are necessary conditions of the class
             for restr in self.onto.graph.objects(cls_uri, RDFS.subClassOf):
@@ -887,6 +996,14 @@ class InferenceEngine:
                 node = coll
                 while node and node != RDF.nil:
                     first = self.onto.graph.value(node, RDF.first)
+                    if self._add_complement_or_enumeration_condition(
+                        cls_name, first, sufficient
+                    ):
+                        covered_restrictions.add(
+                            self.onto.graph.value(first, OWL.complementOf)
+                        )
+                        node = self.onto.graph.value(node, RDF.rest)
+                        continue
                     restriction_added = self._restrictions_handler(
                         cls_name, first, sufficient=sufficient
                     )
@@ -934,12 +1051,32 @@ class InferenceEngine:
             for_class = self.onto.description_for(for_class) or for_class
             self.property_maps.declared_dom_map[prop_name].add(for_class)
 
+    def _is_extracted(self, class_node: rdflib.term.Node, cls_name: str) -> bool:
+        """
+        :param class_node: A class.
+        :param cls_name: Its name.
+        :return: False for an anonymous intersection that was not extracted because another one of the same members
+            and name was, such as a filler that stands for the named class it has the definition of.
+        """
+        if not isinstance(class_node, rdflib.BNode) or not list(
+            self.onto.graph.objects(class_node, OWL.intersectionOf)
+        ):
+            return True
+        description_for = self.onto.description_for(cls_name)
+        info = (
+            self.onto.class_descriptions[description_for]
+            if description_for is not None
+            else self.onto.classes.get(cls_name)
+        )
+        return info is None or info.uri == str(class_node)
+
     def _is_sufficient_class_expression(self, class_node: rdflib.term.Node) -> bool:
         """
         Whether the class expression ``class_node`` (an intersection) is a sufficient condition of the class it
         describes: a named class defined by the intersection, a general class axiom ``expression rdfs:subClassOf
-        Class``, or an ``owl:equivalentClass`` definition. An expression that only appears as a superclass of a named
-        class (``Class rdfs:subClassOf expression``) is a necessary condition.
+        Class``, an ``owl:equivalentClass`` definition, or an anonymous intersection that describes no named class and
+        so is a class of its own. An expression that only appears as a superclass of a named class
+        (``Class rdfs:subClassOf expression``) is a necessary condition.
 
         :param class_node: The class node.
         :return: True if the expression is a sufficient condition.
@@ -951,11 +1088,14 @@ class InferenceEngine:
             for superclass in self.onto.graph.objects(class_node, RDFS.subClassOf)
         ):
             return True
-        return (None, OWL.equivalentClass, class_node) in self.onto.graph or (
-            class_node,
-            OWL.equivalentClass,
-            None,
-        ) in self.onto.graph
+        return (
+            (None, OWL.equivalentClass, class_node) in self.onto.graph
+            or (class_node, OWL.equivalentClass, None) in self.onto.graph
+            or not (
+                any(self.onto.graph.objects(class_node, RDFS.subClassOf))
+                or any(self.onto.graph.subjects(RDFS.subClassOf, class_node))
+            )
+        )
 
     def _add_named_conjunct_conditions(
         self, for_class: str, named_conjuncts: List[str], sufficient: bool
@@ -1008,77 +1148,10 @@ class InferenceEngine:
         prop_name = NamingRegistry.uri_to_python_name(on_prop, self.onto.graph)
         if prop_name in self.onto.properties:
             self.property_maps.dom_map[prop_name].add(for_class)
-        axiom = None
-        value_type = None
-        if self.onto.graph.value(node, OWL.hasValue):
-            has_value = self.onto.graph.value(node, OWL.hasValue)
-            axiom = HasValueAxiomInfo(
-                property_name=prop_name,
-                value=has_value,
-                for_class=for_class,
-                onto=self.onto,
-            )
-            value_type = [
-                v
-                for v in self.onto.graph.objects(has_value, RDF.type)
-                if v != OWL.NamedIndividual
-            ][0]
-            value_type = NamingRegistry.uri_to_python_name(value_type, self.onto.graph)
-        elif self.onto.graph.value(node, OWL.maxQualifiedCardinality):
-            literal_value = self.onto.graph.value(node, OWL.maxQualifiedCardinality)
-            max_value = literal_value.toPython()
-            clazz_uri = self.onto.graph.value(node, OWL.onClass)
-            value_type = NamingRegistry.uri_to_python_name(clazz_uri, self.onto.graph)
-            axiom = MaxQualifiedCardinalityAxiomInfo(
-                property_name=prop_name,
-                quantity=max_value,
-                on_class=value_type,
-                for_class=for_class,
-                onto=self.onto,
-            )
-        elif self.onto.graph.value(node, OWL.minQualifiedCardinality):
-            literal_value = self.onto.graph.value(node, OWL.minQualifiedCardinality)
-            min_value = literal_value.toPython()
-            clazz_uri = self.onto.graph.value(node, OWL.onClass)
-            value_type = NamingRegistry.uri_to_python_name(clazz_uri, self.onto.graph)
-            axiom = MinQualifiedCardinalityAxiomInfo(
-                property_name=prop_name,
-                quantity=min_value,
-                on_class=value_type,
-                for_class=for_class,
-                onto=self.onto,
-            )
-        elif self.onto.graph.value(node, OWL.qualifiedCardinality):
-            literal_value = self.onto.graph.value(node, OWL.qualifiedCardinality)
-            exact_value = literal_value.toPython()
-            clazz_uri = self.onto.graph.value(node, OWL.onClass)
-            value_type = NamingRegistry.uri_to_python_name(clazz_uri, self.onto.graph)
-            axiom = QualifiedCardinalityAxiomInfo(
-                property_name=prop_name,
-                quantity=exact_value,
-                on_class=value_type,
-                for_class=for_class,
-                onto=self.onto,
-            )
-        elif self.onto.graph.value(node, OWL.someValuesFrom):
-            value_type = self.onto.graph.value(node, OWL.someValuesFrom)
-            value_type = NamingRegistry.uri_to_python_name(value_type, self.onto.graph)
-            axiom = SomeValuesFromAxiomInfo(
-                property_name=prop_name,
-                on_class=NamingRegistry.uri_to_python_name(value_type, self.onto.graph),
-                for_class=for_class,
-                onto=self.onto,
-            )
-        elif self.onto.graph.value(node, OWL.allValuesFrom):
-            value_type = self.onto.graph.value(node, OWL.allValuesFrom)
-            value_type = NamingRegistry.uri_to_python_name(value_type, self.onto.graph)
-            axiom = AllValuesFromAxiomInfo(
-                property_name=prop_name,
-                on_class=value_type,
-                for_class=for_class,
-                onto=self.onto,
-            )
-        if axiom:
+        restriction = self._restriction_condition(node, for_class, prop_name)
+        if restriction:
+            axiom = restriction.axiom
+            value_type = restriction.value_class
             try:
                 rng_name = value_type
                 if prop_name == "roleFor":
@@ -1088,18 +1161,7 @@ class InferenceEngine:
                             rng_name, NamingRegistry.to_snake_case(rng_name)
                         )
                     return True
-                if sufficient:
-                    self.onto.classes[for_class].axioms_setup.extend(
-                        axiom.setup_statements()
-                    )
-                    self.onto.classes[for_class].axioms.extend(axiom.conditions_eql())
-                    self.onto.classes[for_class].axioms_python.extend(
-                        axiom.conditions_python()
-                    )
-                else:
-                    self.onto.classes[for_class].necessary_axioms_python.extend(
-                        axiom.conditions_python()
-                    )
+                self._add_condition(for_class, axiom, sufficient)
                 if rng_name is None:
                     if self.onto.original_properties[prop_name].ranges:
                         rng_name = self.onto.original_properties[prop_name].ranges[0]
@@ -1133,7 +1195,7 @@ class InferenceEngine:
                 self.property_maps.rng_map[prop_name].add(rng_name)
                 rng_uri = (
                     value_type
-                    if not isinstance(value_type, rdflib.term.BNode)
+                    if value_type is not None
                     else rdflib.URIRef(self.onto.classes[rng_name].uri)
                 )
                 self.property_maps.rng_uri_map[prop_name].add(rng_uri)
@@ -1150,6 +1212,178 @@ class InferenceEngine:
             except Exception as e:
                 logger.warning(f"[owl_to_python] Error processing restriction: {e}")
             return True
+
+    def _restriction_condition(
+        self, node: rdflib.term.Node, for_class: str, prop_name: str
+    ) -> Optional[RestrictionCondition]:
+        """
+        :param node: A restriction.
+        :param for_class: The class the restriction is a condition of.
+        :param prop_name: The name of the property the restriction is on.
+        :return: The condition the restriction puts on the class, or None for a kind of restriction that is not
+            translated.
+        """
+        graph = self.onto.graph
+        if graph.value(node, OWL.hasValue):
+            has_value = graph.value(node, OWL.hasValue)
+            value_type = [
+                v
+                for v in graph.objects(has_value, RDF.type)
+                if v not in (OWL.NamedIndividual, OWL.Thing)
+            ][0]
+            return RestrictionCondition(
+                HasValueAxiomInfo(
+                    property_name=prop_name,
+                    value=has_value,
+                    for_class=for_class,
+                    onto=self.onto,
+                ),
+                NamingRegistry.uri_to_python_name(value_type, graph),
+            )
+        for qualified, axiom_type in (
+            (OWL.maxQualifiedCardinality, MaxQualifiedCardinalityAxiomInfo),
+            (OWL.minQualifiedCardinality, MinQualifiedCardinalityAxiomInfo),
+            (OWL.qualifiedCardinality, QualifiedCardinalityAxiomInfo),
+        ):
+            if graph.value(node, qualified):
+                on_class = NamingRegistry.uri_to_python_name(
+                    graph.value(node, OWL.onClass), graph
+                )
+                return RestrictionCondition(
+                    axiom_type(
+                        property_name=prop_name,
+                        quantity=graph.value(node, qualified).toPython(),
+                        on_class=on_class,
+                        for_class=for_class,
+                        onto=self.onto,
+                    ),
+                    on_class,
+                )
+        for unqualified, axiom_type in (
+            (OWL.maxCardinality, MaxCardinalityAxiomInfo),
+            (OWL.minCardinality, MinCardinalityAxiomInfo),
+            (OWL.cardinality, CardinalityAxiomInfo),
+        ):
+            if graph.value(node, unqualified) is not None:
+                return RestrictionCondition(
+                    axiom_type(
+                        property_name=prop_name,
+                        quantity=graph.value(node, unqualified).toPython(),
+                        for_class=for_class,
+                        onto=self.onto,
+                    ),
+                    None,
+                )
+        for quantified, axiom_type in (
+            (OWL.someValuesFrom, SomeValuesFromAxiomInfo),
+            (OWL.allValuesFrom, AllValuesFromAxiomInfo),
+        ):
+            filler = graph.value(node, quantified)
+            if filler:
+                union = graph.value(filler, OWL.unionOf)
+                return RestrictionCondition(
+                    axiom_type(
+                        property_name=prop_name,
+                        on_class=self._classes_of_filler(filler),
+                        for_class=for_class,
+                        onto=self.onto,
+                    ),
+                    None if union is not None else self._class_of_filler(filler),
+                )
+        return None
+
+    def _classes_of_filler(self, filler: rdflib.term.Node) -> str:
+        """
+        :param filler: The class expression a restriction restricts the values of a property to.
+        :return: The class a value is checked against, or the tuple of the members of a union, as Python source.
+        :raises UnionOfAnonymousClassesAsFiller: If the filler is a union holding an anonymous class expression.
+        """
+        graph = self.onto.graph
+        union = graph.value(filler, OWL.unionOf)
+        if union is None:
+            return self._class_of_filler(filler)
+        members = NamingRegistry._get_rdf_list(graph, union)
+        if not all(isinstance(member, rdflib.URIRef) for member in members):
+            raise UnionOfAnonymousClassesAsFiller(
+                NamingRegistry.uri_to_python_name(filler, graph)
+            )
+        return f"({', '.join(NamingRegistry.uri_to_python_name(member) for member in members)})"
+
+    def _class_of_filler(self, filler: rdflib.term.Node) -> str:
+        """
+        :param filler: A class expression that is not a union.
+        :return: The name of its class: the named class an anonymous intersection is the definition of, otherwise the
+            name of the expression.
+        """
+        name = NamingRegistry.uri_to_python_name(filler, self.onto.graph)
+        return self.onto.description_for(name) or name
+
+    def _add_condition(self, for_class: str, axiom: AxiomInfo, sufficient: bool):
+        """
+        Add a condition to a class: to its classification axioms when it is sufficient, to its necessary conditions
+        otherwise.
+
+        :param for_class: The name of the class.
+        :param axiom: The condition.
+        :param sufficient: Whether the condition is (part of) a sufficient condition of the class.
+        """
+        cls_info = self.onto.classes[for_class]
+        if not sufficient:
+            cls_info.necessary_axioms_python.extend(axiom.conditions_python())
+            return
+        if isinstance(axiom, (PropertyAxiomInfo, ComplementAxiomInfo)):
+            cls_info.axioms_setup.extend(axiom.setup_statements())
+        cls_info.axioms.extend(axiom.conditions_eql())
+        cls_info.axioms_python.extend(axiom.conditions_python())
+
+    def _add_complement_or_enumeration_condition(
+        self, cls_name: str, member: rdflib.term.Node, sufficient: bool
+    ) -> bool:
+        """
+        Add the condition a member of an intersection stands for when it is a complement (``owl:complementOf``) or
+        an enumeration of individuals (``owl:oneOf``).
+
+        :param cls_name: The name of the class, or of the description, the intersection belongs to.
+        :param member: The member of the intersection.
+        :param sufficient: Whether the intersection is a sufficient condition.
+        :return: Whether the member is a complement or an enumeration.
+        :raises UntranslatedComplement: If the member is the complement of something other than a named class or
+            a restriction.
+        """
+        graph = self.onto.graph
+        complemented = graph.value(member, OWL.complementOf)
+        enumerated = graph.value(member, OWL.oneOf)
+        if complemented is None and enumerated is None:
+            return False
+        for_class = self.onto.description_for(cls_name) or cls_name
+        if enumerated is not None:
+            individuals = NamingRegistry._get_rdf_list(graph, enumerated)
+            self._add_condition(
+                for_class,
+                OneOfAxiomInfo([str(individual) for individual in individuals]),
+                sufficient,
+            )
+            return True
+        if isinstance(complemented, rdflib.URIRef):
+            inner = SubClassAxiomInfo(NamingRegistry.uri_to_python_name(complemented))
+        else:
+            on_prop = graph.value(complemented, OWL.onProperty)
+            restriction = (
+                self._restriction_condition(
+                    complemented,
+                    for_class,
+                    NamingRegistry.uri_to_python_name(on_prop, graph),
+                )
+                if on_prop is not None
+                else None
+            )
+            if restriction is None:
+                raise UntranslatedComplement(
+                    NamingRegistry.uri_to_python_name(complemented, graph)
+                )
+            inner = restriction.axiom
+        self._add_condition(for_class, ComplementAxiomInfo(inner), sufficient)
+        return True
 
     def _propagate_types(self):
         """
@@ -1238,6 +1472,11 @@ class InferenceEngine:
                 if rng_names.issubset(
                     set(self.onto.original_properties[prop_name].ranges)
                 ):
+                    continue
+                if len(rng_names) > 1:
+                    # Restricted to several classes (e.g. hasTopping some MozzarellaTopping and hasTopping some
+                    # TomatoTopping), the property is narrowed to none of them; one field per class would declare it
+                    # several times.
                     continue
                 if cls_name in base.declared_domains:
                     base.declared_domains.remove(cls_name)
@@ -2241,11 +2480,19 @@ class OwlToPythonConverter:
         all_class_subjects = set(self.graph.subjects(RDF.type, OWL.Class))
 
         for cls_uri in all_class_subjects:
-            # Skip BNodes that are not intersections or unions
+            # Skip BNodes that are not intersections or unions, and unions that only appear inside another
+            # expression, such as the filler of a restriction: they are checked against their members instead.
+            # An anonymous intersection is a class of its own, classified by its conjuncts, unless it has the members
+            # of a named class's definition: then it stands for that class.
             if isinstance(cls_uri, rdflib.BNode):
                 if not (
                     list(self.graph.objects(cls_uri, OWL.intersectionOf))
                     or list(self.graph.objects(cls_uri, OWL.unionOf))
+                ):
+                    continue
+                if not self.class_ext.is_attached_to_a_named_class(cls_uri) and (
+                    list(self.graph.objects(cls_uri, OWL.unionOf))
+                    or self.class_ext.named_class_defined_alike(cls_uri) is not None
                 ):
                     continue
 

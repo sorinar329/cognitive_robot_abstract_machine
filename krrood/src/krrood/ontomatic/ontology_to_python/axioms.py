@@ -531,3 +531,51 @@ class AllValuesFromAxiomInfo(PropertyAxiomInfo, QualifiedAxiomInfoMixin):
             f"all(any(issubclass(t, {self.on_class}) for t in attr.types) for attr in candidate.{self.snake_property_name})"
         )
         return base_conditions
+
+
+@dataclass
+class ComplementAxiomInfo(AxiomInfo):
+    """
+    The complement of a condition (``owl:complementOf``): holds for every candidate the condition does not hold for,
+    e.g. ``not (hasTopping some MeatTopping)``.
+    """
+
+    complemented: AxiomInfo
+    """
+    The condition that must not hold.
+    """
+
+    def setup_statements(self) -> List[str]:
+        """
+        :return: The statements the complemented condition needs before it is evaluated.
+        """
+        if isinstance(self.complemented, PropertyAxiomInfo):
+            return self.complemented.setup_statements()
+        return []
+
+    def conditions_eql(self):
+        conditions = self.complemented.conditions_eql()
+        if len(conditions) == 1:
+            return [f"eql.not_({conditions[0]})"]
+        return [f"eql.not_(eql.and_({', '.join(conditions)}))"]
+
+    def conditions_python(self):
+        return [f"not ({' and '.join(self.complemented.conditions_python())})"]
+
+
+@dataclass
+class OneOfAxiomInfo(AxiomInfo):
+    """
+    An enumeration of individuals (``owl:oneOf``): holds for exactly the listed individuals.
+    """
+
+    individual_iris: List[str]
+    """
+    The IRIs of the individuals the enumeration lists.
+    """
+
+    def conditions_eql(self):
+        return [f"eql.in_(to_str(candidate_var.uri), {tuple(self.individual_iris)!r})"]
+
+    def conditions_python(self):
+        return [f"(str(candidate.uri) in {tuple(self.individual_iris)!r})"]

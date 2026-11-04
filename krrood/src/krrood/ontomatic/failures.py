@@ -42,3 +42,40 @@ class NoObjectOfIndividualDeclaresProperty(Exception):
             f"No object of the individual of {self.individual_object!r} declares the property "
             f"'{self.property_descriptor_class.__name__}'."
         )
+
+
+@dataclass
+class UnionOfAnonymousClassesAsFiller(Exception):
+    """
+    Raised when a restriction restricts the values of a property to a union that holds an anonymous class
+    expression, which cannot be checked against the classes of a value.
+    """
+
+    union_name: str
+    """
+    The name ontomatic gives the union.
+    """
+
+    def __post_init__(self):
+        super().__init__(
+            f"The union '{self.union_name}' restricts the values of a property but holds an anonymous class "
+            f"expression; only unions of named classes can be translated there."
+        )
+
+
+@dataclass
+class UntranslatedComplement(Exception):
+    """
+    Raised when a class expression is the complement of something other than a named class or a restriction.
+    """
+
+    complemented_name: str
+    """
+    The name ontomatic gives the complemented class expression.
+    """
+
+    def __post_init__(self):
+        super().__init__(
+            f"The complement of '{self.complemented_name}' cannot be translated; only complements of named classes "
+            f"and of restrictions are."
+        )

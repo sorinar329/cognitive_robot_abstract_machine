@@ -115,6 +115,14 @@ class NamingRegistry:
             items = NamingRegistry._get_rdf_list(graph, unions[0])
             return "OR".join([NamingRegistry._get_node_name(graph, i) for i in items])
 
+        # Enumeration of individuals
+        enumerations = list(graph.objects(bnode, OWL.oneOf))
+        if enumerations:
+            items = NamingRegistry._get_rdf_list(graph, enumerations[0])
+            return "OneOf" + "".join(
+                NamingRegistry._get_node_name(graph, i) for i in items
+            )
+
         # Restrictions
         on_prop = graph.value(bnode, OWL.onProperty)
         if on_prop:
@@ -137,6 +145,13 @@ class NamingRegistry:
                     graph.value(bnode, OWL.onClass)
                 )
                 return f"{prop_name}MAX{target}{on_class}"
+            for cardinality, word in (
+                (OWL.minCardinality, "MIN"),
+                (OWL.maxCardinality, "MAX"),
+                (OWL.cardinality, "EXACTLY"),
+            ):
+                if graph.value(bnode, cardinality) is not None:
+                    return f"{prop_name}{word}{graph.value(bnode, cardinality)}"
             if graph.value(bnode, OWL.complementOf):
                 target = NamingRegistry.uri_to_python_name(
                     graph.value(bnode, OWL.complementOf)
@@ -148,7 +163,9 @@ class NamingRegistry:
                 NamingRegistry.uri_to_python_name,
                 list(graph.objects(complement_of, OWL.disjointWith)),
             )
-            return "OR".join(possible_complements)
+            return "OR".join(possible_complements) or (
+                "Not" + NamingRegistry._get_node_name(graph, complement_of)
+            )
         return None
 
     @staticmethod
