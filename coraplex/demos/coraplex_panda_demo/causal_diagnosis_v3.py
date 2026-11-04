@@ -11,13 +11,8 @@ pattern ``causal_diagnosis_v2.py`` uses, unchanged: the causal circuit's require
 and ``object_friction`` stays a candidate cause on the same footing as every other
 tunable field -- see ``causal_diagnosis_v2.py``'s own docstring for the full reasoning.
 
-All four cubes are registered as effect variables, not just the step's own acted-upon
-cube, since the demo's actual goal is the whole stack standing, not one cube reaching its
-own target height: a step whose action knocks an already-stacked cube loose while
-placing its own perfectly is still a failure, and only shows up in that other cube's z.
-:meth:`ActionCausalDiagnoser.diagnose` runs the diagnosis against each registered effect
-in turn and keeps whichever one the observed parameters are least consistent with (see
-its own docstring).
+All four cubes are registered as effect variables; :meth:`ActionCausalDiagnoser.diagnose`
+judges a failure against the final z of the cube the failed step acted on.
 """
 
 from __future__ import annotations
@@ -26,15 +21,13 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
-from typing_extensions import Optional
-
 from krrood.adapters.json_serializer import from_json
 from probabilistic_model.probabilistic_circuit.causal.causal_circuit import (
     CausalCircuit,
-    FailureDiagnosisResult,
     MarginalDeterminismTreeNode,
 )
-from random_events.product_algebra import Event
+from random_events.interval import closed
+from random_events.product_algebra import Event, SimpleEvent
 from random_events.variable import Variable
 
 MODEL_DIRECTORY = Path(__file__).parent / "training" / "models_v3"
@@ -88,8 +81,6 @@ class CausalVariableConfig:
     effect_names: tuple[str, ...]
     """
     Names of the parameters that play the causal circuit's required ``effect`` role.
-    :meth:`ActionCausalDiagnoser.diagnose` evaluates the diagnosis once per name and
-    keeps whichever one is least consistent with the observed parameters.
     """
 
 
@@ -145,10 +136,9 @@ class ParameterCorrection:
 
     observed_support_probability: float
     """
-    Interventional probability the successful-attempt distribution assigns to
-    :attr:`observed_value`. Zero means the value fell entirely outside what any
-    successful attempt supports -- the threshold :meth:`ActionCausalDiagnoser.diagnose`
-    uses to decide whether a non-primary cause is anomalous enough to also correct.
+    Interventional probability the successful-attempt distribution assigns to a
+    :data:`QUERY_RESOLUTION` window around :attr:`observed_value`. Zero means the value
+    fell entirely outside what any successful attempt supports.
     """
 
     corrected_value: float
@@ -157,32 +147,33 @@ class ParameterCorrection:
     :attr:`variable_name`.
     """
 
-    corrected_support_probability: Optional[float] = None
+    corrected_support_probability: float
     """
-    Interventional probability the successful-attempt distribution assigns to
-    :attr:`corrected_value`, if computed.
+    Interventional probability the successful-attempt distribution assigns to the same
+    window around :attr:`corrected_value`.
+    """
 
-    Only ever populated for the primary cause: the causal circuit scores the
-    recommended region's own probability just for whichever cause
-    :meth:`~probabilistic_model.probabilistic_circuit.causal.causal_circuit.CausalCircuit.diagnose_failure`
-    names primary in a given call. A secondary cause's ``corrected_value`` is still a
-    real recommended region (drawn from that same call's ``all_variable_results``); its
-    probability at that region is just not separately computed.
-    """
+    @property
+    def relative_support(self) -> float:
+        """
+        :attr:`observed_support_probability` as a share of
+        :attr:`corrected_support_probability`: 1 for a value as well supported as the
+        recommended one, 0 for one no successful attempt used.
+
+        Unlike the raw probabilities, this is comparable across parameters: a window of
+        fixed width holds less mass of a widely spread parameter (the friction) than of
+        a narrowly spread one (a velocity), however typical the value is.
+        """
+        return self.observed_support_probability / self.corrected_support_probability
 
     def explanation(self) -> str:
         """
         :return: A one-line, human-readable account of this one correction.
         """
-        correction_probability = (
-            f"{self.corrected_support_probability:.4f}"
-            if self.corrected_support_probability is not None
-            else "not computed"
-        )
         return (
             f"{self.variable_name}={self.observed_value:.4f} (support "
             f"{self.observed_support_probability:.4f}) -> {self.corrected_value:.4f} "
-            f"(support {correction_probability})"
+            f"(support {self.corrected_support_probability:.4f})"
         )
 
 
@@ -195,20 +186,12 @@ class RootCauseDiagnosis:
 
     effect_variable_name: str
     """
-    Name of the cube whose final z position the observed parameters were least
-    consistent with -- see :meth:`ActionCausalDiagnoser.diagnose`. Not necessarily the
-    step's own acted-upon cube: a low value here for another cube means this step's
-    action is implicated in disturbing a cube it was not directly placing.
+    Name of the cube final z position the diagnosis was judged against.
     """
 
     corrections: list[ParameterCorrection]
     """
-    Every parameter this diagnosis corrects, primary cause first. Never empty: the
-    primary cause -- the parameter least consistent with successful attempts -- is
-    always included; any further parameter is included only if it is *equally*
-    inconsistent (zero interventional probability, same as the primary's own threshold
-    for being picked at all -- see :meth:`ActionCausalDiagnoser.diagnose`), so a failure
-    with one clear cause still gets just the one correction it always did.
+    Every parameter this diagnosis corrects, least supported first. Never empty.
     """
 
     @property
@@ -234,26 +217,23 @@ class RootCauseDiagnosis:
         return "; ".join(lines)
 
 
-class NoRecommendationAvailable(RuntimeError):
+class NoAnomalousParameter(RuntimeError):
     """
-    Raised when the causal circuit could not identify a supported region for the
-    primary cause variable, against any of the registered effect variables.
-
-    Happens when every candidate cause's observed value falls outside what any
-    successful attempt supports, leaving no region to recommend correcting towards.
+    Raised when every parameter of a failed attempt is about as well supported by the
+    successful attempts as its recommended value, so no parameter explains the failure.
     """
 
-    def __init__(self, effect_names: tuple[str, ...]) -> None:
+    def __init__(self, effect_name: str) -> None:
         super().__init__(
-            f"no recommended region for any candidate cause, against any of "
-            f"{', '.join(effect_names)}"
+            f"every parameter lies within what successful attempts used, judged "
+            f"against {effect_name}"
         )
 
 
 def _region_midpoint(region: Event, variable: Variable) -> float:
     """
     :param region: A recommended region, as returned on
-        :attr:`~FailureDiagnosisResult.recommended_region`.
+        :attr:`~probabilistic_model.probabilistic_circuit.causal.causal_circuit.FailureDiagnosisResult.recommended_region`.
     :param variable: The variable to read the region's interval for.
     :return: The midpoint of ``region``'s interval for ``variable``.
     """
@@ -280,16 +260,20 @@ class ActionCausalDiagnoser:
         model_path: Path,
         config: CausalVariableConfig,
         query_resolution: float = QUERY_RESOLUTION,
+        anomaly_threshold: float = 0.25,
     ) -> None:
         """
         :param model_path: Where the action's trained tree is saved, as JSON.
         :param config: Which parameters are candidate causes, and which are the effects.
         :param query_resolution: See :data:`QUERY_RESOLUTION`.
+        :param anomaly_threshold: Greatest :attr:`ParameterCorrection.relative_support`
+            a parameter may have and still be corrected.
         :raises SupportDeterminismVerificationResult: If the loaded tree's circuit does
             not satisfy the structural property backdoor adjustment requires.
         """
         self._config = config
         self._query_resolution = query_resolution
+        self._anomaly_threshold = anomaly_threshold
         self._causal_circuit = self._build_causal_circuit(model_path, config)
         self._causal_circuit.verify_support_determinism()
 
@@ -321,86 +305,85 @@ class ActionCausalDiagnoser:
             effect_variables=effect_variables,
         )
 
-    def diagnose(self, observed_parameters: dict[str, float]) -> RootCauseDiagnosis:
+    def _support_probability(
+        self, variable: Variable, effect_variable: Variable, value: float
+    ) -> float:
         """
-        Identify every parameter of a failed attempt that is least consistent with
-        successful attempts, and a corrected value for each.
-
-        Runs the diagnosis once per registered effect variable (one per cube, see
-        :data:`CUBE_FINAL_Z_NAMES`) and keeps the one whose primary cause has the lowest
-        observed support probability -- the effect this step's action is most
-        implicated in disturbing, whether or not that cube is the one it directly acted
-        on.
-
-        A single corrected parameter is often not enough: several causes can each be
-        individually implausible (rather than one bad value forcing the rest), and
-        ``diagnose_failure`` already scores every registered cause against the chosen
-        effect in one call, not just the primary one (see its own
-        ``all_variable_results``). Every other cause whose observed value also gets
-        exactly zero interventional probability -- entirely outside what any successful
-        attempt supports, the same unambiguous signal the primary cause itself must
-        clear to be picked at all -- is corrected too, not just the single worst one.
-        Causes that are merely unlikely, not impossible, are left alone: nothing marks
-        them as reliably wrong, and correcting them on that weaker a signal would risk
-        overwriting values that were not actually the problem.
-
-        :param observed_parameters: The failed attempt's sampled parameter values, by
-            field name. Must contain every name in
-            ``self._config.cause_names``; extra keys are ignored.
-        :raises NoRecommendationAvailable: If no candidate cause has a supported region
-            to recommend correcting towards, against any registered effect variable.
+        :return: The interventional probability of a :data:`QUERY_RESOLUTION` window
+            around ``value`` of ``variable``, judged against ``effect_variable``.
         """
-        variables_by_name = {
+        interventional_circuit = self._causal_circuit.backdoor_adjustment(
+            variable, effect_variable, [], self._query_resolution
+        )
+        window = SimpleEvent.from_data(
+            {
+                variable: closed(
+                    value - self._query_resolution, value + self._query_resolution
+                )
+            }
+        ).as_composite_set()
+        return float(
+            interventional_circuit.probability(
+                window.fill_missing_variables_pure(interventional_circuit.variables)
+            )
+        )
+
+    def diagnose(
+        self, observed_parameters: dict[str, float], effect_name: str
+    ) -> RootCauseDiagnosis:
+        """
+        Identify every parameter of a failed attempt that successful attempts support
+        markedly less than its recommended value, and correct each to that value.
+
+        A parameter is corrected when its :attr:`ParameterCorrection.relative_support`
+        is at most the diagnoser's anomaly threshold; the least supported one is the
+        primary cause. Correcting all of them at once matters: a retry with only the
+        worst one corrected still fails on the next one.
+
+        :param observed_parameters: The failed attempt's parameter values, by field
+            name; must contain every name in the config's ``cause_names``.
+        :param effect_name: The effect variable to judge against, one of the config's
+            ``effect_names``.
+        :raises NoAnomalousParameter: If no parameter is anomalous.
+        """
+        causes_by_name = {
             variable.name: variable
             for variable in self._causal_circuit.causal_variables
         }
-        observed_values = {
-            variables_by_name[name]: observed_parameters[name]
-            for name in self._config.cause_names
-        }
-
-        candidates: list[tuple[Variable, FailureDiagnosisResult]] = []
-        for effect_variable in self._causal_circuit.effect_variables:
-            diagnosis = self._causal_circuit.diagnose_failure(
-                observed_values=observed_values,
-                effect_variable=effect_variable,
-                query_resolution=self._query_resolution,
-            )
-            if diagnosis.recommended_region is not None:
-                candidates.append((effect_variable, diagnosis))
-
-        if not candidates:
-            raise NoRecommendationAvailable(self._config.effect_names)
-
-        effect_variable, diagnosis = min(
-            candidates, key=lambda item: item[1].interventional_probability_at_failure
+        effect_variable = next(
+            variable
+            for variable in self._causal_circuit.effect_variables
+            if variable.name == effect_name
+        )
+        diagnosis = self._causal_circuit.diagnose_failure(
+            observed_values={
+                causes_by_name[name]: observed_parameters[name]
+                for name in self._config.cause_names
+            },
+            effect_variable=effect_variable,
+            query_resolution=self._query_resolution,
         )
 
-        corrections = [
-            ParameterCorrection(
-                variable_name=diagnosis.primary_cause_variable.name,
-                observed_value=diagnosis.actual_value,
-                observed_support_probability=diagnosis.interventional_probability_at_failure,
-                corrected_value=_region_midpoint(
-                    diagnosis.recommended_region, diagnosis.primary_cause_variable
-                ),
-                corrected_support_probability=diagnosis.interventional_probability_at_recommendation,
-            )
-        ]
+        corrections = []
         for variable, result in diagnosis.all_variable_results.items():
-            if variable == diagnosis.primary_cause_variable:
+            if result["recommended_region"] is None:
                 continue
-            if result["interventional_probability"] > 0 or result["recommended_region"] is None:
-                continue
-            corrections.append(
-                ParameterCorrection(
-                    variable_name=variable.name,
-                    observed_value=result["actual_value"],
-                    observed_support_probability=result["interventional_probability"],
-                    corrected_value=_region_midpoint(result["recommended_region"], variable),
-                )
+            corrected_value = _region_midpoint(result["recommended_region"], variable)
+            correction = ParameterCorrection(
+                variable_name=variable.name,
+                observed_value=result["actual_value"],
+                observed_support_probability=result["interventional_probability"],
+                corrected_value=corrected_value,
+                corrected_support_probability=self._support_probability(
+                    variable, effect_variable, corrected_value
+                ),
             )
+            if correction.relative_support <= self._anomaly_threshold:
+                corrections.append(correction)
 
+        if not corrections:
+            raise NoAnomalousParameter(effect_name)
+        corrections.sort(key=lambda correction: correction.relative_support)
         return RootCauseDiagnosis(
-            effect_variable_name=effect_variable.name, corrections=corrections
+            effect_variable_name=effect_name, corrections=corrections
         )

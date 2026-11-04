@@ -58,7 +58,7 @@ from coraplex.robot_plans.actions.core.robot_body import ParkArmsAction
 
 from causal_diagnosis_v3 import (
     ActionCausalDiagnoser,
-    NoRecommendationAvailable,
+    NoAnomalousParameter,
     ParameterCorrection,
     PICKUP_CAUSAL_CONFIG,
     PLACE_CAUSAL_CONFIG,
@@ -331,6 +331,7 @@ Half-extent (in meters) of the region a cube can legitimately be in, in every ax
 ``demo2.py``'s own :data:`WORKSPACE_BOUND`.
 """
 
+
 def _observed_parameters(action, field_names: tuple[str, ...]) -> dict[str, float]:
     """
     :return: ``action``'s current value for each of ``field_names``, by name.
@@ -356,6 +357,7 @@ def diagnose_cube_failure(
     :return: Which action was implicated and its diagnosis, or ``None`` if neither
         action's tree could recommend a correction.
     """
+    effect_name = f"{pickup_action.object_designator.name.name}_final_z"
     candidates: list[tuple[str, RootCauseDiagnosis]] = []
     try:
         candidates.append(
@@ -364,29 +366,31 @@ def diagnose_cube_failure(
                 pickup_diagnoser.diagnose(
                     _observed_parameters(
                         pickup_action, PICKUP_CAUSAL_CONFIG.cause_names
-                    )
+                    ),
+                    effect_name,
                 ),
             )
         )
-    except NoRecommendationAvailable:
+    except NoAnomalousParameter:
         pass
     try:
         candidates.append(
             (
                 "place",
                 place_diagnoser.diagnose(
-                    _observed_parameters(place_action, PLACE_CAUSAL_CONFIG.cause_names)
+                    _observed_parameters(place_action, PLACE_CAUSAL_CONFIG.cause_names),
+                    effect_name,
                 ),
             )
         )
-    except NoRecommendationAvailable:
+    except NoAnomalousParameter:
         pass
 
     if not candidates:
         return None
     return min(
         candidates,
-        key=lambda candidate: candidate[1].primary.observed_support_probability,
+        key=lambda candidate: candidate[1].primary.relative_support,
     )
 
 
@@ -1403,8 +1407,12 @@ def append_inference_report(
     segmind_verdict = segmind_approved()
 
     lines = [f"\n## Iteration {iteration_index}\n"]
-    lines.append(f"`full_stack_intact()` (geometry, ground truth): **{geometry_approved}**\n")
-    lines.append(f"`segmind_approved()` (segmind's own reading): **{segmind_verdict}**\n")
+    lines.append(
+        f"`full_stack_intact()` (geometry, ground truth): **{geometry_approved}**\n"
+    )
+    lines.append(
+        f"`segmind_approved()` (segmind's own reading): **{segmind_verdict}**\n"
+    )
     if geometry_approved != segmind_verdict:
         lines.append(
             "**disagreement**: segmind's contact-based detection missed (or wrongly "

@@ -55,6 +55,29 @@ What the demo does to its own scene is kept off the page: the cubes being telepo
 between iterations, and their settling afterwards, would otherwise read as them being
 picked up and placed by nobody.
 
+## Diagnosing and recovering from a failure
+
+`inference3b.py` stacks with parameters sampled from a range wider than the one the
+training data was collected in, so attempts fail. After a failed attempt it diagnoses both
+the pickup and the place against the trees trained on successful attempts
+(`causal_diagnosis_v3.py`, models in `training/models_v3/`) and retries with every
+anomalous parameter corrected at once:
+
+- a parameter is anomalous when the successful attempts support its value less than a
+  quarter as well as the value they support most (`ActionCausalDiagnoser.anomaly_threshold`);
+  comparing that ratio rather than the raw probability keeps a widely spread parameter,
+  the friction, from always looking anomalous;
+- each anomalous parameter is set to the middle of the region the successful attempts
+  support most;
+- when no parameter is anomalous the failure was not caused by the parameters, and the
+  attempt is retried unchanged.
+
+A cube knocked over by a failed attempt is picked up top-down whichever face points up,
+turned to its faces about the vertical.
+
+Run it with `INFERENCE2_NUMBER_OF_ITERATIONS` (default 20) and `INFERENCE2_RANDOM_SEED`
+(default 42). Each iteration's diagnoses are appended to `inference_report_v3.md`.
+
 ## What makes this demo different
 
 The point of this demo is that **the grasp is real**. The cube is held by

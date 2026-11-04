@@ -60,7 +60,7 @@ from coraplex.robot_plans.actions.core.robot_body import ParkArmsAction
 
 from causal_diagnosis_v3 import (
     ActionCausalDiagnoser,
-    NoRecommendationAvailable,
+    NoAnomalousParameter,
     ParameterCorrection,
     PICKUP_CAUSAL_CONFIG,
     PLACE_CAUSAL_CONFIG,
@@ -73,6 +73,8 @@ from parked_arm_detection_gate import (
     RobotArmParkDeviations,
 )
 from pickup_place_parameterization import (
+    PICKUP_PARAMETER_PRIORS,
+    PLACE_PARAMETER_PRIORS,
     ParameterPrior,
     sample_pickup_instance,
     sample_place_instance,
@@ -269,24 +271,20 @@ How many times a single cube is retried with a causally corrected sample before 
 is abandoned as a hard failure.
 """
 
-ITERATION_TIME_LIMIT = 180.0
+ITERATION_TIME_LIMIT = 3 * 150.0
 """
-Wall-clock budget (in seconds) for one iteration, checked between cubes.
-
-Raised from 120s: 120s was regularly running out before all four cubes' causal
-diagnosis-and-correction runs finished, and a restack triggered by a knocked-over
-stack (:func:`restack_disturbed_cubes`) eats into this same budget on top of the
-cubes' own attempts, so a tight limit starved both alike.
+Wall-clock budget (in seconds) for one iteration, checked between cubes: three cubes'
+:data:`CUBE_PICKUP_TIME_LIMIT`.
 """
 
-CUBE_PICKUP_TIME_LIMIT = 60.0
+CUBE_PICKUP_TIME_LIMIT = 150.0
 """
 Wall-clock budget (in seconds) for one cube's *entire* stacking step -- its initial
 attempt, every correction retry, and any re-stack of an earlier cube it disturbs along
 the way -- checked independently of, and tighter than, :data:`ITERATION_TIME_LIMIT`.
 
-Raised from 40s in step with :data:`ITERATION_TIME_LIMIT`, keeping the same ~1:3 ratio
-between them, for the same reason.
+One attempt takes about 30 s, so this leaves room for the first attempt and
+:data:`MAX_CORRECTION_ATTEMPTS_PER_CUBE` corrections.
 
 A cube that has rolled out of comfortable reach fails its reach the same way on every
 attempt, and no diagnosed correction fixes "the cube is somewhere else"; left bounded
@@ -396,101 +394,78 @@ def _observed_parameters(action, field_names: tuple[str, ...]) -> dict[str, floa
     return {name: getattr(action, name) for name in field_names}
 
 
+def final_z_name(cube: Body) -> str:
+    """
+    :return: The name of ``cube``'s final z position among the trees' effect variables.
+    """
+    return f"{cube.name.name}_final_z"
+
+
 def diagnose_cube_failure(
     pickup_action: PickUpAction, place_action: PlaceAction
-) -> tuple[str, RootCauseDiagnosis] | None:
+) -> list[tuple[str, RootCauseDiagnosis]]:
     """
-    Diagnose a failed cube attempt against both of its actions' trees, and report
-    whichever is more likely to be the actual root cause.
+    Diagnose a failed cube attempt against both of its actions' trees, judged against
+    the picked cube's final z.
 
-    A cube ending up on the floor could stem from either action -- a bad grasp or a bad
-    placement -- and nothing short of a finer-grained mid-plan check says which. Both
-    are diagnosed and the one whose primary cause has the *lower* support probability
-    under successful attempts is reported: the more anomalous of the two is the more
-    likely explanation.
+    A cube ending up off the stack can stem from the pickup, the place or both, and
+    nothing short of a finer-grained mid-plan check says which, so each action's
+    anomalous parameters are reported and all of them get corrected.
 
     :param pickup_action: The failed attempt's pickup, as actually performed.
     :param place_action: The failed attempt's place, as actually performed.
-    :return: Which action was implicated and its diagnosis, or ``None`` if neither
-        action's tree could recommend a correction.
+    :return: Which action was implicated and its diagnosis, for each action with an
+        anomalous parameter; empty if neither has one.
     """
-    candidates: list[tuple[str, RootCauseDiagnosis]] = []
-    try:
-        candidates.append(
-            (
-                "pickup",
-                pickup_diagnoser.diagnose(
-                    _observed_parameters(
-                        pickup_action, PICKUP_CAUSAL_CONFIG.cause_names
-                    )
-                ),
+    effect_name = final_z_name(pickup_action.object_designator)
+    diagnoses: list[tuple[str, RootCauseDiagnosis]] = []
+    for action_name, diagnoser, action, config in (
+        ("pickup", pickup_diagnoser, pickup_action, PICKUP_CAUSAL_CONFIG),
+        ("place", place_diagnoser, place_action, PLACE_CAUSAL_CONFIG),
+    ):
+        try:
+            diagnoses.append(
+                (
+                    action_name,
+                    diagnoser.diagnose(
+                        _observed_parameters(action, config.cause_names), effect_name
+                    ),
+                )
             )
-        )
-    except NoRecommendationAvailable:
-        pass
-    try:
-        candidates.append(
-            (
-                "place",
-                place_diagnoser.diagnose(
-                    _observed_parameters(place_action, PLACE_CAUSAL_CONFIG.cause_names)
-                ),
-            )
-        )
-    except NoRecommendationAvailable:
-        pass
-
-    if not candidates:
-        return None
-    return min(
-        candidates,
-        key=lambda candidate: candidate[1].primary.observed_support_probability,
-    )
+        except NoAnomalousParameter:
+            pass
+    return diagnoses
 
 
 def apply_correction(
     pickup_action: PickUpAction,
     place_action: PlaceAction,
-    action_name: str,
-    diagnosis: RootCauseDiagnosis,
+    diagnoses: list[tuple[str, RootCauseDiagnosis]],
     cube_to_stack_on: Body,
 ) -> tuple[PickUpAction, PlaceAction]:
     """
-    Build the corrected retry's actions: every one of ``diagnosis.corrections`` applied
-    at once to whichever action it was diagnosed against, plus a freshly re-read place
-    target, everything else unchanged from the failed attempt.
+    Build the corrected retry's actions: every correction of every diagnosis applied at
+    once to the action it was diagnosed against, plus a freshly re-read place target,
+    everything else unchanged from the failed attempt.
 
-    Applying every correction together, not just the primary one, is what actually
-    fixes a failure with more than one bad parameter: retrying with only the single
-    most-anomalous value corrected leaves the other equally-bad ones untouched, so the
-    retry keeps failing (and burns through
-    :data:`~inference3b.MAX_CORRECTION_ATTEMPTS_PER_CUBE` one parameter at a time instead
-    of fixing the actual combination) -- see :meth:`ActionCausalDiagnoser.diagnose`'s own
-    docstring for how ``corrections`` is decided.
-
-    The target refresh happens unconditionally, not only when ``action_name`` is
-    ``"place"``: whichever action gets corrected, the retry still performs the *same*
-    place afterward, and ``place_action.target_location`` was baked in as a fixed pose
-    back when this cube's step began (see :func:`_current_place_location`) -- if the
-    failed attempt this is correcting nudged ``cube_to_stack_on`` on its way down, the
-    uncorrected target would carry that staleness into the retry too.
+    The target is re-read whatever was corrected: the failed attempt may have nudged
+    ``cube_to_stack_on``, see :func:`_current_place_location`.
 
     :param pickup_action: The failed attempt's pickup.
     :param place_action: The failed attempt's place.
-    :param action_name: Which action ``diagnosis`` was diagnosed against, ``"pickup"``
-        or ``"place"``.
-    :param diagnosis: The diagnosis to apply.
+    :param diagnoses: The diagnoses to apply, see :func:`diagnose_cube_failure`.
     :param cube_to_stack_on: The cube this step places onto, read fresh for the
         refreshed target.
     """
-    corrected_values = {
-        correction.variable_name: correction.corrected_value
-        for correction in diagnosis.corrections
-    }
-    if action_name == "pickup":
-        pickup_action = dataclasses.replace(pickup_action, **corrected_values)
-    else:
-        place_action = dataclasses.replace(place_action, **corrected_values)
+    for action_name, diagnosis in diagnoses:
+        corrected_values = {
+            correction.variable_name: correction.corrected_value
+            for correction in diagnosis.corrections
+        }
+        if action_name == "pickup":
+            pickup_action = dataclasses.replace(pickup_action, **corrected_values)
+        else:
+            place_action = dataclasses.replace(place_action, **corrected_values)
     place_action = dataclasses.replace(
         place_action, target_location=_current_place_location(cube_to_stack_on)
     )
@@ -733,16 +708,51 @@ def _apply_object_friction(pickup_action: PickUpAction) -> None:
         )
 
 
+def face_aligned_yaw(world_rotation: numpy.ndarray) -> float:
+    """
+    The yaw that lines a top-down grasp up with the faces of a cube rotated by
+    ``world_rotation``, whichever of its faces points up.
+
+    :param world_rotation: The cube's 3x3 rotation matrix in the world frame.
+    :return: The yaw of the cube's horizontal axes, folded into [-45, 45) degrees, in
+        radians: a cube looks the same every quarter turn.
+    """
+    upward_axis = int(numpy.argmax(numpy.abs(world_rotation[2, :3])))
+    horizontal_axis = world_rotation[:2, (upward_axis + 1) % 3]
+    yaw = float(numpy.arctan2(horizontal_axis[1], horizontal_axis[0]))
+    return (yaw + numpy.pi / 4) % (numpy.pi / 2) - numpy.pi / 4
+
+
+def face_aligned_pose(pose: Pose) -> Pose:
+    """
+    :return: A pose at ``pose``'s position in the world frame, turned only about the
+        vertical axis so a top-down grasp meets the faces of a cube at ``pose``, see
+        :func:`face_aligned_yaw`.
+    """
+    world_pose = world.transform(pose, world.root)
+    position = numpy.array(world_pose.to_position().evaluate()[:3], dtype=float)
+    rotation = numpy.array(world_pose.to_rotation_matrix().to_np(), dtype=float)
+    return Pose.from_xyz_rpy(
+        x=position[0],
+        y=position[1],
+        z=position[2],
+        yaw=face_aligned_yaw(rotation),
+        reference_frame=world.root,
+    )
+
+
 class UprightGraspDescription(GraspDescription):
     """
     A grasp whose approach is oriented in the world rather than in the object's own
-    frame, so it stays a top-down grasp however the object is lying.
+    frame, so it stays a top-down grasp however the object is lying, turned about the
+    vertical to meet the cube's faces.
 
     :class:`GraspDescription` builds its pose sequence in the object's frame, so an
     object's own rotation carries into the approach: a cube knocked onto its side turns
     a top-down grasp into a sideways one, which the arm reaches for by bending across the
     row and sweeping its neighbours. A cube presents the same square face whichever way
-    up it is, so nothing is lost by ignoring its rotation.
+    up it is, so only its yaw is kept: fingers closing on a cube turned 45 degrees meet
+    its edges instead of two faces and push it away.
 
     ..note:: Only sound for objects that can be grasped from any orientation. A shape
         that must be taken by a particular feature -- a handle, a spout -- needs the
@@ -752,7 +762,8 @@ class UprightGraspDescription(GraspDescription):
     def grasp_pose_sequence(self, body: Body) -> list[Pose]:
         """
         Overrides :meth:`GraspDescription.grasp_pose_sequence` by anchoring the sequence
-        to the world's frame at the body's position instead of to the body's own frame.
+        to the world's frame at the body's position, turned to its faces, instead of to
+        the body's own frame.
 
         Only matters for callers that reach this method directly (``PickUpAction``'s own
         lift, which uses it to compute the lift-off direction): the reach onto the object
@@ -760,17 +771,15 @@ class UprightGraspDescription(GraspDescription):
 
         :param body: The body being grasped.
         """
-        return self.pose_sequence(
-            Pose(body.global_pose.to_position(), reference_frame=world.root), body
-        )
+        return self.pose_sequence(Pose(reference_frame=body), body)
 
     def pose_sequence(
         self, target_T_grasp_pose: Pose, body: Body = None, reverse: bool = False
     ) -> list[Pose]:
         """
-        Overrides :meth:`GraspDescription.pose_sequence` by discarding whatever rotation
-        ``target_T_grasp_pose`` itself carries before composing the grasp orientation
-        onto it.
+        Overrides :meth:`GraspDescription.pose_sequence` by replacing whatever rotation
+        ``target_T_grasp_pose`` itself carries with its face-aligned yaw (see
+        :func:`face_aligned_pose`) before composing the grasp orientation onto it.
 
         This is the method that actually matters: ``PickUpAction._grasp_attempt_plan``
         drives ``ReachAction`` with ``target_pose=self.object_designator.global_pose`` --
@@ -788,13 +797,13 @@ class UprightGraspDescription(GraspDescription):
         only the object's own incidental one.
 
         Re-anchoring to ``world.root`` (rather than keeping
-        ``target_T_grasp_pose``'s own reference frame) matters just as much as zeroing
+        ``target_T_grasp_pose``'s own reference frame) matters just as much as replacing
         the local rotation: for a pickup, that reference frame is the object body
         itself (see ``PickUpAction._grasp_attempt_plan``'s
         ``Pose(reference_frame=self.object_designator)``), so the base class's own
         ``target = target_T_grasp_pose.reference_frame`` would still anchor the result
-        to the object's rotated frame and reintroduce the very rotation just zeroed
-        out once resolved to world coordinates -- invisible for an upright cube, but
+        to the object's rotated frame and reintroduce the very rotation just replaced
+        once resolved to world coordinates -- invisible for an upright cube, but
         exactly the "reaches from the side/behind instead of the top" bug seen once a
         cube had been knocked onto its side.
 
@@ -802,10 +811,9 @@ class UprightGraspDescription(GraspDescription):
         :param body: The body of the grasp.
         :param reverse: If the sequence should be reversed.
         """
-        world = target_T_grasp_pose.reference_frame._world
-        world_pose = world.transform(target_T_grasp_pose, world.root)
-        upright_target = Pose(world_pose.to_position(), reference_frame=world.root)
-        return super().pose_sequence(upright_target, body, reverse)
+        return super().pose_sequence(
+            face_aligned_pose(target_T_grasp_pose), body, reverse
+        )
 
 
 def _as_upright(grasp_description: GraspDescription) -> UprightGraspDescription:
@@ -899,27 +907,29 @@ def _current_place_location(target_body: Body) -> Pose:
 
 
 def sample_actions(
-    object_body: Body, target_body: Body, picking_arm: Arms
+    object_body: Body,
+    target_body: Body,
+    picking_arm: Arms,
+    pickup_priors: dict[str, ParameterPrior],
+    place_priors: dict[str, ParameterPrior],
 ) -> tuple[PickUpAction, PlaceAction]:
     """
-    Sample a fresh pickup/place pair from the wide priors, for stacking ``object_body``
+    Sample a fresh pickup/place pair from the given priors, for stacking ``object_body``
     centered above ``target_body``, one cube height higher.
 
-    Deliberately wider than :func:`~pickup_place_parameterization.sample_pickup_instance`
-    and :func:`~pickup_place_parameterization.sample_place_instance`'s own default priors
-    -- and than ``demo3.py``'s and ``inference3a.py``'s own first-attempt range -- via
-    :data:`WIDE_PICKUP_PARAMETER_PRIORS` and :data:`WIDE_PLACE_PARAMETER_PRIORS`, so that
-    enough of the wider range's own failures land in every run for the causal correction
-    loop to have something to diagnose.
+    A stacking step's first attempt samples from :data:`WIDE_PICKUP_PARAMETER_PRIORS` and
+    :data:`WIDE_PLACE_PARAMETER_PRIORS`, wider than the range the training data was
+    collected in, so enough attempts fail for the causal correction loop to have
+    something to diagnose.
     """
     place_location = _current_place_location(target_body)
     grasp_description = pickup_grasp_description(object_body, target_body)
     pickup_action = sample_pickup_instance(
-        object_body, picking_arm, grasp_description, priors=WIDE_PICKUP_PARAMETER_PRIORS
+        object_body, picking_arm, grasp_description, priors=pickup_priors
     )
     pickup_action.grasp_description = _as_upright(pickup_action.grasp_description)
     place_action = sample_place_instance(
-        object_body, place_location, picking_arm, priors=WIDE_PLACE_PARAMETER_PRIORS
+        object_body, place_location, picking_arm, priors=place_priors
     )
     return pickup_action, place_action
 
@@ -969,6 +979,44 @@ def build_stack_plan(
     )
 
 
+def print_cube_pose(cube: Body, moment: str) -> None:
+    """
+    Print where MuJoCo has ``cube``: its position, its yaw and how far it is tilted off
+    upright, in degrees.
+
+    :param moment: When the pose is read, for the log line.
+    """
+    position = multi_sim.simulator.get_body_position(cube.name.name).result[:3]
+    w, x, y, z = multi_sim.simulator.get_body_quaternion(cube.name.name).result[:4]
+    yaw = numpy.degrees(numpy.arctan2(2 * (w * z + x * y), 1 - 2 * (y * y + z * z)))
+    tilt = numpy.degrees(numpy.arccos(numpy.clip(1 - 2 * (x * x + y * y), -1, 1)))
+    print(
+        f"[pose] {time.strftime('%H:%M:%S')} {cube.name.name} {moment}: position "
+        f"({position[0]:.3f}, {position[1]:.3f}, {position[2]:.3f}), "
+        f"yaw {yaw:.0f}, tilt {tilt:.0f}"
+    )
+
+
+def print_robot_state(moment: str) -> None:
+    """
+    Print the gripper's finger positions, the tool frame's position and the arm joint
+    furthest from its park target.
+
+    :param moment: When the state is read, for the log line.
+    """
+    fingers = [
+        round(float(world.state[connection.raw_dof.id].position), 4)
+        for connection in gripper.active_connections
+    ]
+    tool = multi_sim.simulator.get_body_position(tool_frame.name.name).result
+    deviations = detection_gate.arm.deviations_from_park_targets()
+    print(
+        f"[robot] {time.strftime('%H:%M:%S')} {moment}: fingers {fingers}, tool at "
+        f"({tool[0]:.3f}, {tool[1]:.3f}, {tool[2]:.3f}), largest park deviation "
+        f"{max(deviations):.3f} rad (joint {deviations.index(max(deviations))})"
+    )
+
+
 def perform_attempt(
     pickup_action: PickUpAction,
     place_action: PlaceAction,
@@ -985,17 +1033,21 @@ def perform_attempt(
     :return: Whether :attr:`pickup_action.object_designator` ended up stacked on
         ``supporting_cube``.
     """
+    print_cube_pose(pickup_action.object_designator, f"before {step_name}")
     plan = build_stack_plan(pickup_action, place_action)
     try:
         plan.perform()
     except Exception as exc:
         print(f"[warning] {step_name} failed ({type(exc).__name__}: {exc}), moving on")
+        print_robot_state(f"after {step_name} failed")
         try:
             sequential([ParkArmsAction(Arms.BOTH)], context=context).perform()
         except Exception as park_exc:
             print(f"[warning] re-park after {step_name} also failed: {park_exc}")
+            print_robot_state(f"after the re-park after {step_name} failed")
 
     time.sleep(ATTEMPT_SETTLE_DURATION)
+    print_cube_pose(pickup_action.object_designator, f"after {step_name}")
     return verify_stacked(pickup_action.object_designator, supporting_cube)
 
 
@@ -1050,11 +1102,15 @@ def restack_disturbed_cubes(
             f"[warning] {supported.name.name} was knocked off {support.name.name} "
             f"during {disturbed_by}; re-stacking it before continuing"
         )
+        # A repair, not a demonstration of the diagnosis: its first attempt samples
+        # from the range the training data was collected in.
         restack_outcome = attempt_cube_with_correction(
             supported,
             support,
             picking_arm,
             f"re-stack {supported.name.name} onto {support.name.name}",
+            pickup_priors=PICKUP_PARAMETER_PRIORS,
+            place_priors=PLACE_PARAMETER_PRIORS,
             confirmed_stacks=confirmed_stacks[:index],
             deadline=deadline,
         )
@@ -1089,13 +1145,13 @@ class CubeAttemptOutcome:
 
     correction_attempts: int
     """
-    How many corrected retries were performed, 0 if the first attempt already succeeded
-    or no diagnosis was available.
+    How many retries were performed, 0 if the first attempt already succeeded.
     """
 
-    diagnoses: list[tuple[str, RootCauseDiagnosis]]
+    diagnoses: list[list[tuple[str, RootCauseDiagnosis]]]
     """
-    Every diagnosis made for this step, one per correction attempt, in order.
+    The diagnoses applied before each retry, in order: one per implicated action, none
+    for a retry made unchanged because no parameter was anomalous.
     """
 
     final_succeeded: bool
@@ -1116,14 +1172,9 @@ class DiagnosisOutcome:
     Which stacking step this diagnosis was for.
     """
 
-    action_name: str
+    diagnoses: list[tuple[str, RootCauseDiagnosis]]
     """
-    Which action the diagnosis was made against, ``"pickup"`` or ``"place"``.
-    """
-
-    diagnosis: RootCauseDiagnosis
-    """
-    The diagnosis itself.
+    The diagnosis of each implicated action, see :func:`diagnose_cube_failure`.
     """
 
     diagnosis_duration_seconds: float
@@ -1150,6 +1201,8 @@ def attempt_cube_with_correction(
     cube_to_stack_on: Body,
     picking_arm: Arms,
     step_label: str,
+    pickup_priors: dict[str, ParameterPrior],
+    place_priors: dict[str, ParameterPrior],
     confirmed_stacks: list[tuple[Body, Body]] | None = None,
     deadline: float = float("inf"),
 ) -> CubeAttemptOutcome:
@@ -1173,6 +1226,8 @@ def attempt_cube_with_correction(
     :param picking_arm: The arm used for this step and for re-stacking any disturbed
         cube.
     :param step_label: Names this step in log output.
+    :param pickup_priors: The priors the first attempt's pickup is sampled from.
+    :param place_priors: The priors the first attempt's place is sampled from.
     :param confirmed_stacks: ``(supported, support)`` pairs already confirmed stacked
         earlier in this iteration, oldest first; none by default.
     :param deadline: ``time.time()`` value beyond which neither a correction retry nor a
@@ -1204,7 +1259,7 @@ def attempt_cube_with_correction(
         return intact
 
     pickup_action, place_action = sample_actions(
-        cube_to_pick, cube_to_stack_on, picking_arm
+        cube_to_pick, cube_to_stack_on, picking_arm, pickup_priors, place_priors
     )
     succeeded = perform_attempt(
         pickup_action, place_action, step_label, cube_to_stack_on
@@ -1216,7 +1271,7 @@ def attempt_cube_with_correction(
     )
     stack_intact = restack_and_reverify(f"{step_label} attempt 1")
 
-    diagnoses: list[tuple[str, RootCauseDiagnosis]] = []
+    diagnoses: list[list[tuple[str, RootCauseDiagnosis]]] = []
     correction_attempts = 0
 
     while (
@@ -1226,21 +1281,22 @@ def attempt_cube_with_correction(
         and time.time() < deadline
     ):
         diagnosis_start_time = time.time()
-        diagnosis_entry = diagnose_cube_failure(pickup_action, place_action)
+        attempt_diagnoses = diagnose_cube_failure(pickup_action, place_action)
         diagnosis_duration = time.time() - diagnosis_start_time
-        if diagnosis_entry is None:
-            print(f"[causal] {step_label}: no correction available, abandoning retries")
-            break
-
-        action_name, diagnosis = diagnosis_entry
-        diagnoses.append(diagnosis_entry)
-        print(
-            f"[causal] {step_label} ({action_name}, {diagnosis_duration:.3f}s): "
-            f"{diagnosis.explanation()}"
-        )
+        diagnoses.append(attempt_diagnoses)
+        if not attempt_diagnoses:
+            print(
+                f"[causal] {step_label} ({diagnosis_duration:.3f}s): every parameter "
+                "lies within what successful attempts used -- retrying unchanged"
+            )
+        for action_name, diagnosis in attempt_diagnoses:
+            print(
+                f"[causal] {step_label} ({action_name}, {diagnosis_duration:.3f}s): "
+                f"{diagnosis.explanation()}"
+            )
 
         pickup_action, place_action = apply_correction(
-            pickup_action, place_action, action_name, diagnosis, cube_to_stack_on
+            pickup_action, place_action, attempt_diagnoses, cube_to_stack_on
         )
         correction_attempts += 1
         correction_label = f"{step_label} (correction {correction_attempts})"
@@ -1250,15 +1306,14 @@ def attempt_cube_with_correction(
         diagnosis_outcomes.append(
             DiagnosisOutcome(
                 step_label=step_label,
-                action_name=action_name,
-                diagnosis=diagnosis,
+                diagnoses=attempt_diagnoses,
                 diagnosis_duration_seconds=diagnosis_duration,
                 correction_succeeded=succeeded,
             )
         )
         print(
             f"[info] {step_label} correction {correction_attempts} "
-            f"{'stayed off the floor' if succeeded else 'ended up on the FLOOR'}"
+            f"{'is stacked' if succeeded else 'is NOT stacked'}"
         )
         stack_intact = restack_and_reverify(correction_label)
 
@@ -1463,8 +1518,12 @@ def append_inference_report(
     segmind_verdict = segmind_approved()
 
     lines = [f"\n## Iteration {iteration_index}\n"]
-    lines.append(f"`full_stack_intact()` (geometry, ground truth): **{geometry_approved}**\n")
-    lines.append(f"`segmind_approved()` (segmind's own reading): **{segmind_verdict}**\n")
+    lines.append(
+        f"`full_stack_intact()` (geometry, ground truth): **{geometry_approved}**\n"
+    )
+    lines.append(
+        f"`segmind_approved()` (segmind's own reading): **{segmind_verdict}**\n"
+    )
     if geometry_approved != segmind_verdict:
         lines.append(
             "**disagreement**: segmind's contact-based detection missed (or wrongly "
@@ -1479,12 +1538,17 @@ def append_inference_report(
         lines.append(
             f"- first attempt: {'success' if outcome.initial_succeeded else 'failure'}"
         )
-        for attempt_number, (action_name, diagnosis) in enumerate(
-            outcome.diagnoses, start=1
-        ):
-            lines.append(
-                f"- correction {attempt_number} ({action_name}): {diagnosis.explanation()}"
-            )
+        for attempt_number, attempt_diagnoses in enumerate(outcome.diagnoses, start=1):
+            if not attempt_diagnoses:
+                lines.append(
+                    f"- correction {attempt_number}: no parameter anomalous, "
+                    "retried unchanged"
+                )
+            for action_name, diagnosis in attempt_diagnoses:
+                lines.append(
+                    f"- correction {attempt_number} ({action_name}): "
+                    f"{diagnosis.explanation()}"
+                )
         lines.append(
             f"- final result: {'SUCCESS' if outcome.final_succeeded else 'HARD FAILURE'} "
             f"after {outcome.correction_attempts} correction attempt(s)"
@@ -1578,7 +1642,8 @@ def _cube_outcome_payload(outcome: CubeAttemptOutcome) -> dict:
         "correctionAttempts": outcome.correction_attempts,
         "diagnoses": [
             _diagnosis_payload(action_name, diagnosis)
-            for action_name, diagnosis in outcome.diagnoses
+            for attempt_diagnoses in outcome.diagnoses
+            for action_name, diagnosis in attempt_diagnoses
         ],
     }
 
@@ -1692,6 +1757,8 @@ with ExecutionEnvironment(
                 cube_to_stack_on,
                 Arms.LEFT,
                 step_label,
+                pickup_priors=WIDE_PICKUP_PARAMETER_PRIORS,
+                place_priors=WIDE_PLACE_PARAMETER_PRIORS,
                 confirmed_stacks=confirmed_stacks,
                 deadline=cube_deadline,
             )
