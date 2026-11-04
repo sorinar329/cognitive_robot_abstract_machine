@@ -4,7 +4,7 @@ Individuals of an OWL ontology whose classes are still being inferred.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 
 from rdflib import URIRef
 from typing_extensions import Any, Iterable
@@ -47,6 +47,15 @@ class AnonymousClass:
         Record that the individual belongs to the class.
         """
         self.types.add(cls)
+
+    def property_attribute_names(self) -> set[str]:
+        """
+        :return: The names of the attributes holding values of properties of the individual: those set on it that
+            are neither fields nor class attributes.
+        """
+        declared = {name for name in dir(type(self)) if not name.startswith("_")}
+        declared.update(declared_field.name for declared_field in fields(self))
+        return {name for name in vars(self) if not name.startswith("_")} - declared
 
     @staticmethod
     def variable_for(candidate: AnonymousClass | Variable) -> Variable:
