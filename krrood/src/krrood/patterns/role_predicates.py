@@ -1,3 +1,7 @@
+"""
+Predicates about roles and the entities they are roles of.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -64,3 +68,57 @@ class IsSameSemanticEntity(Predicate):
             Prepositions.AS,
             Noun(fields["second_entity"]),
         )
+
+
+@dataclass(eq=False)
+class IsSubClassOrRole(Predicate):
+    """
+    Predicate asserting that a class is a subclass of another in the sense of an
+    ontology: it inherits from the other class, or it is a
+    :class:`~krrood.patterns.role.Role` whose role takers are of a subclass of it.
+    """
+
+    sub_class: type
+    """
+    The class that is checked.
+    """
+
+    super_class: type | tuple[type, ...]
+    """
+    The class, or any of the classes, the checked class must be a subclass of.
+    """
+
+    def __call__(self) -> bool:
+        return self.holds(self.sub_class, self.super_class)
+
+    @staticmethod
+    def holds(sub_class: type, super_class: type | tuple[type, ...]) -> bool:
+        """
+        :return: Whether *sub_class* inherits from *super_class*, or is a role whose
+            role-taker type is a subclass or role of *super_class*.
+        """
+        if issubclass(sub_class, super_class):
+            return True
+        if issubclass(sub_class, Role) and sub_class is not Role:
+            return IsSubClassOrRole.holds(sub_class.get_role_taker_type(), super_class)
+        return False
+
+    @classmethod
+    def _verbalization_fragment_(cls, fields: RenderedFields) -> VerbalizationFragment:
+        """:return: the clause *"<sub_class> is a subclass or role of
+        <super_class>"*."""
+        return clause(
+            Noun(fields["sub_class"]),
+            Copula(),
+            Noun("subclass or role"),
+            Prepositions.OF,
+            Noun(fields["super_class"]),
+        )
+
+    @classmethod
+    def _example_operand_values_(cls) -> dict[str, Any]:
+        """
+        A class stands for :attr:`super_class`, see :meth:`~krrood.entity_query_language
+        .predicate.SymbolicCallable._example_operand_values_`.
+        """
+        return {"super_class": object}

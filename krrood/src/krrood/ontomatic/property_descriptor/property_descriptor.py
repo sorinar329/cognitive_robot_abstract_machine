@@ -8,6 +8,8 @@ from collections import defaultdict
 from dataclasses import dataclass, field, fields
 from functools import cached_property, lru_cache
 
+from types import ModuleType
+
 from typing_extensions import ClassVar, Any, Iterable, Iterator, Dict, List
 
 from krrood.ontomatic.property_descriptor.mixins import HasChainAxioms
@@ -27,8 +29,21 @@ from krrood.class_diagrams.class_diagram import (
     Association,
     AssociationThroughRoleTaker,
 )
+from krrood.class_diagrams.utils import classes_of_module
 from krrood.class_diagrams.wrapped_field import WrappedField
-from krrood.entity_query_language.predicate import Symbol
+from krrood.entity_query_language.core.variable import InstantiatedVariable
+from krrood.entity_query_language.factories import and_, variable
+from krrood.entity_query_language.predicate import Predicate, RenderedFields, Symbol
+from krrood.entity_query_language.verbalization.fragments.base import (
+    VerbalizationFragment,
+)
+from krrood.entity_query_language.verbalization.vocabulary.parts_of_speech import (
+    clause,
+    Noun,
+    Verb,
+)
+from krrood.ontomatic.anonymous_class import AnonymousClass
+from krrood.ontomatic.naming import NamingRegistry
 from krrood.patterns.role import Role
 from krrood.symbol_graph.symbol_graph import (
     SymbolGraph,
@@ -177,6 +192,13 @@ class PropertyDescriptor(Symbol):
             if base is not PropertyDescriptor and issubclass(base, PropertyDescriptor)
         )
 
+    @classmethod
+    def attribute_name(cls) -> str:
+        """
+        :return: The name of the attribute a field managed by a descriptor of this class has by convention.
+        """
+        return NamingRegistry.to_snake_case(cls.__name__)
+
     def __post_init__(self):
         """
         Register the descriptor for its domain, and the chains that imply its class.
@@ -278,6 +300,22 @@ class PropertyDescriptor(Symbol):
             yield from PropertyDescriptor._types_a_domain_inherits_fields_from(
                 domain_type.get_role_taker_type()
             )
+
+    @classmethod
+    def update_domains_that_are_axiomatized_on_properties(cls, module: ModuleType):
+        """
+        Register every class of the module whose classification axiom mentions a property as a domain of the
+        property's descriptor type.
+        """
+        for domain_type in classes_of_module(module):
+            if "axiom" not in vars(domain_type):
+                continue
+            for descriptor_type in HasProperty.descriptor_types_in_axiom_of(
+                domain_type
+            ):
+                descriptor_type.get_descriptor_instance_for_domain_type(
+                    domain_type
+                )._register_for_domain(domain_type)
 
     @cached_property
     def range(self) -> SymbolType:
@@ -445,3 +483,60 @@ class PropertyDescriptor(Symbol):
             domain_type, association_condition
         )
         return tuple(associations_generator)
+
+
+@dataclass(eq=False)
+class HasProperty(Predicate):
+    """
+    Predicate asserting that an instance has an attribute for the property of a
+    descriptor class.
+    """
+
+    instance: Any
+    """
+    The instance that is checked.
+    """
+
+    property_descriptor_type: type[PropertyDescriptor]
+    """
+    The descriptor class of the property.
+    """
+
+    def __call__(self) -> bool:
+        return hasattr(self.instance, self.property_descriptor_type.attribute_name())
+
+    @staticmethod
+    @lru_cache(maxsize=None)
+    def descriptor_types_in_axiom_of(
+        cls: type,
+    ) -> tuple[type[PropertyDescriptor], ...]:
+        """
+        :param cls: A class with a classification axiom.
+        :return: The descriptor types of the properties the axiom requires an individual to have.
+        """
+        axiom = and_(*cls.axiom(variable(AnonymousClass, None)))
+        return tuple(
+            dict.fromkeys(
+                expression._kwargs_["property_descriptor_type"]
+                for expression in axiom._descendants_
+                if isinstance(expression, InstantiatedVariable)
+                and issubclass(expression._type_, HasProperty)
+            )
+        )
+
+    @classmethod
+    def _verbalization_fragment_(cls, fields: RenderedFields) -> VerbalizationFragment:
+        """:return: the clause *"<instance> has <property_descriptor_type>"*."""
+        return clause(
+            Noun(fields["instance"]),
+            Verb("have"),
+            Noun(fields["property_descriptor_type"]),
+        )
+
+    @classmethod
+    def _example_operand_values_(cls) -> dict[str, Any]:
+        """
+        A descriptor class stands for :attr:`property_descriptor_type`, see
+        :meth:`~krrood.entity_query_language.predicate.SymbolicCallable._example_operand_values_`.
+        """
+        return {"property_descriptor_type": PropertyDescriptor}
