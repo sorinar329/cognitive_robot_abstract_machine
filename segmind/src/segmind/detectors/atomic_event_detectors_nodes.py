@@ -1,3 +1,8 @@
+"""
+Detectors of the simplest events: contacts made and lost, and bodies starting and
+stopping to move or turn.
+"""
+
 from __future__ import annotations
 
 from abc import abstractmethod, ABC
@@ -81,6 +86,23 @@ class ContactDetector(AbstractDetector):
         ]
 
 
+@dataclass
+class ObservedPose:
+    """
+    A pose of a body, together with when it was observed.
+    """
+
+    observed_at: float
+    """
+    When the pose was observed, in seconds on a clock that never goes backwards.
+    """
+
+    pose: Pose
+    """
+    The pose observed, in the world frame.
+    """
+
+
 @dataclass(eq=False, repr=False, kw_only=True)
 class MotionDetector(AbstractDetector):
     """
@@ -90,9 +112,10 @@ class MotionDetector(AbstractDetector):
     when movement is detected.
     """
 
-    window_size: int = 4
+    window_duration: float = 2.0
     """
-    The window size indicates how many poses to consider for movement.
+    The time, in seconds, a body's motion is read over: where it is now is compared with
+    where it was that long ago.
     """
 
     distance_threshold: float = 0.005
@@ -105,15 +128,15 @@ class MotionDetector(AbstractDetector):
     Threshold for the rotation error between two poses to be considered rotation.
     """
 
-    _pose_history: dict[Body, list[Pose]] = field(
+    _pose_history: dict[Body, list[ObservedPose]] = field(
         default_factory=dict, init=False, repr=False
     )
     """
-    Pose window per tracked body.
+    The poses of each tracked body observed within :attr:`window_duration`, oldest
+    first, led by the last one observed at its start or before.
 
-    Owned by this detector rather than shared through the context, so that the window
-    always spans ``window_size`` ticks regardless of how many other motion detectors are
-    registered in the statechart.
+    Owned by this detector rather than shared through the context, so that no other
+    motion detector in the statechart adds to it.
     """
 
     def update_context_and_events(
@@ -122,7 +145,8 @@ class MotionDetector(AbstractDetector):
         tracked_objects: list[Body],
     ) -> list[DetectionEvent]:
         """
-        Updates the pose history for each tracked object and checks for motion events.
+        Updates the pose history for each tracked object and checks for motion events,
+        once a body has been observed for :attr:`window_duration`.
 
         :param segmind_context: The shared SegmindContext containing the information
             required to track events.
@@ -130,19 +154,24 @@ class MotionDetector(AbstractDetector):
         :return: A list of events triggered during this update.
         """
         events = []
+        window_start = segmind_context.observed_at - self.window_duration
         for tracked_object in tracked_objects:
-            poses = self._pose_history.setdefault(tracked_object, [])
-            poses.append(tracked_object.global_pose)
-            if len(poses) < self.window_size:
+            history = self._pose_history.setdefault(tracked_object, [])
+            history.append(
+                ObservedPose(segmind_context.observed_at, tracked_object.global_pose)
+            )
+            while len(history) > 1 and history[1].observed_at <= window_start:
+                history.pop(0)
+            if history[0].observed_at > window_start:
                 continue
 
             event = self._check_and_trigger_event(
-                segmind_context, tracked_object, poses
+                segmind_context,
+                tracked_object,
+                [observed.pose for observed in history],
             )
             if event:
                 events.append(event)
-
-            poses.pop(0)
         return events
 
     @abstractmethod

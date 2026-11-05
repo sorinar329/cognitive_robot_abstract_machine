@@ -1,3 +1,7 @@
+"""
+Converting objects to JSON and back, for the classes that cannot say themselves how.
+"""
+
 from __future__ import annotations
 
 import base64
@@ -6,7 +10,7 @@ import inspect
 import pathlib
 import re
 import uuid
-from datetime import timedelta, timezone
+from datetime import datetime, timedelta, timezone
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, fields, is_dataclass
 from dataclasses import field
@@ -633,6 +637,54 @@ class TimezoneJSONSerializer(ExternalClassJSONSerializer[timezone]):
         if name is None:
             return clazz(offset)
         return clazz(offset, name)
+
+
+class DatetimeJSONKey(enum.StrEnum):
+    """
+    The keys of the JSON a point in time is serialized to.
+    """
+
+    LOCAL_TIME = "local_time"
+    """
+    The date and time of day in ISO 8601 form, without a timezone.
+    """
+
+    TIMEZONE = "timezone"
+    """
+    The timezone the point in time is given in, or None.
+    """
+
+
+@dataclass
+class DatetimeJSONSerializer(ExternalClassJSONSerializer[datetime]):
+    """
+    External JSON serializer for points in time, exact to the microsecond and keeping
+    the timezone they are given in.
+    """
+
+    @classmethod
+    def to_json(cls, instance: datetime, **kwargs) -> dict[str, Any]:
+        """
+        Like :meth:`ExternalClassJSONSerializer.to_json`, with the timezone serialized
+        on its own.
+        """
+        return {
+            JSONField.TYPE: get_full_class_name(type(instance)),
+            DatetimeJSONKey.LOCAL_TIME: instance.replace(tzinfo=None).isoformat(),
+            DatetimeJSONKey.TIMEZONE: to_json(instance.tzinfo, **kwargs),
+        }
+
+    @classmethod
+    def from_json(
+        cls, data: dict[str, Any], clazz: type[datetime], **kwargs
+    ) -> datetime:
+        """
+        Like :meth:`ExternalClassJSONSerializer.from_json`, in the timezone it was
+        serialized in.
+        """
+        return clazz.fromisoformat(data[DatetimeJSONKey.LOCAL_TIME]).replace(
+            tzinfo=from_json(data[DatetimeJSONKey.TIMEZONE], **kwargs)
+        )
 
 
 class PurePathJSONKey(enum.StrEnum):

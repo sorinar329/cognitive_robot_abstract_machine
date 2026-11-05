@@ -1,3 +1,7 @@
+"""
+Tests for converting objects to JSON and back.
+"""
+
 import datetime
 import json
 import pathlib
@@ -604,6 +608,67 @@ class HasDuration:
 def test_timedelta_field_of_a_dataclass_roundtrips():
     obj = HasDuration()
     result = from_json(to_json(obj))
+    assert result == obj
+
+
+# %% points in time
+
+
+POINTS_IN_TIME = [
+    datetime.datetime(2026, 11, 4, 9, 30, 15, 123456),
+    datetime.datetime(
+        2026, 11, 4, 9, 30, tzinfo=datetime.timezone(datetime.timedelta(hours=1))
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "moment", POINTS_IN_TIME, ids=[repr(moment) for moment in POINTS_IN_TIME]
+)
+def test_a_point_in_time_roundtrips_to_the_microsecond(moment):
+    """
+    A point in time comes back exact, in the timezone it was given in.
+    """
+    result = from_json(json.loads(json.dumps(to_json(moment))))
+
+    assert result == moment
+    assert result.tzinfo == moment.tzinfo
+
+
+def test_a_point_in_time_keeps_the_name_of_its_timezone():
+    """
+    A timezone created with a name keeps that name.
+    """
+    zone = datetime.timezone(datetime.timedelta(hours=-3), "BRT")
+    moment = datetime.datetime(2026, 11, 4, 9, 30, tzinfo=zone)
+
+    result = from_json(to_json(moment))
+
+    assert result.tzname() == moment.tzname()
+
+
+@dataclass
+class HasPointInTime:
+    """
+    A dataclass carrying the moment something happened, as detected events do.
+    """
+
+    happened_at: datetime.datetime = field(
+        default_factory=lambda: datetime.datetime(2026, 11, 4, 9, 30)
+    )
+    """
+    When it happened.
+    """
+
+
+def test_a_point_in_time_field_of_a_dataclass_roundtrips():
+    """
+    A dataclass holding a point in time comes back equal.
+    """
+    obj = HasPointInTime()
+
+    result = from_json(to_json(obj))
+
     assert result == obj
 
 
