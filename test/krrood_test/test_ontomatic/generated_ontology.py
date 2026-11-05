@@ -11,6 +11,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from types import ModuleType
 
+from krrood.ontomatic.ontology_to_python.owl_instances_loader import (
+    OwlInstancesRegistry,
+    OwlLoader,
+)
 from krrood.ontomatic.ontology_to_python.owl_to_python import OwlToPythonConverter
 
 ONTOLOGIES_DIRECTORY = Path(__file__).parent.parent / "dataset" / "ontologies"
@@ -87,3 +91,22 @@ class GeneratedOntology:
             (package / file_name).write_text(source)
         sys.path.insert(0, str(root))
         return importlib.import_module(f"{package.name}.{self.module_name}")
+
+    def loaded_individuals(
+        self, root: Path, individuals_file_name: str
+    ) -> OwlInstancesRegistry:
+        """
+        Import the generated modules and load the individuals of an ontology file of the test dataset into them.
+
+        :param root: An empty directory.
+        :param individuals_file_name: The name of the ontology file holding the individuals.
+        :return: The registry of the loaded individuals.
+        """
+        classes_module = self.imported(root)
+        package = classes_module.__name__.rsplit(".", 1)[0]
+        return OwlLoader.load_instances(
+            str(ONTOLOGIES_DIRECTORY / individuals_file_name),
+            importlib.import_module(f"{package}.{self.module_name}_base"),
+            classes_module,
+            importlib.import_module(f"{package}.{self.module_name}_properties"),
+        )
