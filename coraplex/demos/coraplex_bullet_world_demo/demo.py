@@ -10,10 +10,18 @@ before it is executed, and the first that succeeds is taken. The bowl shows why,
 some of the grasps around its rim can be reached from where the robot may stand.
 
 While the plan runs, SegMind segments it into the grasps, pick-ups, placings and
-containments of the place setting, and reports them once the plan is done.
+containments of the place setting, and reports them once the plan is done. SegMind
+watches from a process of its own by default; ``--segmind thread`` watches from a thread
+of the run's own process instead, and ``--segmind off`` not at all, so the three can be
+compared in Rviz::
+
+    python demo.py --segmind process
+    python demo.py --segmind thread --segmind-tick-period 0.01
 """
 
+import argparse
 import os
+import time
 from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
 from enum import StrEnum
@@ -48,6 +56,7 @@ from segmind.detectors.coarse_event_detector_nodes import (
     PlacingDetector,
 )
 from segmind.detectors.spatial_relation_detector_nodes import ContainmentDetector
+from segmind.event_segmentation import RunSegmentation, Segmind
 from segmind.segmind_process import SegmindProcess
 from semantic_digital_twin.datastructures.definitions import TorsoState
 from semantic_digital_twin.reasoning.world_reasoner import WorldReasoner
@@ -205,6 +214,43 @@ class PlaceSettingObject:
         )
 
 
+# %% where SegMind watches
+
+
+class WhereSegmindWatches(StrEnum):
+    """
+    Where SegMind watches the run from, as named on the command line.
+    """
+
+    OWN_PROCESS = "process"
+    """
+    A process of its own, so the run never waits for SegMind.
+    """
+
+    THREAD = "thread"
+    """
+    A thread of the run's own process, which shares the interpreter with the plan.
+    """
+
+    OFF = "off"
+    """
+    Nowhere: the run is not segmented.
+    """
+
+    @property
+    def segmentation_type(self) -> type[RunSegmentation]:
+        """
+        :return: The kind of segmentation watching from here.
+        :raises ValueError: For :attr:`OFF`, where nothing watches.
+        """
+        match self:
+            case WhereSegmindWatches.OWN_PROCESS:
+                return SegmindProcess
+            case WhereSegmindWatches.THREAD:
+                return Segmind
+        raise ValueError(f"SegMind does not watch when it is {self.value}")
+
+
 # %% the demonstration
 
 
@@ -268,6 +314,18 @@ class BulletWorldDemonstration(RobotDemonstration):
     The spoon, which starts inside the drawer it is fetched from.
     """
 
+    segmind_watches_from: WhereSegmindWatches = WhereSegmindWatches.OWN_PROCESS
+    """
+    Where SegMind watches the run from, when :attr:`event_segmentation` is on.
+    """
+
+    segmind_tick_period: float | None = None
+    """
+    The time, in seconds, from the start of one SegMind tick to the start of the next.
+
+    ``None`` keeps the default of :attr:`segmind_watches_from`'s segmentation.
+    """
+
     @property
     def place_setting(self) -> tuple[PlaceSettingObject, ...]:
         """
@@ -313,9 +371,11 @@ class BulletWorldDemonstration(RobotDemonstration):
 
     def segment_events(self, world: World) -> AbstractContextManager:
         """
-        Detect the place setting being grasped, picked up, placed and contained.
+        Detect the place setting being grasped, picked up, placed and contained, from
+        where :attr:`segmind_watches_from` names.
         """
-        return SegmindProcess.create_for_semantic_annotation_types(
+        segmentation_type = self.segmind_watches_from.segmentation_type
+        segmentation = segmentation_type.create_for_semantic_annotation_types(
             world,
             tuple(
                 placed_object.semantic_annotation_type
@@ -328,6 +388,9 @@ class BulletWorldDemonstration(RobotDemonstration):
                 GraspDetector,
             ),
         )
+        if self.segmind_tick_period is not None:
+            segmentation.tick_period = self.segmind_tick_period
+        return segmentation
 
     def build_statechart(self, context: StatechartContext) -> Statechart:
         """
@@ -371,6 +434,8 @@ def main(
     collision_avoidance: bool = True,
     event_segmentation: bool = True,
     debug: bool = False,
+    segmind_watches_from: WhereSegmindWatches = WhereSegmindWatches.OWN_PROCESS,
+    segmind_tick_period: float | None = None,
 ) -> None:
     """
     Run the demonstration.
@@ -381,15 +446,55 @@ def main(
     :param event_segmentation: Whether SegMind segments the run into events.
     :param debug: Whether to run in debug mode, publishing every copy of the world a
         candidate is tried in.
+    :param segmind_watches_from: Where SegMind watches the run from;
+        :attr:`WhereSegmindWatches.OFF` turns event segmentation off.
+    :param segmind_tick_period: The time between two SegMind ticks, in seconds; ``None``
+        keeps the segmentation's default.
     """
+    started = time.perf_counter()
     BulletWorldDemonstration(
         used_robot=PR2,
         executor_type=executor_type,
         collision_avoidance=collision_avoidance,
-        event_segmentation=event_segmentation,
+        event_segmentation=(
+            event_segmentation and segmind_watches_from != WhereSegmindWatches.OFF
+        ),
         debug=debug,
+        segmind_watches_from=segmind_watches_from,
+        segmind_tick_period=segmind_tick_period,
     ).run()
+    print(
+        f"The run took {time.perf_counter() - started:.1f} s, "
+        f"with SegMind watching from: {segmind_watches_from.value}"
+    )
+
+
+def parsed_command_line() -> argparse.Namespace:
+    """
+    :return: The options the demonstration was started with.
+    """
+    parser = argparse.ArgumentParser(
+        description="The PR2 lays a place setting, segmented by SegMind."
+    )
+    parser.add_argument(
+        "--segmind",
+        type=WhereSegmindWatches,
+        choices=list(WhereSegmindWatches),
+        default=WhereSegmindWatches.OWN_PROCESS,
+        help="where SegMind watches the run from (default: process)",
+    )
+    parser.add_argument(
+        "--segmind-tick-period",
+        type=float,
+        default=None,
+        help="seconds between two SegMind ticks (default: process 0.01, thread 0.5)",
+    )
+    return parser.parse_args()
 
 
 if __name__ == "__main__":
-    main()
+    command_line = parsed_command_line()
+    main(
+        segmind_watches_from=command_line.segmind,
+        segmind_tick_period=command_line.segmind_tick_period,
+    )
