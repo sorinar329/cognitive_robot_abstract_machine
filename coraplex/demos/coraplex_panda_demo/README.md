@@ -9,6 +9,7 @@ retries with the perfect parameters.
 | file | what it is |
 |---|---|
 | `inference3b.py` | The demonstration: the scene, one attempt as a statechart, the diagnose-and-recover loop |
+| `varied_failures.py` | The same demonstration with a realistic friction per cube: only some attempts fail, in different ways |
 | `causal_diagnosis.py` | Judges a failed attempt's parameters against the trees fitted on successful attempts |
 | `training/models/` | The joint probability trees of the pick-up's and the place's successful parameters |
 
@@ -26,6 +27,23 @@ python inference3b.py --iterations 3
 | `--live-port` | Port the run is published on for cramera (default 0: publishes nothing) |
 
 Every iteration's attempts and diagnoses are appended to `inference_report.md`.
+
+## Failures as they come
+
+`inference3b.py` makes every cube's first attempt fail the same way: its friction is
+always too low to lift it. `varied_failures.py` samples a realistic friction instead:
+most cubes grip well, about 30 % are slippery (0.05 to 0.075) and fail at first. A
+slippery cube either slides out of the fingers when lifted and stays where it stood, or
+drops out of them right after and falls. Frictions from about 0.075 on, where a cube
+twists in the fingers and lands tilted, are left out. The velocities alone never make
+an attempt fail.
+
+Both are separate programs; run either on its own:
+
+```bash
+python inference3b.py --iterations 3      # every cube fails once
+python varied_failures.py --iterations 3  # some cubes fail, in different ways
+```
 
 ## Watching it in cramera
 

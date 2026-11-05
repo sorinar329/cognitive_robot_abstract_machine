@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 """The IJCAI expo demo: the Franka Emika Panda stacks four cubes into a tower
 in MuJoCo, diagnoses every failed attempt against the trees fitted on
 successful attempts, and recovers with the perfect parameters.
