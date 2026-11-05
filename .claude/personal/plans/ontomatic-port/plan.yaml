@@ -3,9 +3,9 @@ id: ontomatic-port
 title: Port Ontomatic to upstream
 description: 'Bring Ontomatic (OWL ontology to KRROOD model, ABox loading with OWL 2 RL materialization,
   AAMAS 2027 paper Section 5) from AbdelrhmanBassiouny''s aamas27-experiments branch onto current main
-  as a clean rewrite-in-place. Copied from the Ontomatic port track of his ontomatic-port plan. Related
-  existing work: draft PR 25 (ontomatic-on-main), one port touching the descriptors, compiler, loader and
-  OWL 2 RL check.
+  as a clean rewrite-in-place. Copied from the Ontomatic port track of his ontomatic-port plan. Draft
+  PR 25 (ontomatic-on-main) is split into the stacked PRs 27 to 31, which are direct ports; the clean-rewrite
+  items are still open.
 
   '
 default_repository: sorinar329/cognitive_robot_abstract_machine
@@ -25,16 +25,20 @@ items:
   title: Property characteristics and chain axioms on upstream property descriptors
   track: ontomatic-core
   depends_on: []
-  status: not_started
+  status: in progress
   notes: Port ontomatic/property_descriptor/mixins.py from aamas27-experiments onto main's descriptors.
+    Split from PR 25 (mixins.py, chain registration); done in the PR.
+  pull_request_number: 27
 - id: descriptor-provenance
   branch: descriptor-provenance
   title: Inferred facts with provenance and fact placement in PropertyDescriptorRelation
   track: ontomatic-core
   depends_on:
   - descriptor-characteristics
-  status: not_started
-  notes: InferredThrough, premises/explain, equivalence/inverse/symmetry/chain inference.
+  status: in progress
+  notes: 'InferredThrough, premises/explain, equivalence/inverse/symmetry/chain inference. Split from
+    PR 25: inference, fact placement, provenance and the descriptor registry.'
+  pull_request_number: 28
 - id: terminology-model
   branch: terminology-model
   title: Typed Terminology read from RDF, profile report, explicit domain/range rules
@@ -49,26 +53,34 @@ items:
   depends_on:
   - terminology-model
   - descriptor-characteristics
-  status: not_started
+  - descriptor-provenance
+  status: in progress
   notes: 'Fixes: sufficient conditions as a disjunction, owl:Thing filler, owl:Nothing, hierarchy cycles.
     The source plan also waits on eql-existential-semantics/correlated-quantifiers, because generated
-    object properties are collections; that EQL work is not tracked here.'
+    object properties are collections; that EQL work is not tracked here. PR 29 is the direct port of
+    the converter; Terminology still replaces ClassInfo/PropertyInfo.'
+  pull_request_number: 29
 - id: abox-loader
   branch: abox-loader
   title: ABox loader as the Algorithm 1 pipeline of step classes
   track: ontomatic-core
   depends_on:
+  - owl2rl-consistency-check
   - model-compiler
   - descriptor-provenance
-  status: not_started
-  notes: 'Fixes: line_profiler, tqdm and timing inside library code.'
+  status: in progress
+  notes: 'Fixes: line_profiler, tqdm and timing inside library code. PR 31 is the direct port; the Algorithm
+    1 step classes and the removal of tqdm/timing are still open.'
+  pull_request_number: 31
 - id: owl2rl-consistency-check
   branch: owl2rl-consistency-check
   title: OWL 2 RL equality and consistency check on a rule registry
   track: ontomatic-core
   depends_on:
-  - abox-loader
-  status: not_started
+  - model-compiler
+  status: in progress
+  pull_request_number: 30
+  notes: PR 30 is the direct port; the rule registry is still open.
 - id: closure-verification
   branch: closure-verification
   title: Differential tests against owlrl's closure and the 78-rule coverage test
