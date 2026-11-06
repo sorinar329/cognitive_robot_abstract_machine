@@ -162,6 +162,23 @@ class PropertyDescriptor(Symbol):
     """
     A set of all range types for this descriptor class.
     """
+    descriptor_instances_by_domain_type: ClassVar[
+        defaultdict[type[PropertyDescriptor], dict[SymbolType, PropertyDescriptor]]
+    ] = defaultdict(dict)
+    """
+    For each descriptor class, the descriptor instance managing the field of each of its domain types.
+    """
+
+    @classmethod
+    def super_classes(cls) -> tuple[type[PropertyDescriptor], ...]:
+        """
+        :return: The descriptor classes this descriptor class directly inherits from, its superproperties.
+        """
+        return tuple(
+            base
+            for base in cls.__bases__
+            if base is not PropertyDescriptor and issubclass(base, PropertyDescriptor)
+        )
 
     def __post_init__(self):
         self._validate_non_redundant_domain()
@@ -217,11 +234,13 @@ class PropertyDescriptor(Symbol):
 
     def _update_domain_and_range(self):
         """
-        Update the domain and range sets and the domain-range map for this descriptor type.
+        Update the domain and range sets and the domain-range map for this descriptor type, and register this
+        descriptor instance as the one managing the field for instances of its domain.
         """
         range_type = self.wrapped_field.type_endpoint
         assert issubclass(range_type, Symbol)
         self.domain_range_map[self.__class__][self.domain] = range_type
+        self.descriptor_instances_by_domain_type[self.__class__][self.domain] = self
         for super_class in self.__class__.__mro__:
             if (super_class is PropertyDescriptor) or not issubclass(
                 super_class, PropertyDescriptor

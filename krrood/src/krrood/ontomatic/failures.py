@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from krrood.exceptions import DataclassException
+
 
 @dataclass
 class UnMonitoredContainerTypeForDescriptor(Exception):
@@ -21,4 +23,34 @@ class UnMonitoredContainerTypeForDescriptor(Exception):
         super().__init__(
             f"Unmonitored container type '{self.container_type.__name__}' used for field '{self.field_name}' "
             f"in class '{self.clazz.__name__}'."
+        )
+
+
+@dataclass
+class NoObjectOfIndividualDeclaresProperty(DataclassException):
+    """
+    Raised when a fact is stored for an individual none of whose objects, its root role
+    taker and its roles, has the field of the property.
+    """
+
+    individual_object: object
+    """
+    An object of the individual.
+    """
+
+    property_descriptor_class: type
+    """
+    The property of the fact.
+    """
+
+    def error_message(self) -> str:
+        return (
+            f"No object of the individual of {self.individual_object!r} declares the "
+            f"property {self.property_descriptor_class.__name__}."
+        )
+
+    def suggest_correction(self) -> str:
+        return (
+            f"Give the individual a role, or a class, that declares a field managed by "
+            f"{self.property_descriptor_class.__name__}."
         )
