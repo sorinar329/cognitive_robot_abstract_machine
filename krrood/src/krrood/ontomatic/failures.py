@@ -1,3 +1,7 @@
+"""
+Errors raised by ontomatic.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -23,6 +27,77 @@ class UnMonitoredContainerTypeForDescriptor(Exception):
         super().__init__(
             f"Unmonitored container type '{self.container_type.__name__}' used for field '{self.field_name}' "
             f"in class '{self.clazz.__name__}'."
+        )
+
+
+@dataclass
+class UnionOfAnonymousClassesAsFiller(DataclassException):
+    """
+    Raised when a restriction restricts the values of a property to a union that holds
+    an anonymous class expression, which cannot be checked as a tuple of classes.
+    """
+
+    union_name: str
+    """
+    The name of the union.
+    """
+
+    def error_message(self) -> str:
+        return (
+            f"The union {self.union_name} restricts the values of a property but holds an "
+            f"anonymous class expression."
+        )
+
+    def suggest_correction(self) -> str:
+        return "Name the anonymous class expression in the ontology."
+
+
+@dataclass
+class UntranslatedComplement(DataclassException):
+    """
+    Raised when an intersection holds the complement of something other than a named
+    class or a restriction.
+    """
+
+    complemented_name: str
+    """
+    The name of the complemented class expression.
+    """
+
+    def error_message(self) -> str:
+        return f"The complement of {self.complemented_name} cannot be translated."
+
+    def suggest_correction(self) -> str:
+        return "Complement a named class or a restriction."
+
+
+@dataclass
+class DescriptorNotDeclaredForDomain(DataclassException):
+    """
+    Raised when neither a class nor any class it inherits fields from declares a field
+    managed by a descriptor type.
+    """
+
+    descriptor_type: type
+    """
+    The descriptor type.
+    """
+
+    domain_type: type
+    """
+    The class without such a field.
+    """
+
+    def error_message(self) -> str:
+        return (
+            f"No field of {self.domain_type.__name__} is managed by "
+            f"{self.descriptor_type.__name__}."
+        )
+
+    def suggest_correction(self) -> str:
+        return (
+            f"Declare the field on {self.domain_type.__name__} or on a class it inherits from, "
+            f"and assign a {self.descriptor_type.__name__} to it."
         )
 
 
