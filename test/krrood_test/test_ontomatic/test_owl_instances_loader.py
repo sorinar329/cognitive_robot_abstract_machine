@@ -21,6 +21,10 @@ BENCHMARK = "http://benchmark/OWL2Bench#"
 """
 The namespace of the hobby individuals.
 """
+FAMILY = "http://example.org/family#"
+"""
+The namespace of the family individuals.
+"""
 
 
 @pytest.fixture(scope="module")
@@ -40,6 +44,16 @@ def hobbies(tmp_path_factory) -> OwlInstancesRegistry:
     """
     return GeneratedOntology.of("no_implicit_subsumption.ttl").loaded_individuals(
         tmp_path_factory.mktemp("hobbies"), "no_implicit_subsumption_individuals.ttl"
+    )
+
+
+@pytest.fixture(scope="module")
+def family(tmp_path_factory) -> OwlInstancesRegistry:
+    """
+    Anna, her parent Ben and his parent Clara.
+    """
+    return GeneratedOntology.of("property_chains.ttl").loaded_individuals(
+        tmp_path_factory.mktemp("family"), "property_chains_individuals.ttl"
     )
 
 
@@ -79,6 +93,15 @@ def test_the_inverse_of_an_asserted_fact_is_inferred(pizzeria):
     margherita = pizzeria.resolve(f"{PIZZA}margherita")[0]
     mozzarella = pizzeria.resolve(f"{PIZZA}mozzarella")[0]
     assert margherita in mozzarella.is_topping_of
+
+
+def test_a_fact_of_a_property_chain_is_inferred(family):
+    """
+    The parent of a parent is a grandparent.
+    """
+    anna = family.resolve(f"{FAMILY}anna")[0]
+    clara = family.resolve(f"{FAMILY}clara")[0]
+    assert anna.has_grandparent == {clara}
 
 
 # %% roles

@@ -1,0 +1,6 @@
+@prefix : <http://example.org/family#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+
+:anna a owl:NamedIndividual , :Person ; :hasParent :ben .
+:ben a owl:NamedIndividual , :Person ; :hasParent :clara .
+:clara a owl:NamedIndividual , :Person .

@@ -666,7 +666,7 @@ class OwlLoader:
         :return: Every property chain axiom as (the implied property, the chain of properties).
         """
         return tuple(
-            (descriptor, tuple(chain))
+            (descriptor, chain.properties)
             for descriptor in set(self.metadata.descriptor_by_name.values())
             if issubclass(descriptor, HasChainAxioms)
             for chain in descriptor.get_chain_axioms()
