@@ -52,7 +52,7 @@ from krrood.ontomatic.property_descriptor.mixins import (
     HasChainAxioms,
     HasEquivalentProperties,
     HasInverseProperty,
-    IsBaseClass,
+    OntologyBaseClass,
     TransitiveProperty,
     SymmetricProperty,
     IrreflexiveProperty,
@@ -287,7 +287,7 @@ class ModelMetadata:
             # Collect model classes (dataclasses used to represent OWL classes)
             if isinstance(obj, type) and is_dataclass(obj):
                 self.class_by_name[attr_name] = obj
-                if IsBaseClass in obj.__bases__:
+                if OntologyBaseClass in obj.__bases__:
                     self.ontology_base_class = obj
 
             # Collect descriptor classes available in the module for quick lookup by name
