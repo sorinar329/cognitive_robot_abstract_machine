@@ -8,7 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing_extensions import Optional, Set, TypeVar, Type, Any, Union, List, TYPE_CHECKING
 
-from krrood.ontomatic.property_descriptor.mixins import IsBaseClass
+from krrood.ontomatic.property_descriptor.mixins import OntologyBaseClass
 from krrood.patterns.role import Role
 from krrood.symbol_graph.symbol_graph import Symbol
 {% if annotated_classes %}
@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 {% endif %}
 
 @dataclass(eq=False)
-class {{ cls.name }}({{ ', '.join(cls.base_classes) }}, IsBaseClass):
+class {{ cls.name }}({{ ', '.join(cls.base_classes) }}, OntologyBaseClass):
     {% if cls.label or cls.comment %}
     """{{ cls.label if cls.label else '' }}{% if cls.label and cls.comment %}\n\n{% endif %}{{ cls.comment if cls.comment else '' }}"""
     {% endif %}
