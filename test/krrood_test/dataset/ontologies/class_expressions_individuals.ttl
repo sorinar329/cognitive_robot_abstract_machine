@@ -1,0 +1,7 @@
+@prefix : <http://www.co-ode.org/ontologies/pizza/pizza.owl#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+
+:margherita a owl:NamedIndividual , :Pizza ; :hasTopping :mozzarella , :tomato .
+:mozzarella a owl:NamedIndividual , :MozzarellaTopping .
+:tomato a owl:NamedIndividual , :TomatoTopping .
+:italy a owl:NamedIndividual , :DomainConcept .

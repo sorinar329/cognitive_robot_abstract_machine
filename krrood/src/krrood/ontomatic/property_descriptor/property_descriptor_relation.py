@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from functools import cached_property
 
-from typing_extensions import TYPE_CHECKING, Any, Iterator
+from typing_extensions import TYPE_CHECKING, Any, ClassVar, Iterator
 
 from krrood.class_diagrams.wrapped_field import WrappedField
 from krrood.ontomatic.failures import NoObjectOfIndividualDeclaresProperty
@@ -63,6 +63,74 @@ class InferredThrough(Enum):
     """
     The relations of a property chain. Premises: the relations of the chain, in order.
     """
+    SYMMETRIC_TRANSITIVE_COMPONENT = "symmetric_transitive_component"
+    """
+    A component of the relation graph of a symmetric and transitive property. Premises: the property's name, the
+    component's identifier and size.
+    """
+    HAS_VALUE = "has_value"
+    """
+    The subject belongs to a class that is a ``hasValue`` restriction (OWL 2 RL rule cls-hv1). Premise: the class.
+    """
+
+
+@dataclass(eq=False)
+class SymmetricTransitiveComponent:
+    """
+    A weakly connected component of the relation graph of a property that is both symmetric and transitive: the
+    property relates every two members, and each member to itself unless it is irreflexive.
+    """
+
+    property_descriptor_class: type[PropertyDescriptor]
+    """
+    The symmetric and transitive property.
+    """
+    identifier: int
+    """
+    The index of the component among the components of the property.
+    """
+    members: dict[int, WrappedInstance]
+    """
+    The members of the component by their index in the symbol graph.
+    """
+    reflexive: bool
+    """
+    Whether the property relates each member to itself.
+    """
+
+    def relates(self, source: WrappedInstance, target: WrappedInstance) -> bool:
+        """
+        :return: Whether the component entails that the property relates the source to the target.
+        """
+        return (
+            self.members.get(source.index) is source
+            and self.members.get(target.index) is target
+            and (self.reflexive or source is not target)
+        )
+
+    def relation(
+        self, source: WrappedInstance, target: WrappedInstance
+    ) -> PropertyDescriptorRelation:
+        """
+        :return: The relation from the source to the target the component explains, not added to the symbol graph.
+        """
+        wrapped_field = (
+            self.property_descriptor_class.get_descriptor_instance_for_domain_type(
+                source.instance_type
+            ).wrapped_field
+        )
+        return PropertyDescriptorRelation(
+            source,
+            target,
+            wrapped_field,
+            inferred=True,
+            inference_explanation=(
+                InferredThrough.SYMMETRIC_TRANSITIVE_COMPONENT,
+                self.property_descriptor_class.__name__,
+                self.identifier,
+                len(self.members),
+            ),
+        )
 
 
 # %% relations
@@ -86,6 +154,26 @@ class PropertyDescriptorRelation(PredicateClassRelation):
     relations have none.
     """
 
+    eager_symmetric_transitive_closure: ClassVar[bool] = False
+    """
+    Whether relations of symmetric and transitive properties are closed relation by relation while they are added,
+    instead of once after loading from the components of their relation graph.
+    """
+
+    symmetric_transitive_components: ClassVar[
+        dict[tuple[str, int], SymmetricTransitiveComponent]
+    ] = {}
+    """
+    The components whose facts are stored only in the fields of their members, by the field name and the index of
+    each member. :meth:`find` explains these facts with them.
+    """
+
+    same_individual_role_takers: ClassVar[dict[Any, list[Any]]] = {}
+    """
+    For a root role taker, the other root role takers that represent the same individual, for an individual one of
+    whose classes its root's class cannot take as a role.
+    """
+
     # %% the objects of an individual
 
     @staticmethod
@@ -102,10 +190,29 @@ class PropertyDescriptorRelation(PredicateClassRelation):
         """
         :param instance: An object of the individual.
         :return: The objects representing the individual of the instance: its root role taker followed by the roles
-            of the root in the order they were created.
+            of the root in the order they were created, then the same for every linked root (see
+            :attr:`same_individual_role_takers`).
         """
         root = cls.root_role_taker(instance)
-        return [root, *Role.roles_for(root)]
+        objects = []
+        seen_identities = set()
+        for linked_root in [root, *cls.same_individual_role_takers.get(root, ())]:
+            for individual_object in [linked_root, *Role.roles_for(linked_root)]:
+                if id(individual_object) not in seen_identities:
+                    seen_identities.add(id(individual_object))
+                    objects.append(individual_object)
+        return objects
+
+    @classmethod
+    def nodes_of_individual(cls, node: WrappedInstance) -> list[WrappedInstance]:
+        """
+        :return: The node and the nodes of the roots linked to it in :attr:`same_individual_role_takers`.
+        """
+        linked_nodes = (
+            SymbolGraph().get_wrapped_instance(root)
+            for root in cls.same_individual_role_takers.get(node.instance, ())
+        )
+        return [node, *(linked for linked in linked_nodes if linked is not None)]
 
     @classmethod
     def declaring_object(
@@ -294,7 +401,10 @@ class PropertyDescriptorRelation(PredicateClassRelation):
         """
         Infer the relation back from the target to the source if the property is symmetric.
         """
-        if self.rule is InferredThrough.SYMMETRY:
+        if self.rule in (
+            InferredThrough.SYMMETRY,
+            InferredThrough.SYMMETRIC_TRANSITIVE_COMPONENT,
+        ):
             return
         if issubclass(self.property_descriptor_cls, SymmetricProperty):
             self.add_inferred_relation(
@@ -307,9 +417,15 @@ class PropertyDescriptorRelation(PredicateClassRelation):
     def infer_transitive_relations(self):
         """
         Infer the relations composing this relation with the relations of its property before and after it, if the
-        property is transitive.
+        property is transitive. Symmetric and transitive properties are closed after loading instead, unless
+        :attr:`eager_symmetric_transitive_closure` is set.
         """
         if not self.transitive:
+            return
+        if (
+            issubclass(self.property_descriptor_cls, SymmetricProperty)
+            and not self.eager_symmetric_transitive_closure
+        ):
             return
         for relation in list(self.target_outgoing_relations_with_same_descriptor_type):
             self.__class__(
@@ -359,7 +475,7 @@ class PropertyDescriptorRelation(PredicateClassRelation):
         descriptor_classes: tuple[type[PropertyDescriptor], ...],
     ) -> Iterator[tuple[WrappedInstance, tuple[PropertyDescriptorRelation, ...]]]:
         """
-        :param end: The node the paths end in.
+        :param end: The node the paths end in, or a node of its individual.
         :param descriptor_classes: The descriptor classes of the relations of a path, in order.
         :return: The first node and the relations of every path of relations of the descriptor classes.
         """
@@ -367,9 +483,10 @@ class PropertyDescriptorRelation(PredicateClassRelation):
             yield end, ()
             return
         *before, last = descriptor_classes
-        for relation in list(cls.incoming_relations_of_descriptor(end, last)):
-            for start, path in cls.paths_to(relation.source, tuple(before)):
-                yield start, (*path, relation)
+        for node in cls.nodes_of_individual(end):
+            for relation in list(cls.incoming_relations_of_descriptor(node, last)):
+                for start, path in cls.paths_to(relation.source, tuple(before)):
+                    yield start, (*path, relation)
 
     @classmethod
     def paths_from(
@@ -378,7 +495,7 @@ class PropertyDescriptorRelation(PredicateClassRelation):
         descriptor_classes: tuple[type[PropertyDescriptor], ...],
     ) -> Iterator[tuple[WrappedInstance, tuple[PropertyDescriptorRelation, ...]]]:
         """
-        :param start: The node the paths start from.
+        :param start: The node the paths start from, or a node of its individual.
         :param descriptor_classes: The descriptor classes of the relations of a path, in order.
         :return: The last node and the relations of every path of relations of the descriptor classes.
         """
@@ -386,9 +503,10 @@ class PropertyDescriptorRelation(PredicateClassRelation):
             yield start, ()
             return
         first, *after = descriptor_classes
-        for relation in list(cls.outgoing_relations_of_descriptor(start, first)):
-            for end, path in cls.paths_from(relation.target, tuple(after)):
-                yield end, (relation, *path)
+        for node in cls.nodes_of_individual(start):
+            for relation in list(cls.outgoing_relations_of_descriptor(node, first)):
+                for end, path in cls.paths_from(relation.target, tuple(after)):
+                    yield end, (relation, *path)
 
     # %% relations in the graph
 
@@ -427,30 +545,32 @@ class PropertyDescriptorRelation(PredicateClassRelation):
         self,
     ) -> Iterator[PropertyDescriptorRelation]:
         """
-        The relations of this relation's property that start from the target.
+        The relations of this relation's property that start from the target's individual.
         """
-        yield from SymbolGraph().get_outgoing_relations_with_condition(
-            self.target,
-            lambda relation: (
-                isinstance(relation, PropertyDescriptorRelation)
-                and relation.property_descriptor_cls is self.property_descriptor_cls
-            ),
-        )
+        for node in self.nodes_of_individual(self.target):
+            yield from SymbolGraph().get_outgoing_relations_with_condition(
+                node,
+                lambda relation: (
+                    isinstance(relation, PropertyDescriptorRelation)
+                    and relation.property_descriptor_cls is self.property_descriptor_cls
+                ),
+            )
 
     @property
     def source_incoming_relations_with_same_descriptor_type(
         self,
     ) -> Iterator[PropertyDescriptorRelation]:
         """
-        The relations of this relation's property that end in the source.
+        The relations of this relation's property that end in the source's individual.
         """
-        yield from SymbolGraph().get_incoming_relations_with_condition(
-            self.source,
-            lambda relation: (
-                isinstance(relation, PropertyDescriptorRelation)
-                and relation.property_descriptor_cls is self.property_descriptor_cls
-            ),
-        )
+        for node in self.nodes_of_individual(self.source):
+            yield from SymbolGraph().get_incoming_relations_with_condition(
+                node,
+                lambda relation: (
+                    isinstance(relation, PropertyDescriptorRelation)
+                    and relation.property_descriptor_cls is self.property_descriptor_cls
+                ),
+            )
 
     # %% the property
 
@@ -535,7 +655,8 @@ class PropertyDescriptorRelation(PredicateClassRelation):
         :param source_instance: The object that holds the field.
         :param field_name: The name of the field.
         :param target_instance: The value.
-        :return: The relation in the symbol graph for the fact; None if there is none.
+        :return: The relation in the symbol graph for the fact, or the relation a symmetric and transitive component
+            entails; None if neither exists.
         """
         source = SymbolGraph().get_wrapped_instance(source_instance)
         if source is None:
@@ -546,4 +667,12 @@ class PropertyDescriptorRelation(PredicateClassRelation):
                 and relation.target.instance is target_instance
             ):
                 return relation
+        component = cls.symmetric_transitive_components.get((field_name, source.index))
+        target = SymbolGraph().get_wrapped_instance(target_instance)
+        if (
+            component is not None
+            and target is not None
+            and component.relates(source, target)
+        ):
+            return component.relation(source, target)
         return None

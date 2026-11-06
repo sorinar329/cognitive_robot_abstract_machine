@@ -1,0 +1,1750 @@
+"""
+Loading the individuals of an OWL file into the classes generated from its ontology, and inferring their classes and
+facts by the OWL 2 RL rules.
+"""
+
+from __future__ import annotations
+
+import logging
+import os.path
+import time
+from abc import ABC
+from collections import defaultdict
+from enum import Enum
+from dataclasses import fields, is_dataclass, dataclass, field
+from functools import cached_property, lru_cache
+from types import ModuleType
+from typing import (
+    Any,
+    Dict,
+    Iterable,
+    List,
+    Optional,
+    Set,
+    Tuple,
+    Type,
+    Union,
+    ClassVar,
+)
+
+import rdflib
+import rustworkx as rx
+from rdflib import RDF, URIRef, Literal, OWL, RDFS
+from tqdm import tqdm
+
+from krrood.class_diagrams.class_diagram import Association, ClassDiagram
+from krrood.class_diagrams.utils import classes_of_module
+from krrood.ontomatic.anonymous_class import AnonymousClass
+from krrood.ontomatic.naming import NamingRegistry
+from krrood.ontomatic.ontology_to_python.owl2rl_check import Owl2RlCheck, Owl2RlReport
+from krrood.ontomatic.ontology_to_python.owl2rl_tbox import (
+    AllValuesFrom,
+    ClassExpression,
+    HasValue,
+    IntersectionOf,
+    NamedClass,
+    Owl2RlTerminology,
+)
+from krrood.ontomatic.property_descriptor.attribute_introspector import (
+    DescriptorAwareIntrospector,
+)
+from krrood.ontomatic.property_descriptor.mixins import (
+    HasChainAxioms,
+    HasEquivalentProperties,
+    HasInverseProperty,
+    OntologyBaseClass,
+    TransitiveProperty,
+    SymmetricProperty,
+    IrreflexiveProperty,
+    ReflexiveProperty,
+)
+from krrood.ontomatic.property_descriptor.property_descriptor import PropertyDescriptor
+from krrood.ontomatic.property_descriptor.property_descriptor_relation import (
+    InferredThrough,
+    PropertyDescriptorRelation,
+    SymmetricTransitiveComponent,
+)
+from krrood.patterns.role import Role
+from krrood.patterns.role_aware_class_hierarchy import RoleAwareClassHierarchy
+from krrood.patterns.role_predicates import IsSubClassOrRole
+from krrood.symbol_graph.symbol_graph import Symbol, SymbolGraph
+
+logger = logging.Logger("owl_loader")
+logger.setLevel(logging.DEBUG)
+
+# Handler
+handler = logging.StreamHandler()
+handler.setLevel(logging.INFO)  # <-- this filters out DEBUG messages
+logger.addHandler(handler)
+
+
+class TypeInferredThrough(Enum):
+    """
+    How the loader obtained a type of an individual.
+    """
+
+    ASSERTED = "asserted"
+    """
+    An rdf:type statement of the data. Premise: the class.
+    """
+    DOMAIN = "domain"
+    """
+    The declared domain of a property of the individual (OWL 2 RL rule prp-dom). Premise: (subject, property, value).
+    """
+    RANGE = "range"
+    """
+    The declared range of a property whose value is the individual (OWL 2 RL rule prp-rng).
+    Premise: (subject, property, value).
+    """
+    AXIOM = "axiom"
+    """
+    The individual satisfies a sufficient condition (owl:equivalentClass definition or general class axiom) of the
+    class. Premise: the class whose axiom held.
+    """
+    BASE_CLASS = "base_class"
+    """
+    The individual has no asserted or inferred type, it is represented by the ontology base class (owl:Thing).
+    Premise: none.
+    """
+    SUPERCLASS = "superclass"
+    """
+    The individual belongs to a class that is a subclass of, or equivalent to, an intersection with this class as an
+    operand (OWL 2 RL rules cax-sco and cls-int2). Premise: the class.
+    """
+    ALL_VALUES_FROM = "all_values_from"
+    """
+    The individual is a value of a property of an individual of a class that is a subclass of, or equivalent to, an
+    ``allValuesFrom`` restriction on the property (OWL 2 RL rule cls-avf). Premise: (subject, property, class).
+    """
+
+
+@dataclass(frozen=True)
+class TypeExplanation:
+    """
+    The explanation of a type of an individual.
+    """
+
+    rule: TypeInferredThrough
+    """
+    The rule that added the type.
+    """
+    premises: Tuple[Any, ...]
+    """
+    The premises of the rule, see :class:`TypeInferredThrough`.
+    """
+
+
+class OwlInstancesRegistry:
+    """Registry of instances created from an OWL/RDF instances file.
+
+    Provides access to instances per Python model class and tracks URIRef to instance mapping.
+    """
+
+    def __init__(self, symbol_graph: Optional[SymbolGraph] = None) -> None:
+        """
+        :param symbol_graph: The symbol graph the objects of the individuals are added to.
+        """
+        self._by_uri: Dict[URIRef, List[Any]] = defaultdict(list)
+        self.type_explanations: Dict[URIRef, Dict[Type, TypeExplanation]] = defaultdict(
+            dict
+        )
+        self.terminologies: List[Owl2RlTerminology] = []
+        """
+        The terminologies of the loaded files, see :meth:`check_owl2_rl`.
+        """
+
+    def check_owl2_rl(self) -> Owl2RlReport:
+        """
+        Check the loaded knowledge base against the OWL 2 RL/RDF rules that derive the equality of two individuals or
+        an inconsistency, which loading does not apply (see :class:`Owl2RlCheck`), for the terminology of every
+        loaded file.
+
+        :return: The report; if it passed, the unique-name assumption is entailed and the ontology is consistent under
+         these rules.
+        """
+        report = Owl2RlReport()
+        for terminology in self.terminologies:
+            partial = Owl2RlCheck(terminology, self._by_uri).run()
+            report.equalities.extend(partial.equalities)
+            report.inconsistencies.extend(partial.inconsistencies)
+            report.outside_owl2_rl = sorted(
+                set(report.outside_owl2_rl) | set(partial.outside_owl2_rl)
+            )
+        return report
+
+    def record_type(
+        self, uri: URIRef, cls: Type, rule: TypeInferredThrough, *premises: Any
+    ) -> None:
+        """
+        Record why an individual has a type. The first explanation of a type is kept.
+        """
+        self.type_explanations[uri].setdefault(cls, TypeExplanation(rule, premises))
+
+    def explain_type(
+        self, uri: Union[str, URIRef], cls: Type
+    ) -> Optional[TypeExplanation]:
+        """
+        :param uri: The individual.
+        :param cls: A class of the individual.
+        :return: The explanation of the type, or of the recorded type it is implied by (a subclass or role of
+         ``cls``), or None if no recorded type implies ``cls``.
+        """
+        explanations = self.type_explanations.get(URIRef(uri), {})
+        if cls in explanations:
+            return explanations[cls]
+        for recorded_cls, explanation in explanations.items():
+            if IsSubClassOrRole.holds(recorded_cls, cls):
+                return explanation
+        return None
+
+    def get_or_create_for(
+        self, uri: URIRef, factory: Type, symbol_graph, *args, **kwargs
+    ) -> Any:
+        """
+        :return: The object of the class for the individual: the existing one, or a new one, built on its role taker
+        when the class is a role.
+        """
+        instances = self.resolve(uri)
+
+        if instances and any(isinstance(inst, factory) for inst in instances):
+            # If an instance of the desired factory already exists, return it
+            return next(i for i in instances if isinstance(i, factory))
+
+        role_taker_field_name, role_taker = OwlLoader.get_and_construct_role_taker(
+            self, factory, uri, symbol_graph, **kwargs
+        )
+        if role_taker_field_name:
+            kwargs[role_taker_field_name] = role_taker
+
+        inst = factory(*args, **kwargs)
+
+        # A role reads the IRI from its role taker.
+        if not isinstance(inst, Role):
+            inst.uri = str(uri)
+
+        # Update instance mappings
+        self._by_uri[uri].append(inst)
+        return inst
+
+    def resolve(self, uri: URIRef) -> Optional[Any]:
+        """
+        :return: The objects of the individual, or None for an unknown individual.
+        """
+        if isinstance(uri, str):
+            uri = URIRef(uri)
+        return self._by_uri.get(uri)
+
+
+class ModelMetadata:
+    """Metadata about the Python model classes and their relationship to OWL.
+
+    Maintains mappings from RDF class names to Python classes, and from RDF predicates to
+    Python attributes and property descriptors.
+    """
+
+    def __init__(
+        self,
+        model_modules: Union[ModuleType, Iterable[ModuleType]],
+        symbol_graph: SymbolGraph,
+    ):
+        """Initializes ModelMetadata by scanning the provided modules.
+
+        Args:
+            model_modules: A single module or an iterable of modules containing the model classes.
+        """
+        self.class_by_name: Dict[str, Type] = {}
+        self.descriptor_by_name: Dict[str, Type] = {}
+        self.symbol_graph = symbol_graph
+        self.ontology_base_class: Optional[Type] = None
+        self._collect(model_modules)
+
+    def _collect(self, model_modules: Union[ModuleType, Iterable[ModuleType]]):
+        """Orchestrates the collection of metadata from the model modules.
+
+        Args:
+            model_modules: Modules to scan for classes and descriptors.
+        """
+        if isinstance(model_modules, (ModuleType, type)):
+            model_modules = [model_modules]
+        self._collect_classes_and_descriptors(model_modules)
+
+    def _collect_classes_and_descriptors(self, model_modules: Iterable[ModuleType]):
+        """Scans modules for dataclasses and PropertyDescriptor subclasses.
+
+        Args:
+            model_modules: Iterable of modules to scan.
+        """
+        modules_objects = {}
+        for model_module in model_modules:
+            modules_objects.update(
+                {
+                    attr_name: getattr(model_module, attr_name)
+                    for attr_name in dir(model_module)
+                }
+            )
+
+        for attr_name, obj in modules_objects.items():
+            # Collect model classes (dataclasses used to represent OWL classes)
+            if isinstance(obj, type) and is_dataclass(obj):
+                self.class_by_name[attr_name] = obj
+                if OntologyBaseClass in obj.__bases__:
+                    self.ontology_base_class = obj
+
+            # Collect descriptor classes available in the module for quick lookup by name
+            if (
+                isinstance(obj, type)
+                and issubclass(obj, PropertyDescriptor)
+                and obj is not PropertyDescriptor
+            ):
+                self.descriptor_by_name[obj.__name__] = obj
+
+    def get_python_class(self, rdf_class: URIRef) -> Optional[Type]:
+        """Returns the Python class corresponding to the given RDF class URI.
+
+        Args:
+            rdf_class: The URIRef of the RDF class.
+
+        Returns:
+            The Python class if found, otherwise None.
+        """
+        name = NamingRegistry.local_name(rdf_class)
+        # Expect PascalCase names in model equal to RDF local name
+        return self.class_by_name.get(name)
+
+    @lru_cache
+    def get_descriptor_base(
+        self, pred_local: str
+    ) -> Optional[Type[PropertyDescriptor]]:
+        """
+        :param pred_local: The field name of a property.
+        :return: The descriptor class of the property, or None if the modules define none.
+        """
+        return self.descriptor_by_name.get(NamingRegistry.to_pascal_case(pred_local))
+
+
+@dataclass(unsafe_hash=True)
+class URIType:
+    """
+    Represents a pairing of a URI and its associated Python type.
+    """
+
+    uri: URIRef
+    """
+    The URI of the entity.
+    """
+    type: Type
+    """
+    The associated Python type.
+    """
+
+    def __str__(self):
+        """
+        The IRI and the class.
+        """
+        return f"URIType(uri={self.uri}, type={self.type.__name__})"
+
+    def __repr__(self):
+        """
+        The IRI and the class.
+        """
+        return self.__str__()
+
+
+@dataclass
+class OwlLoader:
+    """Loader for OWL/RDF instances into Python model instances."""
+
+    owl_path: str
+    """
+    The path of the OWL file holding the individuals.
+    """
+    model_modules: Union[ModuleType, Iterable[ModuleType]]
+    """
+    The generated modules: the base class, the classes and the property descriptors.
+    """
+    symbol_graph: SymbolGraph
+    """
+    The symbol graph the objects of the individuals are added to.
+    """
+    registry: OwlInstancesRegistry
+    """
+    The registry of the objects of every individual.
+    """
+    graph: rdflib.Graph = field(default_factory=rdflib.Graph)
+    """
+    The graph of the OWL file.
+    """
+    anonymous_instances: Dict[URIRef, AnonymousClass] = field(default_factory=dict)
+    """
+    Every individual while its classes are inferred, by its IRI.
+    """
+    literals: Dict[URIRef, Dict[str, Literal]] = field(
+        default_factory=lambda: defaultdict(dict)
+    )
+    """
+    The literal values of every individual, by its IRI and the field name of the data property.
+    """
+    _triples_by_subject: Dict[URIRef, List[Tuple[URIRef, Any]]] = field(
+        default_factory=lambda: defaultdict(list)
+    )
+    """
+    The predicates and objects of every subject of the graph.
+    """
+    terminology: Optional[Owl2RlTerminology] = field(init=False, default=None)
+    """
+    The superclass expressions and constraint axioms of the ontology, read when loading.
+    """
+    anonymous_value_sets: Dict[Tuple[URIRef, str], Set[AnonymousClass]] = field(
+        init=False, default_factory=dict
+    )
+    """
+    The values of every property of the anonymous instances as a set, for fast membership tests in
+    :meth:`add_anonymous_fact`. The list of an attribute is indexed when the first value is added through that method.
+    """
+    number_of_anonymous_facts: int = field(init=False, default=0)
+    """
+    The number of property values added to the anonymous instances, used to detect the fixpoint of the type
+    inference.
+    """
+
+    def __post_init__(self):
+        """
+        Read the classes and descriptors of the generated modules.
+        """
+        self.metadata = ModelMetadata(self.model_modules, self.symbol_graph)
+
+    def index_triples(self):
+        """Indexes all triples in the graph for faster lookup by subject."""
+        self._triples_by_subject.clear()
+        for s, p, o in self.graph:
+            self._triples_by_subject[s].append((p, o))
+
+    def load(self) -> OwlInstancesRegistry:
+        """Parses the OWL file and loads instances into the registry.
+
+        Returns:
+            The populated OwlInstancesRegistry.
+        """
+        self.graph.parse(self.owl_path)
+        self.index_triples()
+        self.terminology = Owl2RlTerminology(self.graph, self.metadata.class_by_name)
+        self.registry.terminologies.append(self.terminology)
+        self.create_anonymous_instances()
+        self.assign_all_properties_to_all_anonymous_instances()
+        self.infer_all_types_for_the_anonymous_instances()
+        self.keep_most_specific_types_and_sort_from_least_to_most_specific()
+        self.create_explicit_instances_from_inferred_types_of_anonymous_instances()
+        self.sort_explicit_types_from_most_to_least_specific()
+        self.link_role_takers_of_the_same_individual()
+        self.assign_all_properties_to_explict_types_and_apply_on_time_forward_chaining()
+        self.add_facts_of_superclass_expressions()
+        if not PropertyDescriptorRelation.eager_symmetric_transitive_closure:
+            self.add_inferences_from_transitive_symmetric_relations()
+        return self.registry
+
+    def link_role_takers_of_the_same_individual(self):
+        """
+        Link the root role takers of the objects of every individual that has more than one (see
+        :attr:`PropertyDescriptorRelation.same_individual_role_takers`), so that inferred facts about the individual
+        are stored on whichever of its objects declares the property.
+        """
+        same_individual_role_takers = (
+            PropertyDescriptorRelation.same_individual_role_takers
+        )
+        same_individual_role_takers.clear()
+        for objects in self.registry._by_uri.values():
+            roots = []
+            for individual_object in objects:
+                root = PropertyDescriptorRelation.root_role_taker(individual_object)
+                if not any(root is known_root for known_root in roots):
+                    roots.append(root)
+            if len(roots) < 2:
+                continue
+            for root in roots:
+                same_individual_role_takers[root] = [
+                    other for other in roots if other is not root
+                ]
+
+    def infer_all_types_for_the_anonymous_instances(self):
+        """
+        Infer the OWL 2 RL entailed classes of every individual until nothing changes: the domains and ranges of its
+        properties (prp-dom, prp-rng), the classes whose sufficient conditions (``axiom_python``) it satisfies, and what the
+        superclass expressions of its classes require (see :meth:`apply_superclass_expressions_to_anonymous_instances`).
+        Necessary conditions do not classify.
+        """
+        declared_domains: Dict[Type[PropertyDescriptor], Tuple[Type, ...]] = {}
+        sufficient_domains: Dict[Type[PropertyDescriptor], Tuple[Type, ...]] = {}
+        for instance in self.anonymous_instances.values():
+            instance.final_sorted_types = RoleAwareClassHierarchy.most_specific(
+                tuple(instance.types)
+            )
+        state = None
+        number_of_facts_when_closed = None
+        while state != self._inference_state():
+            state = self._inference_state()
+            if number_of_facts_when_closed != self.number_of_anonymous_facts:
+                self.close_type_relevant_properties_of_anonymous_instances()
+                number_of_facts_when_closed = self.number_of_anonymous_facts
+                self.get_descriptors_of_instance.cache_clear()
+            self._infer_types_once(declared_domains, sufficient_domains)
+            self.apply_data_property_domains_to_anonymous_instances()
+            self.apply_superclass_expressions_to_anonymous_instances()
+        self.represent_untyped_individuals_by_the_base_class()
+
+    def add_anonymous_fact(
+        self,
+        instance: AnonymousClass,
+        descriptor: Type[PropertyDescriptor],
+        value: AnonymousClass,
+    ) -> None:
+        """
+        Add a property value to an anonymous instance, together with the values implied through super-properties,
+        equivalent properties, inverse properties and symmetry (see :meth:`implied_properties`).
+
+        :param instance: The subject.
+        :param descriptor: The property.
+        :param value: The value.
+        """
+        for field_name, inverted in (
+            (descriptor.attribute_name(), False),
+            *self.implied_properties(descriptor),
+        ):
+            source, target = (value, instance) if inverted else (instance, value)
+            values = getattr(source, field_name, None)
+            if values is None:
+                values = []
+                setattr(source, field_name, values)
+            value_set = self.anonymous_value_sets.get((source.uri, field_name))
+            if value_set is None:
+                value_set = set(values)
+                self.anonymous_value_sets[(source.uri, field_name)] = value_set
+            if target in value_set:
+                continue
+            value_set.add(target)
+            values.append(target)
+            self.number_of_anonymous_facts += 1
+
+    def apply_data_property_domains_to_anonymous_instances(self) -> None:
+        """
+        Type every anonymous instance with the declared domains of its data properties and of the data properties
+        they imply (OWL 2 RL rule prp-dom with prp-spo1 and prp-eqp1/2).
+        """
+        for uri, literals in self.literals.items():
+            instance = self.anonymous_instances.get(uri)
+            if instance is None:
+                continue
+            for field_name, literal in list(literals.items()):
+                for domain in self.terminology.data_property_domains.get(
+                    field_name, ()
+                ):
+                    if any(
+                        IsSubClassOrRole.holds(t, domain)
+                        for t in instance.final_sorted_types
+                    ):
+                        continue
+                    self._add_inferred_type(instance, domain)
+                    self.registry.record_type(
+                        uri,
+                        domain,
+                        TypeInferredThrough.DOMAIN,
+                        (uri, field_name, literal),
+                    )
+
+    def apply_superclass_expressions_to_anonymous_instances(self) -> None:
+        """
+        Apply the superclass expressions of the classes of every anonymous instance: the named classes of intersections
+        (cax-sco, cls-int2), the values of ``hasValue`` restrictions (cls-hv1) and the classes of the values of
+        ``allValuesFrom`` restrictions (cls-avf). :class:`~krrood.ontomatic.ontology_to_python.owl2rl_check.Owl2RlCheck`
+        checks complements and maximum cardinalities.
+        """
+        for instance in list(self.anonymous_instances.values()):
+            for (
+                python_class,
+                expressions,
+            ) in self.terminology.superclass_expressions.items():
+                if not any(
+                    IsSubClassOrRole.holds(t, python_class)
+                    for t in instance.final_sorted_types
+                ):
+                    continue
+                for expression in expressions:
+                    self._apply_superclass_expression(
+                        instance,
+                        expression,
+                        TypeInferredThrough.SUPERCLASS,
+                        (python_class,),
+                    )
+
+    def _apply_superclass_expression(
+        self,
+        instance: AnonymousClass,
+        expression: ClassExpression,
+        rule: TypeInferredThrough,
+        premises: Tuple[Any, ...],
+    ) -> None:
+        """
+        Make an anonymous instance satisfy a superclass expression, see
+        :meth:`apply_superclass_expressions_to_anonymous_instances`.
+
+        :param instance: The individual.
+        :param expression: The expression the individual belongs to.
+        :param rule: The rule recorded for a type added for a named class.
+        :param premises: The premises recorded with the rule.
+        """
+        if isinstance(expression, NamedClass):
+            if not any(
+                IsSubClassOrRole.holds(t, expression.python_class)
+                for t in instance.final_sorted_types
+            ):
+                self._add_inferred_type(instance, expression.python_class)
+                self.registry.record_type(
+                    instance.uri, expression.python_class, rule, *premises
+                )
+        elif isinstance(expression, IntersectionOf):
+            for operand in expression.operands:
+                self._apply_superclass_expression(instance, operand, rule, premises)
+        elif isinstance(expression, HasValue):
+            if isinstance(expression.value, Literal):
+                if (
+                    self.literals[instance.uri].get(expression.field_name)
+                    != expression.value
+                ):
+                    self.literals[instance.uri][expression.field_name] = (
+                        expression.value
+                    )
+                    self.number_of_anonymous_facts += 1
+                return
+            descriptor = self.metadata.get_descriptor_base(expression.field_name)
+            value = self.anonymous_instances.get(expression.value)
+            if descriptor is not None and value is not None:
+                self.add_anonymous_fact(instance, descriptor, value)
+        elif isinstance(expression, AllValuesFrom):
+            values = getattr(instance, expression.field_name, None)
+            if not isinstance(values, list):
+                return
+            for value in list(values):
+                self._apply_superclass_expression(
+                    value,
+                    expression.filler,
+                    TypeInferredThrough.ALL_VALUES_FROM,
+                    (instance.uri, expression.field_name, *premises),
+                )
+
+    @cached_property
+    def type_relevant_transitive_properties(
+        self,
+    ) -> Tuple[Type[PropertyDescriptor], ...]:
+        """
+        The transitive properties whose closure can add a class: those occurring, directly or through the properties they
+        imply, in a restriction of the ontology or in a property chain.
+        """
+        restricted = {
+            NamingRegistry.to_snake_case(NamingRegistry.local_name(property_node))
+            for property_node in self.graph.objects(None, OWL.onProperty)
+        }
+        for result, chain in self.property_chains:
+            restricted.add(result.attribute_name())
+            restricted.update(link.attribute_name() for link in chain)
+        return tuple(
+            descriptor
+            for descriptor in set(self.metadata.descriptor_by_name.values())
+            if issubclass(descriptor, TransitiveProperty)
+            and (
+                {descriptor.attribute_name()}
+                | {field_name for field_name, _ in self.implied_properties(descriptor)}
+            )
+            & restricted
+        )
+
+    @cached_property
+    def property_chains(
+        self,
+    ) -> Tuple[
+        Tuple[Type[PropertyDescriptor], Tuple[Type[PropertyDescriptor], ...]], ...
+    ]:
+        """
+        :return: Every property chain axiom as (the implied property, the chain of properties).
+        """
+        return tuple(
+            (descriptor, chain.properties)
+            for descriptor in set(self.metadata.descriptor_by_name.values())
+            if issubclass(descriptor, HasChainAxioms)
+            for chain in descriptor.get_chain_axioms()
+        )
+
+    def close_type_relevant_properties_of_anonymous_instances(self) -> None:
+        """
+        Add to the anonymous instances the property values derived through transitivity (OWL 2 RL rule prp-trp) for
+        the properties in :attr:`type_relevant_transitive_properties`, and through every property chain (prp-spo2),
+        so that the types they imply are inferred before the objects are created. Chains and transitivity are applied
+        in turns until neither adds a value, since a chain can use, or imply, a transitive property.
+        """
+        number_of_facts = None
+        while number_of_facts != self.number_of_anonymous_facts:
+            number_of_facts = self.number_of_anonymous_facts
+            self._close_transitive_properties_of_anonymous_instances()
+            self._apply_property_chains_to_anonymous_instances()
+
+    def _close_transitive_properties_of_anonymous_instances(self) -> None:
+        """
+        Add the values reachable through each property of :attr:`type_relevant_transitive_properties` (prp-trp).
+        """
+        for descriptor in self.type_relevant_transitive_properties:
+            field_name = descriptor.attribute_name()
+            for instance in list(self.anonymous_instances.values()):
+                values = getattr(instance, field_name, None)
+                if not isinstance(values, list):
+                    continue
+                reachable = []
+                frontier = [
+                    value for value in values if isinstance(value, AnonymousClass)
+                ]
+                seen = set(frontier)
+                while frontier:
+                    current = frontier.pop()
+                    for value in getattr(current, field_name, None) or ():
+                        if isinstance(value, AnonymousClass) and value not in seen:
+                            seen.add(value)
+                            reachable.append(value)
+                            frontier.append(value)
+                for value in reachable:
+                    self.add_anonymous_fact(instance, descriptor, value)
+
+    def _apply_property_chains_to_anonymous_instances(self) -> None:
+        """
+        Add the values at the end of every property chain to the property the chain implies (prp-spo2).
+        """
+        for result, chain in self.property_chains:
+            for instance in list(self.anonymous_instances.values()):
+                frontier = {instance}
+                for link in chain:
+                    frontier = {
+                        value
+                        for member in frontier
+                        for value in getattr(member, link.attribute_name(), None) or ()
+                        if isinstance(value, AnonymousClass)
+                    }
+                    if not frontier:
+                        break
+                for value in frontier:
+                    self.add_anonymous_fact(instance, result, value)
+
+    def add_facts_of_superclass_expressions(self) -> None:
+        """
+        Add to the objects the property values that the ``hasValue`` restrictions in superclass position require of
+        the individuals of their classes (OWL 2 RL rule cls-hv1), through the property rules like any inferred fact.
+        The types these values imply were already inferred on the anonymous instances.
+        """
+        for uri, objects in list(self.registry._by_uri.items()):
+            for (
+                python_class,
+                expressions,
+            ) in self.terminology.superclass_expressions.items():
+                if any(IsSubClassOrRole.holds(type(o), python_class) for o in objects):
+                    for expression in expressions:
+                        self._add_facts_of_superclass_expression(
+                            objects, expression, python_class
+                        )
+
+    def _add_facts_of_superclass_expression(
+        self, objects: List[Any], expression: ClassExpression, python_class: Type
+    ) -> None:
+        """
+        :param objects: The objects of an individual of the expression.
+        :param expression: A superclass expression of ``python_class``.
+        :param python_class: The class whose superclass expression it is, the premise of the facts.
+        """
+        if isinstance(expression, IntersectionOf):
+            for operand in expression.operands:
+                self._add_facts_of_superclass_expression(objects, operand, python_class)
+        elif isinstance(expression, HasValue):
+            if isinstance(expression.value, Literal):
+                self.assign_data_value(objects, expression.field_name, expression.value)
+                return
+            descriptor = self.metadata.get_descriptor_base(expression.field_name)
+            value_objects = self.registry.resolve(expression.value)
+            if descriptor is None or not value_objects:
+                return
+            target = self.symbol_graph.ensure_wrapped_instance(
+                PropertyDescriptorRelation.root_role_taker(value_objects[0])
+            )
+            PropertyDescriptorRelation.add_inferred_relation(
+                objects[0],
+                descriptor,
+                target,
+                (InferredThrough.HAS_VALUE, python_class),
+            )
+        elif isinstance(expression, AllValuesFrom):
+            for individual_object in objects:
+                for value in list(
+                    getattr(individual_object, expression.field_name, None) or ()
+                ):
+                    value_objects = PropertyDescriptorRelation.objects_of_individual(
+                        value
+                    )
+                    self._add_facts_of_superclass_expression(
+                        value_objects, expression.filler, python_class
+                    )
+
+    def represent_untyped_individuals_by_the_base_class(self) -> None:
+        """
+        An individual without any asserted or inferred type is only an owl:Thing; it is represented by an instance of
+        the ontology base class. (It is not typed with a class it happens to be named after, e.g. the individual
+        ``Engineering`` used as a value of hasCollegeDiscipline is not an instance of the class ``Engineering``.)
+        """
+        base_class = self.metadata.ontology_base_class
+        if base_class is None:
+            return
+        for instance in self.anonymous_instances.values():
+            if not instance.final_sorted_types:
+                self._add_inferred_type(instance, base_class)
+                self.registry.record_type(
+                    instance.uri, base_class, TypeInferredThrough.BASE_CLASS
+                )
+
+    def _inference_state(self) -> Tuple[int, int]:
+        """
+        :return: The number of inferred types and of property values of the anonymous instances; the type inference
+         has reached its fixpoint when a pass changes neither.
+        """
+        return self._number_of_inferred_types(), self.number_of_anonymous_facts
+
+    def _number_of_inferred_types(self) -> int:
+        """
+        :return: The number of classes inferred for all anonymous instances together.
+        """
+        return sum(len(i.final_sorted_types) for i in self.anonymous_instances.values())
+
+    def _add_inferred_type(self, instance: AnonymousClass, cls: Type) -> None:
+        """
+        Add an inferred type to an individual, visible to the axioms of the next inference pass.
+        """
+        instance.final_sorted_types.append(cls)
+        instance.add_type(cls)
+
+    def _infer_types_once(
+        self,
+        declared_domains: Dict[Type[PropertyDescriptor], Tuple[Type, ...]],
+        sufficient_domains: Dict[Type[PropertyDescriptor], Tuple[Type, ...]],
+    ) -> None:
+        """
+        One pass of the type inference over all individuals, see :meth:`infer_all_types_for_the_anonymous_instances`.
+        """
+        for instance in self.anonymous_instances.values():
+            descriptors = self.get_descriptors_of_instance(instance)
+            for desc in descriptors:
+                if desc not in declared_domains:
+                    declared_domains[desc] = self.declared_domains(desc)
+                    sufficient_domains[desc] = self.domains_with_sufficient_conditions(
+                        desc
+                    )
+                if self.has_declared_domains_and_ranges(desc):
+                    for dom in declared_domains[desc]:
+                        self._add_domain_type(instance, desc, dom)
+                    for range_ in self.declared_ranges(desc):
+                        for value in getattr(instance, desc.attribute_name()):
+                            self._add_range_type(instance, desc, value, range_)
+                else:
+                    for dom in declared_domains[desc]:
+                        self._update_inferred_types_given_descriptor_domain_and_range(
+                            instance, desc, dom
+                        )
+                for dom in sufficient_domains[desc]:
+                    if dom.axiom_python(instance) and not any(
+                        IsSubClassOrRole.holds(t, dom)
+                        for t in instance.final_sorted_types
+                    ):
+                        self._add_inferred_type(instance, dom)
+                        self.registry.record_type(
+                            instance.uri, dom, TypeInferredThrough.AXIOM, dom
+                        )
+
+    @staticmethod
+    def has_declared_domains_and_ranges(desc: Type[PropertyDescriptor]) -> bool:
+        """
+        :return: Whether the generated descriptor lists the rdfs:domain and rdfs:range of its property (models
+         generated before this information was emitted do not).
+        """
+        return "rdfs_domains" in vars(desc)
+
+    def _resolve_class_names(self, names: Iterable[str]) -> Tuple[Type, ...]:
+        """
+        :return: The generated classes with the names, leaving out names the modules do not define.
+        """
+        return tuple(
+            self.metadata.class_by_name[name]
+            for name in names
+            if name in self.metadata.class_by_name
+        )
+
+    def declared_ranges(self, desc: Type[PropertyDescriptor]) -> Tuple[Type, ...]:
+        """
+        :return: The classes declared with rdfs:range for the property of the descriptor.
+        """
+        return self._resolve_class_names(vars(desc).get("rdfs_ranges", ()))
+
+    def _add_domain_type(self, instance: AnonymousClass, desc: Type, dom: Type) -> None:
+        """
+        Type an individual with the declared domain of one of its properties (prp-dom).
+        """
+        if any(IsSubClassOrRole.holds(t, dom) for t in instance.final_sorted_types):
+            return
+        self._add_inferred_type(instance, dom)
+        first_value = getattr(instance, desc.attribute_name())[0]
+        self.registry.record_type(
+            instance.uri,
+            dom,
+            TypeInferredThrough.DOMAIN,
+            (instance.uri, desc.__name__, getattr(first_value, "uri", first_value)),
+        )
+
+    def _add_range_type(
+        self, instance: AnonymousClass, desc: Type, value: AnonymousClass, range_: Type
+    ) -> None:
+        """
+        Type a value with the declared range of the property (prp-rng).
+        """
+        if value is None or any(
+            IsSubClassOrRole.holds(t, range_) for t in value.final_sorted_types
+        ):
+            return
+        self._add_inferred_type(value, range_)
+        self.registry.record_type(
+            value.uri,
+            range_,
+            TypeInferredThrough.RANGE,
+            (instance.uri, desc.__name__, value.uri),
+        )
+
+    def declared_domains(self, desc: Type[PropertyDescriptor]) -> Tuple[Type, ...]:
+        """
+        :param desc: A property descriptor class.
+        :return: The classes declared with rdfs:domain for the property of the descriptor. For models generated
+         without this information, the most general domains of the descriptor (the domains that are not a subclass or
+         role of another domain of the descriptor).
+        """
+        if self.has_declared_domains_and_ranges(desc):
+            return self._resolve_class_names(vars(desc)["rdfs_domains"])
+        domains = tuple(desc.all_domains[desc])
+        return tuple(
+            dom
+            for dom in domains
+            if not any(
+                other is not dom and IsSubClassOrRole.holds(dom, other)
+                for other in domains
+            )
+        )
+
+    @staticmethod
+    def domains_with_sufficient_conditions(
+        desc: Type[PropertyDescriptor],
+    ) -> Tuple[Type, ...]:
+        """
+        :param desc: A property descriptor class.
+        :return: The domains of the descriptor that declare their own sufficient condition (``axiom_python`` defined
+         in the class itself, not inherited).
+        """
+        return tuple(
+            dom for dom in desc.all_domains[desc] if "axiom_python" in vars(dom)
+        )
+
+    def keep_most_specific_types_and_sort_from_least_to_most_specific(
+        self,
+    ) -> None:
+        """
+        Keep only the most specific inferred classes of every individual, from the least to the most specific.
+        """
+        for instance in self.anonymous_instances.values():
+            result = RoleAwareClassHierarchy.most_specific(
+                tuple(instance.final_sorted_types)
+            )
+            instance.final_sorted_types = list(
+                RoleAwareClassHierarchy.sorted_by_inheritance_path_length(
+                    tuple(result),
+                    common_ancestor=self.metadata.ontology_base_class,
+                    classes_without_order=(
+                        Symbol,
+                        ABC,
+                        object,
+                    ),
+                )
+            )
+
+    def sort_explicit_types_from_most_to_least_specific(
+        self,
+    ) -> None:
+        """
+        Order the objects of every individual from the most to the least specific class.
+        """
+        for uri, instances in self.registry._by_uri.items():
+            if len(instances) <= 1:
+                continue
+            types = tuple(type(instance) for instance in instances)
+            sorted_types = list(
+                reversed(
+                    RoleAwareClassHierarchy.sorted_by_inheritance_path_length(
+                        types,
+                        common_ancestor=self.metadata.ontology_base_class,
+                        classes_without_order=(
+                            Symbol,
+                            ABC,
+                            object,
+                        ),
+                    )
+                )
+            )
+            sorted_instances = list()
+            for st in sorted_types:
+                for instance in instances:
+                    if type(instance) is st:
+                        sorted_instances.append(instance)
+                        break
+            self.registry._by_uri[uri] = sorted_instances
+
+    @lru_cache
+    def get_descriptors_of_instance(
+        self, instance: AnonymousClass
+    ) -> List[Type[PropertyDescriptor]]:
+        """
+        :return: The descriptor classes of the properties the anonymous instance has values of.
+        """
+        non_class_fields = instance.property_attribute_names()
+        descriptors = [self.metadata.get_descriptor_base(f) for f in non_class_fields]
+        return [d for d in descriptors if d is not None]
+
+    def _update_inferred_types_given_descriptor_domain_and_range(
+        self,
+        instance: AnonymousClass,
+        desc: Type[PropertyDescriptor],
+        dom: Type,
+        range_: Optional[Type] = None,
+        range_inst: Optional[AnonymousClass] = None,
+    ):
+        """
+        Add the domain of a property to the classes of the instance, and its range to those of the value, recording
+        why each was inferred.
+        """
+        values = getattr(instance, desc.attribute_name(), None) or [None]
+        if not any(IsSubClassOrRole.holds(t, dom) for t in instance.final_sorted_types):
+            self._add_inferred_type(instance, dom)
+            first_value = values[0]
+            self.registry.record_type(
+                instance.uri,
+                dom,
+                TypeInferredThrough.DOMAIN,
+                (
+                    instance.uri,
+                    desc.__name__,
+                    getattr(first_value, "uri", first_value),
+                ),
+            )
+        if not range_:
+            try:
+                range_ = desc.get_descriptor_instance_for_domain_type(dom).range
+            except ValueError:
+                return
+        if not range_inst:
+            range_instances = getattr(instance, desc.attribute_name())
+        else:
+            range_instances = [range_inst]
+        for range_inst in range_instances:
+            if not any(
+                IsSubClassOrRole.holds(t, range_) for t in range_inst.final_sorted_types
+            ):
+                self._add_inferred_type(range_inst, range_)
+                self.registry.record_type(
+                    range_inst.uri,
+                    range_,
+                    TypeInferredThrough.RANGE,
+                    (instance.uri, desc.__name__, range_inst.uri),
+                )
+
+    def add_inferences_from_transitive_symmetric_relations(self):
+        """
+        Close every symmetric and transitive property: it relates all members of a weakly connected component of its
+        relation graph. The facts become relations of the symbol graph when the property implies other properties
+        (:meth:`implies_other_properties`); otherwise they are stored only in the fields of the members, and the component
+        explains them (:class:`SymmetricTransitiveComponent`).
+        """
+        PropertyDescriptorRelation.symmetric_transitive_components.clear()
+        transitive_symmetric_descriptor_types = [
+            d
+            for p, d in self.metadata.descriptor_by_name.items()
+            if issubclass(d, TransitiveProperty) and issubclass(d, SymmetricProperty)
+        ]
+        for descriptor_type in transitive_symmetric_descriptor_types:
+            reflexive = issubclass(
+                descriptor_type, ReflexiveProperty
+            ) or not issubclass(descriptor_type, IrreflexiveProperty)
+            descriptor_induced_subgraph = SymbolGraph().subgraph_of_relations_of_fields(
+                lambda wrapped_field: isinstance(
+                    wrapped_field.property_descriptor, descriptor_type
+                )
+            )
+            wcc = rx.weakly_connected_components(descriptor_induced_subgraph)
+            for component_id, comp in enumerate(wcc):
+                component = SymmetricTransitiveComponent(
+                    descriptor_type,
+                    component_id,
+                    {
+                        member.index: member
+                        for member in (
+                            descriptor_induced_subgraph[node] for node in comp
+                        )
+                    },
+                    reflexive,
+                )
+                if self.implies_other_properties(descriptor_type):
+                    self.add_component_relations_to_the_graph(component)
+                else:
+                    self.add_component_facts_to_the_attributes(component)
+
+    @staticmethod
+    def implies_other_properties(descriptor_type: Type[PropertyDescriptor]) -> bool:
+        """
+        :param descriptor_type: A property descriptor class.
+        :return: True if a fact of the property entails facts of other properties, that is, if the property has a
+         super-property, an inverse other than itself or an equivalent property, or occurs in a property chain.
+        """
+        has_inverse = issubclass(
+            descriptor_type, HasInverseProperty
+        ) and descriptor_type.get_inverse() not in (None, descriptor_type)
+        has_equivalent = issubclass(descriptor_type, HasEquivalentProperties) and bool(
+            descriptor_type.get_equivalent_properties()
+        )
+        occurs_in_chain = bool(PropertyDescriptor.chain_axioms.get(descriptor_type))
+        return bool(
+            descriptor_type.super_classes()
+            or has_inverse
+            or has_equivalent
+            or occurs_in_chain
+        )
+
+    @staticmethod
+    def add_component_relations_to_the_graph(
+        component: SymmetricTransitiveComponent,
+    ):
+        """
+        Add every fact entailed by the component as an explained relation of the symbol graph and apply the rules of
+        the property to it.
+        """
+        for source in component.members.values():
+            for target in component.members.values():
+                if component.relates(source, target):
+                    component.relation(
+                        source, target
+                    ).update_source_and_add_to_graph_and_apply_implications()
+
+    @staticmethod
+    def add_component_facts_to_the_attributes(
+        component: SymmetricTransitiveComponent,
+    ):
+        """
+        Store every fact entailed by the component in the attribute of its source and register the component as the
+        explanation of these facts.
+        """
+        for source in component.members.values():
+            descriptor = component.property_descriptor_class.get_descriptor_instance_for_domain_type(
+                source.instance_type
+            )
+            PropertyDescriptorRelation.symmetric_transitive_components[
+                (descriptor.wrapped_field.name, source.index)
+            ] = component
+            for target in component.members.values():
+                if component.relates(source, target):
+                    descriptor.update_value(
+                        source.instance, target.instance, inferred=True
+                    )
+
+    def create_anonymous_instances(self):
+        """Creates instances for all anonymous subjects in the graph."""
+        for s in self.graph.subjects(RDF.type, OWL.NamedIndividual, unique=True):
+            ac = AnonymousClass(s)
+            self.anonymous_instances[s] = ac
+            for o_class in self.graph.objects(s, RDF.type):
+                py_cls = self.metadata.get_python_class(o_class)
+                if py_cls:
+                    ac.add_type(py_cls)
+                    self.registry.record_type(
+                        s, py_cls, TypeInferredThrough.ASSERTED, o_class
+                    )
+        if self.anonymous_instances:
+            return
+        for s, o_class in self.graph.subject_objects(RDF.type):
+            if not isinstance(s, URIRef):
+                continue
+            if s in self.anonymous_instances:
+                continue
+            if o_class in [
+                OWL.Class,
+                RDFS.Class,
+                OWL.Ontology,
+                OWL.ObjectProperty,
+                OWL.DatatypeProperty,
+                OWL.FunctionalProperty,
+            ]:
+                continue
+            self.anonymous_instances[s] = AnonymousClass(s)
+            py_cls = self.metadata.get_python_class(o_class)
+            if py_cls:
+                self.anonymous_instances[s].add_type(py_cls)
+                self.registry.record_type(
+                    s, py_cls, TypeInferredThrough.ASSERTED, o_class
+                )
+
+    def assign_all_properties_to_all_anonymous_instances(self):
+        """Iterates through all properties of all instances and assigns properties to the instances."""
+        for s, instance in self.anonymous_instances.items():
+            self._assign_all_properties_to_instance(instance)
+        self.add_implied_property_values_to_anonymous_instances()
+
+    def add_implied_property_values_to_anonymous_instances(self):
+        """
+        Before the classes are inferred, add the values of the properties implied by the asserted object property values
+        of every individual through superproperties (prp-spo1), equivalent properties (prp-eqp1/2), inverses (prp-inv1/2) and
+        symmetry (prp-symp), so that their domains and the sufficient conditions using them classify too.
+        """
+        for subject, instance in self.anonymous_instances.items():
+            for predicate, value in self._triples_by_subject[subject]:
+                if isinstance(value, Literal):
+                    continue
+                value_instance = self.anonymous_instances.get(value)
+                if value_instance is None:
+                    continue
+                descriptor = self.metadata.get_descriptor_base(
+                    NamingRegistry.to_snake_case(NamingRegistry.local_name(predicate))
+                )
+                if descriptor is None:
+                    continue
+                self.add_anonymous_fact(instance, descriptor, value_instance)
+
+    @staticmethod
+    @lru_cache(maxsize=None)
+    def implied_properties(
+        descriptor: Type[PropertyDescriptor],
+    ) -> Tuple[Tuple[str, bool], ...]:
+        """
+        :param descriptor: An object property descriptor class.
+        :return: The field names of the properties implied by an assertion of ``descriptor`` (excluding itself), each
+         with a flag that is True if the implied assertion has subject and object swapped.
+        """
+        implied = {(descriptor, False)}
+        frontier = [(descriptor, False)]
+        while frontier:
+            current, inverted = frontier.pop()
+            neighbours = [(parent, inverted) for parent in current.super_classes()]
+            if issubclass(current, HasEquivalentProperties):
+                neighbours += [
+                    (equivalent, inverted)
+                    for equivalent in current.get_equivalent_properties()
+                ]
+            if issubclass(current, HasInverseProperty) and current.get_inverse():
+                neighbours.append((current.get_inverse(), not inverted))
+            if issubclass(current, SymmetricProperty):
+                neighbours.append((current, not inverted))
+            for neighbour in neighbours:
+                if neighbour not in implied:
+                    implied.add(neighbour)
+                    frontier.append(neighbour)
+        implied.discard((descriptor, False))
+        return tuple(
+            (implied_descriptor.attribute_name(), inverted)
+            for implied_descriptor, inverted in implied
+        )
+
+    def _assign_all_properties_to_instance(self, instance: AnonymousClass):
+        """Iterates through all properties of all instances and assigns properties to the instances."""
+        for p, o in self._triples_by_subject[instance.uri]:
+            if p in [RDF.type, RDFS.subClassOf, OWL.equivalentClass, OWL.disjointWith]:
+                continue
+            field_name = NamingRegistry.to_snake_case(NamingRegistry.local_name(p))
+            obj = o
+            if isinstance(obj, Literal):
+                if self._assign_data_property(
+                    [instance], field_name, obj, must_have_attr=False
+                ):
+                    self.literals[instance.uri][field_name] = obj
+            else:
+                obj_inst = self.anonymous_instances.get(obj)
+                if not hasattr(instance, field_name):
+                    setattr(instance, field_name, [obj_inst])
+                else:
+                    getattr(instance, field_name).append(obj_inst)
+
+    def create_explicit_instances_from_inferred_types_of_anonymous_instances(self):
+        """Creates instances for all subjects with an explicit rdf:type in the graph."""
+        so_iterator = (
+            (s, o_class)
+            for s, ai in self.anonymous_instances.items()
+            for o_class in ai.final_sorted_types
+        )
+        for s, py_cls in so_iterator:
+            existing_roles = self.registry.resolve(s)
+            existing_roles = existing_roles or []
+            role_types = list(map(type, existing_roles)) + [py_cls]
+            kwargs = self._get_common_role_taker_kwargs(existing_roles, py_cls)
+            self.registry.get_or_create_for(s, py_cls, self.symbol_graph, **kwargs)
+
+    def _get_common_role_taker_kwargs(
+        self, existing_roles: Optional[List[Any]], target_cls: Type
+    ) -> Dict[str, Any]:
+        """Finds common role-taker associations between existing roles and a target class.
+
+        Args:
+            existing_roles: List of already created roles for the same URI.
+            target_cls: The class of the new role to be created.
+
+        Returns:
+            A dictionary of keyword arguments for the target class constructor.
+        """
+        kwargs = {}
+        if not existing_roles:
+            return kwargs
+        for er in existing_roles:
+            (
+                assoc1,
+                assoc2,
+            ) = self.symbol_graph.class_diagram.get_common_role_taker_associations(
+                type(er), target_cls
+            )
+            if not assoc1 or not assoc2 or assoc2.wrapped_field.name in kwargs:
+                continue
+            kwargs[assoc2.wrapped_field.name] = getattr(er, assoc1.wrapped_field.name)
+        return kwargs
+
+    def assign_all_properties_to_explict_types_and_apply_on_time_forward_chaining(self):
+        """Iterates through all triples in the graph and assigns properties to instances."""
+        skip_ps = {
+            RDF.type,
+            OWL.disjointWith,
+            RDFS.subClassOf,
+            OWL.equivalentClass,
+            OWL.Class,
+        }
+        filtered_triples = [
+            (s, p, o)
+            for s, p_o in self._triples_by_subject.items()
+            for p, o in p_o
+            if p not in skip_ps and self._get_all_instances_of_uri(s)
+        ]
+        total = len(filtered_triples)
+
+        max_time = 0
+
+        with tqdm(total=total, desc="Assigning properties") as pbar:
+            for s, p, o in filtered_triples:
+                subject_roles = self._get_all_instances_of_uri(s)
+                if not subject_roles:
+                    continue
+                predicate_name = NamingRegistry.to_snake_case(
+                    NamingRegistry.local_name(p)
+                )
+                start = time.time()
+                self._assign_property(subject_roles, predicate_name, o)
+                duration = time.time() - start
+
+                if duration > max_time:
+                    max_time = duration
+                    pbar.set_postfix(slowest=f"{predicate_name} ({max_time:.4f}s)")
+
+                pbar.update(1)
+
+    def _assign_property(
+        self,
+        subj_roles: List[Symbol],
+        field_name: str,
+        obj_uri: Union[URIRef, Literal],
+    ):
+        """Assigns a property to an instance based on the predicate name and object URI. It handles both data and
+         object properties.
+        Args:
+            subj_roles: The subject instances.
+            field_name: name of the field to assign the property to.
+            obj_uri: The RDF node of the object.
+        """
+        if isinstance(obj_uri, Literal):
+            self.assign_data_value(subj_roles, field_name, obj_uri)
+        else:
+            self._assign_object_property(subj_roles, field_name, obj_uri)
+
+    def assign_data_value(
+        self, objects: List[Any], field_name: str, literal: Literal
+    ) -> None:
+        """
+        Assign a data property value to the objects of an individual, and to the data properties it implies through
+        super-properties and equivalent properties (OWL 2 RL rules prp-spo1, prp-eqp1/2) where an object declares
+        them.
+
+        :param objects: The objects of the individual.
+        :param field_name: The attribute name of the data property.
+        :param literal: The value.
+        """
+        for implied_field_name in (
+            field_name,
+            *self.terminology.implied_data_properties.get(field_name, ()),
+        ):
+            self._assign_data_property(objects, implied_field_name, literal)
+
+    def _get_all_instances_of_uri(self, subject_uri: URIRef) -> Optional[List[Any]]:
+        """Resolves or ensures instances for a given subject URI.
+
+        Args:
+            subject_uri: The URIRef of the subject.
+
+        Returns:
+            A list of subject roles if found or created, otherwise None.
+        """
+        return self.registry.resolve(subject_uri)
+
+    def _get_role_taker_val(self, subj: Any, subj_cls: Type) -> Optional[Any]:
+        """Retrieves the role-taker instance for a given subject, if it exists.
+
+        Args:
+            subj: The subject instance.
+            subj_cls: The class of the subject instance.
+
+        Returns:
+            The role-taker instance or None.
+        """
+        role_taker_association = (
+            self.symbol_graph.class_diagram.get_role_taker_associations_of_cls(subj_cls)
+        )
+        return (
+            getattr(subj, role_taker_association.wrapped_field.name, None)
+            if role_taker_association
+            else None
+        )
+
+    def _assign_data_property(
+        self,
+        subj_roles: List[Symbol],
+        field_name: Optional[str],
+        literal: Literal,
+        must_have_attr: bool = True,
+    ) -> bool:
+        """Assigns a data property to an instance, coercing the literal value if possible.
+
+        Args:
+            subj_roles: The subject instances.
+            field_name: The determined field name on the subject.
+            literal: The RDF literal value.
+            must_have_attr: Whether the subject must have the attribute before assigning.
+        Returns:
+            True if the property was assigned successfully, False otherwise.
+        """
+        if not field_name:
+            return False
+        subj = next(
+            (s for s in subj_roles if not must_have_attr or hasattr(s, field_name)),
+            subj_roles[0],
+        )
+        if not must_have_attr or hasattr(subj, field_name):
+            # Coerce to field annotated type
+            try:
+                ftypes = {f.name: f.type for f in fields(type(subj))}
+            except TypeError:
+                ftypes = {}
+            coerced = self._coerce_literal(literal, ftypes.get(field_name))
+            setattr(subj, field_name, coerced)
+            return True
+        return False
+
+    @lru_cache
+    def best_fit_object_role(
+        self, field_name: str, obj_roles: Tuple[Any]
+    ) -> Optional[Type]:
+        """Finds the best fitting object role type for a given object type.
+
+        Args:
+            descriptor_base: The base PropertyDescriptor class.
+            obj_type: The type of the object instance.
+
+        Returns:
+            The best fitting object role type if found, otherwise None.
+        """
+        descriptor_base = self.metadata.get_descriptor_base(field_name)
+        descriptor_ranges = tuple(PropertyDescriptor.all_ranges[descriptor_base])
+        obj = next(
+            (
+                obj_role
+                for obj_role in obj_roles
+                if IsSubClassOrRole.holds(type(obj_role), descriptor_ranges)
+            ),
+            None,
+        )
+        return obj
+
+    def _assign_object_property(
+        self,
+        subj_roles: List[Symbol],
+        field_name: str,
+        obj_node: Union[URIRef, Literal],
+    ):
+        """Assigns an object property by resolving the object node and finding the correct attribute.
+
+        Args:
+            subj_roles: The subject instances.
+            field_name: The determined field name on the subject.
+            obj_node: The RDF node of the object.
+        """
+        subj = None
+        obj_roles = (
+            self._get_all_instances_of_uri(obj_node)
+            if isinstance(obj_node, URIRef)
+            else None
+        )
+        if len(obj_roles) > 1:
+            obj = self.best_fit_object_role(field_name, tuple(obj_roles))
+        else:
+            obj = obj_roles[0] if obj_roles else None
+        if obj is None:
+            raise ValueError(f"Could not find object for {subj_roles}.{field_name}")
+        descriptor_base = self.metadata.get_descriptor_base(field_name)
+        declaration = (
+            PropertyDescriptorRelation.declaring_object(
+                subj_roles[0], descriptor_base, obj
+            )
+            if descriptor_base is not None
+            else None
+        )
+        if declaration is not None:
+            subj = declaration[0]
+        else:
+            subject_roles_with_field_name = [
+                s for s in subj_roles if hasattr(s, field_name)
+            ]
+            if subject_roles_with_field_name:
+                subj = subject_roles_with_field_name[0]
+        matched_obj = None
+        # Look for the super, and the inverse properties of the current property,
+        # and try to assign their values as well. So call self._assign_object_property()
+        if subj and field_name and hasattr(subj, field_name):
+            obj = matched_obj or obj
+            if self._assign_to_attribute(subj, field_name, obj):
+                return
+        raise ValueError(f"Could not find {subj_roles}.{field_name} = {obj}")
+
+    def _assign_to_attribute(self, target: Any, attr_name: str, value: Any) -> bool:
+        """Assigns a value to an attribute, or adds to it if it's a collection.
+
+        Args:
+            target: The object to assign the value to.
+            attr_name: The name of the attribute.
+            value: The value to assign.
+
+        Returns:
+            True if assigned, False otherwise.
+        """
+        if value is None:
+            return False
+
+        attr_val = getattr(target, attr_name, None)
+        if isinstance(attr_val, set):
+            # logger.info(
+            #     f"[OwlLoader] Assigning property {attr_name} to {target.uri} with object {value.uri}"
+            # )
+            attr_val.add(value)
+        elif isinstance(attr_val, list):
+            attr_val.append(value)
+        else:
+            setattr(target, attr_name, value)
+        return True
+
+    @staticmethod
+    def _coerce_literal(val: Literal, target_type: Optional[Type] = None) -> Any:
+        """Coerces an RDF literal to a Python type.
+
+        Args:
+            val: The RDF literal.
+            target_type: The target Python type.
+
+        Returns:
+            The coerced Python value.
+        """
+        if target_type is None:
+            return val.toPython()
+        try:
+            # Unwrap Optional[T]
+            origin = getattr(target_type, "__origin__", None)
+            if origin is Union:
+                args = [
+                    a
+                    for a in getattr(target_type, "__args__", ())
+                    if a is not type(None)
+                ]  # noqa: E721
+                if args:
+                    target_type = args[0]
+            if target_type in (str, int, float, bool):
+                return target_type(val.toPython())
+        except Exception:
+            pass
+        return val.toPython()
+
+    @staticmethod
+    def get_and_construct_role_taker(
+        registry, cls_: Type, uri_ref: URIRef, symbol_graph: SymbolGraph, **kwargs
+    ) -> Tuple[Optional[str], Optional[Symbol]]:
+        """Recursively finds or constructs role-takers for a given class.
+
+        Args:
+            cls_: The target class.
+            uri_ref: The URI of the instance.
+            symbol_graph: The symbol graph for lookups.
+            **kwargs: Additional arguments for constructor.
+
+        Returns:
+            A tuple of (Association, RoleTakerInstance) if found/created, else (None, None).
+        """
+        if not issubclass(cls_, Role):
+            return None, None
+
+        role_taker_cls = cls_.get_role_taker_type()
+        role_taker_field_name = cls_.role_taker_field_name()
+        if role_taker_field_name in kwargs:
+            return None, None
+
+        role_taker = None
+        try:
+            registry_instances = registry.resolve(uri_ref)
+            if registry_instances:
+                role_taker = next(
+                    (
+                        inst
+                        for inst in registry_instances
+                        if isinstance(inst, role_taker_cls)
+                    ),
+                    None,
+                )
+        except AttributeError:
+            raise
+        if role_taker:
+            return role_taker_field_name, role_taker
+
+        (
+            inner_role_taker_field_name,
+            inner_role_taker,
+        ) = OwlLoader.get_and_construct_role_taker(
+            registry, role_taker_cls, uri_ref, symbol_graph
+        )
+        if inner_role_taker_field_name:
+            kwargs[inner_role_taker_field_name] = inner_role_taker
+        role_taker = role_taker_cls(**kwargs)
+        if not isinstance(role_taker, Role):
+            role_taker.uri = str(uri_ref)
+
+        return role_taker_field_name, role_taker
+
+    @staticmethod
+    def create_symbol_graph(
+        model_modules: Iterable[Union[str, ModuleType]],
+    ) -> SymbolGraph:
+        """Creates and initializes a SymbolGraph from model modules.
+
+        Args:
+            model_modules: Iterable of modules or module names.
+
+        Returns:
+            The initialized SymbolGraph.
+        """
+        modules = [
+            (__import__(m, fromlist=["*"]) if isinstance(m, str) else m)
+            for m in model_modules
+        ]
+
+        SymbolGraph().clear()
+        classes = set()
+        for model_module in modules:
+            classes.update(classes_of_module(model_module))
+        class_diagram = ClassDiagram(
+            list(classes), introspector=DescriptorAwareIntrospector()
+        )
+        return SymbolGraph(_class_diagram=class_diagram)
+
+    @staticmethod
+    def load_instances(
+        owl_path: str,
+        base_module: Union[str, ModuleType],
+        classes_module: Union[str, ModuleType],
+        properties_module: Union[str, ModuleType],
+        symbol_graph: Optional[SymbolGraph] = None,
+        registry: Optional[OwlInstancesRegistry] = None,
+    ) -> OwlInstancesRegistry:
+        """Loads OWL instances into a registry.
+
+        Args:
+            owl_path: Path to the OWL file.
+            base_module: Module containing base classes.
+            classes_module: Module containing model classes.
+            properties_module: Module containing property descriptors.
+            symbol_graph: Optional existing SymbolGraph.
+            registry: Optional existing registry.
+
+        Returns:
+            The populated OwlInstancesRegistry.
+        """
+        model_modules = [base_module, classes_module, properties_module]
+        if not symbol_graph:
+            symbol_graph = OwlLoader.create_symbol_graph(model_modules)
+
+        # Ensure model_modules are modules, not just names, for OwlLoader
+        modules = [
+            (__import__(m, fromlist=["*"]) if isinstance(m, str) else m)
+            for m in model_modules
+        ]
+
+        if registry is None:
+            registry = OwlInstancesRegistry()
+
+        loader = OwlLoader(owl_path, modules, symbol_graph, registry)
+        return loader.load()
+
+    @staticmethod
+    def load_multi_file_instances(
+        owl_paths: Iterable[str],
+        base_module: Union[str, ModuleType],
+        classes_module: Union[str, ModuleType],
+        properties_module: Union[str, ModuleType],
+    ) -> OwlInstancesRegistry:
+        """Loads instances from multiple OWL files into a single registry.
+
+        Args:
+            owl_paths: Iterable of OWL file paths.
+            base_module: Module containing base classes.
+            classes_module: Module containing model classes.
+            properties_module: Module containing property descriptors.
+
+        Returns:
+            The populated OwlInstancesRegistry.
+        """
+        combined_registry = OwlInstancesRegistry()
+        model_modules = [base_module, classes_module, properties_module]
+        symbol_graph = OwlLoader.create_symbol_graph(model_modules)
+
+        for path in owl_paths:
+            OwlLoader.load_instances(
+                path,
+                base_module,
+                classes_module,
+                properties_module,
+                symbol_graph=symbol_graph,
+                registry=combined_registry,
+            )
+        return combined_registry
+
+    def __hash__(self):
+        """
+        Loaders are hashed by identity.
+        """
+        return hash(id(self))
+
+    def __str__(self):
+        """
+        The path of the OWL file.
+        """
+        return f"OwlLoader(owl_path={self.owl_path})"
+
+    def __repr__(self):
+        """
+        The path of the OWL file.
+        """
+        return self.__str__()
