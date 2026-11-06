@@ -283,14 +283,6 @@ class PropertyDescriptorRelation(PredicateClassRelation):
             return
         self.add_to_graph_and_apply_implications()
 
-    def update_source_and_add_to_graph(self):
-        """
-        Update the source wrapped-field value and add this relation to the graph.
-        """
-        if not self.update_source():
-            return
-        self.add_to_graph()
-
     def add_to_graph_and_apply_implications(self):
         """
         Add this relation to the graph and apply all implications of this relation.
@@ -428,7 +420,7 @@ class PropertyDescriptorRelation(PredicateClassRelation):
         property is transitive. Symmetric and transitive properties are closed after loading instead, unless
         :attr:`eager_symmetric_transitive_closure` is set.
         """
-        if self.rule is InferredThrough.EQUIVALENT or not self.transitive:
+        if not self.transitive:
             return
         if (
             issubclass(self.property_descriptor_cls, SymmetricProperty)
