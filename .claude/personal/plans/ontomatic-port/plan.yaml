@@ -27,8 +27,9 @@ items:
   depends_on: []
   status: in progress
   notes: Port ontomatic/property_descriptor/mixins.py from aamas27-experiments onto main's descriptors.
-    Split from PR 25 (mixins.py, chain registration); done in the PR.
-  pull_request_number: 27
+    Split from PR 25 (mixins.py, chain registration); upstream PR cram2#892; fork review in sorinar329#27.
+  pull_request_number: 892
+  repository: cram2/cognitive_robot_abstract_machine
 - id: descriptor-provenance
   branch: descriptor-provenance
   title: Inferred facts with provenance and fact placement in PropertyDescriptorRelation
@@ -58,7 +59,7 @@ items:
   notes: 'Fixes: sufficient conditions as a disjunction, owl:Thing filler, owl:Nothing, hierarchy cycles.
     The source plan also waits on eql-existential-semantics/correlated-quantifiers, because generated
     object properties are collections; that EQL work is not tracked here. PR 29 is the direct port of
-    the converter; Terminology still replaces ClassInfo/PropertyInfo.'
+    the converter; Terminology still replaces ClassInfo/PropertyInfo. Fix for is_functional in PR 32.'
   pull_request_number: 29
 - id: abox-loader
   branch: abox-loader
