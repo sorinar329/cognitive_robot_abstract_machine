@@ -1,0 +1,39 @@
+@prefix : <http://example.org/test#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+:Person a owl:Class .
+:Man a owl:Class ; rdfs:subClassOf :Person ; owl:disjointWith :Woman .
+:Woman a owl:Class ; rdfs:subClassOf :Person .
+:Course a owl:Class .
+:Interest a owl:Class .
+:College a owl:Class .
+:Student a owl:Class ; rdfs:subClassOf :Person ; owl:hasKey ( :hasId ) .
+:WomanCollege a owl:Class ; rdfs:subClassOf [ owl:intersectionOf ( :College
+    [ a owl:Restriction ; owl:onProperty :hasStudent ; owl:allValuesFrom [ owl:complementOf :Man ] ] ) ] .
+:FootballFan a owl:Class ; owl:equivalentClass [ a owl:Restriction ; owl:onProperty :likes ; owl:hasValue :Football ] .
+:LeisureStudent a owl:Class ; rdfs:subClassOf [ owl:intersectionOf ( :Student
+    [ a owl:Restriction ; owl:onProperty :takesCourse ; owl:maxQualifiedCardinality "1"^^xsd:nonNegativeInteger ;
+      owl:onClass :Course ] ) ] .
+:Role a owl:Class ; rdfs:subClassOf [ a owl:Restriction ; owl:onProperty :roleFor ; owl:someValuesFrom :Person ] .
+
+:enrollIn a owl:ObjectProperty, owl:FunctionalProperty .
+:isHeadOf a owl:ObjectProperty, owl:InverseFunctionalProperty .
+:likes a owl:ObjectProperty, owl:IrreflexiveProperty ; owl:propertyDisjointWith :dislikes .
+:dislikes a owl:ObjectProperty .
+:affiliatedWith a owl:ObjectProperty, owl:AsymmetricProperty .
+:hasStudent a owl:ObjectProperty .
+:takesCourse a owl:ObjectProperty .
+:roleFor a owl:ObjectProperty .
+:hasId a owl:DatatypeProperty .
+:hasAge a owl:DatatypeProperty, owl:FunctionalProperty .
+
+:alice a owl:NamedIndividual ; :hasId "7" ; :hasAge 30, 31 .
+:bob a owl:NamedIndividual ; :hasId "7" .
+:carol a owl:NamedIndividual .
+:Football a owl:NamedIndividual .
+[] a owl:AllDifferent ; owl:distinctMembers ( :d1 :d2 ) .
+[] a owl:NegativePropertyAssertion ; owl:sourceIndividual :carol ; owl:assertionProperty :likes ;
+   owl:targetIndividual :Football .
