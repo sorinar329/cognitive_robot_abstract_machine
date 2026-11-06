@@ -8,7 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing_extensions import Type, List, Optional, Tuple, ClassVar
 
-from krrood.ontomatic.property_descriptor.property_descriptor import PropertyDescriptor
+from krrood.ontomatic.property_descriptor.property_descriptor import PropertyChain, PropertyDescriptor
 from krrood.ontomatic.property_descriptor.mixins import (
 HasInverseProperty,
 TransitiveProperty,
@@ -63,11 +63,11 @@ class {{ prop.descriptor_name }}({{ ', '.join(prop.base_descriptors) }}):
     {% if prop.chain_axioms|length > 0 %}
 
     @classmethod
-    def get_chain_axioms(cls) -> List[Tuple[Type[PropertyDescriptor], ...]]:
+    def get_chain_axioms(cls) -> List[PropertyChain]:
         if cls is {{ prop.descriptor_name }}:
             return [
                 {% for chain in prop.chain_axioms %}
-                ({{ chain | join(', ') }}),
+                PropertyChain(({{ chain | join(', ') }},)),
                 {% endfor %}
             ]
         return []
