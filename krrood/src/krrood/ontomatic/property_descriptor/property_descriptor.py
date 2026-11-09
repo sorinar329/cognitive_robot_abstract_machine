@@ -221,15 +221,15 @@ class PropertyDescriptor(Symbol, DataclassFieldDescriptor):
         return None
 
     @classmethod
-    def super_properties(cls) -> tuple[type[PropertyDescriptor], ...]:
+    def super_properties(cls) -> list[type[PropertyDescriptor]]:
         """
         :return: The descriptor classes this descriptor class directly inherits from, its superproperties.
         """
-        return tuple(
+        return [
             base
             for base in cls.__bases__
             if base is not PropertyDescriptor and issubclass(base, PropertyDescriptor)
-        )
+        ]
 
     @classmethod
     def attribute_name(cls) -> str:
