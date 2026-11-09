@@ -10,6 +10,9 @@ import pytest
 from krrood.ontomatic.ontology_to_python.owl_instances_loader import (
     OwlInstancesRegistry,
 )
+from krrood.ontomatic.property_descriptor.property_descriptor_relation import (
+    PropertyDescriptorRelation,
+)
 from krrood.patterns.role import Role
 from .generated_ontology import GeneratedOntology
 
@@ -24,6 +27,10 @@ The namespace of the hobby individuals.
 FAMILY = "http://example.org/family#"
 """
 The namespace of the family individuals.
+"""
+ROOMS = "http://example.org/rooms#"
+"""
+The namespace of the room individuals.
 """
 
 
@@ -54,6 +61,17 @@ def family(tmp_path_factory) -> OwlInstancesRegistry:
     """
     return GeneratedOntology.of("property_chains.ttl").loaded_individuals(
         tmp_path_factory.mktemp("family"), "property_chains_individuals.ttl"
+    )
+
+
+@pytest.fixture
+def rooms(tmp_path) -> OwlInstancesRegistry:
+    """
+    :return: Three rooms, each connected to the next by a symmetric and transitive property, loaded for each test
+        so that the symbol graph still holds them.
+    """
+    return GeneratedOntology.of("connected_rooms.ttl").loaded_individuals(
+        tmp_path, "connected_rooms_individuals.ttl"
     )
 
 
@@ -102,6 +120,38 @@ def test_a_fact_of_a_property_chain_is_inferred(family):
     anna = family.resolve(f"{FAMILY}anna")[0]
     clara = family.resolve(f"{FAMILY}clara")[0]
     assert anna.has_grandparent == {clara}
+
+
+def test_a_symmetric_and_transitive_property_relates_every_two_connected_individuals(
+    rooms,
+):
+    """
+    Rooms connected through a third are connected, in both directions.
+    """
+    kitchen = rooms.resolve(f"{ROOMS}kitchen")[0]
+    bedroom = rooms.resolve(f"{ROOMS}bedroom")[0]
+    assert bedroom in kitchen.is_connected_to
+    assert kitchen in bedroom.is_connected_to
+
+
+def test_a_fact_of_a_symmetric_and_transitive_property_is_explained_by_its_component(
+    rooms,
+):
+    """
+    The fact that two rooms are connected is explained by the component of connected
+    rooms they belong to.
+    """
+    kitchen = rooms.resolve(f"{ROOMS}kitchen")[0]
+    bedroom = rooms.resolve(f"{ROOMS}bedroom")[0]
+    is_connected_to = type(vars(type(kitchen))["is_connected_to"])
+    explanation = PropertyDescriptorRelation.find(
+        kitchen, is_connected_to, bedroom
+    ).explain()
+    assert explanation.splitlines() == [
+        explanation.splitlines()[0],
+        f"  component 0 of {is_connected_to.__name__} with 3 members",
+    ]
+    assert explanation.splitlines()[0].endswith("(symmetric_transitive_component)")
 
 
 # %% roles

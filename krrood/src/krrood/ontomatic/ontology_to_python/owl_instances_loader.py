@@ -1113,7 +1113,7 @@ class OwlLoader:
         has_equivalent = issubclass(descriptor_type, HasEquivalentProperties) and bool(
             descriptor_type.get_equivalent_properties()
         )
-        occurs_in_chain = bool(PropertyDescriptor.chain_axioms.get(descriptor_type))
+        occurs_in_chain = bool(descriptor_type.chain_positions())
         return bool(
             descriptor_type.super_properties()
             or has_inverse
@@ -1153,9 +1153,7 @@ class OwlLoader:
             ] = component
             for target in component.members.values():
                 if component.relates(source, target):
-                    descriptor.update_value(
-                        source.instance, target.instance, inferred=True
-                    )
+                    descriptor.update_value(source.instance, target.instance)
 
     def create_anonymous_instances(self):
         """Creates instances for all anonymous subjects in the graph."""

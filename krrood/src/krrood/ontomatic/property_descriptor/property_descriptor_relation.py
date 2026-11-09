@@ -97,6 +97,12 @@ class SymmetricTransitiveComponent:
     Whether the property relates each member to itself.
     """
 
+    def __str__(self) -> str:
+        return (
+            f"component {self.identifier} of {self.property_descriptor_class.__name__} "
+            f"with {len(self.members)} members"
+        )
+
     def relates(self, source: WrappedInstance, target: WrappedInstance) -> bool:
         """
         :return: Whether the component entails that the property relates the source to the target.
@@ -635,7 +641,10 @@ class PropertyDescriptorRelation(PredicateClassRelation):
         if self.explanation is None or depth == 0:
             return
         for premise in self.explanation.premises:
-            yield from premise.explanation_lines(depth - 1, f"{indentation}  ")
+            if isinstance(premise, PropertyDescriptorRelation):
+                yield from premise.explanation_lines(depth - 1, f"{indentation}  ")
+            else:
+                yield f"{indentation}  {premise}"
 
     @classmethod
     def find(
