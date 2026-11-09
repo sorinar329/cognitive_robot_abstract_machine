@@ -416,6 +416,10 @@ class DiagnosedStackingDemonstration(RobotDemonstration):
     release_height: float = 0.003
     """How far above the cube below it a cube is let go of."""
 
+    parks_while_carrying: bool = True
+    """Whether the arm parks between pick-up and place, instead of carrying the
+    cube straight to the tower."""
+
     carrying_joint_velocity: float = 0.5
     """Joint velocity of the park between pick-up and place, made with the cube
     held by friction alone; the default park is fast enough to jerk it out of
@@ -588,31 +592,35 @@ class DiagnosedStackingDemonstration(RobotDemonstration):
 
     def build_statechart(self, context: StatechartContext) -> Statechart:
         """Park, pick up the cube of :attr:`planned`, park slowly while holding
-        it, set it down on the cube below and park again."""
+        it if :attr:`parks_while_carrying`, set it down on the cube
+        below and park again."""
         cube_name, support_name, parameters = self.planned
         world = context.world
         panda = context.require_extension(RobotAccess).robot
         cube = self._annotation_of(cube_name, world)
         support = world.get_body_by_name(support_name)
         statechart = Statechart(context=context)
+        pick_up = PickUpAction(
+            grasp=self._grasp_from_above(cube),
+            arm=panda.arm,
+            **parameters.pick_up_fields(),
+        )
+        carrying_park = ParkArmsAction(
+            arms=panda.all_arms, max_joint_velocity=self.carrying_joint_velocity
+        )
+        place = PlaceAction(
+            object_designator=cube,
+            target_location=self._place_pose_on(support, cube.root),
+            **parameters.place_fields(),
+        )
+        carrying = [carrying_park] if self.parks_while_carrying else []
         statechart.add_node(
             Sequence(
                 nodes=[
                     ParkArmsAction(arms=panda.all_arms),
-                    PickUpAction(
-                        grasp=self._grasp_from_above(cube),
-                        arm=panda.arm,
-                        **parameters.pick_up_fields(),
-                    ),
-                    ParkArmsAction(
-                        arms=panda.all_arms,
-                        max_joint_velocity=self.carrying_joint_velocity,
-                    ),
-                    PlaceAction(
-                        object_designator=cube,
-                        target_location=self._place_pose_on(support, cube.root),
-                        **parameters.place_fields(),
-                    ),
+                    pick_up,
+                    *carrying,
+                    place,
                     ParkArmsAction(arms=panda.all_arms),
                 ]
             )

@@ -50,6 +50,7 @@ class CubeFriction:
        tilted, or be dropped somewhere out of reach, which this demonstration leaves out.
     """
 
+
 # %% the demonstration
 
 
@@ -62,6 +63,9 @@ class VariedFailuresDemonstration(DiagnosedStackingDemonstration):
     """How slippery the cubes are."""
 
     report: Path = Path(__file__).parent / "varied_failures_report.md"
+
+    parks_while_carrying: bool = False
+    """The cube is carried straight from the pick-up to the tower."""
 
     def sampled_parameters(self) -> StackingParameters:
         """Extends :meth:`DiagnosedStackingDemonstration.sampled_parameters` by
