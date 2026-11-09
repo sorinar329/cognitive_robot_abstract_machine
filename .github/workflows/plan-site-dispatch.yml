@@ -1,5 +1,5 @@
-# Written by basstler's /setup-personal-notes (python -m basstler.plan_site.publication);
-# re-run that to update it rather than editing it here.
+# Written by basstler's /setup-personal-notes; re-run it to update this file rather than
+# editing it here.
 name: Plan site dispatch
 
 # Every push to the notes branch starts the plan site's build in sorinar329/plans.
@@ -24,4 +24,9 @@ jobs:
       - name: Start the build
         env:
           GH_TOKEN: ${{ secrets.PLAN_SITE_TOKEN }}
-        run: gh workflow run plan-site.yml --repo sorinar329/plans
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::error title=PLAN_SITE_TOKEN is not stored::sorinar329/cognitive_robot_abstract_machine stores no PLAN_SITE_TOKEN secret, so this run started no build in sorinar329/plans. Run /setup-personal-notes, or create the token at https://github.com/settings/personal-access-tokens/new?name=basstler+plan+site&description=Starts+the+plan+site+build+in+sorinar329%2Fplans&target_name=sorinar329&actions=write and store it at https://github.com/sorinar329/cognitive_robot_abstract_machine/settings/secrets/actions/new"
+            exit 1
+          fi
+          gh workflow run plan-site.yml --repo sorinar329/plans
