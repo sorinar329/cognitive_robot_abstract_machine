@@ -47,11 +47,18 @@ python varied_failures.py --iterations 3  # some cubes fail, in different ways
 
 ## Watching it in cramera
 
-Cramera is optional. Without it the run prints what went wrong (`[failure]`), what
-segmind observed during the failed attempt (`[segmind]`), the causal diagnosis
-(`[causal]`) and the recovery (`[recovery]`). To publish the run live through
-cramera's bridge (`~/cramera`, packages `bridge`, `protocol` and `viewer` on the Python
-path), give it a port, start the viewer and open the run:
+The demonstration imports cramera's `bridge` and `protocol` packages, so install them
+along with `viewer` from the `panda-demo-stream` branch of
+[cramera](https://github.com/sorinar329/cramera):
+
+```bash
+pip install -e cramera/packages/protocol -e cramera/packages/bridge -e cramera/packages/viewer
+```
+
+Watching is optional. Without a live port the run prints what went wrong
+(`[failure]`), what segmind observed during the failed attempt (`[segmind]`), the
+causal diagnosis (`[causal]`) and the recovery (`[recovery]`). To publish the run
+live, give it a port, start the viewer and open the run:
 
 ```bash
 python inference3b.py --live-port 8765
