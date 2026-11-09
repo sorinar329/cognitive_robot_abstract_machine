@@ -62,6 +62,7 @@ from krrood.ontomatic.property_descriptor.property_descriptor import PropertyDes
 from krrood.ontomatic.property_descriptor.property_descriptor_relation import (
     InferredThrough,
     PropertyDescriptorRelation,
+    RelationExplanation,
     SymmetricTransitiveComponent,
 )
 from krrood.patterns.role import Role
@@ -772,7 +773,7 @@ class OwlLoader:
                 objects[0],
                 descriptor,
                 target,
-                (InferredThrough.HAS_VALUE, python_class),
+                RelationExplanation(InferredThrough.HAS_VALUE, (python_class,)),
             )
         elif isinstance(expression, AllValuesFrom):
             for individual_object in objects:
@@ -1508,7 +1509,7 @@ class OwlLoader:
             else None
         )
         if declaration is not None:
-            subj = declaration[0]
+            subj = declaration.holder
         else:
             subject_roles_with_field_name = [
                 s for s in subj_roles if hasattr(s, field_name)
