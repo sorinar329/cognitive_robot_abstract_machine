@@ -1115,7 +1115,7 @@ class OwlLoader:
         )
         occurs_in_chain = bool(PropertyDescriptor.chain_axioms.get(descriptor_type))
         return bool(
-            descriptor_type.super_classes()
+            descriptor_type.super_properties()
             or has_inverse
             or has_equivalent
             or occurs_in_chain
@@ -1149,7 +1149,7 @@ class OwlLoader:
                 source.instance_type
             )
             PropertyDescriptorRelation.symmetric_transitive_components[
-                (descriptor.wrapped_field.name, source.index)
+                (component.property_descriptor_class, source.index)
             ] = component
             for target in component.members.values():
                 if component.relates(source, target):
@@ -1233,7 +1233,7 @@ class OwlLoader:
         frontier = [(descriptor, False)]
         while frontier:
             current, inverted = frontier.pop()
-            neighbours = [(parent, inverted) for parent in current.super_classes()]
+            neighbours = [(parent, inverted) for parent in current.super_properties()]
             if issubclass(current, HasEquivalentProperties):
                 neighbours += [
                     (equivalent, inverted)
