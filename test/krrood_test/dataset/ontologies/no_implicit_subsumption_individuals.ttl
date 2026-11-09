@@ -1,0 +1,6 @@
+@prefix : <http://benchmark/OWL2Bench#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+
+:bob a owl:NamedIndividual , :Person ; :loves :football .
+:football a owl:NamedIndividual , :Sports .
+:alice a owl:NamedIndividual , :Person .

@@ -1,0 +1,6 @@
+@prefix : <http://example.org/rooms#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+
+:kitchen a owl:NamedIndividual , :Room ; :isConnectedTo :hall .
+:hall a owl:NamedIndividual , :Room ; :isConnectedTo :bedroom .
+:bedroom a owl:NamedIndividual , :Room .
