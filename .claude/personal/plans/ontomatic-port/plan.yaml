@@ -38,8 +38,10 @@ items:
   - descriptor-characteristics
   status: in progress
   notes: 'InferredThrough, premises/explain, equivalence/inverse/symmetry/chain inference. Split from
-    PR 25: inference, fact placement, provenance and the descriptor registry.'
-  pull_request_number: 28
+    PR 25: inference, fact placement, provenance and the descriptor registry. Upstream PR cram2#909; fork
+    review in sorinar329#28.'
+  pull_request_number: 909
+  repository: cram2/cognitive_robot_abstract_machine
 - id: terminology-model
   branch: terminology-model
   title: Typed Terminology read from RDF, profile report, explicit domain/range rules
