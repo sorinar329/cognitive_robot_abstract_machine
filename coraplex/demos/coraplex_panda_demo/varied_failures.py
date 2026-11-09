@@ -64,9 +64,6 @@ class VariedFailuresDemonstration(DiagnosedStackingDemonstration):
 
     report: Path = Path(__file__).parent / "varied_failures_report.md"
 
-    parks_while_carrying: bool = False
-    """The cube is carried straight from the pick-up to the tower."""
-
     def sampled_parameters(self) -> StackingParameters:
         """Extends :meth:`DiagnosedStackingDemonstration.sampled_parameters` by
         giving the cube a gripping or a slippery friction instead of an always

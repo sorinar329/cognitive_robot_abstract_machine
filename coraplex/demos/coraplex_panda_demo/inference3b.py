@@ -449,15 +449,6 @@ class DiagnosedStackingDemonstration(RobotDemonstration):
     release_height: float = 0.003
     """How far above the cube below it a cube is let go of."""
 
-    parks_while_carrying: bool = True
-    """Whether the arm parks between pick-up and place, instead of carrying the
-    cube straight to the tower."""
-
-    carrying_joint_velocity: float = 0.5
-    """Joint velocity of the park between pick-up and place, made with the cube
-    held by friction alone; the default park is fast enough to jerk it out of
-    the fingers."""
-
     stack_horizontal_tolerance: float = 0.02
     """Greatest horizontal distance between a cube and the one below it that
     counts as stacked."""
@@ -584,14 +575,15 @@ class DiagnosedStackingDemonstration(RobotDemonstration):
 
     def acquire_world(self) -> World:
         """Extends :meth:`RobotDemonstration.acquire_world` by serving the
-        world to the cramera viewer with :meth:`build_backdrop` around it,
-        unless :attr:`live_port` is ``0``."""
+        world to the cramera viewer with :meth:`build_backdrop` around it and
+        the events segmind detects, unless :attr:`live_port` is ``0``."""
         world = super().acquire_world()
         if self.live_port:
             self.live = LiveVisualization(
                 world=world,
                 port=self.live_port,
                 backdrop=self.build_backdrop(),
+                detect_events=True,
             ).start()
             self.visualization = CrameraVisualization(live=self.live)
         return world
@@ -606,6 +598,19 @@ class DiagnosedStackingDemonstration(RobotDemonstration):
             self.live.publisher.state.measured = SimulatedJointPositions.of_robot(
                 self.simulation, world.get_semantic_annotations_by_type(Panda)[0]
             )
+
+    def started_segmentation(self, world: World) -> Segmind:
+        """
+        :return: Segmind watching the cubes: when the run is live, the one cramera
+            shows in its Segmind tab, otherwise one of the demonstration's own.
+        """
+        if self.live is not None and self.live.detections.segmentation is not None:
+            return self.live.detections.segmentation
+        segmentation = Segmind.create_for_bodies(
+            world, [world.get_body_by_name(cube.name) for cube in self.cubes]
+        )
+        segmentation.start()
+        return segmentation
 
     def build_backdrop(self) -> World | None:
         """
@@ -625,36 +630,28 @@ class DiagnosedStackingDemonstration(RobotDemonstration):
     # %% one attempt
 
     def build_statechart(self, context: StatechartContext) -> Statechart:
-        """Park, pick up the cube of :attr:`planned`, park slowly while holding
-        it if :attr:`parks_while_carrying`, set it down on the cube
-        below and park again."""
+        """Park, pick up the cube of :attr:`planned`, carry it straight to the
+        cube below, set it down there and park again."""
         cube_name, support_name, parameters = self.planned
         world = context.world
         panda = context.require_extension(RobotAccess).robot
         cube = self._annotation_of(cube_name, world)
         support = world.get_body_by_name(support_name)
         statechart = Statechart(context=context)
-        pick_up = PickUpAction(
-            grasp=self._grasp_from_above(cube),
-            arm=panda.arm,
-            **parameters.pick_up_fields(),
-        )
-        carrying_park = ParkArmsAction(
-            arms=panda.all_arms, max_joint_velocity=self.carrying_joint_velocity
-        )
-        place = PlaceAction(
-            object_designator=cube,
-            target_location=self._place_pose_on(support, cube.root),
-            **parameters.place_fields(),
-        )
-        carrying = [carrying_park] if self.parks_while_carrying else []
         statechart.add_node(
             Sequence(
                 nodes=[
                     ParkArmsAction(arms=panda.all_arms),
-                    pick_up,
-                    *carrying,
-                    place,
+                    PickUpAction(
+                        grasp=self._grasp_from_above(cube),
+                        arm=panda.arm,
+                        **parameters.pick_up_fields(),
+                    ),
+                    PlaceAction(
+                        object_designator=cube,
+                        target_location=self._place_pose_on(support, cube.root),
+                        **parameters.place_fields(),
+                    ),
                     ParkArmsAction(arms=panda.all_arms),
                 ]
             )
@@ -766,10 +763,7 @@ class DiagnosedStackingDemonstration(RobotDemonstration):
         try:
             world = self.acquire_world()
             self.start_simulation(world)
-            self.segmentation = Segmind.create_for_bodies(
-                world, [world.get_body_by_name(cube.name) for cube in self.cubes]
-            )
-            self.segmentation.start()
+            self.segmentation = self.started_segmentation(world)
             built = 0
             for iteration in range(1, self.iterations + 1):
                 started = perf_counter()
