@@ -26,6 +26,7 @@ from datetime import datetime, timedelta
 from enum import Enum, StrEnum
 from pathlib import Path
 from time import perf_counter
+from xml.etree import ElementTree
 
 import mujoco
 import numpy as np
@@ -60,6 +61,7 @@ from krrood_spatial_math.spatial_types import (
 from physics_simulators.base_simulator import SimulatorCallbackResult
 from segmind.event_segmentation import Segmind
 from semantic_digital_twin.adapters.multi_sim import MujocoSim
+from semantic_digital_twin.adapters.urdf import URDFParser
 from semantic_digital_twin.datastructures.definitions import (
     GripperState,
     StaticJointState,
@@ -121,6 +123,37 @@ class CubeSpawn:
 
     color: Color
     """The colour it is drawn in."""
+
+
+class UrdfElement(StrEnum):
+    """The elements of a URDF description that tell what a link is drawn and
+    collides with."""
+
+    LINK = "link"
+    VISUAL = "visual"
+    COLLISION = "collision"
+
+
+@dataclass
+class VisualDescription:
+    """A URDF description reduced to what is drawn of it: nothing of it
+    collides, and a link that only collides is drawn as it collides."""
+
+    path: Path
+    """The URDF file."""
+
+    def text(self) -> str:
+        """:return: The description without collision elements."""
+        root = ElementTree.parse(self.path).getroot()
+        for link in root.iter(UrdfElement.LINK):
+            collisions = link.findall(UrdfElement.COLLISION)
+            if not link.findall(UrdfElement.VISUAL):
+                for collision in collisions:
+                    collision.tag = UrdfElement.VISUAL
+                continue
+            for collision in collisions:
+                link.remove(collision)
+        return ElementTree.tostring(root, encoding="unicode")
 
 
 # %% the parameters
@@ -576,14 +609,15 @@ class DiagnosedStackingDemonstration(RobotDemonstration):
 
     def build_backdrop(self) -> World | None:
         """
-        :return: The apartment at :attr:`apartment_origin`, or ``None`` without
-            :attr:`apartment`.
+        :return: What is drawn of the apartment, at :attr:`apartment_origin`,
+            or ``None`` without :attr:`apartment`.
         """
         if self.apartment is None:
             return None
+        apartment = URDFParser(urdf=VisualDescription(self.apartment).text())
         backdrop = WorldSpecification().create_world()
         backdrop.merge_world_at_pose(
-            WorldSpecification.from_urdf(str(self.apartment)).create_world(),
+            WorldSpecification(world_source=apartment).create_world(),
             self.apartment_origin,
         )
         return backdrop
