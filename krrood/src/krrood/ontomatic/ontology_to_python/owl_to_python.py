@@ -84,7 +84,7 @@ class SubsumptionType(Enum):
     """
 
 
-@dataclass
+@dataclass(kw_only=True)
 class RoleTakerInfo:
     """
     Information about a class that acts as a role taker.
@@ -101,7 +101,7 @@ class RoleTakerInfo:
     """
 
 
-@dataclass
+@dataclass(kw_only=True)
 class RestrictionCondition:
     """
     A restriction translated into the condition it puts on a class.
@@ -119,7 +119,7 @@ class RestrictionCondition:
     """
 
 
-@dataclass
+@dataclass(kw_only=True)
 class ClassInfo:
     """
     Maintains all metadata, inheritance, and property associations for an OWL class.
@@ -236,7 +236,7 @@ class ClassInfo:
         return hash(id(self))
 
 
-@dataclass
+@dataclass(kw_only=True)
 class PropertyInfo:
     """
     Maintains metadata, domains, ranges, and inheritance for an OWL property.
@@ -403,7 +403,7 @@ class PropertyInfo:
         """
         if not self._sorted_superproperties and self.onto:
             self._sorted_superproperties = InferenceEngine.topological_order(
-                {sp: self.onto.properties[sp] for sp in self.ancestors},
+                items={sp: self.onto.properties[sp] for sp in self.ancestors},
                 dep_key="superproperties",
             )
         return self._sorted_superproperties
@@ -455,7 +455,7 @@ class PropertyInfo:
         return hash(id(self))
 
 
-@dataclass
+@dataclass(kw_only=True)
 class OntologyInfo:
     """Information about the ontology."""
 
@@ -505,7 +505,7 @@ class OntologyInfo:
         for cls_info in self.classes.values():
             cls_info.onto = self
 
-    def description_for(self, description_name: str) -> Optional[str]:
+    def description_for(self, *, description_name: str) -> Optional[str]:
         """
         :return: The name of the named class the anonymous class expression of this name describes, if any.
         """
@@ -531,7 +531,7 @@ class OntologyInfo:
         The name of the base class every generated class inherits from.
         """
         base_cls_name = NamingRegistry.to_pascal_case(
-            re.sub(r"\W+", " ", self.ontology_label).strip()
+            name=re.sub(r"\W+", " ", self.ontology_label).strip()
         )
         if not base_cls_name.endswith("Thing"):
             base_cls_name += "Thing"
@@ -547,6 +547,7 @@ class OntologyInfo:
     @lru_cache
     def properties_inheritance_path_length(
         self,
+        *,
         child_class: str,
         parent_class: str,
     ) -> Optional[int]:
@@ -564,10 +565,12 @@ class OntologyInfo:
         ]:
             return None
 
-        return self._properties_inheritance_path_length(child_class, parent_class, 0)
+        return self._properties_inheritance_path_length(
+            child_class=child_class, parent_class=parent_class, current_length=0
+        )
 
     def _properties_inheritance_path_length(
-        self, child_class: str, parent_class: str, current_length: int = 0
+        self, *, child_class: str, parent_class: str, current_length: int = 0
     ) -> int:
         """
         Helper function for :func:`inheritance_path_length`.
@@ -583,7 +586,9 @@ class OntologyInfo:
         else:
             return min(
                 self._properties_inheritance_path_length(
-                    base, parent_class, current_length + 1
+                    child_class=base,
+                    parent_class=parent_class,
+                    current_length=current_length + 1,
                 )
                 for base in self.properties[child_class].superproperties
                 if parent_class in self.properties[base].all_superproperties + [base]
@@ -592,6 +597,7 @@ class OntologyInfo:
     @lru_cache
     def classes_inheritance_path_length(
         self,
+        *,
         child_class: str,
         parent_class: str,
     ) -> Optional[int]:
@@ -610,10 +616,12 @@ class OntologyInfo:
         ):
             return None
 
-        return self._classes_inheritance_path_length(child_class, parent_class, 0)
+        return self._classes_inheritance_path_length(
+            child_class=child_class, parent_class=parent_class, current_length=0
+        )
 
     def _classes_inheritance_path_length(
-        self, child_class: str, parent_class: str, current_length: int = 0
+        self, *, child_class: str, parent_class: str, current_length: int = 0
     ) -> int:
         """
         Helper function for :func:`inheritance_path_length`.
@@ -629,7 +637,9 @@ class OntologyInfo:
         else:
             return min(
                 self._classes_inheritance_path_length(
-                    base, parent_class, current_length + 1
+                    child_class=base,
+                    parent_class=parent_class,
+                    current_length=current_length + 1,
                 )
                 for base in self.classes[child_class].base_classes
                 if parent_class
@@ -653,13 +663,13 @@ class MetadataExtractor:
         """
         self.graph = graph
 
-    def get_label(self, uri: Any) -> Optional[str]:
+    def get_label(self, *, uri: Any) -> Optional[str]:
         """Get rdfs:label for a URI"""
         for label in self.graph.objects(uri, RDFS.label):
             return str(label)
         return None
 
-    def get_comment(self, uri: Any) -> Optional[str]:
+    def get_comment(self, *, uri: Any) -> Optional[str]:
         """Get rdfs:comment for a URI"""
         for comment in self.graph.objects(uri, RDFS.comment):
             return str(comment)
@@ -678,31 +688,35 @@ class ClassExtractor:
         self.graph = graph
         self.metadata_extractor = metadata_extractor
 
-    def extract_info(self, class_uri: Any) -> ClassInfo:
+    def extract_info(self, *, class_uri: Any) -> ClassInfo:
         """Extract information about a class"""
         is_b_node = False
         if isinstance(class_uri, rdflib.BNode):
             is_b_node = True
-            class_name = NamingRegistry.bnode_to_name(self.graph, class_uri)
+            class_name = NamingRegistry.bnode_to_name(graph=self.graph, bnode=class_uri)
         else:
-            class_name = NamingRegistry.uri_to_python_name(class_uri)
+            class_name = NamingRegistry.uri_to_python_name(uri=class_uri)
 
         # Get superclasses from explicit rdfs:subClassOf
         superclasses: List[str] = []
         has_descriptions = []
         for superclass in self.graph.objects(class_uri, RDFS.subClassOf):
             if isinstance(superclass, rdflib.URIRef):
-                superclasses.append(NamingRegistry.uri_to_python_name(superclass))
+                superclasses.append(NamingRegistry.uri_to_python_name(uri=superclass))
             elif isinstance(superclass, rdflib.BNode):
                 # Only include BNode superclasses if they are intersections or unions
                 if list(self.graph.objects(superclass, OWL.intersectionOf)) or list(
                     self.graph.objects(superclass, OWL.unionOf)
                 ):
                     has_descriptions.append(
-                        NamingRegistry.uri_to_python_name(superclass, self.graph)
+                        NamingRegistry.uri_to_python_name(
+                            uri=superclass, graph=self.graph
+                        )
                     )
         if not is_b_node:
-            superclasses.extend(self.named_conjuncts_of_definitions(class_uri))
+            superclasses.extend(
+                self.named_conjuncts_of_definitions(class_uri=class_uri)
+            )
 
         # De-duplicate while preserving order
         seen = set()
@@ -716,16 +730,20 @@ class ClassExtractor:
         disjoint_with: List[str] = []
         for disjoint_class in self.graph.objects(class_uri, OWL.disjointWith):
             if isinstance(disjoint_class, rdflib.URIRef):
-                disjoint_with.append(NamingRegistry.uri_to_python_name(disjoint_class))
+                disjoint_with.append(
+                    NamingRegistry.uri_to_python_name(uri=disjoint_class)
+                )
 
         # equivalent classes
         equivalent_classes: List[str] = []
         for eq_class in self.graph.objects(class_uri, OWL.equivalentClass):
             if isinstance(eq_class, rdflib.URIRef):
-                equivalent_classes.append(NamingRegistry.uri_to_python_name(eq_class))
+                equivalent_classes.append(
+                    NamingRegistry.uri_to_python_name(uri=eq_class)
+                )
 
         # Get label
-        label = self.metadata_extractor.get_label(class_uri)
+        label = self.metadata_extractor.get_label(uri=class_uri)
         is_description_for = None
         if is_b_node and unique_superclasses:
             if len(unique_superclasses) > 1:
@@ -740,11 +758,15 @@ class ClassExtractor:
                     f"BNode class {class_name} has multiple subclasses: {subclasses}"
                 )
             if subclasses:
-                is_description_for = NamingRegistry.uri_to_python_name(subclasses[0])
+                is_description_for = NamingRegistry.uri_to_python_name(
+                    uri=subclasses[0]
+                )
             else:
-                is_description_for = self.defined_class(class_uri)
+                is_description_for = self.defined_class(class_expression=class_uri)
             if is_description_for is None:
-                unique_superclasses = self.named_conjuncts_of(class_uri)
+                unique_superclasses = self.named_conjuncts_of(
+                    class_expression=class_uri
+                )
 
         return ClassInfo(
             name=class_name,
@@ -755,11 +777,11 @@ class ClassExtractor:
             is_description_for=is_description_for,
             has_descriptions=has_descriptions,
             label=label,
-            comment=self.metadata_extractor.get_comment(class_uri),
+            comment=self.metadata_extractor.get_comment(uri=class_uri),
             add_role_taker=True,
         )
 
-    def defined_class(self, class_expression: rdflib.BNode) -> Optional[str]:
+    def defined_class(self, *, class_expression: rdflib.BNode) -> Optional[str]:
         """
         :param class_expression: An anonymous class expression.
         :return: The name of the named class the expression is the ``owl:equivalentClass`` of, or None when it is
@@ -770,10 +792,10 @@ class ClassExtractor:
             *self.graph.objects(class_expression, OWL.equivalentClass),
         ]:
             if isinstance(defined, rdflib.URIRef):
-                return NamingRegistry.uri_to_python_name(defined)
+                return NamingRegistry.uri_to_python_name(uri=defined)
         return None
 
-    def is_attached_to_a_named_class(self, class_expression: rdflib.BNode) -> bool:
+    def is_attached_to_a_named_class(self, *, class_expression: rdflib.BNode) -> bool:
         """
         :param class_expression: An anonymous class expression.
         :return: Whether the expression describes a named class: as its superclass, its subclass or its definition.
@@ -782,41 +804,44 @@ class ClassExtractor:
         return (
             any(self.graph.objects(class_expression, RDFS.subClassOf))
             or any(self.graph.subjects(RDFS.subClassOf, class_expression))
-            or self.defined_class(class_expression) is not None
+            or self.defined_class(class_expression=class_expression) is not None
         )
 
     def named_class_defined_alike(
-        self, class_expression: rdflib.BNode
+        self, *, class_expression: rdflib.BNode
     ) -> Optional[str]:
         """
         :param class_expression: An anonymous intersection.
         :return: The name of the named class defined by another intersection of the same members, which the expression
             therefore stands for, or None.
         """
-        name = NamingRegistry.uri_to_python_name(class_expression, self.graph)
+        name = NamingRegistry.uri_to_python_name(uri=class_expression, graph=self.graph)
         for definition in self.graph.subjects(OWL.intersectionOf, None):
             if (
                 definition != class_expression
-                and NamingRegistry.uri_to_python_name(definition, self.graph) == name
+                and NamingRegistry.uri_to_python_name(uri=definition, graph=self.graph)
+                == name
             ):
-                defined_class = self.defined_class(definition)
+                defined_class = self.defined_class(class_expression=definition)
                 if defined_class is not None:
                     return defined_class
         return None
 
-    def named_conjuncts_of(self, class_expression: rdflib.BNode) -> List[str]:
+    def named_conjuncts_of(self, *, class_expression: rdflib.BNode) -> List[str]:
         """
         :param class_expression: An anonymous intersection.
         :return: The names of the named classes among its members.
         """
         return [
-            NamingRegistry.uri_to_python_name(member)
+            NamingRegistry.uri_to_python_name(uri=member)
             for intersection in self.graph.objects(class_expression, OWL.intersectionOf)
-            for member in NamingRegistry._get_rdf_list(self.graph, intersection)
+            for member in NamingRegistry._get_rdf_list(
+                graph=self.graph, head=intersection
+            )
             if isinstance(member, rdflib.URIRef)
         ]
 
-    def named_conjuncts_of_definitions(self, class_uri: rdflib.URIRef) -> List[str]:
+    def named_conjuncts_of_definitions(self, *, class_uri: rdflib.URIRef) -> List[str]:
         """
         :param class_uri: A named class.
         :return: The named classes of every intersection the class is defined by (``owl:equivalentClass``), each of
@@ -825,7 +850,7 @@ class ClassExtractor:
         return [
             conjunct
             for definition in self.graph.objects(class_uri, OWL.equivalentClass)
-            for conjunct in self.named_conjuncts_of(definition)
+            for conjunct in self.named_conjuncts_of(class_expression=definition)
         ]
 
 
@@ -841,9 +866,9 @@ class PropertyExtractor:
         self.graph = graph
         self.metadata_extractor = metadata_extractor
 
-    def extract_info(self, property_uri: Any) -> PropertyInfo:
+    def extract_info(self, *, property_uri: Any) -> PropertyInfo:
         """Extract information about a property"""
-        prop_local = NamingRegistry.uri_to_python_name(property_uri)
+        prop_local = NamingRegistry.uri_to_python_name(uri=property_uri)
 
         # Get domain and range
         domains: List[str] = []
@@ -860,47 +885,53 @@ class PropertyExtractor:
         is_functional = False
 
         for domain in self.graph.objects(property_uri, RDFS.domain):
-            domains.append(NamingRegistry.uri_to_python_name(domain))
+            domains.append(NamingRegistry.uri_to_python_name(uri=domain))
 
         range_uris: List[rdflib.term.Identifier] = []
         for range_val in self.graph.objects(property_uri, RDFS.range):
-            ranges.append(NamingRegistry.uri_to_python_name(range_val))
+            ranges.append(NamingRegistry.uri_to_python_name(uri=range_val))
             range_uris.append(range_val)
 
         # Inheritance between properties
         for super_prop in self.graph.objects(property_uri, RDFS.subPropertyOf):
             if isinstance(super_prop, rdflib.URIRef):
-                superproperties.append(NamingRegistry.uri_to_python_name(super_prop))
+                superproperties.append(
+                    NamingRegistry.uri_to_python_name(uri=super_prop)
+                )
 
         # Inverses
         for inv in self.graph.objects(property_uri, OWL.inverseOf):
             if isinstance(inv, rdflib.URIRef):
-                inverses.append(NamingRegistry.uri_to_python_name(inv))
+                inverses.append(NamingRegistry.uri_to_python_name(uri=inv))
         # Also collect when current property is the object of inverseOf
         for inv_subj in self.graph.subjects(OWL.inverseOf, property_uri):
             if isinstance(inv_subj, rdflib.URIRef):
-                inverses.append(NamingRegistry.uri_to_python_name(inv_subj))
+                inverses.append(NamingRegistry.uri_to_python_name(uri=inv_subj))
 
         # Equivalent properties
         for eq_prop in self.graph.objects(property_uri, OWL.equivalentProperty):
             if isinstance(eq_prop, rdflib.URIRef):
-                equivalent_properties.append(NamingRegistry.uri_to_python_name(eq_prop))
+                equivalent_properties.append(
+                    NamingRegistry.uri_to_python_name(uri=eq_prop)
+                )
         for eq_prop_subj in self.graph.subjects(OWL.equivalentProperty, property_uri):
             if isinstance(eq_prop_subj, rdflib.URIRef):
                 equivalent_properties.append(
-                    NamingRegistry.uri_to_python_name(eq_prop_subj)
+                    NamingRegistry.uri_to_python_name(uri=eq_prop_subj)
                 )
 
         # Disjoint properties
         for dis_prop in self.graph.objects(property_uri, OWL.propertyDisjointWith):
             if isinstance(dis_prop, rdflib.URIRef):
-                disjoint_properties.append(NamingRegistry.uri_to_python_name(dis_prop))
+                disjoint_properties.append(
+                    NamingRegistry.uri_to_python_name(uri=dis_prop)
+                )
         for dis_prop_subj in self.graph.subjects(
             OWL.propertyDisjointWith, property_uri
         ):
             if isinstance(dis_prop_subj, rdflib.URIRef):
                 disjoint_properties.append(
-                    NamingRegistry.uri_to_python_name(dis_prop_subj)
+                    NamingRegistry.uri_to_python_name(uri=dis_prop_subj)
                 )
 
         # Determine property type
@@ -935,10 +966,10 @@ class PropertyExtractor:
             range_uris=range_uris,
             equivalent_properties=equivalent_properties,
             disjoint_properties=disjoint_properties,
-            label=self.metadata_extractor.get_label(property_uri),
-            comment=self.metadata_extractor.get_comment(property_uri),
-            field_name=NamingRegistry.to_snake_case(prop_local),
-            descriptor_name=NamingRegistry.to_pascal_case(prop_local),
+            label=self.metadata_extractor.get_label(uri=property_uri),
+            comment=self.metadata_extractor.get_comment(uri=property_uri),
+            field_name=NamingRegistry.to_snake_case(name=prop_local),
+            descriptor_name=NamingRegistry.to_pascal_case(name=prop_local),
             superproperties=superproperties,
             inverses=sorted(set(inverses)),
             inverse_of=inverse_of,
@@ -952,7 +983,7 @@ class PropertyExtractor:
         )
 
 
-@dataclass
+@dataclass(kw_only=True)
 class PropertyMaps:
     """
     Dataclass for storing property inference maps for domain, range, superclasses, and inverse property pairs.
@@ -992,7 +1023,7 @@ class PropertyMaps:
     """
 
     @classmethod
-    def from_properties(cls, properties: Dict[str, PropertyInfo]) -> PropertyMaps:
+    def from_properties(cls, *, properties: Dict[str, PropertyInfo]) -> PropertyMaps:
         """
         Create a PropertyMaps object from a dictionary of PropertyInfo objects.
 
@@ -1014,18 +1045,18 @@ class PropertyMaps:
             n: list(p.equivalent_properties) for n, p in properties.items()
         }
         return cls(
-            dom_map,
-            declared_dom_map,
-            rng_map,
-            rng_uri_map,
-            super_map,
-            inverse_pairs,
-            equivalent_map,
-            properties,
+            dom_map=dom_map,
+            declared_dom_map=declared_dom_map,
+            rng_map=rng_map,
+            rng_uri_map=rng_uri_map,
+            super_map=super_map,
+            inverse_pairs=inverse_pairs,
+            equivalent_map=equivalent_map,
+            properties=properties,
         )
 
 
-@dataclass
+@dataclass(kw_only=True)
 class InferenceEngine:
     """Engine for performing ontological inference and computing class/property relationships."""
 
@@ -1072,10 +1103,12 @@ class InferenceEngine:
         """
         Start from the declared domains and ranges of the properties.
         """
-        self.property_maps = PropertyMaps.from_properties(self.onto.properties)
+        self.property_maps = PropertyMaps.from_properties(
+            properties=self.onto.properties
+        )
 
     @staticmethod
-    def topological_order(items: Dict[str, Any], dep_key: str) -> List[str]:
+    def topological_order(*, items: Dict[str, Any], dep_key: str) -> List[str]:
         """Return a topological order based on dependency names in dep_key; if cycles, append remaining alphabetically."""
 
         def get_deps(item):
@@ -1135,7 +1168,9 @@ class InferenceEngine:
                 continue
             if prop_info.type == PropertyType.DATA_PROPERTY:
                 continue
-            PropertyDomainAndRangeInference(prop_info, self.onto).complete()
+            PropertyDomainAndRangeInference(
+                property_info=prop_info, onto=self.onto
+            ).complete()
 
         self._finalize_properties()
         self._add_property_chain_axioms()
@@ -1153,7 +1188,7 @@ class InferenceEngine:
                 while node and node != RDF.nil:
                     first = self.onto.graph.value(node, RDF.first)
                     if first:
-                        name = NamingRegistry.uri_to_python_name(first)
+                        name = NamingRegistry.uri_to_python_name(uri=first)
                         if name not in self.onto.properties:
                             raise ValueError(
                                 f"Property chain axiom references unknown property {name}"
@@ -1172,37 +1207,41 @@ class InferenceEngine:
         for cls_uri in self.onto.graph.subjects(RDF.type, OWL.Class):
             # if isinstance(cls_uri, rdflib.BNode):
             #     continue
-            cls_name = NamingRegistry.uri_to_python_name(cls_uri, self.onto.graph)
-            for_class = self.onto.description_for(cls_name) or cls_name
-            if not self._is_extracted(cls_uri, cls_name):
+            cls_name = NamingRegistry.uri_to_python_name(
+                uri=cls_uri, graph=self.onto.graph
+            )
+            for_class = self.onto.description_for(description_name=cls_name) or cls_name
+            if not self._is_extracted(class_node=cls_uri, cls_name=cls_name):
                 # Its conditions are those of the intersection it duplicates.
                 for coll in self.onto.graph.objects(cls_uri, OWL.intersectionOf):
                     covered_restrictions.update(
-                        NamingRegistry._get_rdf_list(self.onto.graph, coll)
+                        NamingRegistry._get_rdf_list(graph=self.onto.graph, head=coll)
                     )
                 continue
 
             # direct subclass restrictions are necessary conditions of the class
             for restr in self.onto.graph.objects(cls_uri, RDFS.subClassOf):
-                self._restrictions_handler(cls_name, restr, sufficient=False)
+                self._restrictions_handler(
+                    for_class=cls_name, node=restr, sufficient=False
+                )
                 # If restriction mentions a property, count this class as declared domain for that property
                 covered_restrictions.add(restr)
                 on_prop = self.onto.graph.value(restr, OWL.onProperty)
                 if on_prop:
                     prop_name = NamingRegistry.uri_to_python_name(
-                        on_prop, self.onto.graph
+                        uri=on_prop, graph=self.onto.graph
                     )
                     self.property_maps.declared_dom_map[prop_name].add(cls_name)
 
             # restrictions inside intersectionOf
             intersection = []
-            sufficient = self._is_sufficient_class_expression(cls_uri)
+            sufficient = self._is_sufficient_class_expression(class_node=cls_uri)
             for coll in self.onto.graph.objects(cls_uri, OWL.intersectionOf):
                 node = coll
                 while node and node != RDF.nil:
                     first = self.onto.graph.value(node, RDF.first)
                     if self._add_complement_or_enumeration_condition(
-                        cls_name, first, sufficient
+                        cls_name=cls_name, member=first, sufficient=sufficient
                     ):
                         covered_restrictions.add(
                             self.onto.graph.value(first, OWL.complementOf)
@@ -1210,7 +1249,7 @@ class InferenceEngine:
                         node = self.onto.graph.value(node, RDF.rest)
                         continue
                     restriction_added = self._restrictions_handler(
-                        cls_name, first, sufficient=sufficient
+                        for_class=cls_name, node=first, sufficient=sufficient
                     )
                     covered_restrictions.add(first)
                     on_prop = (
@@ -1218,16 +1257,18 @@ class InferenceEngine:
                     )
                     if on_prop and restriction_added:
                         prop_name = NamingRegistry.uri_to_python_name(
-                            on_prop, self.onto.graph
+                            uri=on_prop, graph=self.onto.graph
                         )
                         self.property_maps.declared_dom_map[prop_name].add(for_class)
                     elif not on_prop:
                         first_name = NamingRegistry.uri_to_python_name(
-                            first, self.onto.graph
+                            uri=first, graph=self.onto.graph
                         )
                         intersection.append(first_name)
                     node = self.onto.graph.value(node, RDF.rest)
-            self._add_named_conjunct_conditions(for_class, intersection, sufficient)
+            self._add_named_conjunct_conditions(
+                for_class=for_class, named_conjuncts=intersection, sufficient=sufficient
+            )
         # Standalone Restrictions
         for restr in self.onto.graph.subjects(RDF.type, OWL.Restriction):
             if restr in covered_restrictions:
@@ -1239,24 +1280,30 @@ class InferenceEngine:
             for_class = None
             for subj, pred in self.onto.graph.subject_predicates(restr):
                 if pred == OWL.equivalentClass:
-                    for_class = NamingRegistry.uri_to_python_name(subj, self.onto.graph)
+                    for_class = NamingRegistry.uri_to_python_name(
+                        uri=subj, graph=self.onto.graph
+                    )
                     break
             if not for_class:
                 for_class = self.onto.graph.value(restr, RDFS.subClassOf)
                 if for_class:
                     for_class = NamingRegistry.uri_to_python_name(
-                        for_class, self.onto.graph
+                        uri=for_class, graph=self.onto.graph
                     )
             if not for_class:
                 raise ValueError(f"Could not determine class for restriction {restr}")
             # Either an owl:equivalentClass definition or a general class axiom (restriction rdfs:subClassOf class),
             # both are sufficient conditions of the class.
-            self._restrictions_handler(for_class, restr, sufficient=True)
-            prop_name = NamingRegistry.uri_to_python_name(on_prop, self.onto.graph)
-            for_class = self.onto.description_for(for_class) or for_class
+            self._restrictions_handler(for_class=for_class, node=restr, sufficient=True)
+            prop_name = NamingRegistry.uri_to_python_name(
+                uri=on_prop, graph=self.onto.graph
+            )
+            for_class = (
+                self.onto.description_for(description_name=for_class) or for_class
+            )
             self.property_maps.declared_dom_map[prop_name].add(for_class)
 
-    def _is_extracted(self, class_node: rdflib.term.Node, cls_name: str) -> bool:
+    def _is_extracted(self, *, class_node: rdflib.term.Node, cls_name: str) -> bool:
         """
         :param class_node: A class.
         :param cls_name: Its name.
@@ -1267,7 +1314,7 @@ class InferenceEngine:
             self.onto.graph.objects(class_node, OWL.intersectionOf)
         ):
             return True
-        description_for = self.onto.description_for(cls_name)
+        description_for = self.onto.description_for(description_name=cls_name)
         info = (
             self.onto.class_descriptions[description_for]
             if description_for is not None
@@ -1275,7 +1322,7 @@ class InferenceEngine:
         )
         return info is None or info.uri == str(class_node)
 
-    def _is_sufficient_class_expression(self, class_node: rdflib.term.Node) -> bool:
+    def _is_sufficient_class_expression(self, *, class_node: rdflib.term.Node) -> bool:
         """
         Whether an intersection is a sufficient condition of the class it describes: a named class, a general class
         axiom, an ``owl:equivalentClass`` definition, or an anonymous intersection that is a class of its own. One
@@ -1301,7 +1348,7 @@ class InferenceEngine:
         )
 
     def _add_named_conjunct_conditions(
-        self, for_class: str, named_conjuncts: List[str], sufficient: bool
+        self, *, for_class: str, named_conjuncts: List[str], sufficient: bool
     ):
         """
         Add a type check for every named class in an intersection to the conditions of the described class, so that
@@ -1317,7 +1364,7 @@ class InferenceEngine:
         for conjunct in reversed(named_conjuncts):
             if conjunct == for_class or conjunct not in self.onto.classes:
                 continue
-            subclass_axiom = SubClassAxiomInfo(conjunct)
+            subclass_axiom = SubClassAxiomInfo(sub_class=conjunct)
             python_condition = subclass_axiom.conditions_python()[0]
             if not sufficient:
                 if python_condition not in cls_info.necessary_axioms_python:
@@ -1332,7 +1379,7 @@ class InferenceEngine:
                 cls_info.axioms_python.insert(0, python_condition)
 
     def _restrictions_handler(
-        self, for_class: str, node: rdflib.term.Node, sufficient: bool = True
+        self, *, for_class: str, node: rdflib.term.Node, sufficient: bool = True
     ):
         """
         Handle restrictions for a given class and node in the ontology graph.
@@ -1347,12 +1394,16 @@ class InferenceEngine:
         on_prop = self.onto.graph.value(node, OWL.onProperty)
         if not on_prop:
             return True
-        description_for = self.onto.description_for(for_class)
+        description_for = self.onto.description_for(description_name=for_class)
         for_class = description_for or for_class
-        prop_name = NamingRegistry.uri_to_python_name(on_prop, self.onto.graph)
+        prop_name = NamingRegistry.uri_to_python_name(
+            uri=on_prop, graph=self.onto.graph
+        )
         if prop_name in self.onto.properties:
             self.property_maps.dom_map[prop_name].add(for_class)
-        restriction = self._restriction_condition(node, for_class, prop_name)
+        restriction = self._restriction_condition(
+            node=node, for_class=for_class, prop_name=prop_name
+        )
         if restriction:
             axiom = restriction.axiom
             value_type = restriction.value_class
@@ -1362,10 +1413,13 @@ class InferenceEngine:
                     cls_info = self.onto.classes.get(for_class)
                     if cls_info:
                         cls_info.role_taker = RoleTakerInfo(
-                            rng_name, NamingRegistry.to_snake_case(rng_name)
+                            class_name=rng_name,
+                            field_name=NamingRegistry.to_snake_case(name=rng_name),
                         )
                     return True
-                self._add_condition(for_class, axiom, sufficient)
+                self._add_condition(
+                    for_class=for_class, axiom=axiom, sufficient=sufficient
+                )
                 if rng_name is None:
                     if self.onto.original_properties[prop_name].ranges:
                         rng_name = self.onto.original_properties[prop_name].ranges[0]
@@ -1418,7 +1472,7 @@ class InferenceEngine:
             return True
 
     def _restriction_condition(
-        self, node: rdflib.term.Node, for_class: str, prop_name: str
+        self, *, node: rdflib.term.Node, for_class: str, prop_name: str
     ) -> Optional[RestrictionCondition]:
         """
         :param node: A restriction.
@@ -1436,13 +1490,15 @@ class InferenceEngine:
                 if v not in (OWL.NamedIndividual, OWL.Thing)
             ][0]
             return RestrictionCondition(
-                HasValueAxiomInfo(
+                axiom=HasValueAxiomInfo(
                     property_name=prop_name,
                     value=has_value,
                     for_class=for_class,
                     onto=self.onto,
                 ),
-                NamingRegistry.uri_to_python_name(value_type, graph),
+                value_class=NamingRegistry.uri_to_python_name(
+                    uri=value_type, graph=graph
+                ),
             )
         for qualified, axiom_type in (
             (OWL.maxQualifiedCardinality, MaxQualifiedCardinalityAxiomInfo),
@@ -1451,17 +1507,17 @@ class InferenceEngine:
         ):
             if graph.value(node, qualified):
                 on_class = NamingRegistry.uri_to_python_name(
-                    graph.value(node, OWL.onClass), graph
+                    uri=graph.value(node, OWL.onClass), graph=graph
                 )
                 return RestrictionCondition(
-                    axiom_type(
+                    axiom=axiom_type(
                         property_name=prop_name,
                         quantity=graph.value(node, qualified).toPython(),
                         on_class=on_class,
                         for_class=for_class,
                         onto=self.onto,
                     ),
-                    on_class,
+                    value_class=on_class,
                 )
         for unqualified, axiom_type in (
             (OWL.maxCardinality, MaxCardinalityAxiomInfo),
@@ -1470,13 +1526,13 @@ class InferenceEngine:
         ):
             if graph.value(node, unqualified) is not None:
                 return RestrictionCondition(
-                    axiom_type(
+                    axiom=axiom_type(
                         property_name=prop_name,
                         quantity=graph.value(node, unqualified).toPython(),
                         for_class=for_class,
                         onto=self.onto,
                     ),
-                    None,
+                    value_class=None,
                 )
         for quantified, axiom_type in (
             (OWL.someValuesFrom, SomeValuesFromAxiomInfo),
@@ -1486,17 +1542,19 @@ class InferenceEngine:
             if filler:
                 union = graph.value(filler, OWL.unionOf)
                 return RestrictionCondition(
-                    axiom_type(
+                    axiom=axiom_type(
                         property_name=prop_name,
-                        on_class=self._classes_of_filler(filler),
+                        on_class=self._classes_of_filler(filler=filler),
                         for_class=for_class,
                         onto=self.onto,
                     ),
-                    None if union is not None else self._class_of_filler(filler),
+                    value_class=None
+                    if union is not None
+                    else self._class_of_filler(filler=filler),
                 )
         return None
 
-    def _classes_of_filler(self, filler: rdflib.term.Node) -> str:
+    def _classes_of_filler(self, *, filler: rdflib.term.Node) -> str:
         """
         :param filler: The class expression a restriction restricts the values of a property to.
         :return: The class a value is checked against, or the tuple of the members of a union, as Python source.
@@ -1505,24 +1563,24 @@ class InferenceEngine:
         graph = self.onto.graph
         union = graph.value(filler, OWL.unionOf)
         if union is None:
-            return self._class_of_filler(filler)
-        members = NamingRegistry._get_rdf_list(graph, union)
+            return self._class_of_filler(filler=filler)
+        members = NamingRegistry._get_rdf_list(graph=graph, head=union)
         if not all(isinstance(member, rdflib.URIRef) for member in members):
             raise UnionOfAnonymousClassesAsFiller(
-                union_name=NamingRegistry.uri_to_python_name(filler, graph)
+                union_name=NamingRegistry.uri_to_python_name(uri=filler, graph=graph)
             )
-        return f"({', '.join(NamingRegistry.uri_to_python_name(member) for member in members)})"
+        return f"({', '.join(NamingRegistry.uri_to_python_name(uri=member) for member in members)})"
 
-    def _class_of_filler(self, filler: rdflib.term.Node) -> str:
+    def _class_of_filler(self, *, filler: rdflib.term.Node) -> str:
         """
         :param filler: A class expression that is not a union.
         :return: The name of its class: the named class an anonymous intersection is the definition of, otherwise the
             name of the expression.
         """
-        name = NamingRegistry.uri_to_python_name(filler, self.onto.graph)
-        return self.onto.description_for(name) or name
+        name = NamingRegistry.uri_to_python_name(uri=filler, graph=self.onto.graph)
+        return self.onto.description_for(description_name=name) or name
 
-    def _add_condition(self, for_class: str, axiom: AxiomInfo, sufficient: bool):
+    def _add_condition(self, *, for_class: str, axiom: AxiomInfo, sufficient: bool):
         """
         Add a condition to a class: to its classification axioms when it is sufficient, to its necessary conditions
         otherwise.
@@ -1540,7 +1598,7 @@ class InferenceEngine:
         cls_info.axioms_python.extend(axiom.conditions_python())
 
     def _add_complement_or_enumeration_condition(
-        self, cls_name: str, member: rdflib.term.Node, sufficient: bool
+        self, *, cls_name: str, member: rdflib.term.Node, sufficient: bool
     ) -> bool:
         """
         Add the condition a member of an intersection stands for when it is a complement (``owl:complementOf``) or
@@ -1558,34 +1616,46 @@ class InferenceEngine:
         enumerated = graph.value(member, OWL.oneOf)
         if complemented is None and enumerated is None:
             return False
-        for_class = self.onto.description_for(cls_name) or cls_name
+        for_class = self.onto.description_for(description_name=cls_name) or cls_name
         if enumerated is not None:
-            individuals = NamingRegistry._get_rdf_list(graph, enumerated)
+            individuals = NamingRegistry._get_rdf_list(graph=graph, head=enumerated)
             self._add_condition(
-                for_class,
-                OneOfAxiomInfo([str(individual) for individual in individuals]),
-                sufficient,
+                for_class=for_class,
+                axiom=OneOfAxiomInfo(
+                    individual_iris=[str(individual) for individual in individuals]
+                ),
+                sufficient=sufficient,
             )
             return True
         if isinstance(complemented, rdflib.URIRef):
-            inner = SubClassAxiomInfo(NamingRegistry.uri_to_python_name(complemented))
+            inner = SubClassAxiomInfo(
+                sub_class=NamingRegistry.uri_to_python_name(uri=complemented)
+            )
         else:
             on_prop = graph.value(complemented, OWL.onProperty)
             restriction = (
                 self._restriction_condition(
-                    complemented,
-                    for_class,
-                    NamingRegistry.uri_to_python_name(on_prop, graph),
+                    node=complemented,
+                    for_class=for_class,
+                    prop_name=NamingRegistry.uri_to_python_name(
+                        uri=on_prop, graph=graph
+                    ),
                 )
                 if on_prop is not None
                 else None
             )
             if restriction is None:
                 raise UntranslatedComplement(
-                    complemented_name=NamingRegistry.uri_to_python_name(complemented, graph)
+                    complemented_name=NamingRegistry.uri_to_python_name(
+                        uri=complemented, graph=graph
+                    )
                 )
             inner = restriction.axiom
-        self._add_condition(for_class, ComplementAxiomInfo(inner), sufficient)
+        self._add_condition(
+            for_class=for_class,
+            axiom=ComplementAxiomInfo(complemented=inner),
+            sufficient=sufficient,
+        )
         return True
 
     def _propagate_types(self):
@@ -1711,7 +1781,7 @@ class InferenceEngine:
                         comment=base.comment,
                         field_name=base.field_name,
                         descriptor_name=NamingRegistry.to_pascal_case(
-                            base.descriptor_name or prop_name
+                            name=base.descriptor_name or prop_name
                         ),
                         superproperties=[prop_name],
                         inverses=[],
@@ -1768,13 +1838,13 @@ class InferenceEngine:
         Handles both object properties (referencing classes) and data properties (XSD types).
         """
         for info in self.onto.properties.values():
-            self._set_base_descriptors(info)
+            self._set_base_descriptors(info=info)
             if info.type == PropertyType.OBJECT_PROPERTY:
-                self._set_object_range_hint(info)
+                self._set_object_range_hint(info=info)
             elif not (info._predefined_data_type and info.data_type_hint_inner):
-                self._set_data_type_hint(info)
+                self._set_data_type_hint(info=info)
 
-    def _set_base_descriptors(self, info: PropertyInfo):
+    def _set_base_descriptors(self, *, info: PropertyInfo):
         """
         Determine the base descriptor classes for a property.
         :param info: The PropertyInfo to update.
@@ -1802,7 +1872,7 @@ class InferenceEngine:
             bases.append(IrreflexiveProperty.__name__)
         info.base_descriptors = bases
 
-    def _set_object_range_hint(self, info: PropertyInfo):
+    def _set_object_range_hint(self, *, info: PropertyInfo):
         """
         Compute and set the object_range_hint for an ObjectProperty.
         :param info: The PropertyInfo to update.
@@ -1842,7 +1912,7 @@ class InferenceEngine:
             )
             info.object_range_hint = self.onto.base_cls_name
 
-    def _set_data_type_hint(self, info: PropertyInfo):
+    def _set_data_type_hint(self, *, info: PropertyInfo):
         """
         Compute and set the data_type_hint_inner for a DataProperty.
         :param info: The PropertyInfo to update.
@@ -1858,7 +1928,7 @@ class InferenceEngine:
 
         # 2. Try mapping from range names if URI mapping failed
         if not py_types:
-            py_types = self._map_range_names_to_python_types(info.ranges)
+            py_types = self._map_range_names_to_python_types(range_names=info.ranges)
 
         if not py_types:
             logger.warning(
@@ -1874,7 +1944,7 @@ class InferenceEngine:
         )
 
     @staticmethod
-    def _map_range_names_to_python_types(range_names: List[str]) -> List[str]:
+    def _map_range_names_to_python_types(*, range_names: List[str]) -> List[str]:
         """Map OWL range names (as strings) to Python types."""
         py_types = []
         textual = [r.lower() for r in range_names]
@@ -1910,7 +1980,7 @@ class InferenceEngine:
                 py_types.append("bool")
         return py_types
 
-    def find_implicit_subtypes(self, props_order: List[str]):
+    def find_implicit_subtypes(self, *, props_order: List[str]):
         """
         Identify implicit subtype or role relationships between classes based on property commonality.
         """
@@ -1922,18 +1992,23 @@ class InferenceEngine:
         for parent_name, parent_info in self.onto.classes.items():
             for child_name, child_info in self.onto.classes.items():
                 if not self._is_subsumption_candidate(
-                    parent_name, parent_info, child_name, child_info
+                    parent_name=parent_name,
+                    parent_info=parent_info,
+                    child_name=child_name,
+                    child_info=child_info,
                 ):
                     continue
 
                 matched_props, child_matched_props = self._get_matched_properties(
-                    parent_info, child_info
+                    parent_info=parent_info, child_info=child_info
                 )
                 if not matched_props:
                     continue
 
                 subsumption_type = self._determine_subsumption_type(
-                    matched_props, parent_info, child_info
+                    matched_props=matched_props,
+                    parent_info=parent_info,
+                    child_info=child_info,
                 )
                 if subsumption_type:
                     matched_props = tuple(sorted(matched_props))
@@ -1947,9 +2022,9 @@ class InferenceEngine:
             if len(candidates) == 1:
                 parent_name, subsumption_type, _ = next(iter(candidates.values()))[0]
                 self._apply_implicit_subsumption(
-                    parent_name,
-                    child_name,
-                    subsumption_type,
+                    parent_name=parent_name,
+                    child_name=child_name,
+                    subsumption_type=subsumption_type,
                 )
                 continue
             min_mro = float("inf")
@@ -1963,7 +2038,7 @@ class InferenceEngine:
                     parent_prop_name = list(child_matched_props.keys())[0]
                     child_prop_name = child_matched_props[parent_prop_name]
                     length = self.onto.properties_inheritance_path_length(
-                        child_prop_name, parent_prop_name
+                        child_class=child_prop_name, parent_class=parent_prop_name
                     )
                     if length < min_mro:
                         min_mro = length
@@ -1971,14 +2046,15 @@ class InferenceEngine:
             if selected:
                 parent_name, subsumption_type = selected
                 self._apply_implicit_subsumption(
-                    parent_name,
-                    child_name,
-                    subsumption_type,
+                    parent_name=parent_name,
+                    child_name=child_name,
+                    subsumption_type=subsumption_type,
                 )
                 continue
 
     def _is_subsumption_candidate(
         self,
+        *,
         parent_name: str,
         parent_info: ClassInfo,
         child_name: str,
@@ -2004,6 +2080,7 @@ class InferenceEngine:
 
     def _get_matched_properties(
         self,
+        *,
         parent_info: ClassInfo,
         child_info: ClassInfo,
     ) -> Tuple[Set[str], Dict[str, str]]:
@@ -2012,10 +2089,10 @@ class InferenceEngine:
         """
 
         parent_props = self.get_declared_and_restricted_properties_of_cls(
-            parent_info.name
+            cls_name=parent_info.name
         )
         child_props = self.get_declared_and_restricted_properties_of_cls(
-            child_info.name
+            cls_name=child_info.name
         )
 
         parent_props_filtered = [p.split("{")[0] for p in parent_props]
@@ -2074,7 +2151,9 @@ class InferenceEngine:
         return matched_prop_names, child_matched_prop_names
 
     @lru_cache
-    def get_declared_and_restricted_properties_of_cls(self, cls_name: str) -> List[str]:
+    def get_declared_and_restricted_properties_of_cls(
+        self, *, cls_name: str
+    ) -> List[str]:
         """Get declared properties of a class, including those from restrictions."""
         cls_info = self.onto.classes[cls_name]
         cls_props = copy(cls_info.declared_properties)
@@ -2089,11 +2168,11 @@ class InferenceEngine:
         return cls_props
 
     def _determine_subsumption_type(
-        self, matched_props: Set[str], parent_info: ClassInfo, child_info: ClassInfo
+        self, *, matched_props: Set[str], parent_info: ClassInfo, child_info: ClassInfo
     ) -> Optional[SubsumptionType]:
         """Determine if the relationship is a SUBTYPE or a ROLE."""
         parent_props = self.get_declared_and_restricted_properties_of_cls(
-            parent_info.name
+            cls_name=parent_info.name
         )
         parent_props_filtered = {p.split("{")[0] for p in parent_props}
 
@@ -2110,6 +2189,7 @@ class InferenceEngine:
 
     def _apply_implicit_subsumption(
         self,
+        *,
         parent_name: str,
         child_name: str,
         subsumption_type: SubsumptionType,
@@ -2121,14 +2201,17 @@ class InferenceEngine:
             child_info.base_classes.remove(self.onto.base_cls_name)
 
         if subsumption_type == SubsumptionType.ROLE:
-            self._apply_role_subsumption(child_info, parent_name)
+            self._apply_role_subsumption(child_info=child_info, parent_name=parent_name)
         else:
-            self._apply_subtype_subsumption(child_info, parent_name, parent_info)
+            self._apply_subtype_subsumption(
+                child_info=child_info, parent_name=parent_name, parent_info=parent_info
+            )
 
-    def _apply_role_subsumption(self, child_info: ClassInfo, parent_name: str):
+    def _apply_role_subsumption(self, *, child_info: ClassInfo, parent_name: str):
         """Add a role taker relationship to the class."""
         child_info.role_taker = RoleTakerInfo(
-            parent_name, NamingRegistry.to_snake_case(parent_name)
+            class_name=parent_name,
+            field_name=NamingRegistry.to_snake_case(name=parent_name),
         )
         if self.onto.role_cls_name not in child_info.all_base_classes:
             child_info.base_classes = [
@@ -2147,7 +2230,7 @@ class InferenceEngine:
 
     @staticmethod
     def _apply_subtype_subsumption(
-        child_info: ClassInfo, parent_name: str, parent_info: ClassInfo
+        *, child_info: ClassInfo, parent_name: str, parent_info: ClassInfo
     ):
         """Make the class a subtype of another class."""
         child_info.base_classes = []
@@ -2185,7 +2268,7 @@ class JinjaRenderer:
             extensions=[loopcontrols],
         )
 
-    def render(self, template_name: str, **context) -> str:
+    def render(self, *, template_name: str, **context) -> str:
         """
         Render a template with the given context.
         :param template_name: Name of the template file.
@@ -2196,7 +2279,7 @@ class JinjaRenderer:
         return template.render(**context)
 
 
-@dataclass
+@dataclass(kw_only=True)
 class CodeGenerator:
     """Orchestrates the generation of Python code from extracted ontology information."""
 
@@ -2226,11 +2309,11 @@ class CodeGenerator:
         self._update_base_classes()
 
         self.engine, self.renderer = (
-            InferenceEngine(self.onto),
+            InferenceEngine(onto=self.onto),
             JinjaRenderer(os.path.join(os.path.dirname(__file__), "jinja")),
         )
 
-    def generate(self, base_file_name: str) -> Dict[str, str]:
+    def generate(self, *, base_file_name: str) -> Dict[str, str]:
         """
         Execute the full generation pipeline.
         :param base_file_name: Base name for generated files.
@@ -2246,9 +2329,9 @@ class CodeGenerator:
         classes_order, props_order = self._finalize_and_sort()
 
         return self._perform_rendering(
-            base_file_name,
-            classes_order,
-            props_order,
+            base_file_name=base_file_name,
+            classes_order=classes_order,
+            props_order=props_order,
         )
 
     def attach_domainless_properties_to_ontology_base_class(self):
@@ -2281,9 +2364,9 @@ class CodeGenerator:
         if "uri" in self.onto.properties:
             return
         self.onto.properties["uri"] = PropertyInfo(
-            "uri",
-            "",
-            PropertyType.DATA_PROPERTY,
+            name="uri",
+            uri="",
+            type=PropertyType.DATA_PROPERTY,
             domains=[self.onto.base_cls_name],
             ranges=["str"],
             range_uris=[XSD.anyURI],
@@ -2319,10 +2402,10 @@ class CodeGenerator:
         if self.onto.base_cls_name in self.onto.classes:
             return
         self.onto.classes[self.onto.base_cls_name] = ClassInfo(
-            self.onto.base_cls_name,
-            "",
-            [Symbol.__name__],
-            [Symbol.__name__],
+            name=self.onto.base_cls_name,
+            uri="",
+            superclasses=[Symbol.__name__],
+            base_classes=[Symbol.__name__],
             label=f"Base class for {self.onto.ontology_label}",
         )
 
@@ -2382,7 +2465,9 @@ class CodeGenerator:
         """
         for p in self.onto.properties.values():
             p.all_superproperties = self._compute_closure(
-                p.superproperties, self.onto.properties, "superproperties"
+                initial=p.superproperties,
+                items=self.onto.properties,
+                key="superproperties",
             )
 
         for info in self.onto.classes.values():
@@ -2390,7 +2475,10 @@ class CodeGenerator:
             if info.role_taker:
                 initial.add(info.role_taker.class_name)
             info.all_base_classes_including_role_takers = self._compute_closure(
-                list(initial), self.onto.classes, "all_base_classes", "role_taker"
+                initial=list(initial),
+                items=self.onto.classes,
+                key="all_base_classes",
+                role_key="role_taker",
             )
 
         if "roleFor" in self.onto.properties:
@@ -2399,7 +2487,9 @@ class CodeGenerator:
         prop_classes = {
             k: v for k, v in self.onto.properties.items() if not v.is_specialized
         }
-        props_order = self.engine.topological_order(prop_classes, "superproperties")
+        props_order = self.engine.topological_order(
+            items=prop_classes, dep_key="superproperties"
+        )
 
         # Subclass and role relations are only taken from the ontology (rdfs:subClassOf, owl:equivalentClass and
         # roleFor restrictions). Implicit subsumptions guessed from shared properties (find_implicit_subtypes) are not
@@ -2474,7 +2564,7 @@ class CodeGenerator:
             if rc in self.onto.classes:
                 del self.onto.classes[rc]
         classes_order = self.engine.topological_order(
-            self.onto.classes, "base_classes_for_topological_sort"
+            items=self.onto.classes, dep_key="base_classes_for_topological_sort"
         )
 
         idx_map = {n: i for i, n in enumerate(props_order)}
@@ -2487,7 +2577,7 @@ class CodeGenerator:
         return classes_order, props_order
 
     def _classes_annotating_the_base_class(
-        self, render_classes: Dict[str, Dict], render_props: Dict[str, Dict]
+        self, *, render_classes: Dict[str, Dict], render_props: Dict[str, Dict]
     ) -> List[str]:
         """
         :return: The generated classes the field annotations of the base class name, which the base module imports
@@ -2507,6 +2597,7 @@ class CodeGenerator:
 
     def _perform_rendering(
         self,
+        *,
         base_file_name,
         classes_order,
         props_order,
@@ -2553,12 +2644,12 @@ class CodeGenerator:
                 prop_info.base_descriptors.append(HasChainAxioms.__name__)
             property_uri = rdflib.URIRef(prop_info.uri)
             prop_info.rdfs_domains = sorted(
-                NamingRegistry.uri_to_python_name(domain)
+                NamingRegistry.uri_to_python_name(uri=domain)
                 for domain in self.onto.graph.objects(property_uri, RDFS.domain)
                 if isinstance(domain, rdflib.URIRef)
             )
             prop_info.rdfs_ranges = sorted(
-                NamingRegistry.uri_to_python_name(range_)
+                NamingRegistry.uri_to_python_name(uri=range_)
                 for range_ in self.onto.graph.objects(property_uri, RDFS.range)
                 if isinstance(range_, rdflib.URIRef)
             )
@@ -2576,21 +2667,21 @@ class CodeGenerator:
         p_mod, b_mod = f"{base_file_name}_properties", f"{base_file_name}_base"
         return {
             f"{p_mod}.py": self.renderer.render(
-                "onto_properties.j2",
+                template_name="onto_properties.j2",
                 properties=render_props,
                 properties_order=props_order,
             ),
             f"{b_mod}.py": self.renderer.render(
-                "onto_base.j2",
+                template_name="onto_base.j2",
                 cls=render_classes[self.onto.base_cls_name],
                 properties=render_props,
                 classes_module_name=base_file_name,
                 annotated_classes=self._classes_annotating_the_base_class(
-                    render_classes, render_props
+                    render_classes=render_classes, render_props=render_props
                 ),
             ),
             f"{base_file_name}.py": self.renderer.render(
-                "onto_classes.j2",
+                template_name="onto_classes.j2",
                 ontology_base_module_name=b_mod,
                 properties_module_name=p_mod,
                 classes=render_classes,
@@ -2600,7 +2691,7 @@ class CodeGenerator:
                 ontology_base_class_name=self.onto.base_cls_name,
             ),
             f"{base_file_name}.pyi": self.renderer.render(
-                "onto_stubs.j2",
+                template_name="onto_stubs.j2",
                 ontology_base_module_name=b_mod,
                 properties_module_name=p_mod,
                 role_takers=list(
@@ -2619,6 +2710,7 @@ class CodeGenerator:
 
     @staticmethod
     def _compute_closure(
+        *,
         initial: List[str],
         items: Dict[str, Any],
         key: str,
@@ -2674,7 +2766,7 @@ class OwlToPythonConverter:
         self.ontology_label = None
         self.ontology_info: Optional[OntologyInfo] = None
 
-    def load_ontology(self, path: str):
+    def load_ontology(self, *, path: str):
         """
         Load an OWL ontology from a file.
         :param path: Path to the .owl file.
@@ -2682,7 +2774,7 @@ class OwlToPythonConverter:
         self.graph.parse(path)
         self._extract_ontology_info()
 
-    def _register_class(self, info: ClassInfo):
+    def _register_class(self, *, info: ClassInfo):
         """Register or update class information."""
         if info.name in self.classes:
             existing = self.classes[info.name]
@@ -2718,9 +2810,9 @@ class OwlToPythonConverter:
         Extract classes and properties from the loaded graph.
         """
         for s in self.graph.subjects(RDF.type, OWL.Ontology):
-            self.ontology_label = self.metadata.get_label(s)
+            self.ontology_label = self.metadata.get_label(uri=s)
             if not self.ontology_label:
-                self.ontology_label = NamingRegistry.uri_to_python_name(s)
+                self.ontology_label = NamingRegistry.uri_to_python_name(uri=s)
             break
 
         if not self.ontology_label:
@@ -2737,36 +2829,41 @@ class OwlToPythonConverter:
                     or list(self.graph.objects(cls_uri, OWL.unionOf))
                 ):
                     continue
-                if not self.class_ext.is_attached_to_a_named_class(cls_uri) and (
+                if not self.class_ext.is_attached_to_a_named_class(
+                    class_expression=cls_uri
+                ) and (
                     list(self.graph.objects(cls_uri, OWL.unionOf))
-                    or self.class_ext.named_class_defined_alike(cls_uri) is not None
+                    or self.class_ext.named_class_defined_alike(
+                        class_expression=cls_uri
+                    )
+                    is not None
                 ):
                     continue
 
             unions = list(self.graph.objects(cls_uri, OWL.unionOf))
             if unions:
                 # 2. Register the parent class
-                info = self.class_ext.extract_info(cls_uri)
+                info = self.class_ext.extract_info(class_uri=cls_uri)
                 super_classes = info.superclasses[:]
 
                 # 3. Process members and make them inherit from the parent union class
-                members = NamingRegistry._get_rdf_list(self.graph, unions[0])
+                members = NamingRegistry._get_rdf_list(graph=self.graph, head=unions[0])
                 for member in members:
-                    member_info = self.class_ext.extract_info(member)
+                    member_info = self.class_ext.extract_info(class_uri=member)
                     # Ensure member inherits from the union parent
                     for sc in super_classes:
                         if sc not in member_info.superclasses:
                             member_info.superclasses.append(sc)
 
                     # Update/Register member
-                    self._register_class(member_info)
+                    self._register_class(info=member_info)
                 continue
 
             # Handle regular classes and other BNodes (Intersections, Restrictions)
-            info = self.class_ext.extract_info(cls_uri)
+            info = self.class_ext.extract_info(class_uri=cls_uri)
             if not info:
                 continue
-            self._register_class(info)
+            self._register_class(info=info)
 
         for p_type in [
             OWL.ObjectProperty,
@@ -2776,7 +2873,7 @@ class OwlToPythonConverter:
             for p_uri in self.graph.subjects(RDF.type, p_type):
                 if isinstance(p_uri, rdflib.term.BNode):
                     continue
-                info = self.prop_ext.extract_info(p_uri)
+                info = self.prop_ext.extract_info(property_uri=p_uri)
                 if info.name in self.properties:
                     existing = self.properties[info.name]
                     if p_type == OWL.TransitiveProperty:
@@ -2789,30 +2886,32 @@ class OwlToPythonConverter:
                     self.properties[info.name] = info
 
         self.ontology_info = OntologyInfo(
-            self.graph,
-            self.classes,
-            self.class_descriptions,
-            self.properties,
-            self.predefined_data_types,
-            self.ontology_label,
+            graph=self.graph,
+            classes=self.classes,
+            class_descriptions=self.class_descriptions,
+            original_properties=self.properties,
+            predefined_data_types=self.predefined_data_types,
+            ontology_label=self.ontology_label,
         )
 
-    def generate_python_code_external(self, base_file_name: str) -> Dict[str, str]:
+    def generate_python_code_external(self, *, base_file_name: str) -> Dict[str, str]:
         """
         Generate Python code without saving to disk.
         :param base_file_name: Base name for the generated files.
         :return: Dictionary of filename to content.
         """
-        gen = CodeGenerator(self.ontology_info)
-        return gen.generate(base_file_name)
+        gen = CodeGenerator(onto=self.ontology_info)
+        return gen.generate(base_file_name=base_file_name)
 
-    def save_to_file(self, output_path: str):
+    def save_to_file(self, *, output_path: str):
         """
         Generate Python code and save it to the specified output path.
         :param output_path: Base path (filename) for the main output file.
         """
         base = os.path.splitext(os.path.basename(output_path))[0]
-        for name, content in self.generate_python_code_external(base).items():
+        for name, content in self.generate_python_code_external(
+            base_file_name=base
+        ).items():
             with open(
                 os.path.join(os.path.dirname(output_path), name), "w", encoding="utf-8"
             ) as f:

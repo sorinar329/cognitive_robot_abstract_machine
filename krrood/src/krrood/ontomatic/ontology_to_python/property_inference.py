@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     )
 
 
-@dataclass
+@dataclass(kw_only=True)
 class PropertyDomainAndRangeInference:
     """
     Completes the domains and ranges of an object property from its equivalent
@@ -28,6 +28,7 @@ class PropertyDomainAndRangeInference:
     """
     The property whose domains and ranges are completed.
     """
+
     onto: OntologyInfo
     """
     The ontology the property belongs to.
@@ -39,12 +40,14 @@ class PropertyDomainAndRangeInference:
         new.
         """
         while self._add_new(
-            self.property_info.domains, self.inferred_domains()
-        ) | self._add_new(self.property_info.ranges, self.inferred_ranges()):
+            values=self.property_info.domains, conclusions=self.inferred_domains()
+        ) | self._add_new(
+            values=self.property_info.ranges, conclusions=self.inferred_ranges()
+        ):
             pass
 
     @staticmethod
-    def _add_new(values: list[str], conclusions: Iterator[list[str]]) -> bool:
+    def _add_new(*, values: list[str], conclusions: Iterator[list[str]]) -> bool:
         """
         Append the concluded values that are not among the values yet.
 
@@ -103,7 +106,7 @@ class PropertyDomainAndRangeInference:
             yield [self.onto.base_cls_name]
         if inverses_declare_no_ranges and not info.equivalent_properties:
             yield self.declared_values_of_superproperties(
-                lambda superproperty: superproperty.domains
+                values_of=lambda superproperty: superproperty.domains
             )
 
     def inferred_ranges(self) -> Iterator[list[str]]:
@@ -123,13 +126,13 @@ class PropertyDomainAndRangeInference:
         )
         if inverses_declare_no_domains and not info.equivalent_properties:
             yield self.declared_values_of_superproperties(
-                lambda superproperty: superproperty.ranges
+                values_of=lambda superproperty: superproperty.ranges
             )
         if not self.has_related_properties:
             yield [self.onto.base_cls_name]
 
     def declared_values_of_superproperties(
-        self, values_of: Callable[[PropertyInfo], list[str]]
+        self, *, values_of: Callable[[PropertyInfo], list[str]]
     ) -> list[str]:
         """
         :param values_of: Selects the domains or the ranges of a property.

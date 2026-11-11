@@ -21,7 +21,7 @@ from krrood.entity_query_language.verbalization.vocabulary.parts_of_speech impor
 from krrood.patterns.role_predicates import IsSubClassOrRole
 
 
-@dataclass
+@dataclass(kw_only=True)
 class AnonymousClass:
     """
     An individual collecting the classes it is inferred to belong to, before it is
@@ -32,6 +32,7 @@ class AnonymousClass:
     """
     The IRI of the individual.
     """
+
     types: set[type] = field(default_factory=set)
     """
     The classes the individual is inferred to belong to.
@@ -42,14 +43,14 @@ class AnonymousClass:
     The most specific of :attr:`types`, from the least to the most specific.
     """
 
-    def add_type(self, cls: type):
+    def add_type(self, *, cls: type):
         """
         Record that the individual belongs to the class.
         """
         self.types.add(cls)
 
     @staticmethod
-    def variable_for(candidate: AnonymousClass | Variable) -> Variable:
+    def variable_for(*, candidate: AnonymousClass | Variable) -> Variable:
         """
         :param candidate: An individual, or a variable standing for one.
         :return: The variable an axiom of a generated class is stated over.
@@ -71,7 +72,7 @@ class AnonymousClass:
         return hash(self) == hash(other)
 
 
-@dataclass(eq=False)
+@dataclass(eq=False, kw_only=True)
 class NumberOfValuesOfClass(SymbolicFunction):
     """
     The number of values of a property of an individual that are inferred to belong to a
@@ -89,11 +90,11 @@ class NumberOfValuesOfClass(SymbolicFunction):
     """
 
     def __call__(self) -> int:
-        return self.count(self.values, self.value_class)
+        return self.count(values=self.values, value_class=self.value_class)
 
     @staticmethod
     def count(
-        values: Iterable[AnonymousClass], value_class: type | tuple[type, ...]
+        *, values: Iterable[AnonymousClass], value_class: type | tuple[type, ...]
     ) -> int:
         """
         :return: The number of *values* inferred to belong to *value_class*.
@@ -101,11 +102,16 @@ class NumberOfValuesOfClass(SymbolicFunction):
         return sum(
             1
             for value in values
-            if any(IsSubClassOrRole.holds(cls, value_class) for cls in value.types)
+            if any(
+                IsSubClassOrRole.holds(sub_class=cls, super_class=value_class)
+                for cls in value.types
+            )
         )
 
     @classmethod
-    def _verbalization_fragment_(cls, fields: RenderedFields) -> VerbalizationFragment:
+    def _verbalization_fragment_(
+        cls, *, fields: RenderedFields
+    ) -> VerbalizationFragment:
         return FunctionVerbalizationTemplates.possessive(
             *fields.values(), function_class=cls
         )

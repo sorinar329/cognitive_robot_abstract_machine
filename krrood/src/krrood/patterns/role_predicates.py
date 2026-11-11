@@ -74,7 +74,7 @@ class IsSameSemanticEntity(Predicate):
         )
 
 
-@dataclass(eq=False)
+@dataclass(eq=False, kw_only=True)
 class IsSubClassOrRole(Predicate):
     """
     Predicate asserting that a class is a subclass of another in the sense of an
@@ -93,10 +93,10 @@ class IsSubClassOrRole(Predicate):
     """
 
     def __call__(self) -> bool:
-        return self.holds(self.sub_class, self.super_class)
+        return self.holds(sub_class=self.sub_class, super_class=self.super_class)
 
     @staticmethod
-    def holds(sub_class: type, super_class: type | tuple[type, ...]) -> bool:
+    def holds(*, sub_class: type, super_class: type | tuple[type, ...]) -> bool:
         """
         :return: Whether *sub_class* inherits from *super_class*, or is a role whose
             role-taker type is a subclass or role of *super_class*.
@@ -104,11 +104,15 @@ class IsSubClassOrRole(Predicate):
         if issubclass(sub_class, super_class):
             return True
         if issubclass(sub_class, Role) and sub_class is not Role:
-            return IsSubClassOrRole.holds(sub_class.get_role_taker_type(), super_class)
+            return IsSubClassOrRole.holds(
+                sub_class=sub_class.get_role_taker_type(), super_class=super_class
+            )
         return False
 
     @classmethod
-    def _verbalization_fragment_(cls, fields: RenderedFields) -> VerbalizationFragment:
+    def _verbalization_fragment_(
+        cls, *, fields: RenderedFields
+    ) -> VerbalizationFragment:
         """:return: the clause *"<sub_class> is a subclass or role of
         <super_class>"*."""
         return clause(

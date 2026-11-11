@@ -58,7 +58,7 @@ class {{ cls.name }}({% if cls.base_classes %}{{ ', '.join(cls.base_classes) }}{
 
     @classmethod
     def axiom(cls, candidate: AnonymousClass) -> Tuple[ConditionType, ...]:
-        candidate_var = AnonymousClass.variable_for(candidate)
+        candidate_var = AnonymousClass.variable_for(candidate=candidate)
         {{ cls.axioms_setup | unique | join('\n        ') }}
         return ({{ cls.axioms | join(',\n\t\t\t\t') }}
         )
@@ -99,4 +99,4 @@ class {{ cls.name }}({% if cls.base_classes %}{{ ', '.join(cls.base_classes) }}{
 {% endfor %}
 {% endfor %}
 
-PropertyDescriptor.update_domains_that_are_axiomatized_on_properties(sys.modules[__name__])
+PropertyDescriptor.update_domains_that_are_axiomatized_on_properties(module=sys.modules[__name__])

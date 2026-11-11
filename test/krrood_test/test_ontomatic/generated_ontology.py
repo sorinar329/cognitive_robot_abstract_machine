@@ -19,7 +19,7 @@ The directory of the ontologies of the test dataset.
 """
 
 
-@dataclass
+@dataclass(kw_only=True)
 class GeneratedOntology:
     """
     The files ontomatic generates from an ontology, by their name.
@@ -35,15 +35,18 @@ class GeneratedOntology:
     """
 
     @classmethod
-    def of(cls, ontology_file_name: str) -> GeneratedOntology:
+    def generate_from_file(cls, *, ontology_file_name: str) -> GeneratedOntology:
         """
         :param ontology_file_name: The name of an ontology file of the test dataset.
         :return: The files generated from it, named after the ontology.
         """
         converter = OwlToPythonConverter()
-        converter.load_ontology(str(ONTOLOGIES_DIRECTORY / ontology_file_name))
+        converter.load_ontology(path=str(ONTOLOGIES_DIRECTORY / ontology_file_name))
         module_name = Path(ontology_file_name).stem
-        return cls(converter.generate_python_code_external(module_name), module_name)
+        return cls(
+            files=converter.generate_python_code_external(base_file_name=module_name),
+            module_name=module_name,
+        )
 
     @property
     def classes_source(self) -> str:
@@ -52,7 +55,7 @@ class GeneratedOntology:
         """
         return self.files[f"{self.module_name}.py"]
 
-    def class_source(self, class_name: str) -> str:
+    def class_source(self, *, class_name: str) -> str:
         """
         :return: The source of the generated class, from its ``class`` line to the next class.
         """
@@ -64,16 +67,16 @@ class GeneratedOntology:
         assert match, f"class {class_name} not generated"
         return match.group(0)
 
-    def method_source(self, class_name: str, method_name: str) -> str:
+    def method_source(self, *, class_name: str, method_name: str) -> str:
         """
         :return: The source of a method of a generated class, up to the next method.
         """
-        class_source = self.class_source(class_name)
+        class_source = self.class_source(class_name=class_name)
         start = class_source.index(f"def {method_name}(")
         following = class_source.find("@classmethod", start)
         return class_source[start : following if following != -1 else None]
 
-    def imported(self, root: Path) -> ModuleType:
+    def imported(self, *, root: Path) -> ModuleType:
         """
         Write the files as a package in the root directory and import its module holding the classes.
 

@@ -214,7 +214,9 @@ class PropertyDescriptor(Symbol, DataclassFieldDescriptor):
             or else on the nearest class it inherits the field from, its role takers' classes included; None if no
             such class declares one.
         """
-        for declaring_type in cls._types_a_domain_inherits_fields_from(domain_type):
+        for declaring_type in cls._types_a_domain_inherits_fields_from(
+            domain_type=domain_type
+        ):
             for attribute in vars(declaring_type).values():
                 if type(attribute) is cls:
                     return attribute
@@ -236,7 +238,7 @@ class PropertyDescriptor(Symbol, DataclassFieldDescriptor):
         """
         :return: The name of the attribute a field managed by a descriptor of this class has by convention.
         """
-        return NamingRegistry.to_snake_case(cls.__name__)
+        return NamingRegistry.to_snake_case(name=cls.__name__)
 
     def __post_init__(self):
         self._validate_non_redundant_domain()
@@ -308,9 +310,9 @@ class PropertyDescriptor(Symbol, DataclassFieldDescriptor):
         """
         Update the domain and range sets and the domain-range map for this descriptor type.
         """
-        self._register_for_domain(self.domain)
+        self._register_for_domain(domain=self.domain)
 
-    def _register_for_domain(self, domain: SymbolType):
+    def _register_for_domain(self, *, domain: SymbolType):
         """
         Register the domain as a domain of this descriptor type and its super descriptor types.
         """
@@ -327,7 +329,7 @@ class PropertyDescriptor(Symbol, DataclassFieldDescriptor):
 
     @classmethod
     def get_descriptor_instance_for_domain_type(
-        cls, domain_type: SymbolType
+        cls, *, domain_type: SymbolType
     ) -> PropertyDescriptor:
         """
         :param domain_type: A class whose instances have the field this descriptor type manages.
@@ -343,7 +345,7 @@ class PropertyDescriptor(Symbol, DataclassFieldDescriptor):
         return descriptor
 
     @staticmethod
-    def _types_a_domain_inherits_fields_from(domain_type: type) -> Iterator[type]:
+    def _types_a_domain_inherits_fields_from(*, domain_type: type) -> Iterator[type]:
         """
         :return: The classes of the method resolution order of the domain type, followed by those of the role-taker
             type when the domain type is a role.
@@ -351,11 +353,11 @@ class PropertyDescriptor(Symbol, DataclassFieldDescriptor):
         yield from domain_type.__mro__
         if issubclass(domain_type, Role) and domain_type is not Role:
             yield from PropertyDescriptor._types_a_domain_inherits_fields_from(
-                domain_type.get_role_taker_type()
+                domain_type=domain_type.get_role_taker_type()
             )
 
     @classmethod
-    def update_domains_that_are_axiomatized_on_properties(cls, module: ModuleType):
+    def update_domains_that_are_axiomatized_on_properties(cls, *, module: ModuleType):
         """
         Register every class of the module whose classification axiom mentions a property as a domain of the
         property's descriptor type.
@@ -364,11 +366,11 @@ class PropertyDescriptor(Symbol, DataclassFieldDescriptor):
             if "axiom" not in vars(domain_type):
                 continue
             for descriptor_type in HasProperty.descriptor_types_in_axiom_of(
-                domain_type
+                cls=domain_type
             ):
                 descriptor_type.get_descriptor_instance_for_domain_type(
-                    domain_type
-                )._register_for_domain(domain_type)
+                    domain_type=domain_type
+                )._register_for_domain(domain=domain_type)
 
     @cached_property
     def range(self) -> SymbolType:
@@ -531,7 +533,7 @@ class PropertyDescriptor(Symbol, DataclassFieldDescriptor):
         return tuple(associations_generator)
 
 
-@dataclass(eq=False)
+@dataclass(eq=False, kw_only=True)
 class HasProperty(Predicate):
     """
     Predicate asserting that an instance has an attribute for the property of a
@@ -554,6 +556,7 @@ class HasProperty(Predicate):
     @staticmethod
     @lru_cache(maxsize=None)
     def descriptor_types_in_axiom_of(
+        *,
         cls: type,
     ) -> tuple[type[PropertyDescriptor], ...]:
         """
@@ -571,7 +574,9 @@ class HasProperty(Predicate):
         )
 
     @classmethod
-    def _verbalization_fragment_(cls, fields: RenderedFields) -> VerbalizationFragment:
+    def _verbalization_fragment_(
+        cls, *, fields: RenderedFields
+    ) -> VerbalizationFragment:
         """:return: the clause *"<instance> has <property_descriptor_type>"*."""
         return clause(
             Noun(content=fields["instance"]),

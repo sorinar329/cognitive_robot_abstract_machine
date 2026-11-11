@@ -17,7 +17,9 @@ def generated() -> GeneratedOntology:
     """
     The files ontomatic generates from the ontology.
     """
-    return GeneratedOntology.of("classification_axioms.ttl")
+    return GeneratedOntology.generate_from_file(
+        ontology_file_name="classification_axioms.ttl"
+    )
 
 
 # %% necessary and sufficient conditions
@@ -28,7 +30,7 @@ def test_necessary_conditions_are_not_classification_axioms(generated):
     Necessary conditions become no classification axioms.
     """
     for class_name in ["LeisureStudent", "WomanCollege"]:
-        source = generated.class_source(class_name)
+        source = generated.class_source(class_name=class_name)
         assert "def axiom_python" not in source
         assert "def axiom(" not in source
         assert "def necessary_conditions_python" in source
@@ -38,7 +40,7 @@ def test_equivalent_class_definition_is_a_classification_axiom(generated):
     """
     A definition is a classification axiom.
     """
-    source = generated.class_source("T20CricketFan")
+    source = generated.class_source(class_name="T20CricketFan")
     assert "def axiom_python" in source
     assert "http://benchmark/OWL2Bench#T20Cricket" in source
 
@@ -47,9 +49,14 @@ def test_general_class_axiom_keeps_named_conjunct(generated):
     """
     A general class axiom classifies by its named conjunct too.
     """
-    axiom_python = generated.method_source("ScienceStudent", "axiom_python")
-    assert "IsSubClassOrRole.holds(t, Student) for t in candidate.types" in axiom_python
-    assert "IsSubClassOrRole.holds(t, Science)" in axiom_python
+    axiom_python = generated.method_source(
+        class_name="ScienceStudent", method_name="axiom_python"
+    )
+    assert (
+        "IsSubClassOrRole.holds(sub_class=t, super_class=Student) for t in candidate.types"
+        in axiom_python
+    )
+    assert "IsSubClassOrRole.holds(sub_class=t, super_class=Science)" in axiom_python
 
 
 def test_inverse_of_a_general_class_axiom_is_not_a_classification_axiom(generated):
@@ -57,5 +64,5 @@ def test_inverse_of_a_general_class_axiom_is_not_a_classification_axiom(generate
     The inverse of a general class axiom is not entailed, so it is no classification
     axiom.
     """
-    assert "def axiom_python" in generated.class_source("Employee")
-    assert "def axiom_python" not in generated.class_source("Organization")
+    assert "def axiom_python" in generated.class_source(class_name="Employee")
+    assert "def axiom_python" not in generated.class_source(class_name="Organization")

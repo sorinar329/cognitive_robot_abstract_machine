@@ -24,7 +24,7 @@ if TYPE_CHECKING:
 # %% conditions
 
 
-@dataclass
+@dataclass(kw_only=True)
 class AxiomInfo(ABC):
     """
     A condition on the individuals of a class.
@@ -50,17 +50,17 @@ class AxiomInfo(ABC):
         """
 
     @staticmethod
-    def variable_name_part(class_expression: str) -> str:
+    def variable_name_part(*, class_expression: str) -> str:
         """
         :param class_expression: The Python source of a class or of a tuple of classes.
         :return: A part of a variable name that tells the class expression apart.
         """
         return NamingRegistry.to_snake_case(
-            re.sub(r"\W+", "_", class_expression).strip("_")
+            name=re.sub(r"\W+", "_", class_expression).strip("_")
         )
 
 
-@dataclass
+@dataclass(kw_only=True)
 class SubClassAxiomInfo(AxiomInfo):
     """
     The individual belongs to a class.
@@ -76,7 +76,7 @@ class SubClassAxiomInfo(AxiomInfo):
         """
         The name of the variable over the classes of the individual.
         """
-        return f"candidate_types_for_{self.variable_name_part(self.sub_class)}"
+        return f"candidate_types_for_{self.variable_name_part(class_expression=self.sub_class)}"
 
     def setup_statements(self) -> list[str]:
         """
@@ -91,11 +91,11 @@ class SubClassAxiomInfo(AxiomInfo):
 
     def conditions_python(self) -> list[str]:
         return [
-            f"any(IsSubClassOrRole.holds(t, {self.sub_class}) for t in candidate.types)"
+            f"any(IsSubClassOrRole.holds(sub_class=t, super_class={self.sub_class}) for t in candidate.types)"
         ]
 
 
-@dataclass
+@dataclass(kw_only=True)
 class PropertyAxiomInfo(AxiomInfo):
     """
     The individual has values of a property.
@@ -120,23 +120,27 @@ class PropertyAxiomInfo(AxiomInfo):
         """
         The name of the attribute holding the values of the property.
         """
-        return NamingRegistry.to_snake_case(self.property_name)
+        return NamingRegistry.to_snake_case(name=self.property_name)
 
     @property
     def descriptor_name(self) -> str:
         """
         The name of the descriptor class of the property.
         """
-        return NamingRegistry.to_pascal_case(self.snake_property_name)
+        return NamingRegistry.to_pascal_case(name=self.snake_property_name)
 
     def conditions_eql(self) -> list[str]:
-        return [f"HasProperty(instance=candidate_var, property_descriptor_type={self.descriptor_name})"]
+        return [
+            f"HasProperty(instance=candidate_var, property_descriptor_type={self.descriptor_name})"
+        ]
 
     def conditions_python(self) -> list[str]:
-        return [f"HasProperty(instance=candidate, property_descriptor_type={self.descriptor_name})"]
+        return [
+            f"HasProperty(instance=candidate, property_descriptor_type={self.descriptor_name})"
+        ]
 
 
-@dataclass
+@dataclass(kw_only=True)
 class QualifiedAxiomInfoMixin:
     """
     The values of the property are restricted to a class.
@@ -148,7 +152,7 @@ class QualifiedAxiomInfoMixin:
     """
 
 
-@dataclass
+@dataclass(kw_only=True)
 class ValuesOfClassAxiomInfo(PropertyAxiomInfo, QualifiedAxiomInfoMixin, ABC):
     """
     A restriction quantifying over the values of a property and their classes.
@@ -159,9 +163,7 @@ class ValuesOfClassAxiomInfo(PropertyAxiomInfo, QualifiedAxiomInfoMixin, ABC):
         """
         The name of the variable over the values of the property.
         """
-        return (
-            f"{self.snake_property_name}_for_{self.variable_name_part(self.on_class)}"
-        )
+        return f"{self.snake_property_name}_for_{self.variable_name_part(class_expression=self.on_class)}"
 
     @property
     def value_types_variable(self) -> str:
@@ -197,10 +199,10 @@ class ValuesOfClassAxiomInfo(PropertyAxiomInfo, QualifiedAxiomInfoMixin, ABC):
         The Python condition that a value ``value`` of the property belongs to the
         class.
         """
-        return f"any(IsSubClassOrRole.holds(t, {self.on_class}) for t in value.types)"
+        return f"any(IsSubClassOrRole.holds(sub_class=t, super_class={self.on_class}) for t in value.types)"
 
 
-@dataclass
+@dataclass(kw_only=True)
 class QuantifiedAxiomInfo(PropertyAxiomInfo, ABC):
     """
     The individual has a number of values of a property.
@@ -246,7 +248,7 @@ class QuantifiedAxiomInfo(PropertyAxiomInfo, ABC):
         ]
 
 
-@dataclass
+@dataclass(kw_only=True)
 class CardinalityAxiomInfo(QuantifiedAxiomInfo):
     """
     The individual has exactly a number of values of a property.
@@ -258,7 +260,7 @@ class CardinalityAxiomInfo(QuantifiedAxiomInfo):
     """
 
 
-@dataclass
+@dataclass(kw_only=True)
 class MaxCardinalityAxiomInfo(QuantifiedAxiomInfo):
     """
     The individual has at most a number of values of a property.
@@ -270,7 +272,7 @@ class MaxCardinalityAxiomInfo(QuantifiedAxiomInfo):
     """
 
 
-@dataclass
+@dataclass(kw_only=True)
 class MinCardinalityAxiomInfo(QuantifiedAxiomInfo):
     """
     The individual has at least a number of values of a property.
@@ -282,7 +284,7 @@ class MinCardinalityAxiomInfo(QuantifiedAxiomInfo):
     """
 
 
-@dataclass
+@dataclass(kw_only=True)
 class QuantifiedQualifiedAxiomInfo(QuantifiedAxiomInfo, QualifiedAxiomInfoMixin, ABC):
     """
     The individual has a number of values of a property that belong to a class.
@@ -300,10 +302,10 @@ class QuantifiedQualifiedAxiomInfo(QuantifiedAxiomInfo, QualifiedAxiomInfoMixin,
         """
         Counts only the values belonging to the class, see :attr:`QuantifiedAxiomInfo.counted_values_python`.
         """
-        return f"NumberOfValuesOfClass.count(candidate.{self.snake_property_name}, {self.on_class})"
+        return f"NumberOfValuesOfClass.count(values=candidate.{self.snake_property_name}, value_class={self.on_class})"
 
 
-@dataclass
+@dataclass(kw_only=True)
 class QualifiedCardinalityAxiomInfo(QuantifiedQualifiedAxiomInfo):
     """
     The individual has exactly a number of values of a property that belong to a class.
@@ -315,7 +317,7 @@ class QualifiedCardinalityAxiomInfo(QuantifiedQualifiedAxiomInfo):
     """
 
 
-@dataclass
+@dataclass(kw_only=True)
 class MaxQualifiedCardinalityAxiomInfo(QuantifiedQualifiedAxiomInfo):
     """
     The individual has at most a number of values of a property that belong to a class.
@@ -327,7 +329,7 @@ class MaxQualifiedCardinalityAxiomInfo(QuantifiedQualifiedAxiomInfo):
     """
 
 
-@dataclass
+@dataclass(kw_only=True)
 class MinQualifiedCardinalityAxiomInfo(QuantifiedQualifiedAxiomInfo):
     """
     The individual has at least a number of values of a property that belong to a class.
@@ -339,7 +341,7 @@ class MinQualifiedCardinalityAxiomInfo(QuantifiedQualifiedAxiomInfo):
     """
 
 
-@dataclass
+@dataclass(kw_only=True)
 class HasValueAxiomInfo(PropertyAxiomInfo):
     """
     A value of a property of the individual is a given individual or literal
@@ -423,7 +425,7 @@ class HasValueAxiomInfo(PropertyAxiomInfo):
         return super().conditions_python() + [condition]
 
 
-@dataclass
+@dataclass(kw_only=True)
 class SomeValuesFromAxiomInfo(ValuesOfClassAxiomInfo):
     """
     A value of a property of the individual belongs to a class (``owl:someValuesFrom``).
@@ -446,7 +448,7 @@ class SomeValuesFromAxiomInfo(ValuesOfClassAxiomInfo):
         ]
 
 
-@dataclass
+@dataclass(kw_only=True)
 class AllValuesFromAxiomInfo(ValuesOfClassAxiomInfo):
     """
     Every value of a property of the individual belongs to a class
@@ -470,7 +472,7 @@ class AllValuesFromAxiomInfo(ValuesOfClassAxiomInfo):
         ]
 
 
-@dataclass
+@dataclass(kw_only=True)
 class ComplementAxiomInfo(AxiomInfo):
     """
     A condition does not hold for the individual (``owl:complementOf``).
@@ -497,7 +499,7 @@ class ComplementAxiomInfo(AxiomInfo):
         return [f"not ({' and '.join(self.complemented.conditions_python())})"]
 
 
-@dataclass
+@dataclass(kw_only=True)
 class OneOfAxiomInfo(AxiomInfo):
     """
     The individual is one of a list of individuals (``owl:oneOf``).

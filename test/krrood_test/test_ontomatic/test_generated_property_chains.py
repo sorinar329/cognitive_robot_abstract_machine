@@ -21,8 +21,10 @@ def properties(tmp_path_factory: pytest.TempPathFactory) -> ModuleType:
     """
     The generated module holding the property descriptors.
     """
-    generated = GeneratedOntology.of("property_chains.ttl")
-    classes = generated.imported(Path(tmp_path_factory.mktemp("property_chains")))
+    generated = GeneratedOntology.generate_from_file(
+        ontology_file_name="property_chains.ttl"
+    )
+    classes = generated.imported(root=Path(tmp_path_factory.mktemp("property_chains")))
     package = classes.__name__.rsplit(".", 1)[0]
     return importlib.import_module(f"{package}.{generated.module_name}_properties")
 

@@ -18,7 +18,9 @@ def test_shared_properties_do_not_create_subclasses():
     """
     Classes sharing a property are not made subclasses of each other.
     """
-    source = GeneratedOntology.of("no_implicit_subsumption.ttl").classes_source
+    source = GeneratedOntology.generate_from_file(
+        ontology_file_name="no_implicit_subsumption.ttl"
+    ).classes_source
     bases = re.search(r"^class SportsLover\((.*?)\):", source, re.M).group(1)
     assert "PeopleWithHobby" not in bases
     assert "Role[Person]" in bases
