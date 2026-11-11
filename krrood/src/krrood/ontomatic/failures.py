@@ -1,7 +1,3 @@
-"""
-Errors raised by ontomatic.
-"""
-
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -17,7 +13,7 @@ if TYPE_CHECKING:
     )
 
 
-@dataclass
+@dataclass(kw_only=True)
 class UnMonitoredContainerTypeForDescriptor(Exception):
     """
     Raised when a descriptor is used on a field with a container type that is not
@@ -38,7 +34,7 @@ class UnMonitoredContainerTypeForDescriptor(Exception):
         )
 
 
-@dataclass
+@dataclass(kw_only=True)
 class UnionOfAnonymousClassesAsFiller(DataclassException):
     """
     Raised when a restriction restricts the values of a property to a union that holds
@@ -60,7 +56,7 @@ class UnionOfAnonymousClassesAsFiller(DataclassException):
         return "Name the anonymous class expression in the ontology."
 
 
-@dataclass
+@dataclass(kw_only=True)
 class UntranslatedComplement(DataclassException):
     """
     Raised when an intersection holds the complement of something other than a named
@@ -79,7 +75,7 @@ class UntranslatedComplement(DataclassException):
         return "Complement a named class or a restriction."
 
 
-@dataclass
+@dataclass(kw_only=True)
 class DescriptorNotDeclaredForDomain(DataclassException):
     """
     Raised when neither a class nor any class it inherits fields from declares a field
@@ -109,7 +105,7 @@ class DescriptorNotDeclaredForDomain(DataclassException):
         )
 
 
-@dataclass
+@dataclass(kw_only=True)
 class NoObjectOfIndividualDeclaresProperty(DataclassException):
     """
     Raised when a fact is stored for an individual none of whose objects, its root role
