@@ -15,6 +15,7 @@ abox-loader	ontomatic-port
 owl2rl-consistency-check	ontomatic-port
 closure-verification	ontomatic-port
 owl2bench-experiments	ontomatic-port
+relation-path-unification	ontomatic-port
 segmind-post-conditions	segmind-post-conditions
 segmind-verdicts-bullet-demo	segmind-post-conditions
 hsr-robocasa	segmind-post-conditions

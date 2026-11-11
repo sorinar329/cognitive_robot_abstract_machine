@@ -99,3 +99,15 @@ items:
   - closure-verification
   status: not_started
   notes: From krrood_experiments aamas27-* and the supplement; large runs skipped in CI.
+
+- id: relation-path-unification
+  branch: relation-path-unification
+  title: Unify RelationPath with the class diagram's AttributeEndpoint
+  track: ontomatic-core
+  depends_on:
+  - descriptor-provenance
+  status: not_started
+  notes: 'Raised in the review of cram2#909. RelationPath (property_descriptor_relation.py) follows relations
+    between instances; AttributeEndpoint (class_diagrams/causal_relation.py, Narenvasant) is the class-level
+    path. Proposal: the class-level path says which fields to follow and RelationPath is its result on
+    instances. Agreed as a later PR; shape not decided.'
