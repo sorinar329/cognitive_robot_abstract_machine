@@ -1509,7 +1509,7 @@ class InferenceEngine:
         members = NamingRegistry._get_rdf_list(graph, union)
         if not all(isinstance(member, rdflib.URIRef) for member in members):
             raise UnionOfAnonymousClassesAsFiller(
-                NamingRegistry.uri_to_python_name(filler, graph)
+                union_name=NamingRegistry.uri_to_python_name(filler, graph)
             )
         return f"({', '.join(NamingRegistry.uri_to_python_name(member) for member in members)})"
 
@@ -1582,7 +1582,7 @@ class InferenceEngine:
             )
             if restriction is None:
                 raise UntranslatedComplement(
-                    NamingRegistry.uri_to_python_name(complemented, graph)
+                    complemented_name=NamingRegistry.uri_to_python_name(complemented, graph)
                 )
             inner = restriction.axiom
         self._add_condition(for_class, ComplementAxiomInfo(inner), sufficient)

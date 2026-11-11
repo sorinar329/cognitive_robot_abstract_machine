@@ -26,7 +26,7 @@ HasChainAxioms
 {% for prop_name in properties_order %}
 {% set prop = properties[prop_name] %}
 {% if prop.type == 'ObjectProperty' and not prop.is_specialized%}
-@dataclass(eq=False)
+@dataclass(eq=False, kw_only=True)
 class {{ prop.descriptor_name }}({{ ', '.join(prop.base_descriptors) }}):
     {% if prop.label or prop.comment %}
     """{{ prop.label if prop.label else '' }}{% if prop.label and prop.comment %}\n\n{% endif %}{{ prop.comment if prop.comment else '' }}"""
@@ -67,7 +67,7 @@ class {{ prop.descriptor_name }}({{ ', '.join(prop.base_descriptors) }}):
         if cls is {{ prop.descriptor_name }}:
             return [
                 {% for chain in prop.chain_axioms %}
-                PropertyChain(({{ chain | join(', ') }},)),
+                PropertyChain(properties=({{ chain | join(', ') }},)),
                 {% endfor %}
             ]
         return []

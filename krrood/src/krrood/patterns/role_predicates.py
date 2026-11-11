@@ -112,11 +112,11 @@ class IsSubClassOrRole(Predicate):
         """:return: the clause *"<sub_class> is a subclass or role of
         <super_class>"*."""
         return clause(
-            Noun(fields["sub_class"]),
+            Noun(content=fields["sub_class"]),
             Copula(),
-            Noun("subclass or role"),
+            Noun(content="subclass or role"),
             Prepositions.OF,
-            Noun(fields["super_class"]),
+            Noun(content=fields["super_class"]),
         )
 
     @classmethod

@@ -86,7 +86,7 @@ class SubClassAxiomInfo(AxiomInfo):
 
     def conditions_eql(self) -> list[str]:
         return [
-            f"exists({self.types_variable}, IsSubClassOrRole({self.types_variable}, {self.sub_class}))"
+            f"exists({self.types_variable}, IsSubClassOrRole(sub_class={self.types_variable}, super_class={self.sub_class}))"
         ]
 
     def conditions_python(self) -> list[str]:
@@ -130,10 +130,10 @@ class PropertyAxiomInfo(AxiomInfo):
         return NamingRegistry.to_pascal_case(self.snake_property_name)
 
     def conditions_eql(self) -> list[str]:
-        return [f"HasProperty(candidate_var, {self.descriptor_name})"]
+        return [f"HasProperty(instance=candidate_var, property_descriptor_type={self.descriptor_name})"]
 
     def conditions_python(self) -> list[str]:
-        return [f"HasProperty(candidate, {self.descriptor_name})"]
+        return [f"HasProperty(instance=candidate, property_descriptor_type={self.descriptor_name})"]
 
 
 @dataclass
@@ -188,7 +188,7 @@ class ValuesOfClassAxiomInfo(PropertyAxiomInfo, QualifiedAxiomInfoMixin, ABC):
         """
         return (
             f"exists({self.value_types_variable}, "
-            f"IsSubClassOrRole({self.value_types_variable}, {self.on_class}))"
+            f"IsSubClassOrRole(sub_class={self.value_types_variable}, super_class={self.on_class}))"
         )
 
     @property
@@ -220,7 +220,7 @@ class QuantifiedAxiomInfo(PropertyAxiomInfo, ABC):
         """
         The entity-query-language expression counting the values.
         """
-        return f"length(candidate_var.{self.snake_property_name})"
+        return f"length(iterable=candidate_var.{self.snake_property_name})"
 
     @property
     def counted_values_python(self) -> str:
@@ -293,7 +293,7 @@ class QuantifiedQualifiedAxiomInfo(QuantifiedAxiomInfo, QualifiedAxiomInfoMixin,
         """
         Counts only the values belonging to the class, see :attr:`QuantifiedAxiomInfo.counted_values_eql`.
         """
-        return f"NumberOfValuesOfClass(candidate_var.{self.snake_property_name}, {self.on_class})"
+        return f"NumberOfValuesOfClass(values=candidate_var.{self.snake_property_name}, value_class={self.on_class})"
 
     @property
     def counted_values_python(self) -> str:

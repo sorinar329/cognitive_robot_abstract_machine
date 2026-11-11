@@ -62,5 +62,5 @@ def test_a_query_selects_the_classes_that_are_subclasses_or_roles():
     Used in a query, the predicate keeps the classes that are subclasses or roles.
     """
     candidate_class = variable_from([CEOAsFirstRole, Company])
-    query = an(entity(candidate_class).where(IsSubClassOrRole(candidate_class, Person)))
+    query = an(entity(candidate_class).where(IsSubClassOrRole(sub_class=candidate_class, super_class=Person)))
     assert list(query.evaluate()) == [CEOAsFirstRole]

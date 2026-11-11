@@ -94,7 +94,7 @@ class {{ cls.name }}({% if cls.base_classes %}{{ ', '.join(cls.base_classes) }}{
 {% for prop_name in cls.declared_properties %}
 {% set prop = properties[prop_name] %}
 {% if prop.type == 'ObjectProperty' %}
-{{ cls.name }}.{{ prop.field_name }} = {{ prop.descriptor_name }}({{ cls.name }}, '{{ prop.field_name }}')
+{{ cls.name }}.{{ prop.field_name }} = {{ prop.descriptor_name }}(domain={{ cls.name }}, field_name='{{ prop.field_name }}')
 {% endif %}
 {% endfor %}
 {% endfor %}

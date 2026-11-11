@@ -83,12 +83,12 @@ def test_a_complement_of_a_restriction_negates_it(generated):
     """
     axiom_python = generated.method_source("VegetarianPizza", "axiom_python")
     assert (
-        "not (HasProperty(candidate, HasTopping) and "
+        "not (HasProperty(instance=candidate, property_descriptor_type=HasTopping) and "
         "any(any(IsSubClassOrRole.holds(t, MeatTopping) for t in value.types) "
         "for value in candidate.has_topping))"
     ) in axiom_python
     assert (
-        "not_(and_(HasProperty(candidate_var, HasTopping)"
+        "not_(and_(HasProperty(instance=candidate_var, property_descriptor_type=HasTopping)"
         in generated.method_source("VegetarianPizza", "axiom")
     )
 

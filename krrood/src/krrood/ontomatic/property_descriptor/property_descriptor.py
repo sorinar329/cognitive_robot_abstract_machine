@@ -335,9 +335,11 @@ class PropertyDescriptor(Symbol, DataclassFieldDescriptor):
             from, its role takers' classes included.
         :raises DescriptorNotDeclaredForDomain: If neither the class nor a class it inherits from declares it.
         """
-        descriptor = cls.declared_by(domain_type)
+        descriptor = cls.declared_by(domain_type=domain_type)
         if descriptor is None:
-            raise DescriptorNotDeclaredForDomain(cls, domain_type)
+            raise DescriptorNotDeclaredForDomain(
+                descriptor_type=cls, domain_type=domain_type
+            )
         return descriptor
 
     @staticmethod
@@ -572,9 +574,9 @@ class HasProperty(Predicate):
     def _verbalization_fragment_(cls, fields: RenderedFields) -> VerbalizationFragment:
         """:return: the clause *"<instance> has <property_descriptor_type>"*."""
         return clause(
-            Noun(fields["instance"]),
-            Verb("have"),
-            Noun(fields["property_descriptor_type"]),
+            Noun(content=fields["instance"]),
+            Verb(lemma="have"),
+            Noun(content=fields["property_descriptor_type"]),
         )
 
     @classmethod

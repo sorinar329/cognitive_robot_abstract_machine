@@ -36,5 +36,5 @@ def test_a_chain_axiom_is_a_property_chain_of_the_implied_property(properties):
     properties.
     """
     assert properties.HasGrandparent.get_chain_axioms() == [
-        PropertyChain((properties.HasParent, properties.HasParent))
+        PropertyChain(properties=(properties.HasParent, properties.HasParent))
     ]

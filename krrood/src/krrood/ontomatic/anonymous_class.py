@@ -106,7 +106,9 @@ class NumberOfValuesOfClass(SymbolicFunction):
 
     @classmethod
     def _verbalization_fragment_(cls, fields: RenderedFields) -> VerbalizationFragment:
-        return FunctionVerbalizationTemplates.possessive(cls, *fields.values())
+        return FunctionVerbalizationTemplates.possessive(
+            *fields.values(), function_class=cls
+        )
 
     @classmethod
     def _example_operand_values_(cls) -> dict[str, Any]:
