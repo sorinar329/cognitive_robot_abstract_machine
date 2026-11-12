@@ -133,7 +133,7 @@ def test_some_values_from_holds_when_a_value_is_of_the_class(ontology):
     axiom = SomeValuesFromAxiomInfo(
         property_name="hasTopping",
         for_class="Pizza",
-        onto=ontology,
+        ontology=ontology,
         on_class="CheeseTopping",
     )
     candidate = individual(
@@ -149,7 +149,7 @@ def test_some_values_from_fails_when_no_value_is_of_the_class(ontology):
     axiom = SomeValuesFromAxiomInfo(
         property_name="hasTopping",
         for_class="Pizza",
-        onto=ontology,
+        ontology=ontology,
         on_class="CheeseTopping",
     )
     assert holds(axiom, individual(has_topping=[individual(MeatTopping)])) is False
@@ -162,7 +162,7 @@ def test_a_restriction_fails_for_an_individual_without_the_property(ontology):
     axiom = SomeValuesFromAxiomInfo(
         property_name="hasTopping",
         for_class="Pizza",
-        onto=ontology,
+        ontology=ontology,
         on_class="CheeseTopping",
     )
     assert holds(axiom, individual()) is False
@@ -177,7 +177,7 @@ def test_has_value_looks_for_the_individual_among_several_values(ontology):
     axiom = HasValueAxiomInfo(
         property_name="hasTopping",
         for_class="Pizza",
-        onto=ontology,
+        ontology=ontology,
         value=rdflib.URIRef(mozzarella.uri),
     )
     assert holds(axiom, individual(has_topping=[mozzarella])) is True
@@ -191,7 +191,7 @@ def test_has_value_compares_the_single_value_of_a_functional_property(ontology):
     axiom = HasValueAxiomInfo(
         property_name="hasBase",
         for_class="Pizza",
-        onto=ontology,
+        ontology=ontology,
         value=rdflib.URIRef(thin_base.uri),
     )
     assert holds(axiom, individual(has_base=thin_base)) is True
@@ -205,7 +205,7 @@ def test_a_maximum_cardinality_holds_up_to_the_maximum(ontology):
     ``maxCardinality 1`` holds for one value.
     """
     axiom = MaxCardinalityAxiomInfo(
-        property_name="hasTopping", for_class="Pizza", onto=ontology, quantity=1
+        property_name="hasTopping", for_class="Pizza", ontology=ontology, quantity=1
     )
     assert holds(axiom, individual(has_topping=[individual(CheeseTopping)])) is True
 
@@ -215,7 +215,7 @@ def test_a_maximum_cardinality_fails_above_the_maximum(ontology):
     ``maxCardinality 1`` fails for two values.
     """
     axiom = MaxCardinalityAxiomInfo(
-        property_name="hasTopping", for_class="Pizza", onto=ontology, quantity=1
+        property_name="hasTopping", for_class="Pizza", ontology=ontology, quantity=1
     )
     candidate = individual(
         has_topping=[individual(CheeseTopping), individual(MeatTopping)]
@@ -235,7 +235,7 @@ def test_a_complement_holds_where_its_restriction_fails(ontology):
         complemented=SomeValuesFromAxiomInfo(
             property_name="hasTopping",
             for_class="Pizza",
-            onto=ontology,
+            ontology=ontology,
             on_class="MeatTopping",
         )
     )
