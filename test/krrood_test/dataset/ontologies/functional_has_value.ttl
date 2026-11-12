@@ -1,0 +1,21 @@
+@prefix : <http://example.org/functional#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+<http://example.org/functional> a owl:Ontology .
+
+:Student a owl:Class .
+:Professor a owl:Class .
+:drSmith a owl:NamedIndividual, :Professor .
+
+:hasAdvisor a owl:ObjectProperty, owl:FunctionalProperty ;
+    rdfs:domain :Student ;
+    rdfs:range :Professor .
+:hasReader a owl:ObjectProperty ;
+    rdfs:domain :Student ;
+    rdfs:range :Professor .
+
+:AdvisedBySmith a owl:Class ;
+    owl:equivalentClass [ a owl:Restriction ; owl:onProperty :hasAdvisor ; owl:hasValue :drSmith ] .
+:ReadBySmith a owl:Class ;
+    owl:equivalentClass [ a owl:Restriction ; owl:onProperty :hasReader ; owl:hasValue :drSmith ] .

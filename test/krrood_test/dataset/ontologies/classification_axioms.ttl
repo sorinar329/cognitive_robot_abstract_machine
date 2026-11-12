@@ -1,0 +1,55 @@
+@prefix : <http://benchmark/OWL2Bench#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+<http://benchmark/OWL2Bench> a owl:Ontology .
+
+:takesCourse a owl:ObjectProperty ; rdfs:domain :Student ; rdfs:range :Course .
+:hasStudent a owl:ObjectProperty ; rdfs:domain :College ; rdfs:range :Student .
+:hasMajor a owl:ObjectProperty ; rdfs:domain :Student ; rdfs:range :Discipline .
+:isCrazyAbout a owl:ObjectProperty ; rdfs:domain :Person ; rdfs:range :Interest .
+:worksFor a owl:ObjectProperty .
+:hasEmployee a owl:ObjectProperty ; owl:inverseOf :worksFor .
+
+:Person a owl:Class .
+:Man a owl:Class ; rdfs:subClassOf :Person .
+:Woman a owl:Class ; rdfs:subClassOf :Person .
+:Student a owl:Class ; rdfs:subClassOf :Person .
+:Course a owl:Class .
+:College a owl:Class .
+:Discipline a owl:Class .
+:Science a owl:Class ; rdfs:subClassOf :Discipline .
+:Interest a owl:Class .
+:Cricket a owl:Class ; rdfs:subClassOf :Interest .
+:ScienceStudent a owl:Class ; rdfs:subClassOf :Student .
+:Organization a owl:Class .
+:Employee a owl:Class ; rdfs:subClassOf :Person .
+
+:LeisureStudent a owl:Class ;
+    rdfs:subClassOf :Student ;
+    rdfs:subClassOf [ a owl:Class ;
+        owl:intersectionOf ( :Student
+            [ a owl:Restriction ; owl:onProperty :takesCourse ;
+              owl:maxQualifiedCardinality "1"^^xsd:nonNegativeInteger ; owl:onClass :Course ] ) ] .
+
+:WomanCollege a owl:Class ;
+    rdfs:subClassOf :College ;
+    rdfs:subClassOf [ a owl:Class ;
+        owl:intersectionOf ( :College
+            [ a owl:Restriction ; owl:onProperty :hasStudent ;
+              owl:allValuesFrom [ a owl:Class ; owl:complementOf :Man ] ] ) ] .
+
+:T20Cricket a owl:NamedIndividual , :Cricket .
+:T20CricketFan a owl:Class ;
+    rdfs:subClassOf :Person ;
+    owl:equivalentClass [ a owl:Restriction ; owl:onProperty :isCrazyAbout ; owl:hasValue :T20Cricket ] .
+
+[ a owl:Class ;
+  owl:intersectionOf ( :Student [ a owl:Restriction ; owl:onProperty :hasMajor ; owl:someValuesFrom :Science ] ) ;
+  rdfs:subClassOf :ScienceStudent ] .
+
+[ a owl:Class ;
+  owl:intersectionOf ( :Person [ a owl:Restriction ; owl:onProperty :worksFor ; owl:someValuesFrom :Organization ] ) ;
+  rdfs:subClassOf :Employee ] .

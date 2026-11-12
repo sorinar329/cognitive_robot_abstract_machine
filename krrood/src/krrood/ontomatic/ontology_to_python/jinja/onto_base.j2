@@ -1,0 +1,46 @@
+"""
+Auto-generated Python classes from OWL ontology
+Generated using custom converter
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing_extensions import Optional, Set, TypeVar, Type, Any, Union, List, TYPE_CHECKING
+
+from krrood.ontomatic.property_descriptor.mixins import OntologyBaseClass
+from krrood.patterns.role import Role
+from krrood.symbol_graph.symbol_graph import Symbol
+{% if annotated_classes %}
+
+if TYPE_CHECKING:
+    from .{{ classes_module_name }} import {{ annotated_classes | join(', ') }}
+{% endif %}
+
+@dataclass(eq=False)
+class {{ class_information.name }}({{ ', '.join(class_information.base_classes) }}, OntologyBaseClass):
+    {% if class_information.label or class_information.comment %}
+    """{{ class_information.label if class_information.label else '' }}{% if class_information.label and class_information.comment %}\n\n{% endif %}{{ class_information.comment if class_information.comment else '' }}"""
+    {% endif %}
+    {% if class_information.declared_properties|length == 0%}
+    ...
+    {% else %}
+    {% if class_information.declared_properties|length > 0 %}
+    {% for property_name in class_information.declared_properties %}
+    {% set property_information = properties[property_name] %}
+    {% if property_information.label or property_information.comment %}    # {{ property_information.label if property_information.label else '' }}{% if property_information.label and property_information.comment %} - {% endif %}{{ property_information.comment if property_information.comment else '' }}
+    {% endif %}
+    {% if property_information.type == 'ObjectProperty' %}
+    {{ property_information.field_name }}: Set[{{ property_information.object_range_hint }}] = field(kw_only=True, default_factory=set)
+    {% else %}
+    {{ property_information.field_name }}: Optional[{{ property_information.data_type_hint_inner }}] = field(kw_only=True, default=None)
+    {% endif %}
+    {% endfor %}
+    {% endif %}
+    {% endif %}
+
+    def __hash__(self):
+        return hash(id(self))
+
+
+T = TypeVar('T', bound={{ class_information.name }})

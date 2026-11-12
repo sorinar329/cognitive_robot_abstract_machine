@@ -1,0 +1,78 @@
+"""
+Auto-generated Python classes from OWL ontology
+Generated using custom converter
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing_extensions import Type, List, Optional, Tuple, ClassVar
+
+from krrood.ontomatic.property_descriptor.property_descriptor import PropertyChain, PropertyDescriptor
+from krrood.ontomatic.property_descriptor.mixins import (
+HasInverseProperty,
+TransitiveProperty,
+HasEquivalentProperties,
+HasDisjointProperties,
+SymmetricProperty,
+ASymmetricProperty,
+ReflexiveProperty,
+IrreflexiveProperty,
+HasChainAxioms
+)
+
+
+# Property descriptor classes (object properties)
+{% for property_name in properties_order %}
+{% set property_information = properties[property_name] %}
+{% if property_information.type == 'ObjectProperty' and not property_information.is_specialized%}
+@dataclass(eq=False, kw_only=True)
+class {{ property_information.descriptor_name }}({{ ', '.join(property_information.base_descriptors) }}):
+    {% if property_information.label or property_information.comment %}
+    """{{ property_information.label if property_information.label else '' }}{% if property_information.label and property_information.comment %}\n\n{% endif %}{{ property_information.comment if property_information.comment else '' }}"""
+    {% else %}
+    """{{ property_information.descriptor_name }}"""
+    {% endif %}
+
+    rdfs_domains: ClassVar[Tuple[str, ...]] = ({% for domain in property_information.rdfs_domains %}"{{ domain }}", {% endfor %})
+    rdfs_ranges: ClassVar[Tuple[str, ...]] = ({% for range_name in property_information.rdfs_ranges %}"{{ range_name }}", {% endfor %})
+    {# Only emit a typed inverse if the target descriptor is already defined earlier #}
+    {% if property_information.inverse_of%}
+
+    {% set inverse = properties[property_information.inverse_of].descriptor_name %}
+    @classmethod
+    def get_inverse(cls) -> Optional[Type[{{ inverse }}]]:
+        if cls is {{ property_information.descriptor_name }}:
+            return {{ inverse }}
+        return None
+    {% endif %}
+    {% if property_information.equivalent_properties|length > 0 %}
+
+    @classmethod
+    def get_equivalent_properties(cls) -> List[Type[PropertyDescriptor]]:
+        if cls is {{ property_information.descriptor_name }}:
+            return [{{ ', '.join(property_information.equivalent_properties_descriptor_names) }}]
+        return []
+    {% endif %}
+    {% if property_information.disjoint_properties|length > 0 %}
+
+    @classmethod
+    def get_disjoint_properties(cls) -> List[Type[PropertyDescriptor]]:
+        return [{{ ', '.join(property_information.disjoint_properties_descriptor_names) }}]
+    {% endif %}
+    {% if property_information.chain_axioms|length > 0 %}
+
+    @classmethod
+    def get_chain_axioms(cls) -> List[PropertyChain]:
+        if cls is {{ property_information.descriptor_name }}:
+            return [
+                {% for chain in property_information.chain_axioms %}
+                PropertyChain(properties=({{ chain | join(', ') }},)),
+                {% endfor %}
+            ]
+        return []
+    {% endif %}
+
+
+{% endif %}
+{% endfor %}

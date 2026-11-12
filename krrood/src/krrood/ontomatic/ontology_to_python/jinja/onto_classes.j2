@@ -1,0 +1,102 @@
+"""
+Auto-generated Python classes from OWL ontology
+Generated using custom converter
+"""
+
+from __future__ import annotations
+
+import sys
+from dataclasses import dataclass, field
+from typing_extensions import Tuple, ClassVar
+
+from krrood.entity_query_language.factories import (
+    ConditionType,
+    and_,
+    contains,
+    exists,
+    for_all,
+    in_,
+    not_,
+    variable_from,
+)
+from krrood.entity_query_language.predicate import length
+from krrood.ontomatic.anonymous_class import AnonymousClass, NumberOfValuesOfClass
+from krrood.ontomatic.property_descriptor.property_descriptor import (
+    HasProperty,
+    PropertyDescriptor,
+)
+from krrood.patterns.role import Role
+from krrood.patterns.role_predicates import IsSubClassOrRole
+from .{{ properties_module_name }} import *
+from .{{ ontology_base_module_name }} import *
+
+# Generated classes
+{% for class_name in classes_order %}
+{% set class_information = classes[class_name] %}
+{% if class_information.name == ontology_base_class_name %}
+    {% continue %}
+{% endif %}
+@dataclass(eq=False)
+class {{ class_information.name }}({% if class_information.base_classes %}{{ ', '.join(class_information.base_classes) }}{% else %}{{ ontology_base_class_name }}{% endif %}):
+    {% if class_information.label or class_information.comment %}
+    """{{ class_information.label if class_information.label else '' }}{% if class_information.label and class_information.comment %}\n\n{% endif %}{{ class_information.comment if class_information.comment else '' }}"""
+    {% endif %}
+    cls_uri: ClassVar[str] = "{{ class_information.uri }}"
+    {% if class_information.declared_properties|length > 0 %}
+    {% for property_name in class_information.declared_properties %}
+    {% set property_information = properties[property_name] %}
+    {% if property_information.label or property_information.comment %}    # {{ property_information.label if property_information.label else '' }}{% if property_information.label and property_information.comment %} - {% endif %}{{ property_information.comment if property_information.comment else '' }}
+    {% endif %}
+    {% if property_information.type == 'ObjectProperty' %}
+    {{ property_information.field_name }}: Set[{{ property_information.object_range_hint }}] = field(kw_only=True, default_factory=set)
+    {% else %}
+    {{ property_information.field_name }}: Optional[{{ property_information.data_type_hint_inner }}] = field(kw_only=True, default=None)
+    {% endif %}
+    {% endfor %}
+    {% endif %}
+    {% if class_information.axioms|length > 0 %}
+
+    @classmethod
+    def axiom(cls, candidate: AnonymousClass) -> Tuple[ConditionType, ...]:
+        candidate_var = AnonymousClass.variable_for(candidate=candidate)
+        {{ class_information.axioms_setup | unique | join('\n        ') }}
+        return ({{ class_information.axioms | join(',\n\t\t\t\t') }}
+        )
+    {% endif %}
+    {% if class_information.axioms_python|length > 0 %}
+
+    @classmethod
+    def axiom_python(cls, candidate: AnonymousClass) -> bool:
+        return {{ class_information.axioms_python | join(' and ') }}
+    {% endif %}
+    {% if class_information.necessary_axioms_python|length > 0 %}
+
+    @classmethod
+    def necessary_conditions_python(cls, candidate: AnonymousClass) -> bool:
+        """Necessary conditions of the class (superclass restrictions). They are not used for classification."""
+        return {{ class_information.necessary_axioms_python | join(' and ') }}
+    {% endif %}
+    {% if class_information.equivalent_classes|length > 0 %}
+
+
+{% for equivalent_class in class_information.equivalent_classes %}
+{{ equivalent_class }} = {{ class_information.name }}
+{% endfor %}
+    {% endif %}
+
+
+{% endfor %}
+
+
+# Descriptor assignments
+{% for class_name in classes_order %}
+{% set class_information = classes[class_name] %}
+{% for property_name in class_information.declared_properties %}
+{% set property_information = properties[property_name] %}
+{% if property_information.type == 'ObjectProperty' %}
+{{ class_information.name }}.{{ property_information.field_name }} = {{ property_information.descriptor_name }}(domain={{ class_information.name }}, field_name='{{ property_information.field_name }}')
+{% endif %}
+{% endfor %}
+{% endfor %}
+
+PropertyDescriptor.update_domains_that_are_axiomatized_on_properties(module=sys.modules[__name__])

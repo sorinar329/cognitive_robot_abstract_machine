@@ -1,0 +1,26 @@
+@prefix : <http://benchmark/OWL2Bench#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+<http://benchmark/OWL2Bench> a owl:Ontology .
+
+:roleFor a owl:ObjectProperty , owl:TransitiveProperty ; rdfs:domain :Role .
+:likes a owl:ObjectProperty ; rdfs:domain :Person ; rdfs:range :Interest .
+:loves a owl:ObjectProperty ; rdfs:subPropertyOf :likes ; rdfs:domain :Person ; rdfs:range :Interest .
+
+:Role a owl:Class .
+:Person a owl:Class .
+:Interest a owl:Class .
+:Sports a owl:Class ; rdfs:subClassOf :Interest .
+
+:PeopleWithHobby a owl:Class ; rdfs:subClassOf :Person , :Role ,
+    [ a owl:Restriction ; owl:onProperty :roleFor ; owl:someValuesFrom :Person ] .
+:SportsLover a owl:Class ; rdfs:subClassOf :Person , :Role ,
+    [ a owl:Restriction ; owl:onProperty :roleFor ; owl:someValuesFrom :Person ] .
+
+[ a owl:Class ;
+  owl:intersectionOf ( :Person [ a owl:Restriction ; owl:onProperty :likes ; owl:someValuesFrom :Interest ] ) ;
+  rdfs:subClassOf :PeopleWithHobby ] .
+[ a owl:Class ;
+  owl:intersectionOf ( :Person [ a owl:Restriction ; owl:onProperty :loves ; owl:someValuesFrom :Sports ] ) ;
+  rdfs:subClassOf :SportsLover ] .

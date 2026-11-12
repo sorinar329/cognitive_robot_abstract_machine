@@ -1,0 +1,85 @@
+@prefix : <http://www.co-ode.org/ontologies/pizza/pizza.owl#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+<http://www.co-ode.org/ontologies/pizza> a owl:Ontology .
+
+:hasTopping a owl:ObjectProperty ; rdfs:domain :Pizza ; rdfs:range :PizzaTopping .
+:isToppingOf a owl:ObjectProperty , owl:FunctionalProperty ; owl:inverseOf :hasTopping ;
+    rdfs:domain :PizzaTopping ; rdfs:range :Pizza .
+:hasSpiciness a owl:ObjectProperty ; rdfs:range :Spiciness .
+:hasCountryOfOrigin a owl:ObjectProperty .
+
+:DomainConcept a owl:Class .
+:Food a owl:Class ; rdfs:subClassOf :DomainConcept .
+:Pizza a owl:Class ; rdfs:subClassOf :Food .
+:NamedPizza a owl:Class ; rdfs:subClassOf :Pizza .
+:PizzaTopping a owl:Class ; rdfs:subClassOf :Food .
+:CheeseTopping a owl:Class ; rdfs:subClassOf :PizzaTopping .
+:MozzarellaTopping a owl:Class ; rdfs:subClassOf :CheeseTopping .
+:TomatoTopping a owl:Class ; rdfs:subClassOf :PizzaTopping .
+:MeatTopping a owl:Class ; rdfs:subClassOf :PizzaTopping .
+:Spiciness a owl:Class ; rdfs:subClassOf :DomainConcept .
+:Hot a owl:Class ; rdfs:subClassOf :Spiciness .
+
+:CheesyPizza a owl:Class ;
+    owl:equivalentClass [ a owl:Class ;
+        owl:intersectionOf ( :Pizza
+            [ a owl:Restriction ; owl:onProperty :hasTopping ; owl:someValuesFrom :CheeseTopping ] ) ] .
+
+:Margherita a owl:Class ;
+    rdfs:subClassOf :NamedPizza ;
+    rdfs:subClassOf [ a owl:Restriction ; owl:onProperty :hasTopping ;
+        owl:allValuesFrom [ a owl:Class ; owl:unionOf ( :MozzarellaTopping :TomatoTopping ) ] ] .
+
+:VegetarianPizza a owl:Class ;
+    owl:equivalentClass [ a owl:Class ;
+        owl:intersectionOf ( :Pizza
+            [ a owl:Class ; owl:complementOf
+                [ a owl:Restriction ; owl:onProperty :hasTopping ; owl:someValuesFrom :MeatTopping ] ] ) ] .
+
+:NonVegetarianPizza a owl:Class ;
+    owl:equivalentClass [ a owl:Class ;
+        owl:intersectionOf ( :Pizza [ a owl:Class ; owl:complementOf :VegetarianPizza ] ) ] .
+
+:Country a owl:Class ;
+    owl:equivalentClass [ a owl:Class ;
+        owl:intersectionOf ( [ a owl:Class ; owl:oneOf ( :America :Italy ) ] :DomainConcept ) ] .
+:America a owl:NamedIndividual , owl:Thing , :Country .
+:Italy a owl:NamedIndividual , :Country .
+
+:InterestingPizza a owl:Class ;
+    owl:equivalentClass [ a owl:Class ;
+        owl:intersectionOf ( [ a owl:Restriction ; owl:onProperty :hasTopping ;
+                               owl:minCardinality "3"^^xsd:nonNegativeInteger ] :Pizza ) ] .
+
+:HotCheesePizza a owl:Class ;
+    owl:equivalentClass [ a owl:Class ;
+        owl:intersectionOf ( :Pizza
+            [ a owl:Restriction ; owl:onProperty :hasTopping ;
+              owl:someValuesFrom [ a owl:Class ;
+                  owl:intersectionOf ( :CheeseTopping
+                      [ a owl:Restriction ; owl:onProperty :hasSpiciness ; owl:someValuesFrom :Hot ] ) ] ] ) ] .
+
+:SpicyTopping a owl:Class ;
+    owl:equivalentClass [ a owl:Class ;
+        owl:intersectionOf ( :PizzaTopping
+            [ a owl:Restriction ; owl:onProperty :hasSpiciness ; owl:someValuesFrom :Hot ] ) ] .
+
+:SpicyPizza a owl:Class ;
+    owl:equivalentClass [ a owl:Class ;
+        owl:intersectionOf ( :Pizza
+            [ a owl:Restriction ; owl:onProperty :hasTopping ;
+              owl:someValuesFrom [ a owl:Class ;
+                  owl:intersectionOf ( :PizzaTopping
+                      [ a owl:Restriction ; owl:onProperty :hasSpiciness ; owl:someValuesFrom :Hot ] ) ] ] ) ] .
+
+:American a owl:Class ;
+    rdfs:subClassOf :NamedPizza ;
+    rdfs:subClassOf [ a owl:Restriction ; owl:onProperty :hasCountryOfOrigin ; owl:hasValue :America ] ;
+    rdfs:subClassOf [ a owl:Restriction ; owl:onProperty :hasTopping ; owl:someValuesFrom :MozzarellaTopping ] ;
+    rdfs:subClassOf [ a owl:Restriction ; owl:onProperty :hasTopping ; owl:someValuesFrom :TomatoTopping ] ;
+    rdfs:subClassOf [ a owl:Restriction ; owl:onProperty :hasTopping ;
+        owl:allValuesFrom [ a owl:Class ; owl:unionOf ( :MozzarellaTopping :TomatoTopping ) ] ] .

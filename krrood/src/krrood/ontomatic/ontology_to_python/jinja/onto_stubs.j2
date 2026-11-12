@@ -1,0 +1,71 @@
+"""
+Auto-generated Python classes from OWL ontology
+Generated using custom converter
+"""
+
+from __future__ import annotations
+
+from .{{ properties_module_name }} import *
+from .{{ ontology_base_module_name }} import *
+
+
+# Generated classes
+{% for class_name in classes_order %}
+{% set class_information = classes[class_name] %}
+{% if class_name in role_takers %}
+@dataclass(eq=False)
+class {{ class_information.name }}MixinProtocol({% if class_information.add_role_taker %}{{ class_information.role_taker.class_name }}MixinProtocol, {% endif %}{% if class_information.base_classes %}{{ ', '.join(class_information.base_classes) }}{% else %}{{ ontology_base_class_name }}{% endif %}):
+    {% if class_information.label or class_information.comment %}
+    """{{ class_information.label if class_information.label else '' }}{% if class_information.label and class_information.comment %}\n\n{% endif %}{{ class_information.comment if class_information.comment else '' }}"""
+    {% endif %}
+    {% if class_information.declared_properties|length == 0%}
+    ...
+    {% else %}
+    {% if class_information.declared_properties|length > 0 %}
+    {% for property_name in class_information.declared_properties %}
+    {% set property_information = properties[property_name] %}
+    {% if property_information.label or property_information.comment %}    # {{ property_information.label if property_information.label else '' }}{% if property_information.label and property_information.comment %} - {% endif %}{{ property_information.comment if property_information.comment else '' }}
+    {% endif %}
+    {% if property_information.type == 'ObjectProperty' %}
+    {{ property_information.field_name }}: Set[{{ property_information.object_range_hint }}]
+    {% else %}
+    {{ property_information.field_name }}: Optional[{{ property_information.data_type_hint_inner }}]
+    {% endif %}
+    {% endfor %}
+    {% endif %}
+    {% endif %}
+
+
+@dataclass(eq=False)
+class {{ class_information.name }}({{ class_information.name }}MixinProtocol):
+    ...
+{% else %}
+{#{% elif class_information.role_taker|length > 0 %}#}
+{#{% if class_information.add_role_taker %}#}
+@dataclass(eq=False)
+class {{ class_information.name }}({% if class_information.add_role_taker %}{{ class_information.role_taker.class_name }}MixinProtocol, {% endif %}{% if class_information.base_classes %}{{ ', '.join(class_information.base_classes) }}{% else %}{{ ontology_base_class_name }}{% endif %}):
+    {% if class_information.label or class_information.comment %}
+    """{{ class_information.label if class_information.label else '' }}{% if class_information.label and class_information.comment %}\n\n{% endif %}{{ class_information.comment if class_information.comment else '' }}"""
+    {% endif %}
+    {% if class_information.declared_properties|length == 0  and class_information.role_taker|length == 0%}
+    ...
+    {% else %}
+    {% if class_information.declared_properties|length > 0 %}
+    {% for property_name in class_information.declared_properties %}
+    {% set property_information = properties[property_name] %}
+    {% if property_information.label or property_information.comment %}    # {{ property_information.label if property_information.label else '' }}{% if property_information.label and property_information.comment %} - {% endif %}{{ property_information.comment if property_information.comment else '' }}
+    {% endif %}
+    {% if property_information.type == 'ObjectProperty' %}
+    {{ property_information.field_name }}: Set[{{ property_information.object_range_hint }}] = field(default_factory=set)
+    {% else %}
+    {{ property_information.field_name }}: Optional[{{ property_information.data_type_hint_inner }}] = field(kw_only=True, default=None)
+    {% endif %}
+    {% endfor %}
+    {% endif %}
+    {% endif %}
+
+{#{% endif %}#}
+{% endif %}
+
+
+{% endfor %}
