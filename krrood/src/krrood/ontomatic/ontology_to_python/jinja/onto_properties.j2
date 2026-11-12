@@ -23,50 +23,50 @@ HasChainAxioms
 
 
 # Property descriptor classes (object properties)
-{% for prop_name in properties_order %}
-{% set prop = properties[prop_name] %}
-{% if prop.type == 'ObjectProperty' and not prop.is_specialized%}
+{% for property_name in properties_order %}
+{% set property_information = properties[property_name] %}
+{% if property_information.type == 'ObjectProperty' and not property_information.is_specialized%}
 @dataclass(eq=False, kw_only=True)
-class {{ prop.descriptor_name }}({{ ', '.join(prop.base_descriptors) }}):
-    {% if prop.label or prop.comment %}
-    """{{ prop.label if prop.label else '' }}{% if prop.label and prop.comment %}\n\n{% endif %}{{ prop.comment if prop.comment else '' }}"""
+class {{ property_information.descriptor_name }}({{ ', '.join(property_information.base_descriptors) }}):
+    {% if property_information.label or property_information.comment %}
+    """{{ property_information.label if property_information.label else '' }}{% if property_information.label and property_information.comment %}\n\n{% endif %}{{ property_information.comment if property_information.comment else '' }}"""
     {% else %}
-    """{{ prop.descriptor_name }}"""
+    """{{ property_information.descriptor_name }}"""
     {% endif %}
 
-    rdfs_domains: ClassVar[Tuple[str, ...]] = ({% for d in prop.rdfs_domains %}"{{ d }}", {% endfor %})
-    rdfs_ranges: ClassVar[Tuple[str, ...]] = ({% for r in prop.rdfs_ranges %}"{{ r }}", {% endfor %})
+    rdfs_domains: ClassVar[Tuple[str, ...]] = ({% for domain in property_information.rdfs_domains %}"{{ domain }}", {% endfor %})
+    rdfs_ranges: ClassVar[Tuple[str, ...]] = ({% for range_name in property_information.rdfs_ranges %}"{{ range_name }}", {% endfor %})
     {# Only emit a typed inverse if the target descriptor is already defined earlier #}
-    {% if prop.inverse_of%}
+    {% if property_information.inverse_of%}
 
-    {% set inverse = properties[prop.inverse_of].descriptor_name %}
+    {% set inverse = properties[property_information.inverse_of].descriptor_name %}
     @classmethod
     def get_inverse(cls) -> Optional[Type[{{ inverse }}]]:
-        if cls is {{ prop.descriptor_name }}:
+        if cls is {{ property_information.descriptor_name }}:
             return {{ inverse }}
         return None
     {% endif %}
-    {% if prop.equivalent_properties|length > 0 %}
+    {% if property_information.equivalent_properties|length > 0 %}
 
     @classmethod
     def get_equivalent_properties(cls) -> List[Type[PropertyDescriptor]]:
-        if cls is {{ prop.descriptor_name }}:
-            return [{{ ', '.join(prop.equivalent_properties_descriptor_names) }}]
+        if cls is {{ property_information.descriptor_name }}:
+            return [{{ ', '.join(property_information.equivalent_properties_descriptor_names) }}]
         return []
     {% endif %}
-    {% if prop.disjoint_properties|length > 0 %}
+    {% if property_information.disjoint_properties|length > 0 %}
 
     @classmethod
     def get_disjoint_properties(cls) -> List[Type[PropertyDescriptor]]:
-        return [{{ ', '.join(prop.disjoint_properties_descriptor_names) }}]
+        return [{{ ', '.join(property_information.disjoint_properties_descriptor_names) }}]
     {% endif %}
-    {% if prop.chain_axioms|length > 0 %}
+    {% if property_information.chain_axioms|length > 0 %}
 
     @classmethod
     def get_chain_axioms(cls) -> List[PropertyChain]:
-        if cls is {{ prop.descriptor_name }}:
+        if cls is {{ property_information.descriptor_name }}:
             return [
-                {% for chain in prop.chain_axioms %}
+                {% for chain in property_information.chain_axioms %}
                 PropertyChain(properties=({{ chain | join(', ') }},)),
                 {% endfor %}
             ]

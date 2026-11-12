@@ -54,8 +54,8 @@ class OwlToPythonConverter:
         :param base_file_name: Base name for the generated files.
         :return: Dictionary of filename to content.
         """
-        gen = CodeGenerator(onto=self.ontology_info)
-        return gen.generate(base_file_name=base_file_name)
+        generator = CodeGenerator(ontology=self.ontology_info)
+        return generator.generate(base_file_name=base_file_name)
 
     def save_to_file(self, *, output_path: str):
         """
@@ -69,5 +69,5 @@ class OwlToPythonConverter:
         ).items():
             with open(
                 os.path.join(os.path.dirname(output_path), name), "w", encoding="utf-8"
-            ) as f:
-                f.write(content)
+            ) as file:
+                file.write(content)
