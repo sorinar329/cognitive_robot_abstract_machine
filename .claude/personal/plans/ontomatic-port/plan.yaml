@@ -49,27 +49,13 @@ items:
   depends_on: []
   status: not_started
   notes: Seed from owl2rl_tbox.py; replaces ClassInfo/PropertyInfo and the rdrs/property_inference files.
-- id: model-compiler
-  branch: model-compiler
-  title: Compile a Terminology into Python modules on krrood.code_generation
-  track: ontomatic-core
-  depends_on:
-  - terminology-model
-  - descriptor-characteristics
-  - descriptor-provenance
-  status: in progress
-  notes: 'Fixes: sufficient conditions as a disjunction, owl:Thing filler, owl:Nothing, hierarchy cycles.
-    The source plan also waits on eql-existential-semantics/correlated-quantifiers, because generated
-    object properties are collections; that EQL work is not tracked here. PR 29 is the direct port of
-    the converter; Terminology still replaces ClassInfo/PropertyInfo. Fix for is_functional in PR 32.'
-  pull_request_number: 29
 - id: abox-loader
   branch: abox-loader
   title: ABox loader as the Algorithm 1 pipeline of step classes
   track: ontomatic-core
   depends_on:
   - owl2rl-consistency-check
-  - model-compiler
+  - ontology-code-generation
   - descriptor-provenance
   status: in progress
   notes: 'Fixes: line_profiler, tqdm and timing inside library code. PR 31 is the direct port; the Algorithm
@@ -80,7 +66,7 @@ items:
   title: OWL 2 RL equality and consistency check on a rule registry
   track: ontomatic-core
   depends_on:
-  - model-compiler
+  - ontology-code-generation
   status: in progress
   pull_request_number: 30
   notes: PR 30 is the direct port; the rule registry is still open.
@@ -111,3 +97,46 @@ items:
     between instances; AttributeEndpoint (class_diagrams/causal_relation.py, Narenvasant) is the class-level
     path. Proposal: the class-level path says which fields to follow and RelationPath is its result on
     instances. Agreed as a later PR; shape not decided.'
+
+- id: ontology-extraction
+  branch: ontology-extraction
+  title: Read an ontology's classes and properties into an information model
+  track: ontomatic-core
+  pull_request_number: 34
+  depends_on: []
+  status: in progress
+  notes: 'Part 1 of 4 replacing PR 29: ClassInfo/PropertyInfo/OntologyInfo, the extractors, NamingRegistry,
+    IsSubClassOrRole. The is_functional fix of PR 32 now belongs here (extraction.py).'
+
+- id: ontology-axioms
+  branch: ontology-axioms
+  title: Classification axioms, individuals of inferred classes and property inference
+  track: ontomatic-core
+  pull_request_number: 35
+  depends_on:
+  - ontology-extraction
+  status: in progress
+  notes: 'Part 2 of 4: axioms.py, AnonymousClass, PropertyDomainAndRangeInference, the descriptor registry
+    and HasProperty.'
+
+- id: ontology-inference
+  branch: ontology-inference
+  title: Infer classification conditions and property types over an ontology
+  track: ontomatic-core
+  pull_request_number: 36
+  depends_on:
+  - ontology-axioms
+  status: in progress
+  notes: 'Part 3 of 4: InferenceEngine (about 1200 lines, one class); dividing it by concern is a later
+    PR.'
+
+- id: ontology-code-generation
+  branch: ontology-code-generation
+  title: Generate Python modules from an ontology
+  track: ontomatic-core
+  pull_request_number: 37
+  depends_on:
+  - ontology-inference
+  status: in progress
+  notes: 'Part 4 of 4: CodeGenerator, the templates and OwlToPythonConverter, with the end-to-end tests.
+    Still the direct port; terminology-model reshapes it.'
