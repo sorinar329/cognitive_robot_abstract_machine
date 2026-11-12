@@ -35,6 +35,36 @@ class UnMonitoredContainerTypeForDescriptor(Exception):
 
 
 @dataclass(kw_only=True)
+class DescriptorNotDeclaredForDomain(DataclassException):
+    """
+    Raised when neither a class nor any class it inherits fields from declares a field
+    managed by a descriptor type.
+    """
+
+    descriptor_type: type
+    """
+    The descriptor type.
+    """
+
+    domain_type: type
+    """
+    The class without such a field.
+    """
+
+    def error_message(self) -> str:
+        return (
+            f"No field of {self.domain_type.__name__} is managed by "
+            f"{self.descriptor_type.__name__}."
+        )
+
+    def suggest_correction(self) -> str:
+        return (
+            f"Declare the field on {self.domain_type.__name__} or on a class it inherits from, "
+            f"and assign a {self.descriptor_type.__name__} to it."
+        )
+
+
+@dataclass(kw_only=True)
 class NoObjectOfIndividualDeclaresProperty(DataclassException):
     """
     Raised when a fact is stored for an individual none of whose objects, its root role
