@@ -1,8 +1,14 @@
+"""
+Tests for extracting object hypotheses from colour blobs in the image.
+"""
+
 from __future__ import annotations
 
 # %% Imports
 
+import cv2
 import numpy as np
+import open3d
 from semantic_digital_twin.world_description.geometry import Color
 
 from robokudo.annotators.image_cluster_extractor import (
@@ -10,6 +16,9 @@ from robokudo.annotators.image_cluster_extractor import (
     ColorRangeBound,
     ImageClusterExtractor,
 )
+from robokudo.annotators.outputs import AnnotatorOutputPerPipelineMap
+from robokudo.pipeline import Pipeline
+from robokudo.types.scene import ObjectHypothesis
 
 # %% Normalized color bounds
 
@@ -141,3 +150,39 @@ class TestHueThresholds:
         )
 
         assert list(mask[0]) == [0, 255]
+
+
+# %% object masks
+
+
+def test_hypothesis_mask_is_the_contour_within_its_region(
+    annotator_output_buffer: AnnotatorOutputPerPipelineMap,
+) -> None:
+    """
+    Each hypothesis keeps the filled contour it was found from as its mask, cut to its
+    region of interest.
+    """
+    pipeline = Pipeline()
+    annotator = ImageClusterExtractor()
+    pipeline.add_child(annotator)
+    pipeline.setup()
+    annotator.depth = np.full((60, 80), 1000, dtype=np.uint16)
+    annotator.camera_intrinsics = open3d.camera.PinholeCameraIntrinsic(
+        80, 60, 100.0, 100.0, 40.0, 30.0
+    )
+    image = np.zeros((60, 80), dtype=np.uint8)
+    triangle = np.array([[10, 10], [60, 15], [20, 50]], dtype=np.int32)
+    cv2.fillConvexPoly(image, triangle, 255)
+    contours, _ = cv2.findContours(image, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    annotator._extract_clusters(np.zeros((60, 80, 3), dtype=np.uint8), contours)
+
+    [hypothesis] = pipeline.cas.filter_annotations_by_type(ObjectHypothesis)
+    region = hypothesis.roi.roi
+    np.testing.assert_array_equal(
+        hypothesis.roi.mask,
+        image[
+            region.pos.y : region.pos.y + region.height,
+            region.pos.x : region.pos.x + region.width,
+        ],
+    )

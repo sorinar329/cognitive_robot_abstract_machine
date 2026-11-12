@@ -8,6 +8,7 @@ All annotation types inherit from the base Annotation class.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from enum import StrEnum
 
 import cv2
 import open3d as o3d
@@ -185,6 +186,60 @@ class Cylinder(Shape):
     geometry: SemDTCylinder = field(default_factory=SemDTCylinder)
     """
     SemDT cylinder geometry represented by this annotation
+    """
+
+
+class FootprintShape(StrEnum):
+    """
+    The shapes an object's footprint on the table is told apart as.
+    """
+
+    TRIANGLE = "triangle"
+    """
+    Three corners; fills half of the smallest rectangle around it.
+    """
+
+    CIRCLE = "circle"
+    """
+    No corners.
+    """
+
+    SQUARE = "square"
+    """
+    Four corners, about as long as it is wide.
+    """
+
+    RECTANGLE = "rectangle"
+    """
+    Four corners, clearly longer than it is wide.
+    """
+
+
+@dataclass
+class Footprint(Annotation):
+    """
+    The outline an object leaves on the table it stands on, seen from straight above.
+    """
+
+    shape: FootprintShape = FootprintShape.SQUARE
+    """
+    The shape of the outline.
+    """
+
+    length: float = 0.0
+    """
+    The longer side of the smallest rectangle around the outline, in metres.
+    """
+
+    width: float = 0.0
+    """
+    The shorter side of the smallest rectangle around the outline, in metres.
+    """
+
+    centre: list[float] = field(default_factory=list)
+    """
+    The middle of the object standing on the footprint, in the camera's frame, in
+    metres.
     """
 
 

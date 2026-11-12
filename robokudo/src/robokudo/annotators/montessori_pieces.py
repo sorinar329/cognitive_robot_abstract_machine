@@ -2,8 +2,8 @@
 Naming the pieces of the Montessori shape-sorting set on Tracy's table.
 
 The set has four pieces in two colours: a cyan cube and cylinder and a yellow
-rectangular and triangular prism. Every object hypothesis the shape estimator fitted
-is named by its colour and its fitted shape, and given a pose at its centre.
+rectangular and triangular prism. Every object hypothesis with a footprint is named by
+its colour and the shape of its footprint, and given a pose at its centre.
 """
 
 from __future__ import annotations
@@ -18,10 +18,9 @@ from py_trees.common import Status
 from robokudo.annotators.core import BaseAnnotator
 from robokudo.types.annotation import (
     Classification,
-    Cuboid,
-    Cylinder,
+    Footprint,
+    FootprintShape,
     PoseAnnotation,
-    Shape,
 )
 from robokudo.types.scene import ObjectHypothesis
 
@@ -50,7 +49,7 @@ class MontessoriPiece(StrEnum):
 
     TRIANGLE = "triangle"
     """
-    The yellow triangular prism, which the shape estimator fits as a nearly cubic box.
+    The yellow triangular prism.
     """
 
 
@@ -60,10 +59,8 @@ class MontessoriPiece(StrEnum):
 class MontessoriPieceAnnotator(BaseAnnotator):
     """
     Names every object hypothesis that is one of the Montessori pieces, by its colour
-    and its fitted shape, and adds a pose at the centre of its points.
-
-    Hypotheses that are not a piece, such as the board or the robot, are left as they
-    are.
+    and the shape of its :class:`~robokudo.types.annotation.Footprint`, and poses it at
+    the footprint's centre. Hypotheses that are no piece are left as they are.
     """
 
     class Descriptor(BaseAnnotator.Descriptor):
@@ -83,10 +80,8 @@ class MontessoriPieceAnnotator(BaseAnnotator):
                 """The OpenCV hues (0 to 180) the cyan pieces cover."""
                 self.minimum_saturation: int = 100
                 """How saturated a hypothesis' median colour has to be to be a piece."""
-                self.rectangle_elongation: float = 1.5
-                """A yellow box whose longest side is this many times its shortest is the rectangular prism; the triangular prism fits a nearly cubic box."""
                 self.largest_extent: float = 0.08
-                """The longest side a fitted shape may have to be a piece, in metres."""
+                """The longest a footprint may be to be a piece's, in metres."""
 
         parameters = Parameters()
 
@@ -100,7 +95,10 @@ class MontessoriPieceAnnotator(BaseAnnotator):
     def update(self) -> Status:
         named = 0
         for hypothesis in self.get_cas().filter_annotations_by_type(ObjectHypothesis):
-            piece = self.piece_of(hypothesis)
+            footprints = [a for a in hypothesis.annotations if isinstance(a, Footprint)]
+            if not footprints:
+                continue
+            piece = self.identify_piece(hypothesis, footprints[0])
             if piece is None:
                 continue
             hypothesis.annotations.append(
@@ -111,45 +109,47 @@ class MontessoriPieceAnnotator(BaseAnnotator):
                     source=type(self).__name__,
                 )
             )
-            hypothesis.annotations.append(self.pose_of(hypothesis.points))
+            hypothesis.annotations.append(self.pose_at(footprints[0].centre))
             named += 1
         self.feedback_message = f"Named {named} Montessori pieces"
         return Status.SUCCESS
 
-    def piece_of(self, hypothesis: ObjectHypothesis) -> MontessoriPiece | None:
+    def identify_piece(
+        self, hypothesis: ObjectHypothesis, footprint: Footprint
+    ) -> MontessoriPiece | None:
         """
-        :param hypothesis: An object hypothesis, possibly with a fitted shape.
+        :param hypothesis: An object hypothesis.
+        :param footprint: The hypothesis' footprint.
         :return: The piece the hypothesis is, or None if it is none of them.
         """
         parameters = self.descriptor.parameters
-        shapes = [a for a in hypothesis.annotations if isinstance(a, Shape)]
-        if not shapes or not self._has_colours(hypothesis.points):
+        if not self._has_colours(hypothesis.points):
             return None
-        [shape] = shapes[:1]
-        extents = self._extents_of(shape)
-        if extents is None or max(extents) > parameters.largest_extent:
+        if footprint.length > parameters.largest_extent:
             return None
         hue, saturation = self._median_hue_and_saturation(hypothesis.points)
         if saturation < parameters.minimum_saturation:
             return None
         if parameters.cyan_hues[0] <= hue <= parameters.cyan_hues[1]:
-            if isinstance(shape, Cylinder):
-                return MontessoriPiece.CIRCLE
-            return MontessoriPiece.SQUARE
+            return {
+                FootprintShape.SQUARE: MontessoriPiece.SQUARE,
+                FootprintShape.CIRCLE: MontessoriPiece.CIRCLE,
+            }.get(footprint.shape)
         if parameters.yellow_hues[0] <= hue <= parameters.yellow_hues[1]:
-            if max(extents) / min(extents) >= parameters.rectangle_elongation:
-                return MontessoriPiece.RECTANGLE
-            return MontessoriPiece.TRIANGLE
+            return {
+                FootprintShape.RECTANGLE: MontessoriPiece.RECTANGLE,
+                FootprintShape.TRIANGLE: MontessoriPiece.TRIANGLE,
+            }.get(footprint.shape)
         return None
 
     @staticmethod
-    def pose_of(points: o3d.geometry.PointCloud) -> PoseAnnotation:
+    def pose_at(centre: list[float]) -> PoseAnnotation:
         """
-        :param points: The points of a piece, in the camera's frame.
-        :return: A pose at their centre, turned as the camera is.
+        :param centre: The middle of a piece, in the camera's frame.
+        :return: A pose there, turned as the camera is.
         """
         pose = PoseAnnotation()
-        pose.translation = list(np.asarray(points.points).mean(axis=0))
+        pose.translation = list(centre)
         pose.rotation = [0.0, 0.0, 0.0, 1.0]
         pose.source = MontessoriPieceAnnotator.__name__
         return pose
@@ -165,19 +165,6 @@ class MontessoriPieceAnnotator(BaseAnnotator):
             and len(points.points) > 0
             and points.has_colors()
         )
-
-    @staticmethod
-    def _extents_of(shape: Shape) -> list[float] | None:
-        """
-        :param shape: A fitted shape.
-        :return: The lengths of its sides, or None for a shape that is no piece.
-        """
-        if isinstance(shape, Cuboid):
-            scale = shape.geometry.scale
-            return [scale.x, scale.y, scale.z]
-        if isinstance(shape, Cylinder):
-            return [shape.geometry.width, shape.geometry.width, shape.geometry.height]
-        return None
 
     @staticmethod
     def _median_hue_and_saturation(

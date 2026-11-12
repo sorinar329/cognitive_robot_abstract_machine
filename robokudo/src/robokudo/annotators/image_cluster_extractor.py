@@ -397,9 +397,9 @@ class ImageClusterExtractor(BaseAnnotator):
         """
         clusters = ImageClusters()
         for contour_index, contour in enumerate(contours):
-            contour_mask = np.zeros_like(self.depth, dtype=np.uint8)
+            filled_contour = np.zeros_like(self.depth, dtype=np.uint8)
             cv2.drawContours(
-                image=contour_mask,
+                image=filled_contour,
                 contours=[contour],
                 contourIdx=-1,
                 color=255,
@@ -409,7 +409,7 @@ class ImageClusterExtractor(BaseAnnotator):
             # Erosion removes background near imperfectly aligned object boundaries.
             kernel = np.ones((erosion_kernel_size, erosion_kernel_size), np.uint8)
             contour_mask = cv2.erode(
-                contour_mask,
+                filled_contour,
                 kernel,
                 iterations=self.descriptor.parameters.erosion_iterations,
             )
@@ -431,6 +431,9 @@ class ImageClusterExtractor(BaseAnnotator):
             object_hypothesis.roi.roi.pos.y = top
             object_hypothesis.roi.roi.width = width
             object_hypothesis.roi.roi.height = height
+            object_hypothesis.roi.mask = filled_contour[
+                top : top + height, left : left + width
+            ]
 
             clusters.object_hypotheses.append(object_hypothesis)
             self.get_cas().annotations.append(object_hypothesis)
