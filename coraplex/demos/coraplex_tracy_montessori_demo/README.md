@@ -74,8 +74,8 @@ occupying roughly `x` 0.03 to 0.23. The layout follows the ICRA branch's
 
 | | x | y | z |
 |---|---|---|---|
-| pieces (start) | 0.55 | 0.1 / 0.2 / 0.3 / 0.4 | on the table |
-| board (centre) | 0.85 | 0.0 | on the table, 8 cm tall, drawers facing the robot |
+| pieces (start) | 0.79 | 0.2 / 0.3 / 0.4 / 0.5 | on the table |
+| board (centre) | 1.035 | 0.16 | on the table, 8 cm tall, drawers facing the robot |
 | release poses | over each hole | | 1 cm above the lid |
 
 Holes, as read off the mesh, in the board's frame:

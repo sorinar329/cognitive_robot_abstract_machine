@@ -228,25 +228,25 @@ class MontessoriScene:
     rather than guessed.
     """
 
-    board_x: float = 0.85
+    board_x: float = 1.035
     """
     How far in front of Tracy the shape-sorting board stands, straight ahead of it, with
     its drawers facing the robot.
     """
 
-    board_y: float = 0.0
+    board_y: float = 0.16
     """
     Where the board stands sideways.
     """
 
-    piece_row_x: float = 0.55
+    piece_row_x: float = 0.79
     """
     How far in front of Tracy the loose pieces stand: nearer than the board, and far
     enough from it that reaching for a piece does not sweep the arm through the drawer
     handles.
     """
 
-    piece_row_start_y: float = 0.1
+    piece_row_start_y: float = 0.2
     """
     Where the first loose piece stands sideways, on the side of the sorting arm.
     """
@@ -260,6 +260,19 @@ class MontessoriScene:
     resting_clearance: float = 0.001
     """
     Gap left between a piece and what it stands on, so it rests rather than intersects.
+    """
+
+    pieces_raised_by: float = 0.0
+    """
+    How far above where they would rest the pieces are stood, so the gripper reaches for
+    them that much higher; an offset for a real robot whose gripper ends lower than its
+    model says.
+    """
+
+    board_raised_by: float = 0.0
+    """
+    How far above the table the board is stood, so pieces are let go of that much
+    higher over it.
     """
 
     pieces: ShapeSortingPieceSet = field(default_factory=ShapeSortingPieceSet)
@@ -366,7 +379,9 @@ class MontessoriScene:
                 parent_T_connection_expression=HomogeneousTransformationMatrix.from_xyz_rpy(
                     self.board_x,
                     self.board_y,
-                    self.table_top_z - self.shape_sorting_board.geometry.bottom,
+                    self.table_top_z
+                    + self.board_raised_by
+                    - self.shape_sorting_board.geometry.bottom,
                 ),
             )
         )
@@ -405,6 +420,7 @@ class MontessoriScene:
                     row_y,
                     self.table_top_z
                     + self.resting_clearance
+                    + self.pieces_raised_by
                     + self.pieces.piece_height / 2,
                 ),
             )
@@ -438,6 +454,12 @@ class ShapeSortingPlan:
     than being pushed against the lid.
     """
 
+    parks_between_pieces: bool = False
+    """
+    Whether the arms are parked after every piece is let go of, before the next one is
+    reached for.
+    """
+
     def build(self, context: StatechartContext) -> Statechart:
         """
         The plan begins by parking the arms: a simulated Tracy starts parked already,
@@ -448,7 +470,8 @@ class ShapeSortingPlan:
         """
         robot = context.require_extension(RobotAccess).robot
         actions = [ParkArmsAction(arms=robot.all_arms)]
-        for piece, hole in self.scene.holes_of_pieces.items():
+        pieces = list(self.scene.holes_of_pieces.items())
+        for index, (piece, hole) in enumerate(pieces):
             [grasp] = piece.grasp_candidates()
             actions.append(PickUpAction(grasp=grasp, arm=self.scene.sorting_arm(robot)))
             actions.append(
@@ -457,6 +480,8 @@ class ShapeSortingPlan:
                     target_location=self.release_pose_over(hole, context.world),
                 )
             )
+            if self.parks_between_pieces and index < len(pieces) - 1:
+                actions.append(ParkArmsAction(arms=robot.all_arms))
         actions.append(ParkArmsAction(arms=robot.all_arms))
         statechart = Statechart(context=context)
         statechart.add_node(Sequence(nodes=actions))

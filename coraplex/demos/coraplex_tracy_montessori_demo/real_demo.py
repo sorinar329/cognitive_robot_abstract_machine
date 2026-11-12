@@ -36,7 +36,7 @@ from coraplex.robot_plans.plan_transformations import (
 )
 from coraplex.robotiq_grippers import DriveRobotiqGrippersThroughTheirActionServers
 from cramph.context import StatechartContext
-from demo import DemoRunner, ShapeSortingPlan
+from demo import DemoRunner, MontessoriScene, ShapeSortingPlan
 from semantic_digital_twin.adapters.ros.world_fetcher import fetch_world_from_service
 from semantic_digital_twin.adapters.ros.world_synchronizer import WorldSynchronizer
 from semantic_digital_twin.robots.tracy import Tracy
@@ -113,6 +113,7 @@ class RealRunner(DemoRunner):
     def run(self) -> None:
         with self.running_robot() as robot:
             self.scene.populate(robot.world)
+            input("World loaded; check it in RViz, then press Enter to run the plan.")
             [tracy] = robot.world.get_semantic_annotations_by_type(Tracy)
             executor = RealRobotPlanExecutor(
                 StatechartContext.with_extensions(robot.world, [RobotAccess(tracy)]),
@@ -120,7 +121,11 @@ class RealRunner(DemoRunner):
                 collision_avoidance=False,
                 plan_adaptations=self.plan_adaptations(),
             )
-            executor.compile(ShapeSortingPlan(scene=self.scene).build(executor.context))
+            executor.compile(
+                ShapeSortingPlan(scene=self.scene, parks_between_pieces=True).build(
+                    executor.context
+                )
+            )
             executor.execute()
             executor.close()
 
@@ -143,11 +148,13 @@ class RealRunner(DemoRunner):
 
         :return: The running robot, for as long as the context lasts.
         """
-        controllers = subprocess.Popen(
-            ["ros2", "launch", "giskardpy_ros", self.giskard_launch_file],
-            start_new_session=True,
-        )
-        time.sleep(self.controller_start_up_time.total_seconds())
+        # Giskard is launched in its own process for now:
+        # ros2 launch giskardpy_ros giskardpy_tracy_velocity.launch.py
+        # controllers = subprocess.Popen(
+        #     ["ros2", "launch", "giskardpy_ros", self.giskard_launch_file],
+        #     start_new_session=True,
+        # )
+        # time.sleep(self.controller_start_up_time.total_seconds())
         try:
             rclpy.init()
             node = rclpy.create_node(self.node_name)
@@ -163,12 +170,16 @@ class RealRunner(DemoRunner):
             WorldSynchronizer(_world=world, node=node)
             yield RunningRobot(world=world, node=node)
         finally:
-            os.killpg(os.getpgid(controllers.pid), signal.SIGTERM)
-            controllers.wait()
+            pass
+            # os.killpg(os.getpgid(controllers.pid), signal.SIGTERM)
+            # controllers.wait()
 
 
 # %% entry point
 
 
 if __name__ == "__main__":
-    RealRunner().run()
+    RealRunner(
+        scene=MontessoriScene(pieces_raised_by=0.1, board_raised_by=0.1),
+        giskard_launch_file=TracyGiskardLaunchFile.VELOCITY,
+    ).run()

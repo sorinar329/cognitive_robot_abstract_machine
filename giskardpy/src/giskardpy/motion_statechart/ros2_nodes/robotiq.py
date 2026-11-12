@@ -26,6 +26,7 @@ from semantic_digital_twin.datastructures.robots.gripper_configuration import (
 from semantic_digital_twin.robots.robot_part_mixins import HasTwoFingers
 from semantic_digital_twin.robots.robotiq_85_gripper import (
     HasParallelGripperCommandServer,
+    Robotiq85Gripper,
 )
 
 logger = logging.getLogger(__name__)
@@ -57,7 +58,9 @@ class RobotiqGripperActionServerTask(
 
     target_position: float
     """
-    How far apart the fingertips' facing surfaces are to stand, in metres.
+    Where the driver is to bring the gripper: the angle of the knuckle joint in radians
+    for a Robotiq 2F-85, whose driver commands that joint, and how far apart the
+    fingertips' facing surfaces are to stand, in metres, for any other gripper.
     """
 
     target_velocity: float = 10.0
@@ -104,11 +107,16 @@ class RobotiqGripperActionServerTask(
             return MoveFingers.moving_gripper_to(
                 configuration, stall_minimum_time, tolerate_stall
             )
+        joint_state = configuration.joint_state
+        if isinstance(end_effector, Robotiq85Gripper):
+            target_position = joint_state.target_values[
+                joint_state.connections.index(end_effector.knuckle_joint)
+            ]
+        else:
+            target_position = end_effector.separation_at(joint_state)
         return cls(
-            action_topic=end_effector.action_topic_serving(
-                configuration.joint_state.state_type
-            ),
-            target_position=end_effector.separation_at(configuration.joint_state),
+            action_topic=end_effector.action_topic_serving(joint_state.state_type),
+            target_position=target_position,
         )
 
     def build_action_goal(self) -> None:
