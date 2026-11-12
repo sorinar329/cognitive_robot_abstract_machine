@@ -27,6 +27,8 @@ from krrood.entity_query_language.verbalization._example_domain import (
     WorksIn,
 )
 from krrood.inheritance_path_length import InheritancePathLength
+from krrood.ontomatic.anonymous_class import NumberOfValuesOfClass
+from krrood.ontomatic.property_descriptor.property_descriptor import HasProperty
 from krrood.patterns.role_predicates import IsSameSemanticEntity, IsSubClassOrRole
 
 results: tuple[VerbalizationResult, ...] = (
@@ -53,6 +55,10 @@ results: tuple[VerbalizationResult, ...] = (
         InheritancePathLength,
         "the inheritance path length between a child class and a parent class",
     ),
+    VerbalizationResult(
+        NumberOfValuesOfClass, "the number of values of class of a values and object"
+    ),
+    VerbalizationResult(HasProperty, "an instance has PropertyDescriptor"),
     VerbalizationResult(
         IsSameSemanticEntity,
         "a first entity is the same semantic entity as a second entity",
