@@ -25,7 +25,8 @@ def ontology_with(*properties: PropertyInfo) -> OntologyInfo:
     return OntologyInfo(
         graph=rdflib.Graph(),
         original_properties={
-            property_info.name: property_info for property_info in properties
+            property_information.name: property_information
+            for property_information in properties
         },
     )
 
@@ -50,5 +51,7 @@ def test_a_subproperty_without_a_domain_takes_the_domain_of_its_superproperty():
         ),
     )
     has_cheese = ontology.properties["hasCheese"]
-    PropertyDomainAndRangeInference(property_info=has_cheese, onto=ontology).complete()
+    PropertyDomainAndRangeInference(
+        property_information=has_cheese, ontology=ontology
+    ).complete()
     assert (has_cheese.domains, has_cheese.ranges) == (["Pizza"], ["Topping"])

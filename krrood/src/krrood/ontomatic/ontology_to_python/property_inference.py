@@ -24,12 +24,12 @@ class PropertyDomainAndRangeInference:
     of the ontology when nothing relates it to a class.
     """
 
-    property_info: PropertyInfo
+    property_information: PropertyInfo
     """
     The property whose domains and ranges are completed.
     """
 
-    onto: OntologyInfo
+    ontology: OntologyInfo
     """
     The ontology the property belongs to.
     """
@@ -40,9 +40,10 @@ class PropertyDomainAndRangeInference:
         new.
         """
         while self._add_new(
-            values=self.property_info.domains, conclusions=self.inferred_domains()
+            values=self.property_information.domains,
+            conclusions=self.inferred_domains(),
         ) | self._add_new(
-            values=self.property_info.ranges, conclusions=self.inferred_ranges()
+            values=self.property_information.ranges, conclusions=self.inferred_ranges()
         ):
             pass
 
@@ -66,7 +67,7 @@ class PropertyDomainAndRangeInference:
         """
         The property as the ontology declares it.
         """
-        return self.onto.original_properties[self.property_info.name]
+        return self.ontology.original_properties[self.property_information.name]
 
     @property
     def has_related_properties(self) -> bool:
@@ -74,37 +75,42 @@ class PropertyDomainAndRangeInference:
         Whether the property has superproperties, inverses or equivalent properties.
         """
         return bool(
-            self.property_info.superproperties
-            or self.property_info.inverses
-            or self.property_info.equivalent_properties
+            self.property_information.superproperties
+            or self.property_information.inverses
+            or self.property_information.equivalent_properties
         )
 
     def inferred_domains(self) -> Iterator[list[str]]:
         """
         :return: The domains each applicable rule concludes.
         """
-        info = self.property_info
-        if len(info.equivalent_properties) == 1:
-            yield self.onto.properties[info.equivalent_properties[0]].domains
-        if len(info.inverses) == 1:
-            yield self.onto.properties[info.inverses[0]].ranges
+        property_information = self.property_information
+        if len(property_information.equivalent_properties) == 1:
+            yield self.ontology.properties[
+                property_information.equivalent_properties[0]
+            ].domains
+        if len(property_information.inverses) == 1:
+            yield self.ontology.properties[property_information.inverses[0]].ranges
         if self.declared.domains:
             return
         inverses_declare_no_ranges = all(
-            not self.onto.original_properties[inverse].ranges
-            for inverse in info.inverses
+            not self.ontology.original_properties[inverse].ranges
+            for inverse in property_information.inverses
         )
-        if inverses_declare_no_ranges and info.superproperties:
+        if inverses_declare_no_ranges and property_information.superproperties:
             yield list(
                 dict.fromkeys(
                     domain
-                    for superproperty in info.superproperties
-                    for domain in self.onto.properties[superproperty].domains
+                    for superproperty in property_information.superproperties
+                    for domain in self.ontology.properties[superproperty].domains
                 )
             )
         if not self.has_related_properties:
-            yield [self.onto.base_cls_name]
-        if inverses_declare_no_ranges and not info.equivalent_properties:
+            yield [self.ontology.base_class_name]
+        if (
+            inverses_declare_no_ranges
+            and not property_information.equivalent_properties
+        ):
             yield self.declared_values_of_superproperties(
                 values_of=lambda superproperty: superproperty.domains
             )
@@ -113,23 +119,28 @@ class PropertyDomainAndRangeInference:
         """
         :return: The ranges each applicable rule concludes.
         """
-        info = self.property_info
-        if info.equivalent_properties:
-            yield self.onto.properties[info.equivalent_properties[0]].ranges
-        if info.inverses:
-            yield self.onto.properties[info.inverses[0]].domains
+        property_information = self.property_information
+        if property_information.equivalent_properties:
+            yield self.ontology.properties[
+                property_information.equivalent_properties[0]
+            ].ranges
+        if property_information.inverses:
+            yield self.ontology.properties[property_information.inverses[0]].domains
         if self.declared.ranges:
             return
         inverses_declare_no_domains = all(
-            not self.onto.original_properties[inverse].domains
-            for inverse in info.inverses
+            not self.ontology.original_properties[inverse].domains
+            for inverse in property_information.inverses
         )
-        if inverses_declare_no_domains and not info.equivalent_properties:
+        if (
+            inverses_declare_no_domains
+            and not property_information.equivalent_properties
+        ):
             yield self.declared_values_of_superproperties(
                 values_of=lambda superproperty: superproperty.ranges
             )
         if not self.has_related_properties:
-            yield [self.onto.base_cls_name]
+            yield [self.ontology.base_class_name]
 
     def declared_values_of_superproperties(
         self, *, values_of: Callable[[PropertyInfo], list[str]]
@@ -140,6 +151,8 @@ class PropertyDomainAndRangeInference:
         """
         return [
             value
-            for superproperty in reversed(self.property_info.sorted_superproperties)
-            for value in values_of(self.onto.original_properties[superproperty])
+            for superproperty in reversed(
+                self.property_information.sorted_superproperties
+            )
+            for value in values_of(self.ontology.original_properties[superproperty])
         ]
