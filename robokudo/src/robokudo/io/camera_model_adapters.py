@@ -55,9 +55,13 @@ class RosCameraModelAdapter:
             distortion = NoCameraDistortion()
         elif camera_info.distortion_model in distortion_models:
             distortion_model = distortion_models[camera_info.distortion_model]
+            coefficients = list(camera_info.d)
+            # Some drivers, such as Orbbec's, pad plumb_bob with zero coefficients.
+            if distortion_model.value == "plumb_bob" and not any(coefficients[5:]):
+                coefficients = coefficients[:5]
             distortion = CameraDistortion.from_ordered_coefficients(
                 model=distortion_model,
-                coefficients=camera_info.d,
+                coefficients=coefficients,
             )
         else:
             raise UnsupportedCameraDistortionModel(

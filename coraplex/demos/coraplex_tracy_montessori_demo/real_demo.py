@@ -180,6 +180,6 @@ class RealRunner(DemoRunner):
 
 if __name__ == "__main__":
     RealRunner(
-        scene=MontessoriScene(pieces_raised_by=0.1, board_raised_by=0.1),
+        scene=MontessoriScene(pieces_raised_by=0.04, board_raised_by=0.04),
         giskard_launch_file=TracyGiskardLaunchFile.VELOCITY,
     ).run()
