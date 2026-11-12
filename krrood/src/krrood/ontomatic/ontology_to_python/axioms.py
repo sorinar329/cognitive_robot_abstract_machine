@@ -110,7 +110,7 @@ class PropertyAxiomInfo(AxiomInfo):
     The class the condition is a condition of.
     """
 
-    onto: OntologyInfo
+    ontology: OntologyInfo
     """
     The ontology the property is declared in.
     """
@@ -367,10 +367,10 @@ class HasValueAxiomInfo(PropertyAxiomInfo):
         """
         Whether the attribute of the property holds a set of values.
         """
-        property_info = self.onto.properties[self.property_name]
+        property_information = self.ontology.properties[self.property_name]
         return (
-            property_info.type == PropertyType.OBJECT_PROPERTY
-            and not property_info.is_functional
+            property_information.type == PropertyType.OBJECT_PROPERTY
+            and not property_information.is_functional
         )
 
     @property
