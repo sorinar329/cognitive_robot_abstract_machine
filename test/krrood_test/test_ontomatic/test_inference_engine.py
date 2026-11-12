@@ -26,7 +26,7 @@ def ontology() -> OntologyInfo:
         Path(__file__).parent.parent / "dataset" / "ontologies" / "inference.ttl"
     )
     ontology = OntologyExtractor(graph=graph).extract()
-    engine = InferenceEngine(onto=ontology)
+    engine = InferenceEngine(ontology=ontology)
     engine.compute_ancestors()
     engine.infer_properties()
     engine.apply_predefined_overrides()
@@ -45,7 +45,7 @@ def test_a_definition_becomes_the_classification_condition_of_its_class(ontology
     restriction = SomeValuesFromAxiomInfo(
         property_name="takesCourse",
         for_class="Learner",
-        onto=ontology,
+        ontology=ontology,
         on_class="Course",
     )
     assert ontology.classes["Learner"].axioms_python == restriction.conditions_python()
