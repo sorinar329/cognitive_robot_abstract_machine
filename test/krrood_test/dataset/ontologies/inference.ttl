@@ -1,0 +1,23 @@
+@prefix : <http://example.org/inference#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+<http://example.org/inference> a owl:Ontology .
+
+:Person a owl:Class .
+:Student a owl:Class ; rdfs:subClassOf :Person .
+:GraduateStudent a owl:Class ; rdfs:subClassOf :Student .
+:Course a owl:Class .
+:GraduateCourse a owl:Class ; rdfs:subClassOf :Course .
+
+:takesCourse a owl:ObjectProperty ;
+    rdfs:domain :Student ;
+    rdfs:range :Course .
+:takesGraduateCourse a owl:ObjectProperty ;
+    rdfs:subPropertyOf :takesCourse ;
+    rdfs:range :GraduateCourse .
+
+:Learner a owl:Class ;
+    owl:equivalentClass [ a owl:Restriction ;
+        owl:onProperty :takesCourse ;
+        owl:someValuesFrom :Course ] .

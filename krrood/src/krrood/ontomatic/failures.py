@@ -35,6 +35,47 @@ class UnMonitoredContainerTypeForDescriptor(Exception):
 
 
 @dataclass(kw_only=True)
+class UnionOfAnonymousClassesAsFiller(DataclassException):
+    """
+    Raised when a restriction restricts the values of a property to a union that holds
+    an anonymous class expression, which cannot be checked as a tuple of classes.
+    """
+
+    union_name: str
+    """
+    The name of the union.
+    """
+
+    def error_message(self) -> str:
+        return (
+            f"The union {self.union_name} restricts the values of a property but holds an "
+            f"anonymous class expression."
+        )
+
+    def suggest_correction(self) -> str:
+        return "Name the anonymous class expression in the ontology."
+
+
+@dataclass(kw_only=True)
+class UntranslatedComplement(DataclassException):
+    """
+    Raised when an intersection holds the complement of something other than a named
+    class or a restriction.
+    """
+
+    complemented_name: str
+    """
+    The name of the complemented class expression.
+    """
+
+    def error_message(self) -> str:
+        return f"The complement of {self.complemented_name} cannot be translated."
+
+    def suggest_correction(self) -> str:
+        return "Complement a named class or a restriction."
+
+
+@dataclass(kw_only=True)
 class DescriptorNotDeclaredForDomain(DataclassException):
     """
     Raised when neither a class nor any class it inherits fields from declares a field
