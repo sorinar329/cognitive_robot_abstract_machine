@@ -19,6 +19,11 @@ tracks:
   name: Integration branch
   wave: first-task
   description: The fork branch every experiment pull request merges into.
+- id: core
+  name: Core changes
+  wave: first-task
+  description: Upstream pull requests from the fork to main that the first experiment needs; each rebuilt
+    from main, with the old branch hsr-robocasa-tasks as reference.
 - id: first-experiment
   name: First experiment
   wave: first-task
@@ -45,12 +50,17 @@ items:
   track: first-experiment
   depends_on:
   - integration-branch
+  - robocasa-loader
+  - gcs-free-point
+  - collision-rule-lookup
+  - hsr-arm-reach
+  - path-navigation-margin
+  - pick-up-lift
   status: not started
-  notes: 'First task; builds the runner the later tasks reuse. Start clean from main; the old branch
-    hsr-robocasa-tasks is a read-only reference for when something goes wrong. Each core change the task
-    needs (see that branch for candidates: GCS free-point, collision rule lookup, path navigation margin,
-    RoboCasa loader) becomes its own plan item and upstream pull request via /add-plan-item, and this
-    item depends on it.'
+  notes: 'First task; builds the runner the later tasks reuse. Start clean from main; the old branch hsr-robocasa-tasks
+    is a read-only reference for when something goes wrong. Each core change the task needs (see that
+    branch for candidates: GCS free-point, collision rule lookup, path navigation margin, RoboCasa loader)
+    becomes its own plan item and upstream pull request via /add-plan-item, and this item depends on it.'
 - id: pick-place-cabinet-to-counter
   title: HSR PickPlaceCabinetToCounter
   branch: hsr-pick-place-cabinet-to-counter
@@ -79,3 +89,59 @@ items:
   depends_on:
   - pick-place-sink-to-counter
   status: not started
+
+- id: robocasa-loader
+  title: Lower RoboCasa kitchens and weigh bodies as RoboCasa does; Floor annotation, named fixtures,
+    task joint positions kept
+  branch: robocasa-loader-fidelity
+  track: core
+  depends_on: []
+  status: not started
+  notes: semantic_digital_twin loader and layout. Old commits 251bef7f, 8b33ce21, 61ada88d, 9bc8c0f2.
+    Upstream PR from the fork to main, built clean from main with its own tests.
+
+- id: gcs-free-point
+  title: 'GCS: ask whether a point is free, find the nearest free point, leave bodies out'
+  branch: gcs-nearest-free-point
+  track: core
+  depends_on: []
+  status: not started
+  notes: semantic_digital_twin graph_of_convex_sets. Old commit 4a0fe701. Upstream PR from the fork to
+    main, built clean from main with its own tests.
+
+- id: collision-rule-lookup
+  title: Look up a body's external collision rule; tell a robot inside a buffer zone
+  branch: collision-rule-lookup
+  track: core
+  depends_on: []
+  status: not started
+  notes: semantic_digital_twin collision_checking. Old commit 2be976e0. Upstream PR from the fork to main,
+    built clean from main with its own tests.
+
+- id: hsr-arm-reach
+  title: Tell how far ahead the HSR's arm reaches a pose, and with which joints
+  branch: hsr-arm-reach
+  track: core
+  depends_on: []
+  status: not started
+  notes: semantic_digital_twin robots. Old commit 38afab6b. Upstream PR from the fork to main, built clean
+    from main with its own tests.
+
+- id: path-navigation-margin
+  title: Path navigation keeps the base's collision margin and copes with a settled base
+  branch: navigation-keeps-base-margin
+  track: core
+  depends_on: []
+  status: not started
+  notes: coraplex navigation action. Old commit 828cafde. Upstream PR from the fork to main, built clean
+    from main with its own tests.
+
+- id: pick-up-lift
+  title: Lift a picked-up object straight up from where the hand closed; stop within a tolerance of the
+    goals
+  branch: pick-up-lifts-straight-up
+  track: core
+  depends_on: []
+  status: not started
+  notes: coraplex pick-up and placing. Old commits 4ea65b3b, 298edfed. Upstream PR from the fork to main,
+    built clean from main with its own tests.

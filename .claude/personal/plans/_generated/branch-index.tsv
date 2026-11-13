@@ -4,6 +4,12 @@ hsr-pick-place-cabinet-to-counter	hsr-robocasa-experiments
 hsr-pick-place-counter-to-sink	hsr-robocasa-experiments
 hsr-pick-place-sink-to-counter	hsr-robocasa-experiments
 hsr-pick-place-counter-to-microwave	hsr-robocasa-experiments
+robocasa-loader-fidelity	hsr-robocasa-experiments
+gcs-nearest-free-point	hsr-robocasa-experiments
+collision-rule-lookup	hsr-robocasa-experiments
+hsr-arm-reach	hsr-robocasa-experiments
+navigation-keeps-base-margin	hsr-robocasa-experiments
+pick-up-lifts-straight-up	hsr-robocasa-experiments
 wind-turbine-annotation	offshore-wind-farm-demo
 offshore-wind-farm-world	offshore-wind-farm-demo
 wind-farm-simulation	offshore-wind-farm-demo
