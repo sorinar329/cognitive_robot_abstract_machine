@@ -1,0 +1,79 @@
+schema_version: 1
+id: hsr-robocasa-experiments
+title: HSR RoboCasa experiments, one task at a time
+description: Rebuilds the HSR RoboCasa experiments from a clean main, one task per pull request into the
+  fork's integration branch hsr-robocasa. Changes to core code (krrood, semantic_digital_twin, coraplex,
+  giskardpy) are not part of an experiment pull request; each goes upstream as its own pull request,
+  added to this plan when a task first needs it.
+default_repository: sorinar329/cognitive_robot_abstract_machine
+tracking_issue: 38
+waves:
+- id: first-task
+  name: 'Wave 1: First task'
+  description: The integration branch and the first HSR RoboCasa task, with the core changes it needs.
+- id: more-tasks
+  name: 'Wave 2: More tasks'
+  description: The remaining tasks, chained by difficulty.
+tracks:
+- id: integration
+  name: Integration branch
+  wave: first-task
+  description: The fork branch every experiment pull request merges into.
+- id: first-experiment
+  name: First experiment
+  wave: first-task
+  description: The first HSR RoboCasa task, which builds the runner the others reuse.
+- id: experiments
+  name: Experiments
+  wave: more-tasks
+  description: One HSR RoboCasa task per pull request into hsr-robocasa-integration.
+items:
+- id: integration-branch
+  title: Create hsr-robocasa-integration on the fork, fresh from main
+  branch: hsr-robocasa-integration
+  track: integration
+  depends_on: []
+  status: not started
+  notes: 'The fork-only branch experiment pull requests merge into; it never goes upstream. Keep it merged
+    with upstream main. Core branches not yet merged upstream are merged into it so experiments can run,
+    and dropped once upstream has them.'
+- id: pick-place-counter-to-cabinet
+  title: HSR PickPlaceCounterToCabinet and the RoboCasa task runner
+  branch: hsr-pick-place-counter-to-cabinet
+  track: first-experiment
+  depends_on:
+  - integration-branch
+  status: not started
+  notes: 'First task; builds the runner the later tasks reuse. Start clean from main; the old branch
+    hsr-robocasa-tasks is a read-only reference for when something goes wrong. Each core change the task
+    needs (see that branch for candidates: GCS free-point, collision rule lookup, path navigation margin,
+    RoboCasa loader) becomes its own plan item and upstream pull request via /add-plan-item, and this
+    item depends on it.'
+- id: pick-place-cabinet-to-counter
+  title: HSR PickPlaceCabinetToCounter
+  branch: hsr-pick-place-cabinet-to-counter
+  track: experiments
+  depends_on:
+  - pick-place-counter-to-cabinet
+  status: not started
+- id: pick-place-counter-to-sink
+  title: HSR PickPlaceCounterToSink
+  branch: hsr-pick-place-counter-to-sink
+  track: experiments
+  depends_on:
+  - pick-place-cabinet-to-counter
+  status: not started
+- id: pick-place-sink-to-counter
+  title: HSR PickPlaceSinkToCounter, with RoboCasa's verdict on every run
+  branch: hsr-pick-place-sink-to-counter
+  track: experiments
+  depends_on:
+  - pick-place-counter-to-sink
+  status: not started
+- id: pick-place-counter-to-microwave
+  title: HSR PickPlaceCounterToMicrowave
+  branch: hsr-pick-place-counter-to-microwave
+  track: experiments
+  depends_on:
+  - pick-place-sink-to-counter
+  status: not started
