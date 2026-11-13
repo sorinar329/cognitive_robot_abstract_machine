@@ -3,7 +3,7 @@ The montessori demo carried out by the real Tracy, through giskard.
 
 Run it from this folder::
 
-    python real_demo.py
+    python real_demo.py [--live-port 8765]
 
 The world is not built here but fetched from the running stack, so the robot the plan
 addresses is the one the controllers already hold, and a synchronizer keeps it in step
@@ -120,6 +120,7 @@ class RealRunner(DemoRunner):
                 ros_node=robot.node,
                 collision_avoidance=False,
                 plan_adaptations=self.plan_adaptations(),
+                extensions=self.executor_extensions(),
             )
             executor.compile(
                 ShapeSortingPlan(scene=self.scene, parks_between_pieces=True).build(
@@ -179,7 +180,7 @@ class RealRunner(DemoRunner):
 
 
 if __name__ == "__main__":
-    RealRunner(
+    RealRunner.from_command_line(
         scene=MontessoriScene(pieces_raised_by=0.03, board_raised_by=0.03),
         giskard_launch_file=TracyGiskardLaunchFile.VELOCITY,
     ).run()

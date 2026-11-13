@@ -8,21 +8,30 @@ differs. Run the runner for the execution type wanted from this folder::
     python mujoco_demo.py  # physically simulated, in a MuJoCo viewer
     python rviz_demo.py    # kinematically simulated, drawn in RViz
     python real_demo.py    # on the real robot
+
+Any of them is shown in the cramera viewer when given ``--live-port``; see the README.
 """
 
 from __future__ import annotations
 
+import argparse
 import copy
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import timedelta
+from functools import partial
+
+from typing_extensions import Any, Self
 
 from coraplex.plans.context_extensions import RobotAccess
 from coraplex.robot_plans.actions.core.pick_up import PickUpAction
 from coraplex.robot_plans.actions.core.placing import PlaceAction
 from coraplex.robot_plans.actions.core.robot_body import ParkArmsAction
+from cramera_bridge.coraplex_backend import CrameraVisualization
+from cramera_bridge.visualization import LiveVisualization
 from cramph.composites import Sequence
 from cramph.context import StatechartContext
+from cramph.executor import ExecutorExtension
 from cramph.statechart import Statechart
 from montessori_board import HoleShape, ShapeSortingBoard
 from semantic_digital_twin.adapters.urdf import URDFParser
@@ -523,6 +532,42 @@ class DemoRunner(ABC):
     """
     The scene the pieces are sorted in.
     """
+
+    live_port: int = 0
+    """
+    The port the cramera viewer follows the run on; ``0`` shows nothing in cramera.
+    """
+
+    @classmethod
+    def from_command_line(cls, **fields: Any) -> Self:
+        """
+        :param fields: The fields of the runner the command line does not set.
+        :return: The runner, with :attr:`live_port` read from ``--live-port``.
+        """
+        parser = argparse.ArgumentParser(description=cls.__doc__)
+        parser.add_argument(
+            "--live-port",
+            type=int,
+            default=0,
+            help="the port the cramera viewer follows the run on (0: not shown)",
+        )
+        return cls(live_port=parser.parse_args().live_port, **fields)
+
+    def executor_extensions(self) -> list[ExecutorExtension]:
+        """
+        :return: Unless :attr:`live_port` is ``0``, a visualization that serves the
+            executor's world and plan to the cramera viewer, with segmind's detected
+            events, and writes the run's recording once the plan has run.
+        """
+        if not self.live_port:
+            return []
+        return [
+            CrameraVisualization(
+                factory=partial(
+                    LiveVisualization, port=self.live_port, detect_events=True
+                )
+            )
+        ]
 
     @abstractmethod
     def run(self) -> None:

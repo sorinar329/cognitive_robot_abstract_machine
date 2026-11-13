@@ -2,7 +2,7 @@
 The montessori demo drawn in RViz, with Tracy moved kinematically rather than simulated.
 Run it from this folder::
 
-    python rviz_demo.py
+    python rviz_demo.py [--live-port 8765]
 
 Watch it with a ``MarkerArray`` display on ``/semworld/viz_marker``, whose durability has
 to be set to transient local for the markers to arrive.
@@ -52,6 +52,7 @@ class RvizRunner(DemoRunner):
         executor = KinematicallySimulatedPlanExecutor(
             StatechartContext.with_extensions(world, [RobotAccess(tracy)]),
             ros_node=node,
+            extensions=self.executor_extensions(),
         )
         executor.compile(ShapeSortingPlan(scene=self.scene).build(executor.context))
         executor.execute()
@@ -59,4 +60,4 @@ class RvizRunner(DemoRunner):
 
 
 if __name__ == "__main__":
-    RvizRunner().run()
+    RvizRunner.from_command_line().run()

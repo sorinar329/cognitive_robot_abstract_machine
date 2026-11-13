@@ -3,7 +3,7 @@ The montessori demo carried out against MuJoCo physics, in a MuJoCo viewer.
 
 Run it from this folder::
 
-    python mujoco_demo.py
+    python mujoco_demo.py [--live-port 8765]
 
 The physics is stepped from the control loop rather than from a thread of its own: every
 tick of the controller writes its command into the world, the servos take it as their set
@@ -86,6 +86,7 @@ class MujocoRunner(DemoRunner):
             executor = PhysicallySimulatedPlanExecutor(
                 StatechartContext.with_extensions(world, [RobotAccess(tracy)]),
                 simulation=simulation,
+                extensions=self.executor_extensions(),
             )
             executor.compile(ShapeSortingPlan(scene=self.scene).build(executor.context))
             executor.execute()
@@ -95,4 +96,4 @@ class MujocoRunner(DemoRunner):
 
 
 if __name__ == "__main__":
-    MujocoRunner().run()
+    MujocoRunner.from_command_line().run()

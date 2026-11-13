@@ -23,6 +23,27 @@ folder**:
 | `python rviz_demo.py` | kinematically simulated | ROS 2, RViz2 | A `MarkerArray` display on `/semworld/viz_marker`, durability set to transient local. The robot is moved kinematically. |
 | `python real_demo.py` | real | The robot, its ROS stack | It launches `giskardpy_tracy_standalone.launch.py` itself and fetches the world from the running stack. |
 
+## Watching it in cramera
+
+Every runner takes `--live-port`: given a port other than 0, the run serves its world, its
+plan and the events segmind detects to the [cramera](https://github.com/sorinar329/cramera)
+viewer, and writes a recording of the run once the plan has run. The demo imports cramera's
+`bridge` and `protocol` packages, so install them into the environment the demo runs in,
+from a checkout of cramera's `panda-demo-stream` branch:
+
+```bash
+pip install -e cramera/packages/protocol -e cramera/packages/bridge -e cramera/packages/viewer
+```
+
+Then, in two terminals:
+
+```bash
+python mujoco_demo.py --live-port 8765   # or rviz_demo.py, real_demo.py
+cramera --no-browser                     # serves http://127.0.0.1:8711
+```
+
+and open http://127.0.0.1:8711/?live=http://127.0.0.1:8765.
+
 ## File layout
 
 | File | Role |
