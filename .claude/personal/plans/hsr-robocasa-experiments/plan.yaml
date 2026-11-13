@@ -103,6 +103,7 @@ items:
 - id: gcs-free-point
   title: 'GCS: ask whether a point is free, find the nearest free point, leave bodies out'
   branch: gcs-nearest-free-point
+  repository: cram2/cognitive_robot_abstract_machine
   track: core
   depends_on: []
   status: not started
