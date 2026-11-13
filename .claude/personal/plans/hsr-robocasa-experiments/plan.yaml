@@ -32,8 +32,10 @@ items:
   title: Create hsr-robocasa-integration on the fork, fresh from main
   branch: hsr-robocasa-integration
   track: integration
+  pull_request_number: 39
+  session: https://claude.ai/code/session_01Meb8t8PxqSfNswMKesfkJp
   depends_on: []
-  status: not started
+  status: in progress
   notes: 'The fork-only branch experiment pull requests merge into; it never goes upstream. Keep it merged
     with upstream main. Core branches not yet merged upstream are merged into it so experiments can run,
     and dropped once upstream has them.'
