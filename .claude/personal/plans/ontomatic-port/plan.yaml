@@ -102,12 +102,12 @@ items:
   branch: ontology-extraction
   title: Read an ontology's classes and properties into an information model
   track: ontomatic-core
-  pull_request_number: 34
+  pull_request_number: 954
   depends_on: []
   status: in progress
   notes: 'Part 1 of 4 replacing PR 29: ClassInfo/PropertyInfo/OntologyInfo, the extractors, NamingRegistry,
-    IsSubClassOrRole. The is_functional fix of PR 32 now belongs here (extraction.py).'
-
+    IsSubClassOrRole. Includes the is_functional fix of PR 32. Upstream PR cram2#954; fork review in sorinar329#34.'
+  repository: cram2/cognitive_robot_abstract_machine
 - id: ontology-axioms
   branch: ontology-axioms
   title: Classification axioms, individuals of inferred classes and property inference
