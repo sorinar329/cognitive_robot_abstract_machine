@@ -1,12 +1,12 @@
 Plan
-- Tests first in test_gcs.py: is_free (free, occupied, outside the search space, any frame), nearest_free_point (itself if free; otherwise free and nearest; error on an empty graph), excluded_bodies frees a body's space, the HSR's navigable_space keeps its margin
-- GraphOfBoundingBoxes.is_free / nearest_free_point (keyword-only), NoFreeSpaceError in graph_of_convex_sets/exceptions.py
-- excluded_bodies through obstacle_entities, build_bloated_obstacle_collection, both graphs' free_space_from_semantic_annotation, volumetric free_space_from_world (+ obstacle_height_clearance); changed methods keyword-only, every caller updated
-- Floor.navigable_space(*, robot, margin)
-- krrood check + format, run test_gcs*, test_semantic_annotations, experiments caller
+- Review of cram2#962 (draft); answer review comments when asked
 
 Done
-- Worktree gcs_wt from main be591627e7; bootstrap commit pushed to sorin; draft PR cram2#962 (new-feature, api-break); item repository set to cram2
+- Bootstrap: worktree gcs_wt from main be591627e7, draft PR cram2#962 (new-feature, api-break), item repository set to cram2
+- 46b6d1c760: is_free / nearest_free_point (+ NoFreeSpaceError), excluded_bodies through the obstacle collection and both graphs, obstacle_height_clearance on the volumetric graph, Floor.navigable_space (MissingMobileBaseError without a base); PathPlanningNavigateAction uses navigable_space(margin=0.0)
+- Changed methods keyword-only, every caller updated; module docstrings on touched modules; krrood format + check clean
+- Tests: GCS / annotation / transformation tests 102 passed 2 skipped; path-planning designator tests 44 passed 18 skipped
 
 Next
-- Write the failing tests
+- Mark ready only when the user says so
+- navigation-keeps-base-margin will touch navigation.py and navigable_space: build it on this branch or after it lands
