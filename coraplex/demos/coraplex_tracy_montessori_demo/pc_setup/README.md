@@ -95,6 +95,23 @@ git apply ~/workspace/cognitive_robot_abstract_machine/coraplex/demos/coraplex_t
 cd ~/workspace/ros && colcon build --packages-select iai_tracy_description --merge-install
 ```
 
+**By hand**, if the patch does not apply (the file changed upstream): in
+`iai_tracy_description/urdf/tracy.urdf.xacro`, find `camera_link_joint` and make its
+`<origin>` the only one that is not commented out:
+
+```xml
+<joint name="camera_link_joint" type="fixed">
+    <parent link="table"/>
+    <child link="camera_link"/>
+    <origin xyz="0.429417 0.002602 0.892603" rpy="0.040005 1.171431 0.032689"/>
+</joint>
+```
+
+While in that file, check that the gripper coupler is still there: `grep -c
+gripper_coupler tracy.urdf.xacro` must print a number above 0, and both
+`robotiq_gripper` blocks must have `parent="..._gripper_coupler_link"` with
+`<origin xyz="0.0 0.0 ${gripper_coupler_length}" .../>`. Then rebuild as above.
+
 ### 5.2 giskardpy_ros (launch files and RViz config)
 
 What the patch changes:
@@ -112,6 +129,53 @@ git checkout main   # at 8d2b419
 git apply ~/workspace/cognitive_robot_abstract_machine/coraplex/demos/coraplex_tracy_montessori_demo/pc_setup/cram_ros2_packages.patch
 cd ~/workspace/ros && colcon build --packages-select giskardpy_ros --merge-install
 ```
+
+**By hand**, if the patch does not apply. All paths are under
+`~/workspace/ros/src/cram_ros2_packages/giskardpy_ros/`.
+
+1. `launch/giskardpy_tracy_velocity.launch.py` and
+   `launch/giskardpy_tracy_standalone.launch.py`: change the arguments to
+   ```python
+   root_links=["table_footprint", "table_footprint"],
+   ...
+   map_world_tf=True,
+   map_root_link="table_footprint",
+   rviz_config="launch/rviz_config/tracy.rviz",
+   ```
+   This is the minimal fix: `root_links` alone stops the interactive-marker crash.
+   The other two lines need step 2.
+2. `giskardpy_ros/launch_helpers.py`, in `giskard_launch_description`:
+   - add the parameters `rviz_config=None, map_root_link=None` after `map_world_tf=False`;
+   - after the `if map_world_tf:` block, add
+     ```python
+     if map_root_link:
+         nodes.append(
+             Node(
+                 package="tf2_ros",
+                 executable="static_transform_publisher",
+                 name="map_root_link_transform_publisher",
+                 output="screen",
+                 arguments=["--frame-id", "map", "--child-frame-id", map_root_link],
+             )
+         )
+     ```
+   - in the `if rviz:` block, pass the config to RViz:
+     ```python
+     rviz_arguments = []
+     if rviz_config:
+         rviz_arguments = [
+             "-d",
+             PathJoinSubstitution(
+                 [FindPackageShare("giskardpy_ros"), *rviz_config.split("/")]
+             ),
+         ]
+     ```
+     and add `arguments=rviz_arguments,` to that `Node(package="rviz2", ...)`.
+3. `launch/rviz_config/tracy.rviz`: if it is gone, open RViz, set Global Options → Fixed
+   Frame to `table_footprint`, add a MarkerArray display on `/semworld/viz_marker` with
+   Durability Policy *Transient Local*, and File → Save Config As… to that path.
+
+Then rebuild as above and restart Giskard.
 
 ### 5.3 cramera
 
