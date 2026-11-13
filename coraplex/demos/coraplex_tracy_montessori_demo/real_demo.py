@@ -18,10 +18,10 @@ import subprocess
 import threading
 import time
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import timedelta
 from enum import StrEnum
-from typing_extensions import Iterator
+from typing_extensions import Any, Iterator
 
 import rclpy
 from rclpy.executors import MultiThreadedExecutor
@@ -39,8 +39,12 @@ from cramph.context import StatechartContext
 from demo import DemoRunner, MontessoriScene, ShapeSortingPlan
 from semantic_digital_twin.adapters.ros.world_fetcher import fetch_world_from_service
 from semantic_digital_twin.adapters.ros.world_synchronizer import WorldSynchronizer
+from semantic_digital_twin.callbacks.callback import ModelChangeCallback
+from semantic_digital_twin.reasoning.predicates import InContactWith
+from semantic_digital_twin.robots.robot_part_mixins import HasTwoFingers
 from semantic_digital_twin.robots.tracy import Tracy
 from semantic_digital_twin.world import World
+from semantic_digital_twin.world_description.world_entity import Body
 
 # %% the giskard the demo runs against
 
@@ -60,6 +64,66 @@ class TracyGiskardLaunchFile(StrEnum):
     """
     A giskard that commands the velocity controllers of the real Tracy.
     """
+
+
+# %% how close the fingers come to what they grasp
+
+
+@dataclass(eq=False)
+class FingerDistanceReport(ModelChangeCallback):
+    """
+    Prints, whenever a piece is attached to the gripper, how far each side of the
+    gripper stands from it in the world model: segmind reads a grasp only where both
+    sides come closer than :attr:`InContactWith.maximum_distance`.
+    """
+
+    gripper: HasTwoFingers = field(kw_only=True)
+    """
+    The gripper that takes hold of the pieces.
+    """
+
+    pieces: list[Body] = field(kw_only=True)
+    """
+    The pieces whose grasps are reported.
+    """
+
+    held: set[Body] = field(default_factory=set, init=False)
+    """
+    The pieces attached to something other than the world's root, already reported.
+    """
+
+    def on_model_change(self, **kwargs: Any) -> None:
+        for piece in self.pieces:
+            if piece.parent_connection.parent is self._world.root:
+                self.held.discard(piece)
+                continue
+            if piece in self.held:
+                continue
+            self.held.add(piece)
+            thumb, finger = (
+                self.closest_distance(side.bodies, piece)
+                for side in (self.gripper.thumb, self.gripper.finger)
+            )
+            print(
+                f"Grasp of {piece.name.name}: thumb {thumb * 1000:.1f} mm, "
+                f"finger {finger * 1000:.1f} mm from it; segmind needs both under "
+                f"{InContactWith.maximum_distance * 1000:.1f} mm."
+            )
+
+    @staticmethod
+    def closest_distance(side: list[Body], piece: Body) -> float:
+        """
+        :param side: The bodies of one side of the gripper.
+        :param piece: The piece held.
+        :return: How close the nearest of them comes to the piece, negative where it
+            reaches into it, or infinity where none has geometry to measure.
+        """
+        distances = [
+            distance
+            for body in side
+            if (distance := InContactWith(body, piece).compute_distance()) is not None
+        ]
+        return min(distances, default=float("inf"))
 
 
 # %% running the demo
@@ -115,6 +179,11 @@ class RealRunner(DemoRunner):
             self.scene.populate(robot.world)
             input("World loaded; check it in RViz, then press Enter to run the plan.")
             [tracy] = robot.world.get_semantic_annotations_by_type(Tracy)
+            report = FingerDistanceReport(
+                _world=robot.world,
+                gripper=self.scene.sorting_arm(tracy).end_effector,
+                pieces=[piece.root for piece in self.scene.holes_of_pieces],
+            )
             executor = RealRobotPlanExecutor(
                 StatechartContext.with_extensions(robot.world, [RobotAccess(tracy)]),
                 ros_node=robot.node,
@@ -129,6 +198,7 @@ class RealRunner(DemoRunner):
             )
             executor.execute()
             executor.close()
+            report.stop()
 
     def plan_adaptations(self) -> list[PlanTransformation]:
         """
@@ -181,6 +251,6 @@ class RealRunner(DemoRunner):
 
 if __name__ == "__main__":
     RealRunner.from_command_line(
-        scene=MontessoriScene(pieces_raised_by=0.03, board_raised_by=0.03),
+        scene=MontessoriScene(),
         giskard_launch_file=TracyGiskardLaunchFile.VELOCITY,
     ).run()

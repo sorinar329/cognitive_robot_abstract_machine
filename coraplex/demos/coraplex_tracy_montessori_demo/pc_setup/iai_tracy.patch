@@ -1,0 +1,18 @@
+diff --git a/iai_tracy_description/urdf/tracy.urdf.xacro b/iai_tracy_description/urdf/tracy.urdf.xacro
+index d592a55..4fdf4cc 100644
+--- a/iai_tracy_description/urdf/tracy.urdf.xacro
++++ b/iai_tracy_description/urdf/tracy.urdf.xacro
+@@ -137,8 +137,12 @@
+     <joint name="camera_link_joint" type="fixed">
+         <parent link="table"/>
+         <child link="camera_link"/>
++
+         <!-- <origin xyz="0.410542 -0.015143 0.932933" rpy="-0.046277 1.378820 -0.050299"/> --> 
+-        <origin xyz="0.403282 0.019766 0.881559" rpy="-0.016644 1.135460 -0.005690"/>
++        <!-- origin xyz="0.403282 0.019766 0.881559" rpy="-0.016644 1.135460 -0.005690"/> -->
++
++        <origin xyz="0.429417 0.002602 0.892603" rpy="0.040005 1.171431 0.032689"/>
++        <!-- <origin xyz="0.410542 -0.015143 0.932933" rpy="-0.046277 1.378820 -0.050299"/> -->
+     </joint>
+ 
+     <link name="camera_link">

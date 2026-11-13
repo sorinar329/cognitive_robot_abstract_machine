@@ -1,0 +1,660 @@
+diff --git a/giskardpy_ros/giskardpy_ros/launch_helpers.py b/giskardpy_ros/giskardpy_ros/launch_helpers.py
+index b3c5f8e..d7ec312 100644
+--- a/giskardpy_ros/giskardpy_ros/launch_helpers.py
++++ b/giskardpy_ros/giskardpy_ros/launch_helpers.py
+@@ -12,6 +12,8 @@ def giskard_launch_description(
+     xacro_file=None,
+     rviz=False,
+     map_world_tf=False,
++    rviz_config=None,
++    map_root_link=None,
+ ):
+     """Build a LaunchDescription for a giskard robot.
+ 
+@@ -23,6 +25,10 @@ def giskard_launch_description(
+         "robots/hsrb4s.urdf.xacro" (optional).
+     :param rviz: include the rviz2 node.
+     :param map_world_tf: include a map->world static_transform_publisher.
++    :param rviz_config: path of the rviz config within this package, e.g.
++        "launch/rviz_config/tracy.rviz" (optional; rviz's default config otherwise).
++    :param map_root_link: the robot's root link, connected to map by a
++        static_transform_publisher (optional).
+     """
+     nodes = []
+ 
+@@ -37,13 +43,38 @@ def giskard_launch_description(
+             )
+         )
+ 
++    if map_root_link:
++        nodes.append(
++            Node(
++                package="tf2_ros",
++                executable="static_transform_publisher",
++                name="map_root_link_transform_publisher",
++                output="screen",
++                arguments=[
++                    "--frame-id",
++                    "map",
++                    "--child-frame-id",
++                    map_root_link,
++                ],
++            )
++        )
++
+     if rviz:
++        rviz_arguments = []
++        if rviz_config:
++            rviz_arguments = [
++                "-d",
++                PathJoinSubstitution(
++                    [FindPackageShare("giskardpy_ros"), *rviz_config.split("/")]
++                ),
++            ]
+         nodes.append(
+             Node(
+                 package="rviz2",
+                 executable="rviz2",
+                 name="rviz2",
+                 output="screen",
++                arguments=rviz_arguments,
+             )
+         )
+ 
+diff --git a/giskardpy_ros/launch/giskardpy_tracy_standalone.launch.py b/giskardpy_ros/launch/giskardpy_tracy_standalone.launch.py
+index b4ad1b9..9ab465c 100644
+--- a/giskardpy_ros/launch/giskardpy_tracy_standalone.launch.py
++++ b/giskardpy_ros/launch/giskardpy_tracy_standalone.launch.py
+@@ -6,8 +6,10 @@ def generate_launch_description():
+         executable="tracy_standalone",
+         xacro_package="iai_tracy_description",
+         xacro_file="urdf/tracy.urdf.xacro",
+-        root_links=["map", "map"],
++        root_links=["table_footprint", "table_footprint"],
+         tip_links=["l_gripper_tool_frame", "r_gripper_tool_frame"],
+         rviz=True,
+         map_world_tf=True,
++        map_root_link="table_footprint",
++        rviz_config="launch/rviz_config/tracy.rviz",
+     )
+diff --git a/giskardpy_ros/launch/giskardpy_tracy_velocity.launch.py b/giskardpy_ros/launch/giskardpy_tracy_velocity.launch.py
+index 9bcb0f8..3c9cd0d 100644
+--- a/giskardpy_ros/launch/giskardpy_tracy_velocity.launch.py
++++ b/giskardpy_ros/launch/giskardpy_tracy_velocity.launch.py
+@@ -6,8 +6,10 @@ def generate_launch_description():
+         executable="tracy_velocity",
+         xacro_package="iai_tracy_description",
+         xacro_file="urdf/tracy.urdf.xacro",
+-        root_links=["map", "map"],
++        root_links=["table_footprint", "table_footprint"],
+         tip_links=["l_gripper_tool_frame", "r_gripper_tool_frame"],
+         rviz=True,
+         map_world_tf=True,
++        map_root_link="table_footprint",
++        rviz_config="launch/rviz_config/tracy.rviz",
+     )
+diff --git a/giskardpy_ros/launch/rviz_config/tracy.rviz b/giskardpy_ros/launch/rviz_config/tracy.rviz
+new file mode 100644
+index 0000000..8d876c9
+--- /dev/null
++++ b/giskardpy_ros/launch/rviz_config/tracy.rviz
+@@ -0,0 +1,559 @@
++Panels:
++  - Class: rviz_common/Displays
++    Help Height: 0
++    Name: Displays
++    Property Tree Widget:
++      Expanded:
++        - /Global Options1
++        - /Status1
++        - /RobotModel1/Description Topic1
++        - /TF1/Frames1
++        - /TF1/Tree1
++        - /Camera1
++        - /Camera1/Topic1
++        - /Camera2
++        - /Image2
++      Splitter Ratio: 0.40028488636016846
++    Tree Height: 316
++  - Class: rviz_common/Selection
++    Name: Selection
++  - Class: rviz_common/Tool Properties
++    Expanded:
++      - /2D Goal Pose1
++      - /Publish Point1
++    Name: Tool Properties
++    Splitter Ratio: 0.5886790156364441
++  - Class: rviz_common/Views
++    Expanded:
++      - /Current View1
++    Name: Views
++    Splitter Ratio: 0.5
++  - Class: rviz_common/Time
++    Experimental: false
++    Name: Time
++    SyncMode: 0
++    SyncSource: ""
++Visualization Manager:
++  Class: ""
++  Displays:
++    - Alpha: 0.5
++      Cell Size: 1
++      Class: rviz_default_plugins/Grid
++      Color: 160; 160; 164
++      Enabled: true
++      Line Style:
++        Line Width: 0.029999999329447746
++        Value: Lines
++      Name: Grid
++      Normal Cell Count: 0
++      Offset:
++        X: 0
++        Y: 0
++        Z: 0
++      Plane: XY
++      Plane Cell Count: 10
++      Reference Frame: <Fixed Frame>
++      Value: true
++    - Alpha: 1
++      Class: rviz_default_plugins/RobotModel
++      Collision Enabled: false
++      Description File: ""
++      Description Source: Topic
++      Description Topic:
++        Depth: 5
++        Durability Policy: Volatile
++        History Policy: Keep Last
++        Reliability Policy: Reliable
++        Value: /robot_description
++      Enabled: true
++      Links:
++        All Links Enabled: true
++        Expand Joint Details: false
++        Expand Link Details: false
++        Expand Tree: false
++        Link Tree Style: Links in Alphabetic Order
++        camera_link:
++          Alpha: 1
++          Show Axes: false
++          Show Trail: false
++          Value: true
++        camera_pole:
++          Alpha: 1
++          Show Axes: false
++          Show Trail: false
++          Value: true
++        l_gripper_tool_frame:
++          Alpha: 1
++          Show Axes: false
++          Show Trail: false
++        left_arm_mount:
++          Alpha: 1
++          Show Axes: false
++          Show Trail: false
++        left_base:
++          Alpha: 1
++          Show Axes: false
++          Show Trail: false
++        left_base_link:
++          Alpha: 1
++          Show Axes: false
++          Show Trail: false
++        left_base_link_inertia:
++          Alpha: 1
++          Show Axes: false
++          Show Trail: false
++          Value: true
++        left_flange:
++          Alpha: 1
++          Show Axes: false
++          Show Trail: false
++        left_forearm_link:
++          Alpha: 1
++          Show Axes: false
++          Show Trail: false
++          Value: true
++        left_ft_frame:
++          Alpha: 1
++          Show Axes: false
++          Show Trail: false
++        left_robotiq_85_base_link:
++          Alpha: 1
++          Show Axes: false
++          Show Trail: false
++          Value: true
++        left_robotiq_85_left_finger_link:
++          Alpha: 1
++          Show Axes: false
++          Show Trail: false
++          Value: true
++        left_robotiq_85_left_finger_tip_link:
++          Alpha: 1
++          Show Axes: false
++          Show Trail: false
++          Value: true
++        left_robotiq_85_left_inner_knuckle_link:
++          Alpha: 1
++          Show Axes: false
++          Show Trail: false
++          Value: true
++        left_robotiq_85_left_knuckle_link:
++          Alpha: 1
++          Show Axes: false
++          Show Trail: false
++          Value: true
++        left_robotiq_85_right_finger_link:
++          Alpha: 1
++          Show Axes: false
++          Show Trail: false
++          Value: true
++        left_robotiq_85_right_finger_tip_link:
++          Alpha: 1
++          Show Axes: false
++          Show Trail: false
++          Value: true
++        left_robotiq_85_right_inner_knuckle_link:
++          Alpha: 1
++          Show Axes: false
++          Show Trail: false
++          Value: true
++        left_robotiq_85_right_knuckle_link:
++          Alpha: 1
++          Show Axes: false
++          Show Trail: false
++          Value: true
++        left_shoulder_link:
++          Alpha: 1
++          Show Axes: false
++          Show Trail: false
++          Value: true
++        left_tool0:
++          Alpha: 1
++          Show Axes: false
++          Show Trail: false
++        left_upper_arm_link:
++          Alpha: 1
++          Show Axes: false
++          Show Trail: false
++          Value: true
++        left_world:
++          Alpha: 1
++          Show Axes: false
++          Show Trail: false
++        left_wrist_1_link:
++          Alpha: 1
++          Show Axes: false
++          Show Trail: false
++          Value: true
++        left_wrist_2_link:
++          Alpha: 1
++          Show Axes: false
++          Show Trail: false
++          Value: true
++        left_wrist_3_link:
++          Alpha: 1
++          Show Axes: false
++          Show Trail: false
++          Value: true
++        map:
++          Alpha: 1
++          Show Axes: false
++          Show Trail: false
++        r_gripper_tool_frame:
++          Alpha: 1
++          Show Axes: false
++          Show Trail: false
++        right_arm_mount:
++          Alpha: 1
++          Show Axes: false
++          Show Trail: false
++        right_base:
++          Alpha: 1
++          Show Axes: false
++          Show Trail: false
++        right_base_link:
++          Alpha: 1
++          Show Axes: false
++          Show Trail: false
++        right_base_link_inertia:
++          Alpha: 1
++          Show Axes: false
++          Show Trail: false
++          Value: true
++        right_flange:
++          Alpha: 1
++          Show Axes: false
++          Show Trail: false
++        right_forearm_link:
++          Alpha: 1
++          Show Axes: false
++          Show Trail: false
++          Value: true
++        right_ft_frame:
++          Alpha: 1
++          Show Axes: false
++          Show Trail: false
++        right_robotiq_85_base_link:
++          Alpha: 1
++          Show Axes: false
++          Show Trail: false
++          Value: true
++        right_robotiq_85_left_finger_link:
++          Alpha: 1
++          Show Axes: false
++          Show Trail: false
++          Value: true
++        right_robotiq_85_left_finger_tip_link:
++          Alpha: 1
++          Show Axes: false
++          Show Trail: false
++          Value: true
++        right_robotiq_85_left_inner_knuckle_link:
++          Alpha: 1
++          Show Axes: false
++          Show Trail: false
++          Value: true
++        right_robotiq_85_left_knuckle_link:
++          Alpha: 1
++          Show Axes: false
++          Show Trail: false
++          Value: true
++        right_robotiq_85_right_finger_link:
++          Alpha: 1
++          Show Axes: false
++          Show Trail: false
++          Value: true
++        right_robotiq_85_right_finger_tip_link:
++          Alpha: 1
++          Show Axes: false
++          Show Trail: false
++          Value: true
++        right_robotiq_85_right_inner_knuckle_link:
++          Alpha: 1
++          Show Axes: false
++          Show Trail: false
++          Value: true
++        right_robotiq_85_right_knuckle_link:
++          Alpha: 1
++          Show Axes: false
++          Show Trail: false
++          Value: true
++        right_shoulder_link:
++          Alpha: 1
++          Show Axes: false
++          Show Trail: false
++          Value: true
++        right_tool0:
++          Alpha: 1
++          Show Axes: false
++          Show Trail: false
++        right_upper_arm_link:
++          Alpha: 1
++          Show Axes: false
++          Show Trail: false
++          Value: true
++        right_world:
++          Alpha: 1
++          Show Axes: false
++          Show Trail: false
++        right_wrist_1_link:
++          Alpha: 1
++          Show Axes: false
++          Show Trail: false
++          Value: true
++        right_wrist_2_link:
++          Alpha: 1
++          Show Axes: false
++          Show Trail: false
++          Value: true
++        right_wrist_3_link:
++          Alpha: 1
++          Show Axes: false
++          Show Trail: false
++          Value: true
++        table:
++          Alpha: 1
++          Show Axes: false
++          Show Trail: false
++          Value: true
++      Mass Properties:
++        Inertia: false
++        Mass: false
++      Name: RobotModel
++      TF Prefix: ""
++      Update Interval: 0
++      Value: true
++      Visual Enabled: true
++    - Class: rviz_default_plugins/TF
++      Enabled: false
++      Filter (blacklist): ""
++      Filter (whitelist): ""
++      Frame Timeout: 15
++      Frames:
++        All Enabled: false
++      Marker Scale: 1
++      Name: TF
++      Show Arrows: true
++      Show Axes: true
++      Show Names: false
++      Tree:
++        {}
++      Update Interval: 0
++      Value: false
++    - Class: rviz_default_plugins/MarkerArray
++      Enabled: true
++      Name: MarkerArray
++      Namespaces:
++        {}
++      Topic:
++        Depth: 5
++        Durability Policy: Volatile
++        History Policy: Keep Last
++        Reliability Policy: Reliable
++        Value: /giskard/visualization_marker_array
++      Value: true
++    - Class: rviz_default_plugins/MarkerArray
++      Enabled: true
++      Name: SemanticWorld
++      Namespaces:
++        {}
++      Topic:
++        Depth: 5
++        Durability Policy: Transient Local
++        History Policy: Keep Last
++        Reliability Policy: Reliable
++        Value: /semworld/viz_marker
++      Value: true
++    - Class: rviz_default_plugins/InteractiveMarkers
++      Enable Transparency: true
++      Enabled: true
++      Interactive Markers Namespace: /cartesian_goals
++      Name: InteractiveMarkers
++      Show Axes: false
++      Show Descriptions: true
++      Show Visual Aids: false
++      Value: true
++    - Class: rviz_default_plugins/Camera
++      Enabled: false
++      Far Plane Distance: 100
++      Image Rendering: background and overlay
++      Name: Camera
++      Overlay Alpha: 0.5
++      Topic:
++        Depth: 5
++        Durability Policy: Volatile
++        History Policy: Keep Last
++        Reliability Policy: Reliable
++        Value: /camera/camera/color/image_raw
++      Value: false
++      Visibility:
++        Camera: true
++        Grid: true
++        Image: true
++        InteractiveMarkers: true
++        MarkerArray: true
++        RobotModel: true
++        TF: true
++        Value: true
++      Zoom Factor: 1
++    - Class: rviz_default_plugins/Image
++      Enabled: false
++      Max Value: 1
++      Median window: 5
++      Min Value: 0
++      Name: Image
++      Normalize Range: true
++      Topic:
++        Depth: 5
++        Durability Policy: Volatile
++        History Policy: Keep Last
++        Reliability Policy: Reliable
++        Value: /camera/color/image_raw
++      Value: false
++    - Class: rviz_default_plugins/Camera
++      Enabled: false
++      Far Plane Distance: 100
++      Image Rendering: background and overlay
++      Name: Camera
++      Overlay Alpha: 0.5
++      Topic:
++        Depth: 5
++        Durability Policy: Volatile
++        History Policy: Keep Last
++        Reliability Policy: Reliable
++        Value: /camera/color/image_raw
++      Value: false
++      Visibility:
++        Camera: true
++        Grid: true
++        Image: true
++        InteractiveMarkers: true
++        MarkerArray: true
++        RobotModel: true
++        TF: true
++        Value: true
++      Zoom Factor: 1
++    - Class: rviz_default_plugins/Camera
++      Enabled: false
++      Far Plane Distance: 100
++      Image Rendering: background and overlay
++      Name: Camera
++      Overlay Alpha: 0.5
++      Topic:
++        Depth: 5
++        Durability Policy: Volatile
++        History Policy: Keep Last
++        Reliability Policy: Reliable
++        Value: /camera/depth/image_raw
++      Value: false
++      Visibility:
++        Camera: true
++        Grid: true
++        Image: true
++        InteractiveMarkers: true
++        MarkerArray: true
++        RobotModel: true
++        TF: true
++        Value: true
++      Zoom Factor: 1
++    - Class: rviz_default_plugins/Image
++      Enabled: true
++      Max Value: 1
++      Median window: 5
++      Min Value: 0
++      Name: Image
++      Normalize Range: true
++      Topic:
++        Depth: 5
++        Durability Policy: Volatile
++        History Policy: Keep Last
++        Reliability Policy: Reliable
++        Value: /camera/color/image_raw
++      Value: true
++  Enabled: true
++  Global Options:
++    Background Color: 48; 48; 48
++    Fixed Frame: table_footprint
++    Frame Rate: 30
++  Name: root
++  Tools:
++    - Class: rviz_default_plugins/Interact
++      Hide Inactive Objects: true
++    - Class: rviz_default_plugins/MoveCamera
++    - Class: rviz_default_plugins/Select
++    - Class: rviz_default_plugins/FocusCamera
++    - Class: rviz_default_plugins/Measure
++      Line color: 128; 128; 0
++    - Class: rviz_default_plugins/SetInitialPose
++      Covariance x: 0.25
++      Covariance y: 0.25
++      Covariance yaw: 0.06853891909122467
++      Topic:
++        Depth: 5
++        Durability Policy: Volatile
++        History Policy: Keep Last
++        Reliability Policy: Reliable
++        Value: /initialpose
++    - Class: rviz_default_plugins/SetGoal
++      Topic:
++        Depth: 5
++        Durability Policy: Volatile
++        History Policy: Keep Last
++        Reliability Policy: Reliable
++        Value: /goal_pose
++    - Class: rviz_default_plugins/PublishPoint
++      Single click: true
++      Topic:
++        Depth: 5
++        Durability Policy: Volatile
++        History Policy: Keep Last
++        Reliability Policy: Reliable
++        Value: /clicked_point
++  Transformation:
++    Current:
++      Class: rviz_default_plugins/TF
++  Value: true
++  Views:
++    Current:
++      Class: rviz_default_plugins/Orbit
++      Distance: 3.428225517272949
++      Enable Stereo Rendering:
++        Stereo Eye Separation: 0.05999999865889549
++        Stereo Focal Distance: 1
++        Swap Stereo Eyes: false
++        Value: false
++      Focal Point:
++        X: 0.8495671153068542
++        Y: 0.011637797579169273
++        Z: 1.1540108919143677
++      Focal Shape Fixed Size: true
++      Focal Shape Size: 0.05000000074505806
++      Invert Z Axis: false
++      Name: Current View
++      Near Clip Distance: 0.009999999776482582
++      Pitch: 0.5047972202301025
++      Target Frame: <Fixed Frame>
++      Value: Orbit (rviz)
++      Yaw: 0.27722230553627014
++    Saved: ~
++Window Geometry:
++  Camera:
++    collapsed: false
++  Displays:
++    collapsed: false
++  Height: 945
++  Hide Left Dock: false
++  Hide Right Dock: true
++  Image:
++    collapsed: false
++  QMainWindow State: 000000ff00000000fd00000004000000000000046a0000030ffc020000000efb0000001200530065006c0065006300740069006f006e00000001e10000009b0000005d00fffffffb0000001e0054006f006f006c002000500072006f007000650072007400690065007302000001ed000001df00000185000000a3fb000000120056006900650077007300200054006f006f02000001df000002110000018500000122fb000000200054006f006f006c002000500072006f0070006500720074006900650073003203000002880000011d000002210000017afb000000100044006900730070006c006100790073010000003f0000017c000000cc00fffffffb0000002000730065006c0065006300740069006f006e00200062007500660066006500720200000138000000aa0000023a00000294fb00000014005700690064006500530074006500720065006f02000000e6000000d2000003ee0000030bfb0000000c004b0069006e0065006300740200000186000001060000030c00000261fb0000000c00430061006d0065007200610000000241000000a30000001700fffffffb0000000a0049006d00610067006500000001fa000000310000001700fffffffb0000000a0049006d0061006700650100000180000001b00000000000000000fb0000000c00430061006d0065007200610000000183000000780000001700fffffffb0000000c00430061006d006500720061000000028c000000c20000001700fffffffb0000000a0049006d00610067006501000001c10000018d0000001700ffffff000000010000010f000002acfc0200000003fb0000001e0054006f006f006c002000500072006f00700065007200740069006500730100000041000000780000000000000000fb0000000a00560069006500770073000000003f000002ac000000a900fffffffb0000001200530065006c0065006300740069006f006e010000025a000000b200000000000000000000000200000490000000a9fc0100000001fb0000000a00560069006500770073030000004e00000080000002e10000019700000003000007800000003efc0100000002fb0000000800540069006d00650100000000000007800000026f00fffffffb0000000800540069006d00650100000000000004500000000000000000000003100000030f00000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730100000000ffffffff0000000000000000
++  Selection:
++    collapsed: false
++  Time:
++    collapsed: false
++  Tool Properties:
++    collapsed: false
++  Views:
++    collapsed: true
++  Width: 1920
++  X: 1920
++  Y: 32

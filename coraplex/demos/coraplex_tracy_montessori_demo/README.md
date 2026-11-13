@@ -23,6 +23,9 @@ folder**:
 | `python rviz_demo.py` | kinematically simulated | ROS 2, RViz2 | A `MarkerArray` display on `/semworld/viz_marker`, durability set to transient local. The robot is moved kinematically. |
 | `python real_demo.py` | real | The robot, its ROS stack | It launches `giskardpy_tracy_standalone.launch.py` itself and fetches the world from the running stack. |
 
+For the real robot on the Tracy PC — start-up order, URDF, Giskard launch files and what
+to do when something breaks — see [`pc_setup/README.md`](pc_setup/README.md).
+
 ## Watching it in cramera
 
 Every runner takes `--live-port`: given a port other than 0, the run serves its world, its
