@@ -105,8 +105,10 @@ items:
   branch: gcs-nearest-free-point
   repository: cram2/cognitive_robot_abstract_machine
   track: core
+  pull_request_number: 962
+  session: https://claude.ai/code/session_01Meb8t8hZk8xAB2ZF2VEBU9
   depends_on: []
-  status: not started
+  status: in progress
   notes: semantic_digital_twin graph_of_convex_sets. Old commit 4a0fe701. Upstream PR from the fork to
     main, built clean from main with its own tests.
 
