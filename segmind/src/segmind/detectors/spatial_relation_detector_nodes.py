@@ -36,6 +36,12 @@ class SupportDetector(AbstractDetector):
     :class:`LossOfSupportEvent` when it stops resting on something it rested on.
     """
 
+    exclude_robot: bool = False
+    """
+    Overrides :attr:`AbstractDetector.exclude_robot`: a robot's own body, such as the
+    table Tracy is built on, is something objects rest on. Its end effectors never are.
+    """
+
     def update_context_and_events(
         self,
         segmind_context: SegmindContext,

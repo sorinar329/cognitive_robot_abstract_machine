@@ -1,7 +1,7 @@
 """
-Tests for what detectors check an object against: the robot is left out, so what the
-robot does to an object is not read as something the scene did to it, and a gripper is
-never what an object rests on.
+Tests for what detectors check an object against: the robot is left out of contacts and
+containment, so what the robot does to an object is not read as something the scene did
+to it; its body is something an object may rest on, and a gripper never is.
 """
 
 from __future__ import annotations
@@ -108,23 +108,21 @@ def _box_resting_on(
     return box
 
 
-def _supporters_detected_for(
-    world: World, box: Body, exclude_robot: bool = True
-) -> list[Body]:
+def _supporters_detected_by(world: World, detector: SupportDetector) -> list[Body]:
+    """
+    :return: What ``detector`` finds its tracked object resting on, ticked once.
+    """
     executor = StatechartExecutor(
         context=StatechartContext(world=world), extensions=[EpisodeSegmentation()]
     )
-    executor.compile(
-        DetectorStatechartBuilder(
-            [SupportDetector(tracked_object=box, exclude_robot=exclude_robot)]
-        ).build(executor.context)
-    )
+    executor.compile(DetectorStatechartBuilder([detector]).build(executor.context))
     executor.tick()
     segmind_context = executor.context.require_extension(SegmindContext)
     return [
         event.with_object
         for event in segmind_context.logger.get_events()
-        if isinstance(event, SupportEvent) and event.tracked_object is box
+        if isinstance(event, SupportEvent)
+        and event.tracked_object is detector.tracked_object
     ]
 
 
@@ -132,7 +130,22 @@ def test_an_object_resting_on_the_environment_is_supported_by_it(cylinder_bot_wo
     environment = cylinder_bot_world.get_body_by_name("environment")
     box = _box_resting_on(cylinder_bot_world, environment)
 
-    assert _supporters_detected_for(cylinder_bot_world, box) == [environment]
+    assert _supporters_detected_by(
+        cylinder_bot_world, SupportDetector(tracked_object=box)
+    ) == [environment]
+
+
+def test_an_object_resting_on_the_robot_is_supported_by_it(cylinder_bot_world):
+    """
+    A robot's own body can be what things stand on, as Tracy's table is part of Tracy,
+    so a support detector reads the robot unless told to leave it out.
+    """
+    robot_body = cylinder_bot_world.get_body_by_name("bot")
+    box = _box_resting_on(cylinder_bot_world, robot_body)
+
+    assert _supporters_detected_by(
+        cylinder_bot_world, SupportDetector(tracked_object=box)
+    ) == [robot_body]
 
 
 def test_an_object_on_a_gripper_is_not_supported_by_the_gripper(pr2_world_copy):
@@ -152,7 +165,9 @@ def test_an_object_on_a_gripper_is_not_supported_by_the_gripper(pr2_world_copy):
     }
 
     assert gripper_bodies.isdisjoint(
-        _supporters_detected_for(pr2_world_copy, box, exclude_robot=False)
+        _supporters_detected_by(
+            pr2_world_copy, SupportDetector(tracked_object=box, exclude_robot=False)
+        )
     )
 
 
