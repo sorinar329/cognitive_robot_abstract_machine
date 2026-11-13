@@ -2,7 +2,7 @@ schema_version: 1
 id: hsr-robocasa-experiments
 title: HSR RoboCasa experiments, one task at a time
 description: Rebuilds the HSR RoboCasa experiments from a clean main, one task per pull request into the
-  fork's integration branch hsr-robocasa. Changes to core code (krrood, semantic_digital_twin, coraplex,
+  fork's integration branch hsr-robocasa-integration. Changes to core code (krrood, semantic_digital_twin, coraplex,
   giskardpy) are not part of an experiment pull request; each goes upstream as its own pull request,
   added to this plan when a task first needs it.
 default_repository: sorinar329/cognitive_robot_abstract_machine
