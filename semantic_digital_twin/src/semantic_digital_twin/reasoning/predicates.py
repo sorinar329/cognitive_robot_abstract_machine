@@ -236,18 +236,15 @@ class SupportedBy(Triple[TBody, TBody]):
     refused.
     """
 
-    contact_tolerance: float = 0.005
+    contact_tolerance: float = 0.015
     """
     How far apart, in metres, the two may be and still count as touching, and so how far
     above the supporting body the supported body may stand and still rest on it.
 
-    A body is set down by a motion that stops where it can rather than
-    exactly on the surface, so a support read from overlapping volume
-    alone would hold for almost no placement at all. Measured on a robot
-    stacking boxes, a placement missed the surface it was aimed at by
-    1.9 mm; the default leaves room for that while staying far below the
-    centimetres by which a body that is genuinely in the air clears a
-    surface.
+    A body is set down by a motion that stops where it can rather than exactly on the
+    surface, or let go of above it to drop, and a world model that does not simulate the
+    drop leaves it there. Measured, a robot stacking boxes missed its surface by 1.9 mm,
+    and Tracy lets a shape-sorting piece go up to 10.4 mm above the board's lid.
     """
 
     maximum_slope: float = np.radians(30.0)
