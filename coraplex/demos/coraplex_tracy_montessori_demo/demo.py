@@ -34,6 +34,7 @@ from cramph.context import StatechartContext
 from cramph.executor import ExecutorExtension
 from cramph.statechart import Statechart
 from montessori_board import HoleShape, ShapeSortingBoard
+from segmind.detectors.base import AbstractDetector
 from semantic_digital_twin.adapters.urdf import URDFParser
 from semantic_digital_twin.datastructures.definitions import StaticJointState
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
@@ -266,7 +267,7 @@ class MontessoriScene:
     into its neighbour.
     """
 
-    resting_clearance: float = 0.001
+    resting_clearance: float = 0
     """
     Gap left between a piece and what it stands on, so it rests rather than intersects.
     """
@@ -538,6 +539,12 @@ class DemoRunner(ABC):
     The port the cramera viewer follows the run on; ``0`` shows nothing in cramera.
     """
 
+    detector_types: tuple[type[AbstractDetector], ...] = ()
+    """
+    The kinds of segmind detector that watch the run in cramera, with every kind they
+    are read from; every kind segmind defines when empty.
+    """
+
     @classmethod
     def from_command_line(cls, **fields: Any) -> Self:
         """
@@ -556,15 +563,18 @@ class DemoRunner(ABC):
     def executor_extensions(self) -> list[ExecutorExtension]:
         """
         :return: Unless :attr:`live_port` is ``0``, a visualization that serves the
-            executor's world and plan to the cramera viewer, with segmind's detected
-            events, and writes the run's recording once the plan has run.
+            executor's world and plan to the cramera viewer, with the events the
+            detectors of :attr:`detector_types` detect, and writes the run's recording once the plan has run.
         """
         if not self.live_port:
             return []
         return [
             CrameraVisualization(
                 factory=partial(
-                    LiveVisualization, port=self.live_port, detect_events=True
+                    LiveVisualization,
+                    port=self.live_port,
+                    detect_events=True,
+                    detector_types=self.detector_types,
                 )
             )
         ]

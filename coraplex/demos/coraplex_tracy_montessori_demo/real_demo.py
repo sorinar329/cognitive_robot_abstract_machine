@@ -37,6 +37,13 @@ from coraplex.robot_plans.plan_transformations import (
 from coraplex.robotiq_grippers import DriveRobotiqGrippersThroughTheirActionServers
 from cramph.context import StatechartContext
 from demo import DemoRunner, MontessoriScene, ShapeSortingPlan
+from segmind.detectors.atomic_event_detectors_nodes import RotationDetector
+from segmind.detectors.base import AbstractDetector
+from segmind.detectors.coarse_event_detector_nodes import (
+    PickUpDetector,
+    PlacingDetector,
+)
+from segmind.detectors.spatial_relation_detector_nodes import InsertionDetector
 from semantic_digital_twin.adapters.ros.world_fetcher import fetch_world_from_service
 from semantic_digital_twin.adapters.ros.world_synchronizer import WorldSynchronizer
 from semantic_digital_twin.callbacks.callback import ModelChangeCallback
@@ -151,6 +158,18 @@ class RunningRobot:
 class RealRunner(DemoRunner):
     """
     Carries the sorting plan out on the real robot, bringing its controllers up first.
+    """
+
+    detector_types: tuple[type[AbstractDetector], ...] = (
+        PickUpDetector,
+        PlacingDetector,
+        RotationDetector,
+        InsertionDetector,
+    )
+    """
+    Every kind but :class:`~segmind.detectors.agent_event_detector_nodes.GraspDetector`,
+    so pick-ups and placings are read from the pieces' own motion and support: the
+    model's fingers do not follow the real gripper's.
     """
 
     giskard_launch_file: TracyGiskardLaunchFile = TracyGiskardLaunchFile.STANDALONE
