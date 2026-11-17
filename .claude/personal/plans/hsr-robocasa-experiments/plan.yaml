@@ -109,7 +109,7 @@ items:
   depends_on: []
   status: in progress
   notes: semantic_digital_twin graph_of_convex_sets. Old commit 4a0fe701. Draft PR into the fork's main,
-    built clean from main with its own tests; the user opens the cram2 PR.
+    built clean from main with its own tests. The user opened cram2#989 from this branch on 2026-11-17.
 
 - id: collision-rule-lookup
   title: Look up a body's external collision rule; tell a robot inside a buffer zone
