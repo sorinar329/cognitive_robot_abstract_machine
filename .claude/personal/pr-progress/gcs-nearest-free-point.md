@@ -1,5 +1,5 @@
 Plan
-- Draft PR sorinar329#40 into the fork's main for internal review; the user opens the cram2 PR (cram2#962 is closed)
+- Draft PR sorinar329#40 into the fork's main; the user opened cram2#989 from the same branch (2026-11-17)
 
 Done
 - 46b6d1c760: is_free / nearest_free_point (+ NoFreeSpaceError), excluded_bodies through the obstacle collection and both graphs, Floor.navigable_space; keyword-only signatures, every caller updated
