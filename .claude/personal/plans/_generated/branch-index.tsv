@@ -1,6 +1,5 @@
 hsr-robocasa-integration	hsr-robocasa-experiments
 robocasa-loader-fidelity	hsr-robocasa-experiments
-gcs-nearest-free-point	hsr-robocasa-experiments
 collision-rule-lookup	hsr-robocasa-experiments
 hsr-arm-reach	hsr-robocasa-experiments
 navigation-keeps-base-margin	hsr-robocasa-experiments

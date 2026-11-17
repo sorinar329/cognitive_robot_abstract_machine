@@ -1,17 +1,19 @@
 schema_version: 1
 id: hsr-robocasa-experiments
 title: HSR RoboCasa experiments, one task at a time
-description: Rebuilds the HSR RoboCasa experiments from a clean main, one task after another, all committed
-  on the one fork branch hsr-robocasa-integration, with no pull request per task. Changes to core code (krrood,
-  semantic_digital_twin, coraplex, giskardpy) are never committed there directly; each is its own branch and
-  its own draft pull request into the fork's main, added to this plan when a task first needs it. The user
-  opens the pull requests to cram2.
+description: Rebuilds the HSR RoboCasa experiments from a clean main, one task after another,
+  all committed on the one fork branch hsr-robocasa-integration, with no pull request per
+  task. Changes to core code (krrood, semantic_digital_twin, coraplex, giskardpy) are never
+  committed there directly; each is its own branch and its own draft pull request into the
+  fork's main, added to this plan when a task first needs it. The user opens the pull requests
+  to cram2.
 default_repository: sorinar329/cognitive_robot_abstract_machine
 tracking_issue: 38
 waves:
 - id: first-task
   name: 'Wave 1: First task'
-  description: The integration branch and the first HSR RoboCasa task, with the core changes it needs.
+  description: The integration branch and the first HSR RoboCasa task, with the core changes
+    it needs.
 - id: more-tasks
   name: 'Wave 2: More tasks'
   description: The remaining tasks, chained by difficulty.
@@ -23,8 +25,9 @@ tracks:
 - id: core
   name: Core changes
   wave: first-task
-  description: Draft pull requests into the fork's main that the first experiment needs; each rebuilt
-    from main, with the old branch hsr-robocasa-tasks as reference. The user opens the cram2 pull requests.
+  description: Draft pull requests into the fork's main that the first experiment needs; each
+    rebuilt from main, with the old branch hsr-robocasa-tasks as reference. The user opens
+    the cram2 pull requests.
 - id: first-experiment
   name: First experiment
   wave: first-task
@@ -42,25 +45,26 @@ items:
   session: https://claude.ai/code/session_01Meb8t8PxqSfNswMKesfkJp
   depends_on: []
   status: in progress
-  notes: 'Fork-only; it never goes upstream, and PR #39 stays a permanent draft. Every task is committed
-    straight onto it. Keep it merged with main. Core branches not yet in main are merged into it so the experiments
-    can run, and dropped once main has them. Refreshed from main on 2026-11-17 (b1e5a57d2a).'
+  notes: 'Fork-only; it never goes upstream, and PR #39 stays a permanent draft. Every task
+    is committed straight onto it. Keep it merged with main. Core branches not yet in main
+    are merged into it so the experiments can run, and dropped once main has them. Refreshed
+    from main on 2026-11-17 (b1e5a57d2a).'
 - id: pick-place-counter-to-cabinet
   title: HSR PickPlaceCounterToCabinet and the RoboCasa task runner
   track: first-experiment
   depends_on:
   - integration-branch
   - robocasa-loader
-  - gcs-free-point
   - collision-rule-lookup
   - hsr-arm-reach
   - path-navigation-margin
   - pick-up-lift
   status: not started
-  notes: 'First task; builds the runner the later tasks reuse. Committed on hsr-robocasa-integration, with
-    no pull request of its own. The old branch hsr-robocasa-tasks is a read-only reference for when something
-    goes wrong. Each further core change the task needs becomes its own plan item and draft pull request into
-    the fork''s main via /add-plan-item, and this item depends on it.'
+  notes: First task; builds the runner the later tasks reuse. Committed on hsr-robocasa-integration,
+    with no pull request of its own. The old branch hsr-robocasa-tasks is a read-only reference
+    for when something goes wrong. Each further core change the task needs becomes its own
+    plan item and draft pull request into the fork's main via /add-plan-item, and this item
+    depends on it.
 - id: pick-place-cabinet-to-counter
   title: HSR PickPlaceCabinetToCounter
   track: experiments
@@ -89,28 +93,16 @@ items:
   - pick-place-sink-to-counter
   status: not started
   notes: Committed on hsr-robocasa-integration, with no pull request of its own.
-
 - id: robocasa-loader
-  title: Lower RoboCasa kitchens and weigh bodies as RoboCasa does; Floor annotation, named fixtures,
-    task joint positions kept
+  title: Lower RoboCasa kitchens and weigh bodies as RoboCasa does; Floor annotation, named
+    fixtures, task joint positions kept
   branch: robocasa-loader-fidelity
   track: core
   depends_on: []
   status: not started
-  notes: semantic_digital_twin loader and layout. Old commits 251bef7f, 8b33ce21, 61ada88d, 9bc8c0f2.
-    Draft PR into the fork's main, built clean from main with its own tests; the user opens the cram2 PR.
-
-- id: gcs-free-point
-  title: 'GCS: ask whether a point is free, find the nearest free point, leave bodies out'
-  branch: gcs-nearest-free-point
-  track: core
-  pull_request_number: 40
-  session: https://claude.ai/code/session_01Meb8t8hZk8xAB2ZF2VEBU9
-  depends_on: []
-  status: in progress
-  notes: semantic_digital_twin graph_of_convex_sets. Old commit 4a0fe701. Draft PR into the fork's main,
-    built clean from main with its own tests. The user opened cram2#989 from this branch on 2026-11-17.
-
+  notes: semantic_digital_twin loader and layout. Old commits 251bef7f, 8b33ce21, 61ada88d,
+    9bc8c0f2. Draft PR into the fork's main, built clean from main with its own tests; the
+    user opens the cram2 PR.
 - id: collision-rule-lookup
   title: Look up a body's external collision rule; tell a robot inside a buffer zone
   branch: collision-rule-lookup
@@ -119,33 +111,30 @@ items:
   session: https://claude.ai/code/session_01Meb8t8hZk8xAB2ZF2VEBU9
   depends_on: []
   status: in progress
-  notes: semantic_digital_twin collision_checking. Old commit 2be976e0. Draft PR into the fork's main,
-    built clean from main with its own tests; the user opens the cram2 PR.
-
+  notes: semantic_digital_twin collision_checking. Old commit 2be976e0. Draft PR into the
+    fork's main, built clean from main with its own tests; the user opens the cram2 PR.
 - id: hsr-arm-reach
   title: Tell how far ahead the HSR's arm reaches a pose, and with which joints
   branch: hsr-arm-reach
   track: core
   depends_on: []
   status: not started
-  notes: semantic_digital_twin robots. Old commit 38afab6b. Draft PR into the fork's main, built clean
-    from main with its own tests; the user opens the cram2 PR.
-
+  notes: semantic_digital_twin robots. Old commit 38afab6b. Draft PR into the fork's main,
+    built clean from main with its own tests; the user opens the cram2 PR.
 - id: path-navigation-margin
   title: Path navigation keeps the base's collision margin and copes with a settled base
   branch: navigation-keeps-base-margin
   track: core
   depends_on: []
   status: not started
-  notes: coraplex navigation action. Old commit 828cafde. Draft PR into the fork's main, built clean
-    from main with its own tests; the user opens the cram2 PR.
-
+  notes: coraplex navigation action. Old commit 828cafde. Draft PR into the fork's main, built
+    clean from main with its own tests; the user opens the cram2 PR.
 - id: pick-up-lift
-  title: Lift a picked-up object straight up from where the hand closed; stop within a tolerance of the
-    goals
+  title: Lift a picked-up object straight up from where the hand closed; stop within a tolerance
+    of the goals
   branch: pick-up-lifts-straight-up
   track: core
   depends_on: []
   status: not started
-  notes: coraplex pick-up and placing. Old commits 4ea65b3b, 298edfed. Draft PR into the fork's main,
-    built clean from main with its own tests; the user opens the cram2 PR.
+  notes: coraplex pick-up and placing. Old commits 4ea65b3b, 298edfed. Draft PR into the fork's
+    main, built clean from main with its own tests; the user opens the cram2 PR.
