@@ -1,10 +1,11 @@
 schema_version: 1
 id: hsr-robocasa-experiments
 title: HSR RoboCasa experiments, one task at a time
-description: Rebuilds the HSR RoboCasa experiments from a clean main, one task per pull request into the
-  fork's integration branch hsr-robocasa-integration. Changes to core code (krrood, semantic_digital_twin, coraplex,
-  giskardpy) are not part of an experiment pull request; each goes upstream as its own pull request,
-  added to this plan when a task first needs it.
+description: Rebuilds the HSR RoboCasa experiments from a clean main, one task after another, all committed
+  on the one fork branch hsr-robocasa-integration, with no pull request per task. Changes to core code (krrood,
+  semantic_digital_twin, coraplex, giskardpy) are never committed there directly; each is its own branch and
+  its own draft pull request into the fork's main, added to this plan when a task first needs it. The user
+  opens the pull requests to cram2.
 default_repository: sorinar329/cognitive_robot_abstract_machine
 tracking_issue: 38
 waves:
@@ -18,12 +19,12 @@ tracks:
 - id: integration
   name: Integration branch
   wave: first-task
-  description: The fork branch every experiment pull request merges into.
+  description: The one fork branch the experiments are committed on.
 - id: core
   name: Core changes
   wave: first-task
-  description: Upstream pull requests from the fork to main that the first experiment needs; each rebuilt
-    from main, with the old branch hsr-robocasa-tasks as reference.
+  description: Draft pull requests into the fork's main that the first experiment needs; each rebuilt
+    from main, with the old branch hsr-robocasa-tasks as reference. The user opens the cram2 pull requests.
 - id: first-experiment
   name: First experiment
   wave: first-task
@@ -31,22 +32,21 @@ tracks:
 - id: experiments
   name: Experiments
   wave: more-tasks
-  description: One HSR RoboCasa task per pull request into hsr-robocasa-integration.
+  description: The remaining HSR RoboCasa tasks, each committed on hsr-robocasa-integration.
 items:
 - id: integration-branch
-  title: Create hsr-robocasa-integration on the fork, fresh from main
+  title: hsr-robocasa-integration, the one fork branch the experiments are committed on
   branch: hsr-robocasa-integration
   track: integration
   pull_request_number: 39
   session: https://claude.ai/code/session_01Meb8t8PxqSfNswMKesfkJp
   depends_on: []
   status: in progress
-  notes: 'The fork-only branch experiment pull requests merge into; it never goes upstream. Keep it merged
-    with upstream main. Core branches not yet merged upstream are merged into it so experiments can run,
-    and dropped once upstream has them.'
+  notes: 'Fork-only; it never goes upstream, and PR #39 stays a permanent draft. Every task is committed
+    straight onto it. Keep it merged with main. Core branches not yet in main are merged into it so the experiments
+    can run, and dropped once main has them. Refreshed from main on 2026-11-17 (b1e5a57d2a).'
 - id: pick-place-counter-to-cabinet
   title: HSR PickPlaceCounterToCabinet and the RoboCasa task runner
-  branch: hsr-pick-place-counter-to-cabinet
   track: first-experiment
   depends_on:
   - integration-branch
@@ -57,38 +57,38 @@ items:
   - path-navigation-margin
   - pick-up-lift
   status: not started
-  notes: 'First task; builds the runner the later tasks reuse. Start clean from main; the old branch hsr-robocasa-tasks
-    is a read-only reference for when something goes wrong. Each core change the task needs (see that
-    branch for candidates: GCS free-point, collision rule lookup, path navigation margin, RoboCasa loader)
-    becomes its own plan item and upstream pull request via /add-plan-item, and this item depends on it.'
+  notes: 'First task; builds the runner the later tasks reuse. Committed on hsr-robocasa-integration, with
+    no pull request of its own. The old branch hsr-robocasa-tasks is a read-only reference for when something
+    goes wrong. Each further core change the task needs becomes its own plan item and draft pull request into
+    the fork''s main via /add-plan-item, and this item depends on it.'
 - id: pick-place-cabinet-to-counter
   title: HSR PickPlaceCabinetToCounter
-  branch: hsr-pick-place-cabinet-to-counter
   track: experiments
   depends_on:
   - pick-place-counter-to-cabinet
   status: not started
+  notes: Committed on hsr-robocasa-integration, with no pull request of its own.
 - id: pick-place-counter-to-sink
   title: HSR PickPlaceCounterToSink
-  branch: hsr-pick-place-counter-to-sink
   track: experiments
   depends_on:
   - pick-place-cabinet-to-counter
   status: not started
+  notes: Committed on hsr-robocasa-integration, with no pull request of its own.
 - id: pick-place-sink-to-counter
   title: HSR PickPlaceSinkToCounter, with RoboCasa's verdict on every run
-  branch: hsr-pick-place-sink-to-counter
   track: experiments
   depends_on:
   - pick-place-counter-to-sink
   status: not started
+  notes: Committed on hsr-robocasa-integration, with no pull request of its own.
 - id: pick-place-counter-to-microwave
   title: HSR PickPlaceCounterToMicrowave
-  branch: hsr-pick-place-counter-to-microwave
   track: experiments
   depends_on:
   - pick-place-sink-to-counter
   status: not started
+  notes: Committed on hsr-robocasa-integration, with no pull request of its own.
 
 - id: robocasa-loader
   title: Lower RoboCasa kitchens and weigh bodies as RoboCasa does; Floor annotation, named fixtures,
@@ -98,19 +98,18 @@ items:
   depends_on: []
   status: not started
   notes: semantic_digital_twin loader and layout. Old commits 251bef7f, 8b33ce21, 61ada88d, 9bc8c0f2.
-    Upstream PR from the fork to main, built clean from main with its own tests.
+    Draft PR into the fork's main, built clean from main with its own tests; the user opens the cram2 PR.
 
 - id: gcs-free-point
   title: 'GCS: ask whether a point is free, find the nearest free point, leave bodies out'
   branch: gcs-nearest-free-point
-  repository: cram2/cognitive_robot_abstract_machine
   track: core
-  pull_request_number: 962
+  pull_request_number: 40
   session: https://claude.ai/code/session_01Meb8t8hZk8xAB2ZF2VEBU9
   depends_on: []
   status: in progress
-  notes: semantic_digital_twin graph_of_convex_sets. Old commit 4a0fe701. Upstream PR from the fork to
-    main, built clean from main with its own tests.
+  notes: semantic_digital_twin graph_of_convex_sets. Old commit 4a0fe701. Draft PR into the fork's main,
+    built clean from main with its own tests; the user opens the cram2 PR.
 
 - id: collision-rule-lookup
   title: Look up a body's external collision rule; tell a robot inside a buffer zone
@@ -118,8 +117,8 @@ items:
   track: core
   depends_on: []
   status: not started
-  notes: semantic_digital_twin collision_checking. Old commit 2be976e0. Upstream PR from the fork to main,
-    built clean from main with its own tests.
+  notes: semantic_digital_twin collision_checking. Old commit 2be976e0. Draft PR into the fork's main,
+    built clean from main with its own tests; the user opens the cram2 PR.
 
 - id: hsr-arm-reach
   title: Tell how far ahead the HSR's arm reaches a pose, and with which joints
@@ -127,8 +126,8 @@ items:
   track: core
   depends_on: []
   status: not started
-  notes: semantic_digital_twin robots. Old commit 38afab6b. Upstream PR from the fork to main, built clean
-    from main with its own tests.
+  notes: semantic_digital_twin robots. Old commit 38afab6b. Draft PR into the fork's main, built clean
+    from main with its own tests; the user opens the cram2 PR.
 
 - id: path-navigation-margin
   title: Path navigation keeps the base's collision margin and copes with a settled base
@@ -136,8 +135,8 @@ items:
   track: core
   depends_on: []
   status: not started
-  notes: coraplex navigation action. Old commit 828cafde. Upstream PR from the fork to main, built clean
-    from main with its own tests.
+  notes: coraplex navigation action. Old commit 828cafde. Draft PR into the fork's main, built clean
+    from main with its own tests; the user opens the cram2 PR.
 
 - id: pick-up-lift
   title: Lift a picked-up object straight up from where the hand closed; stop within a tolerance of the
@@ -146,5 +145,5 @@ items:
   track: core
   depends_on: []
   status: not started
-  notes: coraplex pick-up and placing. Old commits 4ea65b3b, 298edfed. Upstream PR from the fork to main,
-    built clean from main with its own tests.
+  notes: coraplex pick-up and placing. Old commits 4ea65b3b, 298edfed. Draft PR into the fork's main,
+    built clean from main with its own tests; the user opens the cram2 PR.

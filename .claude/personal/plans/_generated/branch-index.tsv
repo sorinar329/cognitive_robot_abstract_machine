@@ -1,9 +1,4 @@
 hsr-robocasa-integration	hsr-robocasa-experiments
-hsr-pick-place-counter-to-cabinet	hsr-robocasa-experiments
-hsr-pick-place-cabinet-to-counter	hsr-robocasa-experiments
-hsr-pick-place-counter-to-sink	hsr-robocasa-experiments
-hsr-pick-place-sink-to-counter	hsr-robocasa-experiments
-hsr-pick-place-counter-to-microwave	hsr-robocasa-experiments
 robocasa-loader-fidelity	hsr-robocasa-experiments
 gcs-nearest-free-point	hsr-robocasa-experiments
 collision-rule-lookup	hsr-robocasa-experiments
