@@ -55,7 +55,6 @@ items:
   depends_on:
   - integration-branch
   - robocasa-loader
-  - collision-rule-lookup
   - hsr-arm-reach
   - path-navigation-margin
   - pick-up-lift
@@ -103,16 +102,6 @@ items:
   notes: semantic_digital_twin loader and layout. Old commits 251bef7f, 8b33ce21, 61ada88d,
     9bc8c0f2. Draft PR into the fork's main, built clean from main with its own tests; the
     user opens the cram2 PR.
-- id: collision-rule-lookup
-  title: Look up a body's external collision rule; tell a robot inside a buffer zone
-  branch: collision-rule-lookup
-  track: core
-  pull_request_number: 41
-  session: https://claude.ai/code/session_01Meb8t8hZk8xAB2ZF2VEBU9
-  depends_on: []
-  status: in progress
-  notes: semantic_digital_twin collision_checking. Old commit 2be976e0. Draft PR into the
-    fork's main, built clean from main with its own tests; the user opens the cram2 PR.
 - id: hsr-arm-reach
   title: Tell how far ahead the HSR's arm reaches a pose, and with which joints
   branch: hsr-arm-reach
