@@ -26,7 +26,7 @@ if TYPE_CHECKING:
         HasRootBody,
         HasSupportingSurface,
     )
-    from semantic_digital_twin.semantic_annotations.mixins import HasGraspCandidates
+    from semantic_digital_twin.semantic_annotations.mixins import IsGraspable
     from semantic_digital_twin.grasping.object_relative_grasp import (
         ObjectRelativeGrasp,
     )
@@ -1437,6 +1437,28 @@ class StateUpdateContainsUnknownDegreesOfFreedomError(UsageError):
 
 
 @dataclass
+class StateUpdateContainsNonNumericValuesError(UsageError):
+    """
+    Raised when a received WorldStateUpdate gives a degree of freedom a value that is
+    not a number.
+    """
+
+    non_numeric_states: list[Any]
+    """
+    The values that are not numbers.
+    """
+
+    def error_message(self) -> str:
+        return (
+            f"Received a WorldStateUpdate whose states {self.non_numeric_states} are "
+            f"not numbers."
+        )
+
+    def suggest_correction(self) -> str:
+        return "publish the positions of degrees of freedom as numbers."
+
+
+@dataclass
 class WorldHasNoSynchronizerError(UsageError):
     """
     Raised when the synchronizer of a world is asked for, but the world publishes its
@@ -2427,7 +2449,7 @@ class NoGraspGeometry(UsageError):
     shape to derive them from.
     """
 
-    graspable: HasGraspCandidates
+    graspable: IsGraspable
     """
     The annotation whose grasps were asked for.
     """
@@ -2456,7 +2478,7 @@ class GraspNotOnObjectError(UsageError):
     The grasp that missed.
     """
 
-    graspable: HasGraspCandidates
+    graspable: IsGraspable
     """
     The object it was meant for.
     """
