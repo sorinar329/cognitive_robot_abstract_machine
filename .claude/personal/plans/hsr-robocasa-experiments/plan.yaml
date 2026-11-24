@@ -114,8 +114,10 @@ items:
   title: Path navigation keeps the base's collision margin and copes with a settled base
   branch: navigation-keeps-base-margin
   track: core
+  pull_request_number: 42
+  session: https://claude.ai/code/session_01Meb8t8hZk8xAB2ZF2VEBU9
   depends_on: []
-  status: not started
+  status: in progress
   notes: coraplex navigation action. Old commit 828cafde. Draft PR into the fork's main, built
     clean from main with its own tests; the user opens the cram2 PR.
 - id: pick-up-lift
