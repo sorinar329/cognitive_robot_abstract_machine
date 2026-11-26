@@ -177,6 +177,17 @@ class PathPlanningNavigateAction(
     those added during navigation.
     """
 
+    obstacle_clearance: float = 0.0
+    """
+    How much further than its radius the base keeps away from obstacles, in m.
+    """
+
+    floor_top_tolerance: float = 0.01
+    """
+    How far below the top of a floor the robot's base may lie, in m, and still stand on
+    it, as a simulated base that has settled into its floor does.
+    """
+
     def create_steps(self) -> list[StatechartNode]:
         return [
             self.base_goal_type.moving_base_of(
@@ -218,23 +229,22 @@ class PathPlanningNavigateAction(
         """
         :param floor: The floor to test.
         :return: Whether the robot's base rests within this floor's footprint and no
-            lower than its top.
+            more than :attr:`floor_top_tolerance` below its top.
         """
         extent = self._extent_of(floor=floor)
         base_pose = self.robot.root.global_pose
         return (
             extent.min_x <= float(base_pose.x) <= extent.max_x
             and extent.min_y <= float(base_pose.y) <= extent.max_y
-            and extent.max_z <= float(base_pose.z)
+            and extent.max_z <= float(base_pose.z) + self.floor_top_tolerance
         )
 
     def _path(self) -> list[Pose2D]:
         """
         The poses the robot drives to, one per leg of the path.
 
-        Each pose faces the waypoint after it, so the leg leaving a waypoint no longer
-        has to begin by turning. The waypoint the robot already stands on is left out,
-        and the last pose is the requested target.
+        Each pose faces the waypoint after it, so no leg begins by turning. The first
+        waypoint is left out, and the last pose is the requested target.
 
         .. note::
             The orientation aims the base's x-axis, which is the axis a drive travels
@@ -262,13 +272,18 @@ class PathPlanningNavigateAction(
         """
         The points the robot travels through to get from where it stands to the target.
 
-        :return: The path, beginning at the robot's own position and ending at the
-            target's.
+        :return: The path through the space the base keeps :attr:`obstacle_clearance`
+            in, beginning at the free point of it nearest the robot's own position, which
+            is that position where it is free, and ending at the target's.
         """
-        base_pose = self.robot.root.global_pose
-        free_space = self._floor.navigable_space(robot=self.robot, margin=0.0)
-        return free_space.path_from_to(
-            Point2.from_pose(base_pose), self.planar_goal_pose.position
+        navigable_space = self._floor.navigable_space(
+            robot=self.robot, margin=self.obstacle_clearance
+        )
+        return navigable_space.path_from_to(
+            navigable_space.nearest_free_point(
+                point=Point2.from_pose(self.robot.root.global_pose)
+            ),
+            self.planar_goal_pose.position,
         )
 
 

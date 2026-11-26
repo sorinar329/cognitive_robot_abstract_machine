@@ -87,6 +87,7 @@ from giskardpy.motion_statechart.weights import DefaultWeights
 from krrood.entity_query_language.factories import a
 from krrood_spatial_math.spatial_types import (
     HomogeneousTransformationMatrix,
+    Point2,
     Point3,
     Quaternion,
     Vector3,
@@ -985,6 +986,142 @@ def test_gcs_navigation_takes_a_waypoints_height_from_that_waypoints_frame(
         assert float(pose.reference_frame.global_pose.z) == pytest.approx(
             float(base_in_pose_frame.reference_frame.global_pose.z)
         )
+
+
+def floor_sunk_into_by(*, world: World, robot: AbstractRobot, depth: float) -> Floor:
+    """
+    :param world: The world the robot stands in.
+    :param robot: The robot to lay the floor under.
+    :param depth: How far the floor's top lies above the robot's base, in m.
+    :return: A thin floor spanning the apartment around the robot.
+    """
+    base_position = robot.root.global_pose.to_np()[:3, 3]
+    thickness = 0.01
+    span = 20.0
+    with world.modify_world():
+        return Floor.create_with_new_body_in_world(
+            name="mat",
+            world=world,
+            world_root_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(
+                base_position[0],
+                base_position[1],
+                base_position[2] + depth - thickness / 2,
+                reference_frame=world.root,
+            ),
+            scale=Scale(span, span, thickness),
+        )
+
+
+def test_gcs_navigation_plans_on_the_floor_a_robot_has_sunk_into(
+    multiple_robot_apartment_context,
+):
+    """
+    A simulated base settles a little into the floor it stands on, which leaves it
+    standing on that floor rather than on what lies below it.
+    """
+    world, robot, extensions = multiple_robot_apartment_context
+    action = PathPlanningNavigateAction(
+        planar_goal_pose=Pose2D.from_xy_yaw(x=5, y=1, reference_frame=world.root)
+    )
+    mat = floor_sunk_into_by(
+        world=world, robot=robot, depth=action.floor_top_tolerance / 2
+    )
+    attach_to_statechart(action, extensions)
+
+    assert action._floor is mat
+
+
+def test_gcs_navigation_does_not_plan_on_a_floor_above_the_robot(
+    multiple_robot_apartment_context,
+):
+    """
+    A floor whose top lies further above the base than the tolerance is one the robot
+    stands below, not on.
+
+    The floor is laid after the action is expanded, since it blocks the path from where
+    the robot stands.
+    """
+    world, robot, extensions = multiple_robot_apartment_context
+    action = PathPlanningNavigateAction(
+        planar_goal_pose=Pose2D.from_xy_yaw(x=5, y=1, reference_frame=world.root)
+    )
+    attach_to_statechart(action, extensions)
+    mat = floor_sunk_into_by(
+        world=world, robot=robot, depth=action.floor_top_tolerance * 2
+    )
+
+    assert action._floor is not mat
+
+
+def place_robot_inside_an_obstacle_margin(
+    *, world: World, robot: AbstractRobot, action: PathPlanningNavigateAction
+) -> Point2:
+    """
+    Stands the robot 1 cm closer to the apartment's main table than its navigable space
+    allows.
+
+    :param world: The apartment world.
+    :param robot: The robot to move.
+    :param action: The navigation whose navigable space the robot is placed outside of.
+    :return: The free point nearest where the robot now stands, in the world's frame.
+    """
+    navigable_space = action._floor.navigable_space(
+        robot=robot, margin=action.obstacle_clearance
+    )
+    table = Point2.from_pose(world.get_body_by_name("table_area_main").global_pose)
+    edge = world.transform(navigable_space.nearest_free_point(point=table), world.root)
+    towards_the_table = table.to_np()[:2] - edge.to_np()[:2]
+    inside_the_margin = edge.to_np()[:2] + 0.01 * towards_the_table / np.linalg.norm(
+        towards_the_table
+    )
+    robot.root.parent_connection.origin = HomogeneousTransformationMatrix.from_xyz_rpy(
+        *inside_the_margin, float(robot.root.global_pose.z), reference_frame=world.root
+    )
+    world.notify_state_change()
+    return edge
+
+
+def test_gcs_navigation_leaves_from_the_free_point_nearest_a_robot_too_close_to_an_obstacle(
+    multiple_robot_apartment_context,
+):
+    """
+    A robot that stopped closer to furniture than its base radius still drives off, from
+    the free point nearest where it stands.
+    """
+    world, robot, extensions = multiple_robot_apartment_context
+    action = PathPlanningNavigateAction(
+        planar_goal_pose=Pose2D.from_xy_yaw(x=5, y=1, reference_frame=world.root)
+    )
+    attach_to_statechart(action, extensions)
+    edge = place_robot_inside_an_obstacle_margin(
+        world=world, robot=robot, action=action
+    )
+
+    first_waypoint = world.transform(action._waypoints()[0], world.root)
+
+    assert first_waypoint.to_np()[:2] == pytest.approx(edge.to_np()[:2], abs=1e-6)
+
+
+def test_gcs_navigation_keeps_the_obstacle_clearance(
+    multiple_robot_apartment_context,
+):
+    """
+    The base keeps the clearance beyond its radius, so a robot that stands within it but
+    beyond its radius leaves from the edge of the clearance, not from where it stands.
+    """
+    world, robot, extensions = multiple_robot_apartment_context
+    action = PathPlanningNavigateAction(
+        planar_goal_pose=Pose2D.from_xy_yaw(x=5, y=1, reference_frame=world.root),
+        obstacle_clearance=0.1,
+    )
+    attach_to_statechart(action, extensions)
+    edge = place_robot_inside_an_obstacle_margin(
+        world=world, robot=robot, action=action
+    )
+
+    first_waypoint = world.transform(action._waypoints()[0], world.root)
+
+    assert first_waypoint.to_np()[:2] == pytest.approx(edge.to_np()[:2], abs=1e-6)
 
 
 def test_gcs_navigation_needs_a_floor_below_the_robot(
